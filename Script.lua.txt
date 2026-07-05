@@ -1,0 +1,419 @@
+--기본 변수
+DEBUG = 1      --디버그 활성화 여부
+MAXROLL = 30   --조교성공굴림
+TRAIN_REC = 0  --수정구 녹화 남은회수
+DC_PENALTY = 1 --조교 난이도굴림 전역 페널티. 1보다 작으면 보너스
+
+--전역 상수
+DEFAULT_LORE_OPTION = { alwaysActive = false, insertOrder = 100, key = "", secondKey = "", regex = false }
+
+--====================================
+-- 유틸리티 함수
+--====================================
+
+--로어북 DB 직접 로드 (캐싱 없음 - RisuAI 플랫폼에서 직접 호출이 더 빠름)
+--로어북 DB 로드 (Lua Config / Return 방식)
+function getDB(triggerId, dbName)
+    local content = getLoreBookContent(triggerId, dbName)
+    if not content or content == "" then 
+        debug("[DB] Empty Content: " .. dbName)
+        return {} 
+    end
+
+    -- Lua 로더 (Config Style / Return Style)
+    local env = {}
+    setmetatable(env, { __index = _G }) -- 전역 함수 사용 가능
+
+    local chunk, err = load(content, dbName, "t", env)
+    if not chunk then
+        debug("[DB] Load Syntax Error [" .. dbName .. "]: " .. tostring(err))
+        return {}
+    end
+
+    local ok, result = pcall(chunk)
+    if not ok then
+        debug("[DB] Runtime Error [" .. dbName .. "]: " .. tostring(result))
+        return {}
+    end
+
+    -- 결과 반환 (Return형 vs Env형)
+    local finalData = (type(result) == "table" and result) or env
+
+    -- 간단한 아이템 개수 로깅 (디버그용)
+    local count = 0
+    for _ in pairs(finalData) do count = count + 1 end
+
+    --debug("[DB] Loaded Lua [" .. dbName .. "] - " .. count .. " items")
+    return finalData
+end
+
+--날짜/시간 문자열 생성 유틸리티
+--format: "full" = "day1 ☀️ 낮", "short" = "1일째, 낮", "log" = "1일차 낮"
+function getDateString(triggerId, form)
+    local day = getChatVar(triggerId, "day")
+    local ampm = tonumber(getChatVar(triggerId, "ampm"))
+    local ampmText = ampm == 0 and "낮" or "밤"
+    local ampmIcon = ampm == 0 and "☀️" or "🌙"
+
+    form = form or "full"
+    if form == "full" then
+        return "day" .. day .. " " .. ampmIcon .. " " .. ampmText
+    elseif form == "short" then
+        return day .. "일째, " .. ampmText
+    elseif form == "log" then
+        return day .. "일차 " .. ampmText
+    else
+        return day .. "일 " .. ampmText
+    end
+end
+
+--디버깅용
+function debug(...)
+    if DEBUG == 1 then
+        print(...)
+    end
+end
+
+--스크린이펙트 알림 (alertNormal 대체용)
+function alertEffect(triggerId, message, alertType)
+    sysFunction(triggerId, "alertEffect.sys", message, alertType or "info")
+end
+
+--tonumber를 콤마제거후 숫자로 인식하도록 오버라이딩
+old_tonumber = tonumber
+tonumber = function(str, base)
+    if type(str) == "string" then
+        local cleaned_str = string.gsub(str, ",", "")
+        return old_tonumber(cleaned_str, base)
+    else
+        return str, base
+    end
+end
+
+--LLM함수 오버라이드
+old_LLM = LLM
+LLM = function(triggerId, prompt, callName)
+    local models = json.decode(getChatVar(triggerId, "models"))
+    local modelSelect = models[callName]
+    local response
+
+    local maxRetries = tonumber(getChatVar(triggerId, "llmRetries")) or 3
+    
+    for i = 0, maxRetries do
+        if modelSelect == "1" then
+            response = old_LLM(triggerId, prompt)
+        else
+            response = axLLM(triggerId, prompt)
+        end
+
+        if response.success then
+            return response
+        else
+            debug("LLM 요청 실패 (시도 " .. (i + 1) .. "/" .. (maxRetries + 1) .. "): " .. tostring(response.result))
+        end
+    end
+    
+    debug("LLM 요청 최종 실패. 최대 재시도 횟수 초과.")
+    return response
+end
+
+--upsertLocalLoreBook 오버라이드 (주석 제거 처리 유지)
+old_upsertLocalLoreBook = upsertLocalLoreBook
+upsertLocalLoreBook = function(triggerId, name, content, ...)
+    old_upsertLocalLoreBook(triggerId, name, content, ...)
+    debug("Lore 업데이트: " .. name)
+end
+
+--정수 포맷팅
+function intForm(str)
+    if tonumber(str) ~= nil and tonumber(str) >= 1000 then --숫자변환이 불가하면 바이패스하고 입력값을 다시 반환
+        str = string.reverse(string.reverse(string.format("%.0f", str)):gsub("(%d%d%d)", "%1,"))
+        if string.sub(str, 1, 1) == "," then
+            str = string.sub(str, 2)
+        end
+    end
+    return str
+end
+
+--테이블 길이 파악
+function len(tbl)
+    local len = 0
+    if type(tbl) ~= "table" then
+        debug(tbl .. "은 올바른 테이블이 아닙니다.")
+        return false
+    end
+    for k, v in pairs(tbl) do
+        len = len + 1
+    end
+    return len
+end
+
+--table에 val이 있는지 확인.
+--신체특성 같은 배열 내에 있는 값도 체크하기 위해 밸류도 함께 체크
+--return으로 밸류를 반환하도록 해 함수 활용성을 높임
+function hasVal(tbl, val)
+    for k, v in pairs(tbl) do
+        if k == val or v == val then
+            return true, v
+        end
+        if type(v) == "table" then
+            local found, foundVal = hasVal(v, val)
+            if found then
+                return found, foundVal
+            end
+        end
+    end
+    return false, nil
+end
+
+--로어북 컨텐츠 직접 로딩 (캐싱 없음 - RisuAI 플랫폼에서 getLoreBooks 직접 호출이 더 빠름)
+function getLoreBookContent(triggerId, lore)
+    local rawContent = getLoreBooks(triggerId, lore)[1].content
+    local modContent = string.gsub(rawContent, "%s*///[^\n]*\n?", "\n") --로어북 주석처리 "///" 제거
+    return modContent
+end
+
+--테이블을 1차원으로 flatten
+function flatten(tbl)
+    local result = {}
+    -- 입력된 테이블의 모든 요소를 순회
+    local function doFlatten(tbl)
+        for k, v in pairs(tbl) do
+            if type(v) == "table" then --값이 테이블이면 재귀
+                if k == "이상경험 기록" then
+                    result[k] = v      --이상경험 기록은 평탄화 금지. 개선방안 고민 필요함
+                end
+                doFlatten(v)
+            elseif type(k) == "number" then --키가 인덱스(배열)이면 키값에 값을 넣고 밸류는 "1"
+                result[v] = "1"
+            else
+                result[k] = v --일반적인 키:값 상태면 그대로 입력
+            end
+        end
+    end
+    doFlatten(tbl)
+    return result
+end
+
+-- state에 저장된 테이블을 챗변수varName으로 할당. 입력된 테이블을 1차원으로 flatten함
+function stateToVar(triggerId, key, tbl)
+    --테이블을 리수 딕셔너리/배열 양식에 맞게 변형
+    local tbl = flatten(tbl)
+    local new_tbl = ""
+    local function checkArray(v) --배열인지 확인
+        for k, _ in pairs(v) do
+            if type(k) ~= "number" then
+                return false
+            end
+        end
+        return true
+    end
+
+    if checkArray(tbl) then --tbl이 배열이면
+        --배열처리
+        new_tbl = "["
+        for _, v in pairs(tbl) do
+            new_tbl = new_tbl .. '"' .. v .. '",'
+        end
+        new_tbl = string.gsub(new_tbl, ",$", "]")
+    else
+        --딕셔너리처리
+        new_tbl = "{"
+        for k, v in pairs(tbl) do
+            if type(v) == "table" then --이상경험기록은 평탄화 안해서 값이 테이블이므로 encode해서 집어넣음 추후 개선안 필요함.
+                v = json.encode(v)
+            end
+            -- 큰따옴표를 HTML 엔티티로 이스케이프
+            v = string.gsub(tostring(v), '"', '&quot;')
+            new_tbl = new_tbl .. '"' .. k .. '":"' .. v .. '",'
+        end
+        new_tbl = string.gsub(new_tbl, ",$", "}")
+    end
+    debug("state to chatVar: " .. key)
+    setChatVar(triggerId, key, new_tbl)
+end
+
+--초기세팅 함수
+function initialize(triggerId)
+    debug("초기 세팅 개시...")
+    sysFunction(triggerId, "initVars.sys")
+    screenChange(triggerId, "config")
+    processAndStoreLore(triggerId, "config.lua")
+end
+
+--screen 전환
+function screenChange(triggerId, newScreen)
+    setState(triggerId, "oldScreen", getState(triggerId, "screen"))
+    setState(triggerId, "screen", newScreen)
+    debug("화면 전환: " .. newScreen)
+end
+
+-- 문자열 함수를 실제 함수 객체로 변환
+function createFunctionFromString(functionString)
+    local returnableString = "return " .. functionString
+
+    local chunk, errorMessage = load(returnableString, "lore_function", "t", _G)
+    if not chunk then
+        return nil, "컴파일 오류: " .. (errorMessage or "알 수 없음")
+    end
+
+    local success, result = pcall(chunk)
+    if success and type(result) == "function" then
+        return result, nil
+    else
+        return nil, "실행 오류: " .. tostring(result)
+    end
+end
+
+--- 로어 텍스트를 처리하여 funcs 테이블에 저장
+function processAndStoreLore(triggerId, loreBookId)
+    local funcs = getState(triggerId, "funcs")
+
+    -- debugCmds는 한 번만 로드하도록 캐싱 체크
+    if not funcs or not funcs["0000"] then
+        sysFunction(triggerId, "debugCmds.sys") --디버그 함수 저장 (최초 1회만)
+        funcs = getState(triggerId, "funcs")    -- debugCmds 실행 후 funcs 갱신
+    end
+
+    --debug(loreBookId .. "로어북에서 함수 호출")
+    local loreEntries = getLoreBookContent(triggerId, loreBookId)
+
+    local pattern = "%[(%S+)/(%S+)/([^%]]+)%]%s*(function.-end)!!"
+    local count = 0
+    local cmds = ""
+
+
+    for page, number, description, functionBody in loreEntries:gmatch(pattern) do
+        local key = page .. "_" .. number
+        funcs[key] = functionBody
+        --debug(description.."-> funcs['" .. key .. "']에 함수 저장됨.")
+        count = count + 1
+
+        --cmds 챗변수에 버튼들 입력
+        if number == "hr" then --구분선 처리
+            cmds = cmds ..
+                "<div style='text-align:center;border-bottom:solid 1px;width:100%;margin:0.1em;grid-column:1/-1;'>" ..
+                description .. "</div>"
+        elseif description ~= "hidden" then
+            cmds = cmds ..
+                "<button class='btn command-btn' risu-btn='" .. number .. "'>[" .. number .. "] " .. description ..
+                "</button>"
+        end
+    end
+    setChatVar(triggerId, "cmds", cmds)
+    setState(triggerId, "funcs", funcs)
+    reloadDisplay(triggerId)
+    --debug("처리 완료. 총 " .. count .. "개의 함수를 저장했습니다.\n")
+end
+
+function executeFunction(triggerId, screen, code, ...)
+    local f_code = screen .. "_" .. code
+    local funcs = getState(triggerId, "funcs")
+    local funcBody = funcs[f_code]
+
+    if not funcBody then
+        funcBody = funcs[code]
+        if not funcBody then
+            alertNormal(triggerId, "커맨드 오류: " .. f_code .. ("존재하지 않는 커맨드"))
+            return
+        end
+    end
+    local func, err = createFunctionFromString(funcBody)
+    if func then
+        func(triggerId, ...)
+    else
+        debug("[executeFunction] " .. (f_code or "unknown") .. " 함수 생성 실패: " .. tostring(err))
+    end
+end
+
+function sysFunction(triggerId, f_code, ...)
+    local funcBody = getLoreBookContent(triggerId, f_code)
+    if not funcBody then
+        alertNormal(triggerId, "시스템 커맨드 오류: " .. (f_code or "존재하지 않는 커맨드"))
+        return
+    end
+    local func, err = createFunctionFromString(funcBody)
+    if not func then
+        debug("[sysFunction] " .. f_code .. " 함수 생성 실패: ")
+        return nil
+    end
+    return func(triggerId, ...)
+end
+
+function promptBuild(_role, _content)
+    local prompt = {
+        role = _role,
+        content = _content
+    }
+    return prompt
+end
+
+listenEdit("editDisplay", function(triggerId, data)
+    local screen = getState(triggerId, "screen")
+    if not screen then
+        screenChange(triggerId, "gameStart")
+        screen = getState(triggerId, "screen")
+    end
+
+    --현재 페이지에 맞는 html호출
+    local html = getLoreBookContent(triggerId, screen .. ".html")
+    setChatVar(triggerId, "html", html)
+    local gameStart = getLoreBookContent(triggerId, "gameStart.html")
+    setChatVar(triggerId, "gamestart", gameStart)
+    if gameStart ~= html then
+        setChatVar(triggerId, "gamestart", "")
+    end
+end)
+
+--기본 입력창을 통해 리퀘가 가는걸 방지 + 입력한 번호 캐치해서 함수수행
+onStart = async(function(triggerId)
+    stopChat(triggerId)
+    local success, command = pcall(getUserLastMessage, triggerId)
+    debug(success, command)
+    
+    if command == nil then -- null checks
+        debug("리퀘 차단")
+        return -- pcall 내부에서 return하면 pcall 종료
+    end
+    
+    removeChat(triggerId, getChatLength(triggerId) - 1)
+    local screen = getState(triggerId, "screen")
+    debug("현재 " .. screen .. " 화면에 있습니다.")
+    executeFunction(triggerId, "debug", command)
+    debug("리퀘 차단")
+
+    --현재 페이지에 맞는 html호출
+    screen = getState(triggerId, "screen")
+    local html = getLoreBookContent(triggerId, screen .. ".html")
+    setChatVar(triggerId, "html", html)
+    debug(screen .. ".html 화면을 갱신합니다.")
+    processAndStoreLore(triggerId, screen .. ".lua")
+    return false
+end)
+
+onButtonClick = async(function(triggerId, data)
+    setChatVar(triggerId, "screenEffect", "") --버튼 누를때마다 screenEffect 초기화
+    setChatVar(triggerId, "alertEffectCount", 0) --알림 카운트 초기화
+    if data == "gameStart" then
+        initialize(triggerId)
+        debug("게임 시작")
+    else
+        -- .sys 호출 패턴인지 확인 (단순히 .sys가 포함되어 있으면 해당 파일을 호출)
+        local sysFile = string.match(data, "^(.-%.sys)")
+
+        if sysFile then
+            -- 데이터 파싱은 각 sys파일의 click 함수 내에서 처리하도록 원본 data를 그대로 전달
+            sysFunction(triggerId, sysFile, "click", data)
+        else
+            local screen = getState(triggerId, "screen")
+            executeFunction(triggerId, screen, data)
+        end
+
+        --현재 페이지에 맞는 html호출
+        local screen = getState(triggerId, "screen")
+        local html = getLoreBookContent(triggerId, screen .. ".html")
+        setChatVar(triggerId, "html", html)
+        processAndStoreLore(triggerId, screen .. ".lua")
+    end
+
+end)
