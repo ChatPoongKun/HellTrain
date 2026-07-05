@@ -11,7 +11,7 @@ DEFAULT_LORE_OPTION = { alwaysActive = false, insertOrder = 100, key = "", secon
 
 --디버깅용
 function debug(depth, ...)
-    if DEBUG =< depth then
+    if DEBUG <= depth then
         print(...)
     end
 end
@@ -29,13 +29,88 @@ end
 
 --json을 chatVar 형식으로 저장
 function toChatVar(triggerId, data)
+    local source = _G[data]
 
-    setChatVar(triggerId, )
+    if type(source) ~= "table" then
+        debug(1, "toChatVar error: " .. tostring(data) .. " is not a lua table.")
+        return nil
+    end
+
+    local function encodeForChatVar(value)
+        if type(value) ~= "table" then
+            return tostring(value)
+        end
+
+        local encoded = {}
+        for k, v in pairs(value) do
+            if type(v) == "table" then
+                encoded[tostring(k)] = json.encode(encodeForChatVar(v))
+            else
+                encoded[tostring(k)] = tostring(v)
+            end
+        end
+        return encoded
+    end
+
+    local encoded = json.encode(encodeForChatVar(source))
+    setChatVar(triggerId, data, encoded)
+    return encoded
 end
 
 --chatVar를 lua테이블 형식으로 저장
 function toTable(triggerId, data)
-    
+    local source = getChatVar(triggerId, data)
+
+    if not source or source == "" then
+        debug(1, "toTable error: chat var " .. tostring(data) .. " is empty.")
+        _G[data] = {}
+        return _G[data]
+    end
+
+    local function tryDecode(value)
+        if type(value) ~= "string" then
+            return nil
+        end
+
+        local trimmed = value:match("^%s*(.-)%s*$")
+        local first = trimmed:sub(1, 1)
+        if first ~= "{" and first ~= "[" then
+            return nil
+        end
+
+        local ok, decoded = pcall(json.decode, trimmed)
+        if ok and type(decoded) == "table" then
+            return decoded
+        end
+        return nil
+    end
+
+    local function decodeFromChatVar(value)
+        if type(value) == "table" then
+            local decoded = {}
+            for k, v in pairs(value) do
+                decoded[k] = decodeFromChatVar(v)
+            end
+            return decoded
+        end
+
+        local decoded = tryDecode(value)
+        if decoded then
+            return decodeFromChatVar(decoded)
+        end
+
+        return value
+    end
+
+    local root = tryDecode(source)
+    if not root then
+        debug(1, "toTable error: chat var " .. tostring(data) .. " is not a dict json.")
+        _G[data] = {}
+        return _G[data]
+    end
+
+    _G[data] = decodeFromChatVar(root)
+    return _G[data]
 end
 
 --로어북에서 내용을 불러와 return
