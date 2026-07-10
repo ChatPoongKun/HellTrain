@@ -1,0 +1,11 @@
+{
+  "solid": {
+    "name": "철통방어",
+    "description": "카드 사용으로 인한 캐릭터의 저항이 1만큼 적게 감소합니다.",
+    "trigger": [
+      "onCharCard",
+      "onUserCard"
+    ],
+    "effect": "function(resist) return resist - 1 end"
+  }
+}

@@ -14,3 +14,6 @@
 ## 📖 문서
 - [CBS.md] - RisuAI CBS 문법 완전 가이드 (v166)
 - [Lua.md] - RisuAI Lua 트리거 가이드 (v166)
+
+## 기타 주요사항.
+- 명시적 지시 없이 main.lua파일을 수정해서는 안됨

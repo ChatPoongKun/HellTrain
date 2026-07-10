@@ -1,0 +1,12 @@
+{
+    "가벼운 스침":{
+        "rarity": "C",
+        "name": "가벼운 스침",
+        "description": "열차가 흔들리는 타이밍에 맞춰 자연스럽게 손등으로 대상의 신체를 스칩니다.",
+        "resist": 1,
+        "suppression": -1,
+        "tags": ["접촉", "연속"],
+        "behavior": "",
+        "condition": ""
+    }
+}

@@ -1,17 +1,13 @@
 --기본 변수
-DEBUG = 1 --디버그 메시지 depth. 숫자가 클수록 덜 중요하고 디테일 한 메시지.
+DEBUG = 2 --디버그 메시지 depth. 숫자가 클수록 덜 중요하고 디테일 한 메시지.
 
 --전역 상수
 DEFAULT_LORE_OPTION = { alwaysActive = false, insertOrder = 100, key = "", secondKey = "", regex = false }
 
 
---====================================
--- 유틸리티 함수
---====================================
-
---디버깅용
+--디버깅
 function debug(depth, ...)
-    if DEBUG <= depth then
+    if depth <= DEBUG then
         print(...)
     end
 end
@@ -23,48 +19,56 @@ tonumber = function(str, base)
         local cleaned_str = string.gsub(str, ",", "")
         return old_tonumber(cleaned_str, base)
     else
-        return str, base
+        return old_tonumber(str, base)
     end
 end
 
 --json을 chatVar 형식으로 저장
-function toChatVar(triggerId, data)
-    local source = _G[data]
+function toChatVar(triggerId, name, data)
+    if data == nil then
+        data = getState(triggerId, name)
+    end
 
-    if type(source) ~= "table" then
-        debug(1, "toChatVar error: " .. tostring(data) .. " is not a lua table.")
-        return nil
+    if type(data) ~= "table" then
+        setChatVar(triggerId, name, tostring(data))
+        return tostring(data)
+    end
+
+    local function encodeString(value)
+        return json.encode(tostring(value))
     end
 
     local function encodeForChatVar(value)
-        if type(value) ~= "table" then
-            return tostring(value)
+        local parts = {}
+
+        for k, v in pairs(value) do
+            local encodedValue
+
+            if type(v) == "table" then
+                encodedValue = encodeString(encodeForChatVar(v))
+            else
+                encodedValue = encodeString(v)
+            end
+
+            table.insert(parts, encodeString(k) .. ":" .. encodedValue)
         end
 
-        local encoded = {}
-        for k, v in pairs(value) do
-            if type(v) == "table" then
-                encoded[tostring(k)] = json.encode(encodeForChatVar(v))
-            else
-                encoded[tostring(k)] = tostring(v)
-            end
-        end
-        return encoded
+        return "{" .. table.concat(parts, ",") .. "}"
     end
 
-    local encoded = json.encode(encodeForChatVar(source))
-    setChatVar(triggerId, data, encoded)
+    local encoded = encodeForChatVar(data)
+    setChatVar(triggerId, name, encoded)
     return encoded
 end
 
---chatVar를 lua테이블 형식으로 저장
-function toTable(triggerId, data)
-    local source = getChatVar(triggerId, data)
+--chatVar를 state 형식으로 저장
+function toState(triggerId, name)
+    local source = getChatVar(triggerId, name)
 
     if not source or source == "" then
-        debug(1, "toTable error: chat var " .. tostring(data) .. " is empty.")
-        _G[data] = {}
-        return _G[data]
+        debug(1, "toState error: chat var " .. tostring(name) .. " is empty.")
+        setState(triggerId, name, {})
+        return getState(triggerId, name)
     end
 
     local function tryDecode(value)
@@ -104,13 +108,13 @@ function toTable(triggerId, data)
 
     local root = tryDecode(source)
     if not root then
-        debug(1, "toTable error: chat var " .. tostring(data) .. " is not a dict json.")
-        _G[data] = {}
-        return _G[data]
+        setState(triggerId, name, source)
+        return source
     end
 
-    _G[data] = decodeFromChatVar(root)
-    return _G[data]
+    local decoded = decodeFromChatVar(root)
+    setState(triggerId, name, decoded)
+    return decoded
 end
 
 --로어북에서 내용을 불러와 return
@@ -123,11 +127,9 @@ function loadLores(triggerId, lore)
 
     --주석 제거
     returnContents = returnContents
-        :gsub("%-%-.*\n", "\n")
-        :gsub("%-%-.*", "")
+        :gsub("%-%-%-[^\r\n]*", "")
 
     if returnContents == "" then
-        debug(1, "로어북 로드 오류: ".. lore .."로어북이 존재하지 않음.")
         return nil
     else
         return returnContents
@@ -135,40 +137,143 @@ function loadLores(triggerId, lore)
 end
 
 --로어북에서 스크립트를 호출해 실행
-function runScript(triggerId, script)
-    local functionString = loadLores(triggerId, script)
-    local returnFunc = "return " .. functionString
+function runScript(triggerId, script, ...)
+    --nil 체크
+    local source = loadLores(triggerId, script..".lua")
+    if not source then
+        debug(1, "runScript error: lorebook '" .. script .. "' not found.")
+        return nil
+    end
 
-    local chunk, err = load(returnFunc, "lore_function", "t", _G)
+    local functionString = "return" .. source
+    debug(3, functionString)
+
+    local chunk, err = load(functionString, "lore_function", "t", _G)
     if not chunk then
         debug(1, "컴파일 오류: " .. (err or "알 수 없음"))
         return nil
     end
 
-    local success, result = pcall(chunk)
-    if success and type(result) == "function" then
-        return result
-    else
-        debug(1, "실행 오류: " .. tostring(result))
-        return nil
-    end
-end
-
---로어북에서 db를 호출해 저장
-function saveDB(triggerId, db)
-    local data = "return " .. loadLores(triggerId, db)
-
-    local chunk, err = load(data, db, "t", _G)
-    if not chunk then
-        debug(1, err)
-        return nil
-    end
-
     local ok, result = pcall(chunk)
     if not ok then
-        debug(1, result)
+        debug(1, "스크립트 로드 오류: " .. tostring(result))
         return nil
     end
 
-    setChatVar = toChatVar(triggerId, data)
+    if type(result) ~= "function" then
+        debug(1, "runScript error: lorebook '" .. script .. "' did not return a function.")
+        return nil
+    end
+
+    local execOk, execResult = pcall(result, triggerId, ...)
+    if not execOk then
+        debug(1, "스크립트 실행 오류: " .. tostring(execResult))
+        return nil
+    end
+
+    return execResult
 end
+
+--로어북에서 db를 호출해 return
+function loadDB(triggerId, db)
+    local lores = getLoreBooks(triggerId, db)
+
+    if #lores == 0 then
+        debug(1, "loadDB error: lorebook '" .. db .. "' not found.")
+        return nil
+    end
+
+    local merged = {}
+    local loadedCount = 0
+
+    for _, lore in ipairs(lores) do
+        local ok, decoded = pcall(json.decode, lore.content)
+
+        if not ok or decoded == nil then
+            debug(1, "loadDB error: invalid json in lorebook '" .. db .. "'.")
+            return nil
+        end
+
+        if type(decoded) ~= "table" then
+            return decoded
+        end
+
+        loadedCount = loadedCount + 1
+        for k, v in pairs(decoded) do
+            if type(k) == "number" then
+                table.insert(merged, v)
+            else
+                merged[k] = v
+            end
+        end
+    end
+
+    if loadedCount == 0 then
+        return nil
+    end
+
+    return merged
+end
+
+--변수를 로어북으로 저장
+function saveDB(triggerId, name, data, ...)
+    if data == nil then
+        debug(1, "saveDB error: data is nil.")
+        return
+    end
+    upsertLocalLoreBook(triggerId, name, json.encode(data), ...)
+    debug(2, "saveDB: "..name.." saved successfully.")
+    debug(3, name, json.encode(data))
+end
+
+--구분자로 문자열을 나누어 return
+function splitByDelimiter(text, delimiter)
+    local result = {}
+    local source = tostring(text or "")
+    local startIndex = 1
+
+    while true do
+        local foundStart, foundEnd = string.find(source, delimiter, startIndex, true)
+
+        if not foundStart then
+            table.insert(result, string.sub(source, startIndex))
+            break
+        end
+
+        table.insert(result, string.sub(source, startIndex, foundStart - 1))
+        startIndex = foundEnd + 1
+    end
+
+    return result
+end
+
+--플레이 시작시 한번만 작동
+listenEdit("editDisplay", function(triggerId, data)
+    --최초 한번만 작동해서 init.lua를 통해 기초 변수들을 설정하도록 할것.
+end)
+
+--버튼 클릭시 동작
+onButtonClick = async(function(triggerId, data)
+    --risu-btn 값을 "스크립트|인자1|인자2" 형식으로 해석
+    print("Button clicked: " .. tostring(data))
+
+    local parts = splitByDelimiter(data, "|")
+    local script = table.remove(parts, 1)
+
+    if not script or script == "" then
+        debug(1, "button dispatch error: empty script.")
+        return
+    end
+
+    runScript(triggerId, script, table.unpack(parts))
+end)
+
+--리퀘 전송시 동작
+onStart = async(function(triggerId)
+    return false
+end)
+
+--[[
+게임 시작시 필요한 db를 챗변수로 저장하는 프로세스 필요
+    퍼메를 세팅용으로 구성하고 세팅이 완료되기 전에는 onStart에서 return false로 채팅 보내는것을 막을 것.
+]]

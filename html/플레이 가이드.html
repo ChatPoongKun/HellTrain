@@ -1,0 +1,323 @@
+<!-- popup -->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
+
+/* Decorative background elements */
+.bg-orb {
+position: absolute;
+border-radius: 50%;
+filter: blur(100px);
+z-index: 0;
+}
+.orb-1 {
+width: 400px;
+height: 400px;
+background: rgba(139, 92, 246, 0.2);
+top: -100px;
+left: -100px;
+}
+.orb-2 {
+width: 300px;
+height: 300px;
+background: rgba(56, 189, 248, 0.2);
+bottom: -50px;
+right: -50px;
+}
+
+/* Popup Container */
+.popup-overlay {
+position: fixed;
+inset: 0;
+display: flex;
+align-items: center;
+justify-content: center;
+z-index: 10;
+padding: 1rem;
+}
+
+.popup-container {
+width: 100%;
+max-width: 520px;
+background: rgba(30, 41, 59, 0.7);
+backdrop-filter: blur(20px);
+-webkit-backdrop-filter: blur(20px);
+border: 1px solid rgba(255, 255, 255, 0.1);
+border-radius: 24px;
+box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5),
+inset 0 1px 0 rgba(255,255,255,0.1);
+overflow: hidden;
+display: flex;
+flex-direction: column;
+animation: popupIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popupIn {
+0% { opacity: 0; transform: scale(0.95) translateY(20px); }
+100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Header */
+.popup-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 0.1rem 1rem;
+border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+background: rgba(255, 255, 255, 0.02);
+}
+
+.popup-title {
+font-size: 1.25rem;
+font-weight: 600;
+letter-spacing: 0.5px;
+display: flex;
+align-items: center;
+gap: 0.5rem;
+}
+
+.popup-title::before {
+content: '';
+display: block;
+width: 4px;
+height: 20px;
+background: #38bdf8;
+border-radius: 4px;
+box-shadow: 0 0 10px #38bdf8;
+}
+
+.close-btn {
+background: transparent;
+border: none;
+color: #94a3b8;
+cursor: pointer;
+width: 36px;
+height: 36px;
+border-radius: 50%;
+display: flex;
+align-items: center;
+justify-content: center;
+transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+background: rgba(255, 255, 255, 0.1);
+color: white;
+transform: rotate(90deg);
+}
+
+/* Content Area */
+.guide-content {
+padding: 1.5rem;
+display: flex;
+flex-direction: column;
+gap: 1rem;
+overflow-y: auto;
+max-height: 500px;
+scroll-behavior: smooth;
+}
+
+.guide-content::-webkit-scrollbar {
+width: 6px;
+}
+.guide-content::-webkit-scrollbar-track {
+background: transparent;
+}
+.guide-content::-webkit-scrollbar-thumb {
+background: rgba(255, 255, 255, 0.2);
+border-radius: 10px;
+}
+.guide-content::-webkit-scrollbar-thumb:hover {
+background: rgba(255, 255, 255, 0.3);
+}
+
+.guide-intro {
+font-size: 0.95rem;
+color: #94a3b8;
+line-height: 1.5;
+margin-bottom: 0.5rem;
+text-align: center;
+}
+
+/* Guide Card */
+.guide-card {
+display: flex;
+align-items: flex-start;
+gap: 1rem;
+padding: 1rem;
+background: rgba(255, 255, 255, 0.03);
+border: 1px solid rgba(255, 255, 255, 0.05);
+border-radius: 16px;
+transition: all 0.3s ease;
+position: relative;
+overflow: hidden;
+}
+
+.guide-card::before {
+content: '';
+position: absolute;
+inset: 0;
+background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
+transform: translateX(-100%);
+transition: transform 0.6s ease;
+}
+
+.guide-card:hover {
+background: rgba(255, 255, 255, 0.08);
+border-color: rgba(56, 189, 248, 0.3);
+transform: translateY(-2px);
+box-shadow: 0 10px 20px -10px rgba(0,0,0,0.4),
+0 0 15px rgba(56, 189, 248, 0.1);
+}
+
+.guide-card:hover::before {
+transform: translateX(100%);
+}
+
+.guide-icon {
+flex-shrink: 0;
+width: 48px;
+height: 48px;
+background: rgba(56, 189, 248, 0.1);
+border-radius: 12px;
+display: flex;
+align-items: center;
+justify-content: center;
+color: #38bdf8;
+border: 1px solid rgba(56, 189, 248, 0.2);
+transition: all 0.3s ease;
+}
+
+.guide-card:hover .guide-icon {
+background: rgba(56, 189, 248, 0.2);
+box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+color: #fff;
+}
+
+.guide-info {
+flex: 1;
+}
+
+.guide-title {
+font-size: 1.1rem;
+font-weight: 600;
+color: #fff;
+margin-bottom: 0.25rem;
+display: flex;
+align-items: center;
+gap: 0.5rem;
+}
+
+.guide-desc {
+font-size: 0.9rem;
+color: #94a3b8;
+line-height: 1.5;
+}
+
+/* Action Button */
+.action-container {
+padding: 1rem 1.5rem;
+border-top: 1px solid rgba(255, 255, 255, 0.1);
+background: rgba(0, 0, 0, 0.2);
+display: flex;
+justify-content: center;
+}
+
+/* Mobile Adjustments */
+@media (max-width: 600px) {
+.popup-overlay {
+padding: 0;
+align-items: flex-end;
+}
+
+.popup-container {
+max-width: 100%;
+height: 100vh;
+border-radius: 0;
+border: none;
+border-top: 1px solid rgba(255, 255, 255, 0.1);
+animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.guide-content {
+max-height: none;
+flex: 1;
+}
+
+@keyframes slideUp {
+0% { transform: translateY(100%); }
+100% { transform: translateY(0); }
+}
+}
+</style>
+
+<div class="bg-orb orb-1"></div>
+<div class="bg-orb orb-2"></div>
+
+<div class="popup-overlay">
+<div class="popup-container">
+<div class="popup-header">
+<div class="popup-title">플레이 가이드</div>
+<button class="close-btn" aria-label="닫기" risu-btn="popupManage|close">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<line x1="18" y1="6" x2="6" y2="18"></line>
+<line x1="6" y1="6" x2="18" y2="18"></line>
+</svg>
+</button>
+</div>
+
+<div class="guide-content">
+<div class="guide-intro">
+무한의 지옥철에 오신 것을 환영합니다.<br>
+안전한 여정을 위해 아래의 기본 수칙을 숙지해 주세요.
+</div>
+
+<!-- Guide 1 -->
+<div class="guide-card">
+<div class="guide-icon">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+</div>
+<div class="guide-info">
+<div class="guide-title">생존 수칙</div>
+<div class="guide-desc">각 칸마다 존재하는 위험 요소들을 파악하고 멘탈을 관리하세요. 체력과 정신력이 모두 소진되면 게임 오버됩니다.</div>
+</div>
+</div>
+
+<!-- Guide 2 -->
+<div class="guide-card">
+<div class="guide-icon">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+</div>
+<div class="guide-info">
+<div class="guide-title">탐색 및 시간 제한</div>
+<div class="guide-desc">특정 구역에서는 제한 시간이 존재합니다. 유용한 아이템이나 단서를 빠르게 확보하고 다음 칸으로 이동하세요.</div>
+</div>
+</div>
+
+<!-- Guide 3 -->
+<div class="guide-card">
+<div class="guide-icon">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+</div>
+<div class="guide-info">
+<div class="guide-title">동료와의 상호작용</div>
+<div class="guide-desc">열차 내에서 마주치는 캐릭터들과 대화를 통해 호감도를 올리거나 숨겨진 스토리를 해금할 수 있습니다.</div>
+</div>
+</div>
+
+<!-- Guide 4 -->
+<div class="guide-card">
+<div class="guide-icon">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+</div>
+<div class="guide-info">
+<div class="guide-title">아이템 조합</div>
+<div class="guide-desc">인벤토리에서 얻은 아이템들을 조합하여 새로운 도구를 만들어 장애물을 극복하세요.</div>
+</div>
+</div>
+</div>
+
+<div class="action-container">
+</div>
+</div>
+</div>
+<!-- popup -->

@@ -1,0 +1,339 @@
+<!-- popup -->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
+
+/* Decorative background elements */
+.bg-orb {
+position: absolute;
+border-radius: 50%;
+filter: blur(100px);
+z-index: 0;
+}
+.orb-1 {
+width: 400px;
+height: 400px;
+background: rgba(139, 92, 246, 0.2);
+top: -100px;
+left: -100px;
+}
+.orb-2 {
+width: 300px;
+height: 300px;
+background: rgba(56, 189, 248, 0.2);
+bottom: -50px;
+right: -50px;
+}
+
+/* Popup Container */
+.popup-overlay {
+position: fixed;
+inset: 0;
+display: flex;
+align-items: center;
+justify-content: center;
+z-index: 10;
+padding: 1rem;
+}
+
+.popup-container {
+width: 100%;
+max-width: 480px;
+background: rgba(30, 41, 59, 0.7);
+backdrop-filter: blur(20px);
+-webkit-backdrop-filter: blur(20px);
+border: 1px solid rgba(255, 255, 255, 0.1);
+border-radius: 24px;
+box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5),
+inset 0 1px 0 rgba(255,255,255,0.1);
+overflow: hidden;
+display: flex;
+flex-direction: column;
+animation: popupIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popupIn {
+0% { opacity: 0; transform: scale(0.95) translateY(20px); }
+100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Header */
+.popup-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 0.1rem 1rem;
+border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+background: rgba(255, 255, 255, 0.02);
+}
+
+.popup-title {
+font-size: 1.25rem;
+font-weight: 600;
+letter-spacing: 0.5px;
+display: flex;
+align-items: center;
+gap: 0.5rem;
+}
+
+.popup-title::before {
+content: '';
+display: block;
+width: 4px;
+height: 20px;
+background: #38bdf8;
+border-radius: 4px;
+box-shadow: 0 0 10px #38bdf8;
+}
+
+.close-btn {
+background: transparent;
+border: none;
+color: #94a3b8;
+cursor: pointer;
+width: 36px;
+height: 36px;
+border-radius: 50%;
+display: flex;
+align-items: center;
+justify-content: center;
+transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+background: rgba(255, 255, 255, 0.1);
+color: white;
+transform: rotate(90deg);
+}
+
+/* List Container */
+.character-list {
+padding: 1rem;
+display: flex;
+flex-direction: column;
+gap: 0.75rem;
+overflow-y: auto;
+/*
+Card height: 110px
+Gap: 12px (0.75rem)
+3.5 cards = (110 * 3.5) + (12 * 3) = 385 + 36 = 421px
+*/
+max-height: 421px;
+scroll-behavior: smooth;
+}
+
+/* Custom Scrollbar */
+.character-list::-webkit-scrollbar {
+width: 6px;
+}
+.character-list::-webkit-scrollbar-track {
+background: transparent;
+}
+.character-list::-webkit-scrollbar-thumb {
+background: rgba(255, 255, 255, 0.2);
+border-radius: 10px;
+}
+.character-list::-webkit-scrollbar-thumb:hover {
+background: rgba(255, 255, 255, 0.3);
+}
+
+/* Character Card */
+.char-card {
+display: flex;
+align-items: center;
+gap: 1rem;
+padding: 0.75rem;
+height: 110px;
+background: rgba(255, 255, 255, 0.03);
+border: 1px solid rgba(255, 255, 255, 0.05);
+border-radius: 16px;
+cursor: pointer;
+transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+position: relative;
+overflow: hidden;
+flex-shrink: 0;
+}
+
+.char-card::before {
+content: '';
+position: absolute;
+inset: 0;
+background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+transform: translateX(-100%);
+transition: transform 0.5s ease;
+}
+
+.char-card:hover {
+background: rgba(255, 255, 255, 0.08);
+border-color: rgba(139, 92, 246, 0.4);
+transform: translateY(-2px);
+box-shadow: 0 10px 20px -10px rgba(0,0,0,0.5),
+0 0 15px rgba(139, 92, 246, 0.2);
+}
+
+.char-card:hover::before {
+transform: translateX(100%);
+}
+
+.char-card:active {
+transform: translateY(0);
+}
+
+.char-avatar {
+width: 80px;
+height: 80px;
+border-radius: 12px;
+object-fit: cover;
+border: 2px solid rgba(255, 255, 255, 0.1);
+transition: all 0.3s ease;
+}
+
+.char-card:hover .char-avatar {
+border-color: #8b5cf6;
+box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
+}
+
+.char-info {
+flex: 1;
+display: flex;
+flex-direction: column;
+justify-content: center;
+}
+
+.char-name {
+font-size: 1.1rem;
+font-weight: 600;
+color: #fff;
+margin-bottom: 0.25rem;
+display: flex;
+align-items: center;
+justify-content: space-between;
+}
+
+.char-role {
+font-size: 0.75rem;
+text-transform: uppercase;
+letter-spacing: 1px;
+background: rgba(139, 92, 246, 0.2);
+color: #c4b5fd;
+padding: 2px 8px;
+border-radius: 4px;
+border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.char-desc {
+font-size: 0.85rem;
+color: #94a3b8;
+line-height: 1.4;
+display: -webkit-box;
+-webkit-line-clamp: 2;
+-webkit-box-orient: vertical;
+overflow: hidden;
+}
+
+/* Mobile Adjustments */
+@media (max-width: 600px) {
+.popup-overlay {
+padding: 0;
+align-items: flex-end;
+}
+
+.popup-container {
+max-width: 100%;
+height: 100vh;
+border-radius: 0;
+border: none;
+border-top: 1px solid rgba(255, 255, 255, 0.1);
+animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.character-list {
+max-height: calc(100vh - 80px); /* Fill remaining space on mobile */
+flex: 1;
+}
+
+@keyframes slideUp {
+0% { transform: translateY(100%); }
+100% { transform: translateY(0); }
+}
+}
+</style>
+
+<div class="bg-orb orb-1"></div>
+<div class="bg-orb orb-2"></div>
+
+<div class="popup-overlay">
+<div class="popup-container">
+<div class="popup-header">
+<div class="popup-title">캐릭터 선택</div>
+<button class="close-btn" aria-label="닫기" risu-btn="popupManage|close">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<line x1="18" y1="6" x2="6" y2="18"></line>
+<line x1="6" y1="6" x2="18" y2="18"></line>
+</svg>
+</button>
+</div>
+
+<div class="character-list">
+<!-- Character 1 -->
+<div class="char-card" risu-btn="popupManage|push|캐릭터 프로필|유지영">
+<img src="knight_portrait_1783616309562.png" alt="기사" class="char-avatar">
+<div class="char-info">
+<div class="char-name">
+유지영
+<span class="char-role">Knight</span>
+</div>
+<div class="char-desc">왕국을 수호하기로 맹세한 단호한 전사입니다. 근접 전투에 능숙합니다.</div>
+</div>
+</div>
+
+<!-- Character 2 -->
+<div class="char-card">
+<img src="mage_portrait_1783616319692.png" alt="마법사" class="char-avatar">
+<div class="char-info">
+<div class="char-name">
+벡살리아
+<span class="char-role">Mage</span>
+</div>
+<div class="char-desc">강력한 파괴력과 어두운 신비의 마법을 다루는 마법사입니다.</div>
+</div>
+</div>
+
+<!-- Character 3 -->
+<div class="char-card">
+<img src="rogue_portrait_1783616328890.png" alt="도적" class="char-avatar">
+<div class="char-info">
+<div class="char-name">
+징크스
+<span class="char-role">Rogue</span>
+</div>
+<div class="char-desc">빠르고 민첩하며, 언제나 다음 보물을 찾아 헤매는 도적입니다.</div>
+</div>
+</div>
+
+<!-- Character 4 (This one will be partially cut off to show exactly 3.5 cards on desktop) -->
+<div class="char-card">
+<img src="cleric_portrait_1783616338785.png" alt="성직자" class="char-avatar">
+<div class="char-info">
+<div class="char-name">
+엘라라 라이트브링어
+<span class="char-role">Cleric</span>
+</div>
+<div class="char-desc">상처받은 자들을 치유하기 위해 고대의 서약을 맺은 부드러운 치유사입니다.</div>
+</div>
+</div>
+
+<!-- Character 5 (Scroll to see) -->
+<div class="char-card">
+<img src="knight_portrait_1783616309562.png" alt="전사" class="char-avatar" style="filter: hue-rotate(180deg);">
+<div class="char-info">
+<div class="char-name">
+카일렌
+<span class="char-role">Fighter</span>
+</div>
+<div class="char-desc">전장에서 견줄 데 없는 기술을 가진 노련한 베테랑 전사입니다.</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- popup -->

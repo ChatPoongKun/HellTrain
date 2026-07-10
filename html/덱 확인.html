@@ -1,0 +1,290 @@
+<!-- popup -->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
+
+.bg-orb {
+position: absolute;
+border-radius: 50%;
+filter: blur(100px);
+z-index: 0;
+}
+.orb-1 {
+width: 400px;
+height: 400px;
+background: rgba(139, 92, 246, 0.2);
+top: -100px;
+left: -100px;
+}
+.orb-2 {
+width: 300px;
+height: 300px;
+background: rgba(56, 189, 248, 0.2);
+bottom: -50px;
+right: -50px;
+}
+
+.popup-overlay {
+position: fixed;
+inset: 0;
+display: flex;
+align-items: center;
+justify-content: center;
+z-index: 10;
+padding: 1rem;
+}
+
+.popup-container {
+width: 100%;
+max-width: 520px;
+background: rgba(30, 41, 59, 0.7);
+backdrop-filter: blur(20px);
+-webkit-backdrop-filter: blur(20px);
+border: 1px solid rgba(255, 255, 255, 0.1);
+border-radius: 24px;
+box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+overflow: hidden;
+display: flex;
+flex-direction: column;
+animation: popupIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popupIn {
+0% { opacity: 0; transform: scale(0.95) translateY(20px); }
+100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.popup-header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 0.1rem 1rem;
+border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+background: rgba(255, 255, 255, 0.02);
+}
+
+.popup-title {
+font-size: 1.25rem;
+font-weight: 600;
+letter-spacing: 0.5px;
+display: flex;
+align-items: center;
+gap: 0.5rem;
+color: #fff;
+}
+
+.popup-title::before {
+content: '';
+display: block;
+width: 4px;
+height: 20px;
+background: #38bdf8;
+border-radius: 4px;
+box-shadow: 0 0 10px #38bdf8;
+}
+
+.close-btn {
+background: transparent;
+border: none;
+color: #94a3b8;
+cursor: pointer;
+width: 36px;
+height: 36px;
+border-radius: 50%;
+display: flex;
+align-items: center;
+justify-content: center;
+transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+background: rgba(255, 255, 255, 0.1);
+color: white;
+transform: rotate(90deg);
+}
+
+.deck-content {
+padding: 1rem;
+display: flex;
+flex-direction: column;
+gap: 0.75rem;
+overflow-y: auto;
+max-height: 500px;
+scroll-behavior: smooth;
+}
+
+.deck-summary {
+display: grid;
+grid-template-columns: repeat(3, minmax(0, 1fr));
+gap: 0.75rem;
+}
+
+.deck-stat {
+background: rgba(255, 255, 255, 0.03);
+border: 1px solid rgba(255, 255, 255, 0.05);
+border-radius: 14px;
+padding: 0.8rem;
+text-align: center;
+}
+
+.deck-stat-value {
+font-size: 1.4rem;
+font-weight: 800;
+color: #fff;
+}
+
+.deck-stat-label {
+font-size: 0.75rem;
+color: #94a3b8;
+margin-top: 0.2rem;
+}
+
+.deck-card {
+display: flex;
+align-items: center;
+gap: 1rem;
+padding: 0.85rem;
+min-height: 92px;
+background: rgba(255, 255, 255, 0.03);
+border: 1px solid rgba(255, 255, 255, 0.05);
+border-radius: 16px;
+transition: all 0.3s ease;
+}
+
+.deck-card:hover {
+background: rgba(255, 255, 255, 0.08);
+border-color: rgba(139, 92, 246, 0.4);
+transform: translateY(-2px);
+box-shadow: 0 10px 20px -10px rgba(0,0,0,0.5), 0 0 15px rgba(139, 92, 246, 0.2);
+}
+
+.deck-cost {
+width: 44px;
+height: 44px;
+border-radius: 12px;
+background: rgba(139, 92, 246, 0.2);
+border: 1px solid rgba(139, 92, 246, 0.3);
+color: #c4b5fd;
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 1.2rem;
+font-weight: 800;
+flex-shrink: 0;
+}
+
+.deck-info {
+flex: 1;
+min-width: 0;
+}
+
+.deck-name {
+font-size: 1rem;
+font-weight: 600;
+color: #fff;
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 0.5rem;
+}
+
+.deck-type {
+font-size: 0.72rem;
+letter-spacing: 1px;
+text-transform: uppercase;
+color: #38bdf8;
+}
+
+.deck-desc {
+font-size: 0.84rem;
+line-height: 1.4;
+color: #94a3b8;
+margin-top: 0.25rem;
+}
+
+@media (max-width: 600px) {
+.popup-overlay {
+padding: 0;
+align-items: flex-end;
+}
+.popup-container {
+max-width: 100%;
+height: 100vh;
+border-radius: 0;
+border: none;
+border-top: 1px solid rgba(255, 255, 255, 0.1);
+animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.deck-content {
+max-height: none;
+flex: 1;
+}
+@keyframes slideUp {
+0% { transform: translateY(100%); }
+100% { transform: translateY(0); }
+}
+}
+</style>
+
+<div class="bg-orb orb-1"></div>
+<div class="bg-orb orb-2"></div>
+
+<div class="popup-overlay">
+<div class="popup-container">
+<div class="popup-header">
+<div class="popup-title">덱 확인</div>
+<button class="close-btn" aria-label="닫기" risu-btn="popupManage|close">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<line x1="18" y1="6" x2="6" y2="18"></line>
+<line x1="6" y1="6" x2="18" y2="18"></line>
+</svg>
+</button>
+</div>
+
+<div class="deck-content">
+<div class="deck-summary">
+<div class="deck-stat">
+<div class="deck-stat-value">12</div>
+<div class="deck-stat-label">보유 카드</div>
+</div>
+<div class="deck-stat">
+<div class="deck-stat-value">3</div>
+<div class="deck-stat-label">평균 비용</div>
+</div>
+<div class="deck-stat">
+<div class="deck-stat-value">4</div>
+<div class="deck-stat-label">희귀 카드</div>
+</div>
+</div>
+
+<div class="deck-card">
+<div class="deck-cost">1</div>
+<div class="deck-info">
+<div class="deck-name">비상 손전등 <span class="deck-type">Tool</span></div>
+<div class="deck-desc">다음 칸의 위험도를 미리 확인합니다.</div>
+</div>
+</div>
+<div class="deck-card">
+<div class="deck-cost">2</div>
+<div class="deck-info">
+<div class="deck-name">임시 바리케이드 <span class="deck-type">Guard</span></div>
+<div class="deck-desc">이번 턴 받는 피해를 줄이고 추격을 지연시킵니다.</div>
+</div>
+</div>
+<div class="deck-card">
+<div class="deck-cost">3</div>
+<div class="deck-info">
+<div class="deck-name">역무원 호출벨 <span class="deck-type">Event</span></div>
+<div class="deck-desc">무작위 도움 효과를 얻지만 소음 수치가 증가합니다.</div>
+</div>
+</div>
+<div class="deck-card">
+<div class="deck-cost">5</div>
+<div class="deck-info">
+<div class="deck-name">마지막 환승권 <span class="deck-type">Rare</span></div>
+<div class="deck-desc">위험한 객차를 건너뛰고 다음 안전 구역으로 이동합니다.</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- popup -->
