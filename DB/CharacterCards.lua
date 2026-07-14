@@ -1,0 +1,151 @@
+return {
+    schemaVersion = 1,
+    kind = "cardDatabase",
+    cards = {
+        close_collar = {
+            id = "close_collar",
+            owner = "character",
+            name = "옷깃을 여미다",
+            description = "::tag[block]:: 행동으로 흐트러진 옷깃을 급히 여미며 몸 앞을 가리고 저항을 회복합니다.",
+            actionTag = "block",
+            mechanisms = {},
+            base = {
+                stealthCost = 0,
+                resistanceDamage = 0,
+            },
+            rules = {
+                "저항을 3 회복합니다.",
+            },
+            resolve = function(context)
+                return {
+                    {
+                        op = "recoverResistance",
+                        target = "character",
+                        amount = 3,
+                        cause = "cardEffect",
+                    },
+                }
+            end,
+            narration = {
+                play = {
+                    actorAction = "흐트러진 옷깃을 급히 여미며 몸 앞을 가린다.",
+                    actorThought = "더 흐트러지기 전에 가려야 해...",
+                },
+            },
+            prototype = true,
+        },
+
+        quiet_warning = {
+            id = "quiet_warning",
+            owner = "character",
+            name = "이러지 마세요...",
+            description = "::tag[vigilance]:: 행동으로 시선을 피한 채 작은 목소리로 그만두라고 말하고 플레이어의 은폐를 낮춥니다.",
+            actionTag = "vigilance",
+            mechanisms = {},
+            base = {
+                stealthCost = 0,
+                resistanceDamage = 0,
+            },
+            rules = {
+                "플레이어가 은폐를 2 잃습니다.",
+            },
+            resolve = function(context)
+                return {
+                    {
+                        op = "loseStealth",
+                        target = "player",
+                        amount = 2,
+                        cause = "cardEffect",
+                    },
+                }
+            end,
+            narration = {
+                play = {
+                    actorAction = "시선을 피한 채 작은 목소리로 그만두라고 말한다.",
+                    actorThought = "크게 말하고 싶진 않지만, 멈추게 해야 해...",
+                },
+            },
+            prototype = true,
+        },
+
+        turn_to_corner = {
+            id = "turn_to_corner",
+            owner = "character",
+            name = "구석으로 몸을 돌리다",
+            description = "::tag[evade]:: 행동으로 벽과 좌석 쪽으로 몸을 돌려 접촉을 피하고 저항을 회복합니다.",
+            actionTag = "evade",
+            mechanisms = {},
+            base = {
+                stealthCost = 0,
+                resistanceDamage = 0,
+            },
+            rules = {
+                "저항을 4 회복합니다.",
+            },
+            resolve = function(context)
+                return {
+                    {
+                        op = "recoverResistance",
+                        target = "character",
+                        amount = 4,
+                        cause = "cardEffect",
+                    },
+                }
+            end,
+            narration = {
+                play = {
+                    actorAction = "벽과 좌석 쪽으로 몸을 돌려 거리를 벌리려 한다.",
+                    actorThought = "구석으로 피하면 더는 가까이 오기 어렵겠지...",
+                },
+            },
+            prototype = true,
+        },
+
+        silent_glare = {
+            id = "silent_glare",
+            owner = "character",
+            name = "말없이 노려보기",
+            description = "::tag[intimidate]:: 행동으로 상대의 다음 움직임을 경계하며 말없이 노려보고 ::tag[plan]::을 배치합니다.",
+            actionTag = "intimidate",
+            mechanisms = { "plan" },
+            base = {
+                stealthCost = 0,
+                resistanceDamage = 0,
+            },
+            rules = {
+                "다음 플레이어 카드가 선언되면 플레이어가 은폐를 3 잃습니다.",
+            },
+            mechanismData = {
+                plan = {
+                    durationTurns = 1,
+                    charges = 1,
+                    trigger = function(context, event)
+                        return event.type == "cardDeclared"
+                            and event.side == "player"
+                    end,
+                    resolve = function(context, event)
+                        return {
+                            {
+                                op = "loseStealth",
+                                target = "player",
+                                amount = 3,
+                                cause = "plan",
+                            },
+                        }
+                    end,
+                },
+            },
+            narration = {
+                planPlaced = {
+                    actorAction = "말없이 상대를 노려보며 다음 움직임을 경계한다.",
+                    actorThought = "또 움직이면 이번에는 가만히 있지 않을 거야...",
+                },
+                planTriggered = {
+                    actorAction = "경계하던 움직임을 알아차리고 날카롭게 반응한다.",
+                    actorThought = "역시 또 이러려고 했어...",
+                },
+            },
+            prototype = true,
+        },
+    },
+}

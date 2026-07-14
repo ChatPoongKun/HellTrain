@@ -1,0 +1,219 @@
+return {
+    schemaVersion = 1,
+    kind = "cardDatabase",
+    cards = {
+        subtle_approach = {
+            id = "subtle_approach",
+            owner = "player",
+            name = "은밀한 접근",
+            description = "::tag[approach]:: 행동으로 상대의 반응을 살피고, ::tag[plan]::을 배치해 다음 턴을 준비합니다.",
+            actionTag = "approach",
+            mechanisms = { "plan" },
+            base = {
+                stealthCost = 0,
+                resistanceDamage = 0,
+            },
+            rules = {
+                "다음 턴 시작 무드가 무시라면 그 턴 동안 무드를 고정합니다.",
+            },
+            mechanismData = {
+                plan = {
+                    durationTurns = 1,
+                    charges = 1,
+                    trigger = function(context, event)
+                        return event.type == "turnStart"
+                            and event.side == "player"
+                            and context.mood == "ignore"
+                    end,
+                    resolve = function(context, event)
+                        return {
+                            {
+                                op = "lockMood",
+                                target = "character",
+                                mood = "ignore",
+                                until = "turnEnd",
+                                cause = "plan",
+                            },
+                        }
+                    end,
+                },
+            },
+            narration = {
+                planPlaced = {
+                    actorAction = "상대의 움직임을 관찰하며 다음 기회를 준비한다.",
+                },
+                planTriggered = {
+                    actorAction = "미리 살핀 반응을 바탕으로 분위기가 흔들리지 않게 행동한다.",
+                },
+            },
+            prototype = true,
+        },
+
+        accidental_brush = {
+            id = "accidental_brush",
+            owner = "player",
+            name = "우연한 스침",
+            description = "::tag[contact]:: 행동으로 열차의 흔들림을 이용해 우연을 가장하고 저항을 낮춥니다.",
+            actionTag = "contact",
+            mechanisms = {},
+            base = {
+                stealthCost = 0,
+                resistanceDamage = 3,
+            },
+            rules = {
+                "의심 무드에서 사용하면 은폐를 3 잃습니다.",
+            },
+            moodEffects = {
+                suspicion = function(context)
+                    return {
+                        {
+                            op = "loseStealth",
+                            target = "player",
+                            amount = 3,
+                            cause = "moodEffect",
+                        },
+                    }
+                end,
+            },
+            narration = {
+                play = {
+                    actorAction = "열차가 흔들리는 순간에 맞춰 우연인 듯 움직인다.",
+                },
+            },
+            prototype = true,
+        },
+
+        play_it_cool = {
+            id = "play_it_cool",
+            owner = "player",
+            name = "능청떨기",
+            description = "::tag[deception]:: 행동으로 아무런 관심이 없는 척하며 은폐를 회복합니다.",
+            actionTag = "deception",
+            mechanisms = {},
+            base = {
+                stealthCost = 0,
+                resistanceDamage = 0,
+            },
+            rules = {
+                "은폐를 3 회복합니다.",
+                "거절 무드라면 대신 1 회복합니다.",
+            },
+            resolve = function(context)
+                local amount = 3
+                if context.mood == "rejection" then
+                    amount = 1
+                end
+
+                return {
+                    {
+                        op = "recoverStealth",
+                        target = "player",
+                        amount = amount,
+                        cause = "cardEffect",
+                    },
+                }
+            end,
+            narration = {
+                play = {
+                    actorAction = "혼잣말을 하며 주변 일에 관심 없는 듯 태연하게 행동한다.",
+                },
+            },
+            prototype = true,
+        },
+
+        read_the_room = {
+            id = "read_the_room",
+            owner = "player",
+            name = "눈치보기",
+            description = "::tag[observation]:: 행동입니다. ::tag[chain]::으로 주 행동을 남기고, ::tag[insight]::로 이 해결에 반응하는 상대 ::tag[plan]::을 억제합니다.",
+            actionTag = "observation",
+            mechanisms = { "chain", "insight" },
+            base = {
+                stealthCost = 0,
+                resistanceDamage = 0,
+            },
+            rules = {
+                "카드를 1장 뽑습니다.",
+                "이 카드 때문에 발동할 상대 ::tag[plan]::을 억제하지만 그 정보는 공개하지 않습니다.",
+            },
+            resolve = function(context)
+                return {
+                    {
+                        op = "drawCards",
+                        target = "player",
+                        amount = 1,
+                        cause = "cardEffect",
+                    },
+                }
+            end,
+            narration = {
+                play = {
+                    actorAction = "곧바로 움직이지 않고 상대의 시선과 주변 상황을 살핀다.",
+                },
+            },
+            prototype = true,
+        },
+
+        pin_down = {
+            id = "pin_down",
+            owner = "player",
+            name = "제압",
+            description = "::tag[threat]:: 행동으로 상대를 강하게 압박합니다. ::tag[insight]::로 이 해결에 반응하는 상대 ::tag[plan]::을 억제합니다.",
+            actionTag = "threat",
+            mechanisms = { "insight" },
+            base = {
+                stealthCost = 3,
+                resistanceDamage = 7,
+            },
+            rules = {
+                "이 카드 때문에 발동할 상대 ::tag[plan]::을 억제하지만 그 정보는 공개하지 않습니다.",
+            },
+            narration = {
+                play = {
+                    actorAction = "상대가 쉽게 움직이지 못하도록 강하게 압박한다.",
+                },
+            },
+            prototype = true,
+        },
+
+        hypnotic_whisper = {
+            id = "hypnotic_whisper",
+            owner = "player",
+            name = "최면의 속삭임",
+            description = "::tag[deception]:: 행동으로 상대의 판단을 흐리고, 사용 후 ::tag[remove]::되어 이번 세션에서 제외됩니다.",
+            actionTag = "deception",
+            mechanisms = { "remove" },
+            base = {
+                stealthCost = 0,
+                resistanceDamage = 0,
+            },
+            rules = {
+                "캐릭터는 이번 턴 남은 카드 행동을 수행하지 않습니다.",
+                "무드를 순응 방향으로 한 단계 직접 이동합니다.",
+                "사용 후 이번 세션에서 ::tag[remove]::됩니다.",
+            },
+            resolve = function(context)
+                return {
+                    {
+                        op = "skipActions",
+                        target = "character",
+                        scope = "remainingTurn",
+                        cause = "cardEffect",
+                    },
+                    {
+                        op = "shiftMood",
+                        target = "character",
+                        amount = 1,
+                        cause = "cardEffect",
+                    },
+                }
+            end,
+            narration = {
+                play = {
+                    actorAction = "낮은 목소리로 짧은 암시를 건네 상대의 판단을 흐린다.",
+                },
+            },
+            prototype = true,
+        },
+    },
+}
