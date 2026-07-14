@@ -1,0 +1,59 @@
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        yoo_jiyoung = {
+            id = "yoo_jiyoung",
+            name = "유지영",
+
+            publicProfile = {
+                age = 20,
+                occupation = "대학생",
+                appearance = {
+                    hairColor = "갈색",
+                    eyeColor = "검은색",
+                    skin = "깨끗하고 밝은 피부",
+                    height = 160,
+                    weight = 50,
+                    threeSize = "85-60-85",
+                },
+                personality = {
+                    traits = { "introvert", "kind", "shy" },
+                    likes = { "reading", "music", "nature" },
+                },
+                background = {
+                    family = "부모님과 함께 살고 있음",
+                    hobbies = "독서, 음악 감상, 자연 산책",
+                },
+            },
+
+            privateProfile = {
+                sexualKnowledge = "섹스를 야동으로만 접함",
+                sexualExperience = "실제 관계는 한 적 없으나 몇 번 자위를 해본 적 있음",
+                virginity = {
+                    kiss = false,
+                    oral = false,
+                    vaginal = "자위 때 사용한 딱풀",
+                    anal = false,
+                },
+            },
+
+            battle = {
+                startingResistance = 30,
+                startingMood = "ignore",
+                traitIds = { "reserved" },
+                deck = {
+                    "close_collar",
+                    "quiet_warning",
+                    "turn_to_corner",
+                    "silent_glare",
+                },
+                selectionProfile = {
+                    preferredActionTags = { "evade", "block", "vigilance" },
+                    excludedActionTags = { "expose" },
+                    description = "상황을 크게 만들기보다 몸을 피하고 가리며 작은 목소리로 경고하는 행동을 우선합니다.",
+                },
+            },
+        },
+    },
+}

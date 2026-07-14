@@ -158,7 +158,7 @@ CBS/HTML은 `tag` 조각만 신뢰된 `span`으로 만들고 `text` 조각은 �
 <span class="card-tag card-tag--action" data-tag-id="contact" title="신체 접촉을 시도하는 행동">접촉</span>
 ```
 
-태그는 본문과 구분되면서 줄 높이를 흔들지 않는 작은 인라인 라벨로 표시한다. 기본 스타일은 다음 값을 기준으로 하며, 실제 RisuAI 접두사가 붙은 CSS 선택자는 런타임 기준선 단계에서 확인한다.
+태그는 본문과 구분되면서 줄 높이를 흔들지 않는 작은 인라인 라벨로 표시한다. 기본 스타일은 다음 값을 기준으로 하며, 실제 RisuAI 접두사가 붙은 CSS 선택자는 전투 UI 연결 단계에서 확인한다.
 
 ```css
 .card-tag {
