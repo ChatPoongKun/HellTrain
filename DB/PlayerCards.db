@@ -21,17 +21,17 @@ return {
                     durationTurns = 1,
                     charges = 1,
                     trigger = function(context, event)
-                        return event.type == "turnStart"
+                        return event.type == "turn_start"
                             and event.side == "player"
                             and context.mood == "ignore"
                     end,
                     resolve = function(context, event)
                         return {
                             {
-                                op = "lockMood",
+                                op = "lock_mood",
                                 target = "character",
                                 mood = "ignore",
-                                until = "turnEnd",
+                                ["until"] = "turn_end",
                                 cause = "plan",
                             },
                         }
@@ -67,7 +67,7 @@ return {
                 suspicion = function(context)
                     return {
                         {
-                            op = "loseStealth",
+                            op = "lose_stealth",
                             target = "player",
                             amount = 3,
                             cause = "moodEffect",
@@ -106,7 +106,7 @@ return {
 
                 return {
                     {
-                        op = "recoverStealth",
+                        op = "recover_stealth",
                         target = "player",
                         amount = amount,
                         cause = "cardEffect",
@@ -139,7 +139,7 @@ return {
             resolve = function(context)
                 return {
                     {
-                        op = "drawCards",
+                        op = "draw_cards",
                         target = "player",
                         amount = 1,
                         cause = "cardEffect",
@@ -195,13 +195,13 @@ return {
             resolve = function(context)
                 return {
                     {
-                        op = "skipActions",
+                        op = "skip_actions",
                         target = "character",
                         scope = "remainingTurn",
                         cause = "cardEffect",
                     },
                     {
-                        op = "shiftMood",
+                        op = "shift_mood",
                         target = "character",
                         amount = 1,
                         cause = "cardEffect",

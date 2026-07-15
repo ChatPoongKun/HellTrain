@@ -2,21 +2,21 @@
 
 ## 1. 공통 모듈 형식
 
-정적 게임 데이터 로어북은 Lua 청크 하나이며 `schemaVersion`, `kind`와 종류별 컬렉션을 가진 테이블을 반환한다. 로딩 이외의 부수효과를 만들지 않는다.
+정적 게임 데이터 로어북은 Lua 청크 하나이며 `schemaVersion`, `kind`와 종류별 컬렉션을 가진 테이블을 반환한다. 파일과 로어북 이름은 정적 데이터임을 드러내는 `.db` 확장자를 사용하지만 내용 문법은 Lua다. 작업공간의 `files.associations`가 `*.db`를 Lua로 연결한다. 로딩 이외의 부수효과를 만들지 않는다.
 
 | `kind` | 컬렉션 | 현재 로어북 |
 |---|---|---|
-| `gameRegistry` | 행동 태그, 메커니즘, 무드, 사건, 효과 명령 | `GameRegistry.lua` |
-| `cardDatabase` | `cards` | `PlayerCards.lua`, `CharacterCards.lua` |
-| `traitDatabase` | `traits` | `CharTraits.lua` |
-| `environmentDatabase` | `environments` | `Environments.lua` |
-| `characterDatabase` | `characters` | `YooJiyoung.lua` |
+| `gameRegistry` | 행동 태그, 메커니즘, 무드, 사건, 효과 명령 | `GameRegistry.db` |
+| `cardDatabase` | `cards` | `PlayerCards.db`, `CharacterCards.db` |
+| `traitDatabase` | `traits` | `CharTraits.db` |
+| `environmentDatabase` | `environments` | `Environments.db` |
+| `characterDatabase` | `characters` | `YooJiyoung.db` |
 
-모든 컬렉션 키와 항목의 `id`는 같아야 하며 전체 병합 범위에서 종류별 ID가 중복되면 오류다.
+모든 컬렉션 키와 항목의 `id`는 같아야 하며 전체 병합 범위에서 종류별 ID가 중복되면 오류다. 게임 ID 값은 종류와 관계없이 `lower_snake_case`를 사용하고, `schemaVersion` 같은 스키마 필드명은 lowerCamelCase를 사용한다.
 
 ## 2. 중앙 레지스트리
 
-`GameRegistry.lua`는 카드와 다른 정적 DB가 참조할 수 있는 내부 ID를 정의한다. `block`과 `evade`는 캐릭터 행동 태그이며 메커니즘이 아니다. 메커니즘은 `chain`, `remove`, `plan`, `insight`다.
+`GameRegistry.db`는 카드와 다른 정적 DB가 참조할 수 있는 내부 ID를 정의한다. `block`과 `evade`는 캐릭터 행동 태그이며 메커니즘이 아니다. 메커니즘은 `chain`, `remove`, `plan`, `insight`다.
 
 효과 함수가 반환하는 `op`와 트리거가 참조하는 `event`도 레지스트리에 먼저 등록되어야 한다.
 

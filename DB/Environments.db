@@ -11,12 +11,12 @@ return {
             },
             triggers = {
                 {
-                    event = "cardDeclared",
+                    event = "card_declared",
                     side = "player",
                     resolve = function(context, event)
                         return {
                             {
-                                op = "loseStealth",
+                                op = "lose_stealth",
                                 target = "player",
                                 amount = 1,
                                 cause = "environmentEffect",

@@ -19,7 +19,7 @@ return {
             resolve = function(context)
                 return {
                     {
-                        op = "recoverResistance",
+                        op = "recover_resistance",
                         target = "character",
                         amount = 3,
                         cause = "cardEffect",
@@ -52,7 +52,7 @@ return {
             resolve = function(context)
                 return {
                     {
-                        op = "loseStealth",
+                        op = "lose_stealth",
                         target = "player",
                         amount = 2,
                         cause = "cardEffect",
@@ -85,7 +85,7 @@ return {
             resolve = function(context)
                 return {
                     {
-                        op = "recoverResistance",
+                        op = "recover_resistance",
                         target = "character",
                         amount = 4,
                         cause = "cardEffect",
@@ -120,13 +120,13 @@ return {
                     durationTurns = 1,
                     charges = 1,
                     trigger = function(context, event)
-                        return event.type == "cardDeclared"
+                        return event.type == "card_declared"
                             and event.side == "player"
                     end,
                     resolve = function(context, event)
                         return {
                             {
-                                op = "loseStealth",
+                                op = "lose_stealth",
                                 target = "player",
                                 amount = 3,
                                 cause = "plan",

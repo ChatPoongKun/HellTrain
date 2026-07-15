@@ -5,27 +5,27 @@
         registry = {
             kind = "gameRegistry",
             collection = nil,
-            lores = { "GameRegistry.lua" },
+            lores = { "GameRegistry.db" },
         },
         cards = {
             kind = "cardDatabase",
             collection = "cards",
-            lores = { "PlayerCards.lua", "CharacterCards.lua" },
+            lores = { "PlayerCards.db", "CharacterCards.db" },
         },
         traits = {
             kind = "traitDatabase",
             collection = "traits",
-            lores = { "CharTraits.lua" },
+            lores = { "CharTraits.db" },
         },
         environments = {
             kind = "environmentDatabase",
             collection = "environments",
-            lores = { "Environments.lua" },
+            lores = { "Environments.db" },
         },
         characters = {
             kind = "characterDatabase",
             collection = "characters",
-            lores = { "YooJiyoung.lua" },
+            lores = { "YooJiyoung.db" },
         },
     }
 

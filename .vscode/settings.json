@@ -1,0 +1,11 @@
+{
+  "[html]": {
+    "editor.tabSize": 2,
+    "editor.formatOnPaste": false,
+    "editor.formatOnSave": false,
+    "editor.insertSpaces": true
+  },
+  "files.associations": {
+    "*.db": "lua"
+  }
+}

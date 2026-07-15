@@ -1,0 +1,1229 @@
+(function(triggerId, action, ...)
+    local SCHEMA_VERSION = 1
+
+    local function addError(errors, code, path, message)
+        table.insert(errors, {
+            code = code,
+            path = path,
+            message = message,
+        })
+    end
+
+    local function failure(errors)
+        return {
+            ok = false,
+            schemaVersion = SCHEMA_VERSION,
+            errors = errors,
+        }
+    end
+
+    local function success(key, value)
+        local response = {
+            ok = true,
+            schemaVersion = SCHEMA_VERSION,
+            errors = {},
+        }
+        if key then
+            response[key] = value
+        end
+        return response
+    end
+
+    local function isFinite(value)
+        return type(value) == "number"
+            and value == value
+            and value ~= math.huge
+            and value ~= -math.huge
+    end
+
+    local function isInteger(value, minimum)
+        return isFinite(value)
+            and value % 1 == 0
+            and (minimum == nil or value >= minimum)
+    end
+
+    local function isAsciiId(value)
+        return type(value) == "string"
+            and string.match(value, "^[a-z][a-z0-9_]*$") ~= nil
+    end
+
+    local function isRuntimeId(value)
+        return type(value) == "string"
+            and string.match(value, "^[A-Za-z0-9][A-Za-z0-9_-]*$") ~= nil
+    end
+
+    local function objectPath(path, key)
+        if type(key) == "string" and string.match(key, "^[A-Za-z_][A-Za-z0-9_]*$") then
+            return path .. "." .. key
+        end
+        return path .. "[" .. string.format("%q", tostring(key)) .. "]"
+    end
+
+    local function inspectTable(value, path, errors)
+        if type(value) ~= "table" then
+            addError(errors, "expected_table", path, "테이블이어야 합니다.")
+            return nil
+        end
+
+        local numericCount = 0
+        local maximum = 0
+        local hasNumeric = false
+        local hasString = false
+        local stringKeys = {}
+
+        for key in pairs(value) do
+            if type(key) == "number" then
+                hasNumeric = true
+                numericCount = numericCount + 1
+                if not isInteger(key, 1) then
+                    addError(errors, "invalid_array_index", path, "배열 인덱스는 1 이상의 정수여야 합니다.")
+                    return nil
+                end
+                if key > maximum then
+                    maximum = key
+                end
+            elseif type(key) == "string" then
+                hasString = true
+                table.insert(stringKeys, key)
+            else
+                addError(errors, "invalid_object_key", path, "객체 키는 문자열이어야 합니다.")
+                return nil
+            end
+        end
+
+        if hasNumeric and hasString then
+            addError(errors, "mixed_table", path, "숫자 인덱스와 문자열 키를 함께 사용할 수 없습니다.")
+            return nil
+        end
+        if hasNumeric then
+            if numericCount ~= maximum then
+                addError(errors, "sparse_array", path, "배열 인덱스는 1부터 빈틈없이 이어져야 합니다.")
+                return nil
+            end
+            return "array", maximum
+        end
+        if hasString then
+            table.sort(stringKeys)
+            return "object", stringKeys
+        end
+        return "array", 0
+    end
+
+    local function validateJsonSafe(value, path, errors, active)
+        local valueType = type(value)
+        if valueType == "string" or valueType == "boolean" then
+            return
+        end
+        if valueType == "number" then
+            if not isFinite(value) then
+                addError(errors, "non_finite_number", path, "NaN과 무한대는 View에 넣을 수 없습니다.")
+            end
+            return
+        end
+        if valueType ~= "table" then
+            addError(errors, "unsupported_type", path, "View에 넣을 수 없는 자료형입니다: " .. valueType)
+            return
+        end
+        if getmetatable(value) ~= nil then
+            addError(errors, "metatable_not_allowed", path, "View에는 메타테이블을 사용할 수 없습니다.")
+            return
+        end
+        active = active or {}
+        if active[value] then
+            addError(errors, "circular_reference", path, "순환 참조가 있는 View는 허용하지 않습니다.")
+            return
+        end
+        active[value] = true
+        local kind, shape = inspectTable(value, path, errors)
+        if kind == "array" then
+            for index = 1, shape do
+                validateJsonSafe(value[index], path .. "[" .. index .. "]", errors, active)
+            end
+        elseif kind == "object" then
+            for _, key in ipairs(shape) do
+                validateJsonSafe(value[key], objectPath(path, key), errors, active)
+            end
+        end
+        active[value] = nil
+    end
+
+    local function checkAllowedKeys(value, allowed, path, errors)
+        if type(value) ~= "table" then
+            return
+        end
+        for key in pairs(value) do
+            if type(key) ~= "string" or not allowed[key] then
+                addError(errors, "unknown_field", objectPath(path, key), "battleView에 허용되지 않은 필드입니다.")
+            end
+        end
+    end
+
+    local function getArrayLength(value, path, errors)
+        local kind, length = inspectTable(value, path, errors)
+        if kind ~= "array" then
+            if kind ~= nil then
+                addError(errors, "expected_array", path, "연속 배열이어야 합니다.")
+            end
+            return nil
+        end
+        return length
+    end
+
+    local function normalizeStaticData(staticData)
+        if type(staticData) == "table" and type(staticData.data) == "table" then
+            return staticData.data
+        end
+        return staticData
+    end
+
+    local function hasMechanism(card, mechanismId)
+        if type(card) ~= "table" or type(card.mechanisms) ~= "table" then
+            return false
+        end
+        for _, id in ipairs(card.mechanisms) do
+            if id == mechanismId then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function appendNestedErrors(target, prefix, nested)
+        if type(nested) ~= "table" or type(nested.errors) ~= "table" then
+            addError(target, "validation_failed", prefix, "하위 검증 결과를 읽을 수 없습니다.")
+            return
+        end
+        for _, item in ipairs(nested.errors) do
+            local suffix = tostring(item.path or "$")
+            if string.sub(suffix, 1, 1) == "$" then
+                suffix = string.sub(suffix, 2)
+            end
+            addError(
+                target,
+                tostring(item.code or "validation_failed"),
+                prefix .. suffix,
+                tostring(item.message or "하위 검증에 실패했습니다.")
+            )
+        end
+    end
+
+    local function resolveRegistry(registry)
+        if type(registry) == "table" and type(registry.registry) == "table" then
+            return registry.registry
+        end
+        if type(registry) == "table" and type(registry.data) == "table" then
+            return resolveRegistry(registry.data)
+        end
+        return registry
+    end
+
+    local function lookupTag(registry, tagId, path, errors)
+        registry = resolveRegistry(registry)
+        local action = type(registry) == "table"
+            and type(registry.actionTags) == "table"
+            and registry.actionTags[tagId]
+            or nil
+        local mechanism = type(registry) == "table"
+            and type(registry.mechanisms) == "table"
+            and registry.mechanisms[tagId]
+            or nil
+
+        if action and mechanism then
+            addError(errors, "tag_registry_collision", path, "행동 태그와 메커니즘 ID가 충돌합니다: " .. tagId)
+            return nil
+        end
+        local entry = action or mechanism
+        if not entry then
+            addError(errors, "unknown_tag_token", path, "등록되지 않은 태그입니다: " .. tagId)
+            return nil
+        end
+        if type(entry.label) ~= "string" or entry.label == ""
+            or type(entry.tooltip) ~= "string" or entry.tooltip == "" then
+            addError(errors, "invalid_tag_metadata", path, "태그 표시명과 툴팁이 필요합니다: " .. tagId)
+            return nil
+        end
+
+        return {
+            kind = "tag",
+            id = tagId,
+            label = entry.label,
+            tagKind = action and "action" or "mechanism",
+            tooltip = entry.tooltip,
+        }
+    end
+
+    local function appendText(segments, value)
+        if value == "" then
+            return
+        end
+        local previous = segments[#segments]
+        if previous and previous.kind == "text" then
+            previous.value = previous.value .. value
+        else
+            table.insert(segments, {
+                kind = "text",
+                value = value,
+            })
+        end
+    end
+
+    local function tokenizeTags(source, registry, sourcePath)
+        local errors = {}
+        sourcePath = sourcePath or "$"
+        if type(source) ~= "string" then
+            addError(errors, "invalid_text", sourcePath, "태그를 해석할 값이 문자열이 아닙니다.")
+            return failure(errors)
+        end
+
+        local segments = {}
+        local cursor = 1
+        while cursor <= #source do
+            local tokenStart = string.find(source, "::tag[", cursor, true)
+            if not tokenStart then
+                appendText(segments, string.sub(source, cursor))
+                break
+            end
+
+            appendText(segments, string.sub(source, cursor, tokenStart - 1))
+            local idStart = tokenStart + #"::tag["
+            local tokenCloseStart, tokenCloseEnd = string.find(source, "]::", idStart, true)
+            if not tokenCloseStart then
+                addError(errors, "malformed_tag_token", sourcePath, "닫히지 않은 태그 토큰이 있습니다.")
+                return failure(errors)
+            end
+
+            local tagId = string.sub(source, idStart, tokenCloseStart - 1)
+            if not isAsciiId(tagId) then
+                addError(errors, "malformed_tag_token", sourcePath, "태그 ID는 소문자 ASCII ID여야 합니다: " .. tagId)
+                return failure(errors)
+            end
+
+            local tag = lookupTag(registry, tagId, sourcePath, errors)
+            if not tag then
+                return failure(errors)
+            end
+            table.insert(segments, tag)
+            cursor = tokenCloseEnd + 1
+        end
+
+        if #source == 0 then
+            return success("segments", {})
+        end
+        return success("segments", segments)
+    end
+
+    local function tokenizeForBuild(source, registry, path, errors)
+        local tokenized = tokenizeTags(source, registry, "$")
+        if not tokenized.ok then
+            appendNestedErrors(errors, path, tokenized)
+            return {}
+        end
+        return tokenized.segments
+    end
+
+    local function buildRuleLines(rules, registry, path, errors)
+        local lines = {}
+        if type(rules) ~= "table" then
+            addError(errors, "invalid_rules", path, "규칙 목록이 배열이 아닙니다.")
+            return lines
+        end
+        for index, rule in ipairs(rules) do
+            table.insert(lines, {
+                segments = tokenizeForBuild(rule, registry, path .. "[" .. index .. "]", errors),
+            })
+        end
+        return lines
+    end
+
+    local function buildSafeCardSummary(card, registry, path, errors)
+        if type(card) ~= "table" then
+            addError(errors, "missing_card", path, "카드 정의를 찾을 수 없습니다.")
+            return nil
+        end
+
+        local actionTag = lookupTag(registry, card.actionTag, path .. ".actionTag", errors)
+        local mechanisms = {}
+        for index, mechanismId in ipairs(card.mechanisms or {}) do
+            local tag = lookupTag(registry, mechanismId, path .. ".mechanisms[" .. index .. "]", errors)
+            if tag then
+                table.insert(mechanisms, tag)
+            end
+        end
+
+        return {
+            cardId = card.id,
+            name = card.name,
+            descriptionSegments = tokenizeForBuild(card.description, registry, path .. ".description", errors),
+            ruleLines = buildRuleLines(card.rules, registry, path .. ".rules", errors),
+            actionTag = actionTag or {
+                kind = "tag",
+                id = "invalid",
+                label = "오류",
+                tagKind = "action",
+                tooltip = "태그 정보를 불러오지 못했습니다.",
+            },
+            mechanisms = mechanisms,
+        }
+    end
+
+    local function buildPlanView(slot, owner, cards, registry, path, errors)
+        if type(slot) ~= "table" or slot.occupied ~= true then
+            return {
+                status = "empty",
+                hasDuration = false,
+            }
+        end
+
+        local hasDuration = slot.remainingTurns ~= nil
+        local hidden = owner == "character" and slot.revealed ~= true
+        local view = {
+            status = hidden and "hidden" or "revealed",
+            hasDuration = hasDuration,
+        }
+        if hasDuration then
+            view.remainingTurns = slot.remainingTurns
+        end
+        if not hidden then
+            view.card = buildSafeCardSummary(cards[slot.cardId], registry, path .. ".card", errors)
+        end
+        return view
+    end
+
+    local function buildMoodView(state, data, errors)
+        local moodId = state.character.mood
+        local mood = data.registry.moods[moodId]
+        if type(mood) ~= "table" then
+            addError(errors, "unknown_mood", "$.character.mood", "무드 표시 정보를 찾을 수 없습니다.")
+            mood = { id = moodId, label = moodId, order = 0 }
+        end
+
+        local boundaries = { 5, 4, 4, 5 }
+        local order = mood.order
+        local rejectionThreshold = isInteger(order, 1) and order > 1 and boundaries[order - 1] or nil
+        local complianceThreshold = isInteger(order, 1) and order < 5 and boundaries[order] or nil
+
+        for _, traitId in ipairs(state.character.traitIds) do
+            local trait = data.traits[traitId]
+            for _, modifier in ipairs(type(trait) == "table" and trait.modifiers or {}) do
+                if modifier.timing == "moodPerformanceThreshold"
+                    and modifier.operation == "add"
+                    and isFinite(modifier.amount) then
+                    if modifier.direction == "rejection" and rejectionThreshold ~= nil then
+                        rejectionThreshold = rejectionThreshold + modifier.amount
+                    elseif modifier.direction == "compliance" and complianceThreshold ~= nil then
+                        complianceThreshold = complianceThreshold + modifier.amount
+                    end
+                end
+            end
+        end
+
+        local view = {
+            id = moodId,
+            label = mood.label,
+            hasThresholdToRejection = rejectionThreshold ~= nil,
+            hasThresholdToCompliance = complianceThreshold ~= nil,
+        }
+        if rejectionThreshold ~= nil then
+            view.thresholdToRejection = rejectionThreshold
+        end
+        if complianceThreshold ~= nil then
+            view.thresholdToCompliance = complianceThreshold
+        end
+        return view
+    end
+
+    local function buildTraitViews(state, data, errors)
+        local views = {}
+        for _, traitId in ipairs(state.character.traitIds) do
+            local trait = data.traits[traitId]
+            if type(trait) == "table" and trait.visibility == "public" then
+                table.insert(views, {
+                    id = trait.id,
+                    name = trait.name,
+                    description = trait.description,
+                    ruleLines = buildRuleLines(trait.rules, data.registry, "$.character.traits." .. traitId .. ".rules", errors),
+                })
+            end
+        end
+        return views
+    end
+
+    local function countZones(instances)
+        local counts = {
+            deckCount = 0,
+            usedCount = 0,
+            discardCount = 0,
+            removedCount = 0,
+        }
+        for _, instance in ipairs(instances) do
+            if instance.owner == "player" then
+                if instance.zone == "deck" then
+                    counts.deckCount = counts.deckCount + 1
+                elseif instance.zone == "used" then
+                    counts.usedCount = counts.usedCount + 1
+                elseif instance.zone == "discard" then
+                    counts.discardCount = counts.discardCount + 1
+                elseif instance.zone == "removed" then
+                    counts.removedCount = counts.removedCount + 1
+                end
+            end
+        end
+        return counts
+    end
+
+    local function buildBattleView(state, staticData, pendingTurn)
+        local errors = {}
+        local data = normalizeStaticData(staticData)
+        if type(data) ~= "table"
+            or type(data.registry) ~= "table"
+            or type(data.cards) ~= "table"
+            or type(data.traits) ~= "table"
+            or type(data.environments) ~= "table"
+            or type(data.characters) ~= "table" then
+            addError(errors, "missing_static_data", "$", "battleView 생성에는 검증된 전체 정적 데이터가 필요합니다.")
+            return failure(errors)
+        end
+
+        local stateValidation = runScript(triggerId, "stateSchema", "validateBattleState", state, data)
+        if type(stateValidation) ~= "table" or stateValidation.ok ~= true then
+            appendNestedErrors(errors, "$.state", stateValidation)
+            return failure(errors)
+        end
+
+        local displayState = state
+        local phase
+        local locked
+        local turnId
+        if pendingTurn ~= nil then
+            if type(pendingTurn) ~= "table" or getmetatable(pendingTurn) ~= nil then
+                addError(errors, "invalid_pending_marker", "$.pendingTurn", "대기 View에는 메타테이블 없는 pendingTurn이 필요합니다.")
+                return failure(errors)
+            end
+            if rawget(pendingTurn, "status") ~= "awaitingOutput" then
+                addError(errors, "invalid_pending_status", "$.pendingTurn.status", "대기 View의 상태는 awaitingOutput이어야 합니다.")
+                return failure(errors)
+            end
+            if not isRuntimeId(rawget(pendingTurn, "turnId")) then
+                addError(errors, "invalid_pending_turn_id", "$.pendingTurn.turnId", "대기 View의 turnId가 올바르지 않습니다.")
+                return failure(errors)
+            end
+            phase = "awaitingOutput"
+            locked = true
+            turnId = rawget(pendingTurn, "turnId")
+        elseif state.status == "active" then
+            phase = "selecting"
+            locked = false
+            turnId = string.format("%s-turn-%03d", state.battleId, state.turnNumber)
+        else
+            phase = "ended"
+            locked = true
+            turnId = state.lastCommittedTurnId or string.format("%s-turn-%03d", state.battleId, state.turnNumber)
+        end
+
+        local characterDefinition = data.characters[displayState.character.characterId]
+        local environment = data.environments[displayState.environmentId]
+        if type(characterDefinition) ~= "table" or type(environment) ~= "table" then
+            addError(errors, "missing_static_reference", "$", "캐릭터 또는 환경 정의를 찾을 수 없습니다.")
+            return failure(errors)
+        end
+
+        local selectedOrder = {}
+        for index, instanceId in ipairs(displayState.selection.playerCardInstanceIds) do
+            selectedOrder[instanceId] = index
+        end
+
+        local handInstances = {}
+        for _, instance in ipairs(displayState.cardInstances) do
+            if instance.owner == "player" and instance.zone == "hand" then
+                table.insert(handInstances, instance)
+            end
+        end
+        table.sort(handInstances, function(left, right)
+            return left.position < right.position
+        end)
+
+        local handItems = {}
+        local playableById = {}
+        for slot, instance in ipairs(handInstances) do
+            local card = data.cards[instance.cardId]
+            local summary = buildSafeCardSummary(card, data.registry, "$.hand.items[" .. slot .. "]", errors)
+            if summary then
+                local baseStealthCost = card.base.stealthCost
+                local baseResistanceDamage = card.base.resistanceDamage
+                local playable = true
+                local reasonCode = "none"
+                if locked then
+                    playable = false
+                    reasonCode = phase == "awaitingOutput" and "awaiting_output" or "battle_ended"
+                elseif displayState.player.stealth <= baseStealthCost then
+                    playable = false
+                    reasonCode = "insufficient_stealth"
+                end
+                playableById[instance.instanceId] = playable
+
+                table.insert(handItems, {
+                    slot = slot,
+                    instanceId = instance.instanceId,
+                    cardId = summary.cardId,
+                    name = summary.name,
+                    descriptionSegments = summary.descriptionSegments,
+                    ruleLines = summary.ruleLines,
+                    actionTag = summary.actionTag,
+                    mechanisms = summary.mechanisms,
+                    baseStealthCost = baseStealthCost,
+                    finalStealthCost = baseStealthCost,
+                    baseResistanceDamage = baseResistanceDamage,
+                    finalResistanceDamage = baseResistanceDamage,
+                    playable = playable,
+                    reasonCode = reasonCode,
+                    selected = selectedOrder[instance.instanceId] ~= nil,
+                    selectionOrder = selectedOrder[instance.instanceId] or 0,
+                })
+            end
+        end
+
+        local mainActionCount = 0
+        local mainActionIndex = nil
+        local selectedPlayable = true
+        for index, instanceId in ipairs(displayState.selection.playerCardInstanceIds) do
+            local instance
+            for _, candidate in ipairs(displayState.cardInstances) do
+                if candidate.instanceId == instanceId then
+                    instance = candidate
+                    break
+                end
+            end
+            local card = instance and data.cards[instance.cardId] or nil
+            if card and not hasMechanism(card, "chain") then
+                mainActionCount = mainActionCount + 1
+                mainActionIndex = index
+            end
+            if playableById[instanceId] ~= true then
+                selectedPlayable = false
+            end
+        end
+
+        local selectedCount = #displayState.selection.playerCardInstanceIds
+        local hasMainAction = mainActionCount == 1
+        local mainActionLast = mainActionIndex == selectedCount
+        local canSubmit = not locked and hasMainAction and mainActionLast and selectedPlayable
+        local selectionReason = "none"
+        if locked then
+            selectionReason = phase == "awaitingOutput" and "awaiting_output" or "battle_ended"
+        elseif mainActionCount == 0 then
+            selectionReason = "missing_main_action"
+        elseif mainActionCount > 1 then
+            selectionReason = "multiple_main_actions"
+        elseif not mainActionLast then
+            selectionReason = "main_action_not_last"
+        elseif not selectedPlayable then
+            selectionReason = "unplayable_selection"
+        end
+
+        local publicAction = { status = "none" }
+        if displayState.characterIntent.publicActionTag ~= nil then
+            local tag = lookupTag(data.registry, displayState.characterIntent.publicActionTag, "$.character.publicAction.tag", errors)
+            if tag then
+                publicAction = {
+                    status = "tagRevealed",
+                    tag = tag,
+                }
+            end
+        end
+
+        local outcomeLabels = {
+            active = "진행 중",
+            victory = "승리",
+            defeat = "패배",
+        }
+        local remaining = displayState.turnLimit - displayState.turnNumber + 1
+        if remaining < 0 then
+            remaining = 0
+        end
+
+        local view = {
+            schemaVersion = SCHEMA_VERSION,
+            kind = "battleView",
+            battleId = displayState.battleId,
+            turnId = turnId,
+            phase = phase,
+            locked = locked,
+            turn = {
+                number = displayState.turnNumber,
+                limit = displayState.turnLimit,
+                remaining = remaining,
+            },
+            environment = {
+                id = environment.id,
+                name = environment.name,
+                description = environment.description,
+                ruleLines = buildRuleLines(environment.rules, data.registry, "$.environment.rules", errors),
+            },
+            player = {
+                stealth = displayState.player.stealth,
+                plan = buildPlanView(displayState.player.planSlot, "player", data.cards, data.registry, "$.player.plan", errors),
+            },
+            character = {
+                id = characterDefinition.id,
+                name = characterDefinition.name,
+                resistance = displayState.character.resistance,
+                startingResistance = characterDefinition.battle.startingResistance,
+                mood = buildMoodView(displayState, data, errors),
+                publicAction = publicAction,
+                traits = buildTraitViews(displayState, data, errors),
+                plan = buildPlanView(displayState.character.planSlot, "character", data.cards, data.registry, "$.character.plan", errors),
+            },
+            hand = {
+                count = #handItems,
+                items = handItems,
+            },
+            selection = {
+                count = selectedCount,
+                hasMainAction = hasMainAction,
+                canSubmit = canSubmit,
+                reasonCode = selectionReason,
+            },
+            zones = countZones(displayState.cardInstances),
+            outcome = {
+                status = displayState.status,
+                label = outcomeLabels[displayState.status],
+            },
+        }
+
+        if #errors > 0 then
+            return failure(errors)
+        end
+
+        return success("view", view)
+    end
+
+    local function validateTagView(value, path, errors, expectedTagKind)
+        if type(value) ~= "table" then
+            addError(errors, "invalid_tag_view", path, "태그 View가 테이블이 아닙니다.")
+            return
+        end
+        checkAllowedKeys(value, {
+            kind = true,
+            id = true,
+            label = true,
+            tagKind = true,
+            tooltip = true,
+        }, path, errors)
+        if value.kind ~= "tag" then
+            addError(errors, "invalid_tag_kind", path .. ".kind", "태그 조각의 kind는 tag여야 합니다.")
+        end
+        if not isAsciiId(value.id) then
+            addError(errors, "invalid_tag_id", path .. ".id", "태그 ID가 올바르지 않습니다.")
+        end
+        if type(value.label) ~= "string" or value.label == "" then
+            addError(errors, "invalid_tag_label", path .. ".label", "태그 표시명이 필요합니다.")
+        end
+        if value.tagKind ~= "action" and value.tagKind ~= "mechanism" then
+            addError(errors, "invalid_tag_type", path .. ".tagKind", "tagKind가 올바르지 않습니다.")
+        elseif expectedTagKind and value.tagKind ~= expectedTagKind then
+            addError(errors, "tag_role_mismatch", path .. ".tagKind", "이 위치의 태그 종류는 " .. expectedTagKind .. "이어야 합니다.")
+        end
+        if type(value.tooltip) ~= "string" or value.tooltip == "" then
+            addError(errors, "invalid_tag_tooltip", path .. ".tooltip", "태그 툴팁이 필요합니다.")
+        end
+    end
+
+    local function validateSegments(value, path, errors)
+        local length = getArrayLength(value, path, errors)
+        if length == nil then
+            return
+        end
+        for index = 1, length do
+            local segment = value[index]
+            local segmentPath = path .. "[" .. index .. "]"
+            if type(segment) ~= "table" then
+                addError(errors, "invalid_segment", segmentPath, "문장 조각이 테이블이 아닙니다.")
+            elseif segment.kind == "text" then
+                checkAllowedKeys(segment, { kind = true, value = true }, segmentPath, errors)
+                if type(segment.value) ~= "string" or segment.value == "" then
+                    addError(errors, "invalid_text_segment", segmentPath .. ".value", "빈 텍스트 조각은 허용하지 않습니다.")
+                end
+            elseif segment.kind == "tag" then
+                validateTagView(segment, segmentPath, errors)
+            else
+                addError(errors, "invalid_segment_kind", segmentPath .. ".kind", "알 수 없는 문장 조각입니다.")
+            end
+        end
+    end
+
+    local function validateRuleLines(value, path, errors)
+        local length = getArrayLength(value, path, errors)
+        if length == nil then
+            return
+        end
+        for index = 1, length do
+            local line = value[index]
+            local linePath = path .. "[" .. index .. "]"
+            if type(line) ~= "table" then
+                addError(errors, "invalid_rule_line", linePath, "규칙 줄이 테이블이 아닙니다.")
+            else
+                checkAllowedKeys(line, { segments = true }, linePath, errors)
+                validateSegments(line.segments, linePath .. ".segments", errors)
+            end
+        end
+    end
+
+    local function validateTagArray(value, path, errors, expectedTagKind)
+        local length = getArrayLength(value, path, errors)
+        if length == nil then
+            return
+        end
+        for index = 1, length do
+            validateTagView(value[index], path .. "[" .. index .. "]", errors, expectedTagKind)
+        end
+    end
+
+    local function validateSafeCardSummary(value, path, errors)
+        if type(value) ~= "table" then
+            addError(errors, "invalid_card_summary", path, "카드 요약이 테이블이 아닙니다.")
+            return
+        end
+        checkAllowedKeys(value, {
+            cardId = true,
+            name = true,
+            descriptionSegments = true,
+            ruleLines = true,
+            actionTag = true,
+            mechanisms = true,
+        }, path, errors)
+        if not isAsciiId(value.cardId) then
+            addError(errors, "invalid_card_id", path .. ".cardId", "카드 ID가 올바르지 않습니다.")
+        end
+        if type(value.name) ~= "string" or value.name == "" then
+            addError(errors, "invalid_card_name", path .. ".name", "카드 이름이 필요합니다.")
+        end
+        validateSegments(value.descriptionSegments, path .. ".descriptionSegments", errors)
+        validateRuleLines(value.ruleLines, path .. ".ruleLines", errors)
+        validateTagView(value.actionTag, path .. ".actionTag", errors, "action")
+        validateTagArray(value.mechanisms, path .. ".mechanisms", errors, "mechanism")
+    end
+
+    local function validatePlanView(value, path, errors)
+        if type(value) ~= "table" then
+            addError(errors, "invalid_plan_view", path, "계획 View가 테이블이 아닙니다.")
+            return
+        end
+        checkAllowedKeys(value, {
+            status = true,
+            hasDuration = true,
+            remainingTurns = true,
+            card = true,
+        }, path, errors)
+        if value.status ~= "empty" and value.status ~= "hidden" and value.status ~= "revealed" then
+            addError(errors, "invalid_plan_status", path .. ".status", "계획 공개 상태가 올바르지 않습니다.")
+        end
+        if value.hasDuration ~= true and value.hasDuration ~= false then
+            addError(errors, "invalid_plan_duration_flag", path .. ".hasDuration", "hasDuration은 불리언이어야 합니다.")
+        elseif value.hasDuration then
+            if not isInteger(value.remainingTurns, 0) then
+                addError(errors, "invalid_remaining_turns", path .. ".remainingTurns", "남은 지속 턴이 올바르지 않습니다.")
+            end
+        elseif value.remainingTurns ~= nil then
+            addError(errors, "unexpected_remaining_turns", path .. ".remainingTurns", "지속시간이 없는 계획에 남은 턴을 표시할 수 없습니다.")
+        end
+
+        if value.status == "revealed" then
+            validateSafeCardSummary(value.card, path .. ".card", errors)
+        elseif value.card ~= nil then
+            addError(errors, "hidden_plan_leak", path .. ".card", "미공개 또는 빈 계획에 카드 정보를 넣을 수 없습니다.")
+        end
+        if value.status == "empty" and value.hasDuration ~= false then
+            addError(errors, "empty_plan_duration", path .. ".hasDuration", "빈 계획에는 지속시간이 없습니다.")
+        end
+    end
+
+    local function validateCardView(value, path, errors)
+        if type(value) ~= "table" then
+            addError(errors, "invalid_card_view", path, "손패 카드 View가 테이블이 아닙니다.")
+            return
+        end
+        checkAllowedKeys(value, {
+            slot = true,
+            instanceId = true,
+            cardId = true,
+            name = true,
+            descriptionSegments = true,
+            ruleLines = true,
+            actionTag = true,
+            mechanisms = true,
+            baseStealthCost = true,
+            finalStealthCost = true,
+            baseResistanceDamage = true,
+            finalResistanceDamage = true,
+            playable = true,
+            reasonCode = true,
+            selected = true,
+            selectionOrder = true,
+        }, path, errors)
+        if not isInteger(value.slot, 1) then
+            addError(errors, "invalid_card_slot", path .. ".slot", "손패 슬롯이 올바르지 않습니다.")
+        end
+        if not isRuntimeId(value.instanceId) then
+            addError(errors, "invalid_instance_id", path .. ".instanceId", "카드 인스턴스 ID가 올바르지 않습니다.")
+        end
+        if not isAsciiId(value.cardId) then
+            addError(errors, "invalid_card_id", path .. ".cardId", "카드 ID가 올바르지 않습니다.")
+        end
+        if type(value.name) ~= "string" or value.name == "" then
+            addError(errors, "invalid_card_name", path .. ".name", "카드 이름이 필요합니다.")
+        end
+        validateSegments(value.descriptionSegments, path .. ".descriptionSegments", errors)
+        validateRuleLines(value.ruleLines, path .. ".ruleLines", errors)
+        validateTagView(value.actionTag, path .. ".actionTag", errors, "action")
+        validateTagArray(value.mechanisms, path .. ".mechanisms", errors, "mechanism")
+        for _, field in ipairs({
+            "baseStealthCost",
+            "finalStealthCost",
+            "baseResistanceDamage",
+            "finalResistanceDamage",
+        }) do
+            if not isFinite(value[field]) or value[field] < 0 then
+                addError(errors, "invalid_card_number", path .. "." .. field, "카드 수치는 0 이상의 유한한 숫자여야 합니다.")
+            end
+        end
+        if value.playable ~= true and value.playable ~= false then
+            addError(errors, "invalid_playable", path .. ".playable", "playable은 불리언이어야 합니다.")
+        end
+        if type(value.reasonCode) ~= "string" then
+            addError(errors, "invalid_reason_code", path .. ".reasonCode", "사유 코드는 문자열이어야 합니다.")
+        elseif value.playable == true and value.reasonCode ~= "none" then
+            addError(errors, "playable_reason_mismatch", path .. ".reasonCode", "사용 가능한 카드는 사유 코드가 none이어야 합니다.")
+        elseif value.playable == false and value.reasonCode == "none" then
+            addError(errors, "disabled_reason_missing", path .. ".reasonCode", "사용할 수 없는 카드에는 사유 코드가 필요합니다.")
+        end
+        if value.selected ~= true and value.selected ~= false then
+            addError(errors, "invalid_selected", path .. ".selected", "selected는 불리언이어야 합니다.")
+        end
+        if not isInteger(value.selectionOrder, 0) then
+            addError(errors, "invalid_selection_order", path .. ".selectionOrder", "선택 순서가 올바르지 않습니다.")
+        elseif value.selected and value.selectionOrder == 0 then
+            addError(errors, "selected_order_missing", path .. ".selectionOrder", "선택 카드에는 1 이상의 선택 순서가 필요합니다.")
+        elseif not value.selected and value.selectionOrder ~= 0 then
+            addError(errors, "unselected_order_present", path .. ".selectionOrder", "미선택 카드의 선택 순서는 0이어야 합니다.")
+        end
+    end
+
+    local function validateBattleView(view)
+        local errors = {}
+        if type(view) ~= "table" then
+            addError(errors, "invalid_view", "$", "battleView가 테이블이 아닙니다.")
+            return failure(errors)
+        end
+        validateJsonSafe(view, "$", errors)
+        if #errors > 0 then
+            return failure(errors)
+        end
+        checkAllowedKeys(view, {
+            schemaVersion = true,
+            kind = true,
+            battleId = true,
+            turnId = true,
+            phase = true,
+            locked = true,
+            turn = true,
+            environment = true,
+            player = true,
+            character = true,
+            hand = true,
+            selection = true,
+            zones = true,
+            outcome = true,
+        }, "$", errors)
+        if view.schemaVersion ~= SCHEMA_VERSION then
+            addError(errors, "unsupported_schema", "$.schemaVersion", "지원하지 않는 battleView 스키마입니다.")
+        end
+        if view.kind ~= "battleView" then
+            addError(errors, "invalid_kind", "$.kind", "kind는 battleView여야 합니다.")
+        end
+        if not isRuntimeId(view.battleId) or not isRuntimeId(view.turnId) then
+            addError(errors, "invalid_runtime_id", "$", "battleId와 turnId가 올바르지 않습니다.")
+        end
+        if view.phase ~= "selecting" and view.phase ~= "awaitingOutput" and view.phase ~= "ended" then
+            addError(errors, "invalid_phase", "$.phase", "알 수 없는 battleView phase입니다.")
+        end
+        if view.locked ~= true and view.locked ~= false then
+            addError(errors, "invalid_locked", "$.locked", "locked는 불리언이어야 합니다.")
+        elseif (view.phase == "selecting" and view.locked) or (view.phase ~= "selecting" and not view.locked) then
+            addError(errors, "phase_lock_mismatch", "$.locked", "phase와 locked 값이 일치하지 않습니다.")
+        end
+
+        if type(view.turn) ~= "table" then
+            addError(errors, "invalid_turn", "$.turn", "turn이 테이블이 아닙니다.")
+        else
+            checkAllowedKeys(view.turn, { number = true, limit = true, remaining = true }, "$.turn", errors)
+            if not isInteger(view.turn.number, 1) or not isInteger(view.turn.limit, 1) or not isInteger(view.turn.remaining, 0) then
+                addError(errors, "invalid_turn_value", "$.turn", "턴 표시 수치가 올바르지 않습니다.")
+            elseif view.turn.remaining ~= math.max(0, view.turn.limit - view.turn.number + 1) then
+                addError(errors, "turn_remaining_mismatch", "$.turn.remaining", "남은 턴 표시가 현재 턴과 제한 턴에서 계산한 값과 다릅니다.")
+            end
+        end
+
+        if type(view.environment) ~= "table" then
+            addError(errors, "invalid_environment", "$.environment", "environment가 테이블이 아닙니다.")
+        else
+            checkAllowedKeys(view.environment, { id = true, name = true, description = true, ruleLines = true }, "$.environment", errors)
+            if not isAsciiId(view.environment.id) or type(view.environment.name) ~= "string" or type(view.environment.description) ~= "string" then
+                addError(errors, "invalid_environment_value", "$.environment", "환경 표시 값이 올바르지 않습니다.")
+            end
+            validateRuleLines(view.environment.ruleLines, "$.environment.ruleLines", errors)
+        end
+
+        if type(view.player) ~= "table" then
+            addError(errors, "invalid_player", "$.player", "player가 테이블이 아닙니다.")
+        else
+            checkAllowedKeys(view.player, { stealth = true, plan = true }, "$.player", errors)
+            if not isFinite(view.player.stealth) then
+                addError(errors, "invalid_stealth", "$.player.stealth", "은폐 표시값이 올바르지 않습니다.")
+            end
+            validatePlanView(view.player.plan, "$.player.plan", errors)
+        end
+
+        if type(view.character) ~= "table" then
+            addError(errors, "invalid_character", "$.character", "character가 테이블이 아닙니다.")
+        else
+            checkAllowedKeys(view.character, {
+                id = true,
+                name = true,
+                resistance = true,
+                startingResistance = true,
+                mood = true,
+                publicAction = true,
+                traits = true,
+                plan = true,
+            }, "$.character", errors)
+            if not isAsciiId(view.character.id) or type(view.character.name) ~= "string" then
+                addError(errors, "invalid_character_value", "$.character", "캐릭터 표시 값이 올바르지 않습니다.")
+            end
+            if not isFinite(view.character.resistance) or not isFinite(view.character.startingResistance) then
+                addError(errors, "invalid_resistance", "$.character", "저항 표시값이 올바르지 않습니다.")
+            end
+
+            local mood = view.character.mood
+            if type(mood) ~= "table" then
+                addError(errors, "invalid_mood", "$.character.mood", "무드 View가 테이블이 아닙니다.")
+            else
+                checkAllowedKeys(mood, {
+                    id = true,
+                    label = true,
+                    hasThresholdToRejection = true,
+                    thresholdToRejection = true,
+                    hasThresholdToCompliance = true,
+                    thresholdToCompliance = true,
+                }, "$.character.mood", errors)
+                if not isAsciiId(mood.id) or type(mood.label) ~= "string" then
+                    addError(errors, "invalid_mood_value", "$.character.mood", "무드 표시 값이 올바르지 않습니다.")
+                end
+                for _, direction in ipairs({ "Rejection", "Compliance" }) do
+                    local flag = mood["hasThresholdTo" .. direction]
+                    local threshold = mood["thresholdTo" .. direction]
+                    if flag ~= true and flag ~= false then
+                        addError(errors, "invalid_mood_threshold_flag", "$.character.mood", "무드 경계 존재 값은 불리언이어야 합니다.")
+                    elseif flag and (not isFinite(threshold) or threshold < 0) then
+                        addError(errors, "invalid_mood_threshold", "$.character.mood", "무드 경계가 올바르지 않습니다.")
+                    elseif not flag and threshold ~= nil then
+                        addError(errors, "unexpected_mood_threshold", "$.character.mood", "존재하지 않는 방향의 무드 경계를 표시할 수 없습니다.")
+                    end
+                end
+            end
+
+            local publicAction = view.character.publicAction
+            if type(publicAction) ~= "table" then
+                addError(errors, "invalid_public_action", "$.character.publicAction", "공개 행동 View가 테이블이 아닙니다.")
+            elseif publicAction.status == "none" then
+                checkAllowedKeys(publicAction, { status = true }, "$.character.publicAction", errors)
+            elseif publicAction.status == "tagRevealed" then
+                checkAllowedKeys(publicAction, { status = true, tag = true }, "$.character.publicAction", errors)
+                validateTagView(publicAction.tag, "$.character.publicAction.tag", errors, "action")
+            else
+                addError(errors, "invalid_public_action_status", "$.character.publicAction.status", "공개 행동 상태가 올바르지 않습니다.")
+            end
+
+            local traitCount = getArrayLength(view.character.traits, "$.character.traits", errors)
+            if traitCount then
+                for index = 1, traitCount do
+                    local trait = view.character.traits[index]
+                    local path = "$.character.traits[" .. index .. "]"
+                    if type(trait) ~= "table" then
+                        addError(errors, "invalid_trait_view", path, "특징 View가 테이블이 아닙니다.")
+                    else
+                        checkAllowedKeys(trait, { id = true, name = true, description = true, ruleLines = true }, path, errors)
+                        if not isAsciiId(trait.id) or type(trait.name) ~= "string" or type(trait.description) ~= "string" then
+                            addError(errors, "invalid_trait_value", path, "특징 표시 값이 올바르지 않습니다.")
+                        end
+                        validateRuleLines(trait.ruleLines, path .. ".ruleLines", errors)
+                    end
+                end
+            end
+            validatePlanView(view.character.plan, "$.character.plan", errors)
+        end
+
+        if type(view.hand) ~= "table" then
+            addError(errors, "invalid_hand", "$.hand", "hand가 테이블이 아닙니다.")
+        else
+            checkAllowedKeys(view.hand, { count = true, items = true }, "$.hand", errors)
+            local handCount = getArrayLength(view.hand.items, "$.hand.items", errors)
+            if handCount and view.hand.count ~= handCount then
+                addError(errors, "hand_count_mismatch", "$.hand.count", "손패 개수와 항목 수가 다릅니다.")
+            end
+            if handCount then
+                for index = 1, handCount do
+                    validateCardView(view.hand.items[index], "$.hand.items[" .. index .. "]", errors)
+                    if type(view.hand.items[index]) == "table" and view.hand.items[index].slot ~= index then
+                        addError(errors, "hand_slot_mismatch", "$.hand.items[" .. index .. "].slot", "손패 배열 순서와 슬롯이 다릅니다.")
+                    end
+                end
+            end
+        end
+
+        if type(view.selection) ~= "table" then
+            addError(errors, "invalid_selection", "$.selection", "selection이 테이블이 아닙니다.")
+        else
+            checkAllowedKeys(view.selection, {
+                count = true,
+                hasMainAction = true,
+                canSubmit = true,
+                reasonCode = true,
+            }, "$.selection", errors)
+            if not isInteger(view.selection.count, 0)
+                or (view.selection.hasMainAction ~= true and view.selection.hasMainAction ~= false)
+                or (view.selection.canSubmit ~= true and view.selection.canSubmit ~= false)
+                or type(view.selection.reasonCode) ~= "string" then
+                addError(errors, "invalid_selection_value", "$.selection", "선택 표시 값이 올바르지 않습니다.")
+            end
+            if type(view.hand) == "table" and type(view.hand.items) == "table" then
+                local selectedCount = 0
+                local orders = {}
+                local mainActionCount = 0
+                local mainActionOrder = nil
+                local selectedPlayable = true
+                for _, item in ipairs(view.hand.items) do
+                    if type(item) == "table" and item.selected == true then
+                        selectedCount = selectedCount + 1
+                        if isInteger(item.selectionOrder, 1) then
+                            orders[item.selectionOrder] = (orders[item.selectionOrder] or 0) + 1
+                        end
+                        if item.playable ~= true then
+                            selectedPlayable = false
+                        end
+
+                        local hasChain = false
+                        if type(item.mechanisms) == "table" then
+                            for _, mechanism in ipairs(item.mechanisms) do
+                                if type(mechanism) == "table" and mechanism.id == "chain" then
+                                    hasChain = true
+                                    break
+                                end
+                            end
+                        end
+                        if not hasChain then
+                            mainActionCount = mainActionCount + 1
+                            mainActionOrder = item.selectionOrder
+                        end
+                    end
+                end
+                if view.selection.count ~= selectedCount then
+                    addError(errors, "selection_count_mismatch", "$.selection.count", "선택 개수와 손패의 선택 표시가 다릅니다.")
+                end
+                for order = 1, selectedCount do
+                    if orders[order] ~= 1 then
+                        addError(errors, "selection_order_gap", "$.hand.items", "선택 순서는 1부터 중복 없이 이어져야 합니다.")
+                        break
+                    end
+                end
+
+                local expectedHasMainAction = mainActionCount == 1
+                local mainActionLast = mainActionOrder == selectedCount
+                local expectedCanSubmit = view.locked == false
+                    and expectedHasMainAction
+                    and mainActionLast
+                    and selectedPlayable
+                local expectedReason = "none"
+                if view.locked == true then
+                    expectedReason = view.phase == "awaitingOutput" and "awaiting_output" or "battle_ended"
+                elseif mainActionCount == 0 then
+                    expectedReason = "missing_main_action"
+                elseif mainActionCount > 1 then
+                    expectedReason = "multiple_main_actions"
+                elseif not mainActionLast then
+                    expectedReason = "main_action_not_last"
+                elseif not selectedPlayable then
+                    expectedReason = "unplayable_selection"
+                end
+
+                if view.selection.hasMainAction ~= expectedHasMainAction then
+                    addError(errors, "main_action_summary_mismatch", "$.selection.hasMainAction", "손패 선택에서 계산한 주 행동 여부와 다릅니다.")
+                end
+                if view.selection.canSubmit ~= expectedCanSubmit then
+                    addError(errors, "submit_summary_mismatch", "$.selection.canSubmit", "손패 선택에서 계산한 전송 가능 여부와 다릅니다.")
+                end
+                if view.selection.reasonCode ~= expectedReason then
+                    addError(errors, "selection_reason_mismatch", "$.selection.reasonCode", "손패 선택에서 계산한 사유 코드와 다릅니다.")
+                end
+            end
+        end
+
+        if type(view.zones) ~= "table" then
+            addError(errors, "invalid_zones", "$.zones", "zones가 테이블이 아닙니다.")
+        else
+            checkAllowedKeys(view.zones, {
+                deckCount = true,
+                usedCount = true,
+                discardCount = true,
+                removedCount = true,
+            }, "$.zones", errors)
+            for _, field in ipairs({ "deckCount", "usedCount", "discardCount", "removedCount" }) do
+                if not isInteger(view.zones[field], 0) then
+                    addError(errors, "invalid_zone_count", "$.zones." .. field, "카드 영역 개수가 올바르지 않습니다.")
+                end
+            end
+        end
+
+        if type(view.outcome) ~= "table" then
+            addError(errors, "invalid_outcome", "$.outcome", "outcome이 테이블이 아닙니다.")
+        else
+            checkAllowedKeys(view.outcome, { status = true, label = true }, "$.outcome", errors)
+            if view.outcome.status ~= "active" and view.outcome.status ~= "victory" and view.outcome.status ~= "defeat" then
+                addError(errors, "invalid_outcome_status", "$.outcome.status", "결과 상태가 올바르지 않습니다.")
+            end
+            if type(view.outcome.label) ~= "string" or view.outcome.label == "" then
+                addError(errors, "invalid_outcome_label", "$.outcome.label", "결과 표시명이 필요합니다.")
+            end
+            if view.phase == "ended" and view.outcome.status == "active" then
+                addError(errors, "ended_outcome_mismatch", "$.outcome.status", "종료 View의 결과는 active일 수 없습니다.")
+            elseif view.phase ~= "ended" and view.outcome.status ~= "active" then
+                addError(errors, "active_phase_outcome_mismatch", "$.outcome.status", "선택 또는 출력 대기 View의 결과는 active여야 합니다.")
+            end
+        end
+
+        if #errors > 0 then
+            return failure(errors)
+        end
+        return success(nil, nil)
+    end
+
+    local arguments = { ... }
+    if action == "tokenizeTags" then
+        return tokenizeTags(arguments[1], arguments[2], arguments[3])
+    elseif action == "validateBattleView" then
+        return validateBattleView(arguments[1])
+    elseif action == "buildBattleView" then
+        local built = buildBattleView(arguments[1], arguments[2], arguments[3])
+        if type(built) ~= "table" or built.ok ~= true then
+            return built
+        end
+        local validation = validateBattleView(built.view)
+        if not validation.ok then
+            return validation
+        end
+        return built
+    end
+
+    local errors = {}
+    addError(errors, "unknown_action", "$", "지원하지 않는 View 작업입니다: " .. tostring(action))
+    return failure(errors)
+end)

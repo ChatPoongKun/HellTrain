@@ -9,6 +9,7 @@
 - 카드·특징·환경과 캐릭터 같은 정적 정의는 Lua 테이블로 작성한다.
 - 진행 상태와 세이브는 함수가 없는 JSON 직렬화 가능한 값만 사용한다.
 - 내부 ID와 스키마 키는 ASCII를 사용한다.
+- 카드·태그·메커니즘·사건·효과 명령 같은 ID 값은 `lower_snake_case`, `cardId` 같은 스키마 필드명은 lowerCamelCase를 사용한다.
 - 카드명, 규칙 설명과 LLM 묘사는 한글을 사용한다.
 - 카드 함수는 실제 Lua 함수로 작성할 수 있다.
 - 카드 함수는 상태를 직접 변경하지 않고 구조화된 효과 명령 목록을 반환한다.
@@ -38,6 +39,8 @@ local cardInstanceState = {
 }
 ```
 
+`temporaryModifiers`는 선택 필드다. 내부 명령 스키마가 전투 엔진 단계에서 확정되기 전에는 생략하거나 빈 배열로만 두며, 임의 필드를 가진 payload는 허용하지 않는다.
+
 계획 슬롯도 원본 함수 대신 ID와 수명 상태만 저장한다.
 
 ```lua
@@ -53,7 +56,7 @@ local planState = {
 
 ## 3. 정적 DB 모듈 형식
 
-한 DB 로어북은 다음 형태의 Lua 청크를 반환한다.
+한 DB 로어북은 `.db` 이름을 사용하지만 다음 형태의 Lua 청크를 반환한다.
 
 ```lua
 return {
@@ -103,6 +106,14 @@ base = {
 캐릭터 카드도 같은 스키마를 사용한다. 캐릭터 카드가 기본 저항 피해나 은폐 비용을 사용하지 않으면 0을 기록하고, 실제 효과는 구조화 명령으로 반환한다.
 
 ## 5. 내부 식별자
+
+내부 식별자와 스키마 필드명은 역할을 구분한다.
+
+- 레지스트리 키, `id`, `event.type`, 환경 트리거의 `event`와 효과 명령의 `op`: `lower_snake_case`
+- Lua/JSON 테이블의 필드명과 런타임 API 작업명: lowerCamelCase
+- 사용자에게 보이는 이름과 설명: 한글
+
+예를 들어 `cardDeclared`라는 필드명을 만들지 않고 사건 ID 값으로 `card_declared`를 사용하며, 카드 참조 필드는 `cardId`로 유지한다. 레지스트리 키와 내부 `id`는 항상 같아야 한다.
 
 초기 알파의 내부 ID는 다음 값부터 시작한다.
 
@@ -260,7 +271,7 @@ end
 resolve = function(context)
     return {
         {
-            op = "recoverStealth",
+            op = "recover_stealth",
             target = "player",
             amount = 3,
             cause = "cardEffect",
@@ -284,15 +295,15 @@ end
 
 | `op` | 주요 값 | 의미 |
 |---|---|---|
-| `damageResistance` | `amount` | 캐릭터 저항 피해 |
-| `recoverResistance` | `amount` | 캐릭터 저항 회복 |
-| `loseStealth` | `amount` | 비용과 구분되는 외부 은폐 손실 |
-| `recoverStealth` | `amount` | 은폐 회복 |
-| `drawCards` | `amount` | 대상 덱에서 카드 드로우 |
-| `skipActions` | `scope` | 이번 턴 대상의 남은 카드 행동 생략 |
-| `shiftMood` | `amount` | 현재 무드를 지정 단계만큼 직접 이동 |
-| `setMood` | `mood` | 무드를 특정 단계로 직접 설정 |
-| `lockMood` | `mood`, `until` | 조건이 맞는 동안 무드 변경 방지 |
+| `damage_resistance` | `amount` | 캐릭터 저항 피해 |
+| `recover_resistance` | `amount` | 캐릭터 저항 회복 |
+| `lose_stealth` | `amount` | 비용과 구분되는 외부 은폐 손실 |
+| `recover_stealth` | `amount` | 은폐 회복 |
+| `draw_cards` | `amount` | 대상 덱에서 카드 드로우 |
+| `skip_actions` | `scope` | 이번 턴 대상의 남은 카드 행동 생략 |
+| `shift_mood` | `amount` | 현재 무드를 지정 단계만큼 직접 이동 |
+| `set_mood` | `mood` | 무드를 특정 단계로 직접 설정 |
+| `lock_mood` | `mood`, `until` | 조건이 맞는 동안 무드 변경 방지 |
 
 기본 은폐 비용과 기본 저항 피해는 `base`에서 엔진이 효과 사건으로 만든다. 카드 함수가 같은 기본 효과를 다시 반환하지 않는다.
 
@@ -325,7 +336,7 @@ end
 
 엔진은 카드 한 장의 해결마다 고유한 해결 ID를 만들고 그 카드가 직접 만든 효과 사건에 같은 원본 해결 ID를 붙인다. `insight`는 이 원본 해결 ID를 가진 사건 때문에 발동할 상대 계획에만 적용한다. 드로우한 카드를 나중에 별도로 사용하거나 다른 카드가 독립적으로 만든 사건은 새로운 해결이므로 억제 범위에 포함하지 않는다.
 
-카드가 `shiftMood`, `setMood` 또는 `lockMood`를 실제로 적용하면 해당 턴의 공통 무드 성과 판정을 생략한다.
+카드가 `shift_mood`, `set_mood` 또는 `lock_mood`를 실제로 적용하면 해당 턴의 공통 무드 성과 판정을 생략한다.
 
 ## 9. 계획 계약
 
@@ -338,7 +349,7 @@ mechanismData = {
         charges = 1,
 
         trigger = function(context, event)
-            return event.type == "turnStart"
+            return event.type == "turn_start"
                 and event.side == "player"
                 and context.mood == "ignore"
         end,
@@ -346,10 +357,10 @@ mechanismData = {
         resolve = function(context, event)
             return {
                 {
-                    op = "lockMood",
+                    op = "lock_mood",
                     target = "character",
                     mood = "ignore",
-                    until = "turnEnd",
+                    ["until"] = "turn_end",
                     cause = "plan",
                 },
             }
@@ -416,17 +427,17 @@ return {
                     durationTurns = 1,
                     charges = 1,
                     trigger = function(context, event)
-                        return event.type == "turnStart"
+                        return event.type == "turn_start"
                             and event.side == "player"
                             and context.mood == "ignore"
                     end,
                     resolve = function(context, event)
                         return {
                             {
-                                op = "lockMood",
+                                op = "lock_mood",
                                 target = "character",
                                 mood = "ignore",
-                                until = "turnEnd",
+                                ["until"] = "turn_end",
                                 cause = "plan",
                             },
                         }
@@ -462,7 +473,7 @@ return {
                 suspicion = function(context)
                     return {
                         {
-                            op = "loseStealth",
+                            op = "lose_stealth",
                             target = "player",
                             amount = 3,
                             cause = "moodEffect",
@@ -500,7 +511,7 @@ return {
                 end
                 return {
                     {
-                        op = "recoverStealth",
+                        op = "recover_stealth",
                         target = "player",
                         amount = amount,
                         cause = "cardEffect",
@@ -533,7 +544,7 @@ return {
             resolve = function(context)
                 return {
                     {
-                        op = "drawCards",
+                        op = "draw_cards",
                         target = "player",
                         amount = 1,
                         cause = "cardEffect",
@@ -589,13 +600,13 @@ return {
             resolve = function(context)
                 return {
                     {
-                        op = "skipActions",
+                        op = "skip_actions",
                         target = "character",
                         scope = "remainingTurn",
                         cause = "cardEffect",
                     },
                     {
-                        op = "shiftMood",
+                        op = "shift_mood",
                         target = "character",
                         amount = 1,
                         cause = "cardEffect",
