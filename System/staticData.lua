@@ -77,6 +77,12 @@
             and value >= 0
     end
 
+    local function isPositiveInteger(value)
+        return isFiniteNonNegative(value)
+            and value >= 1
+            and value % 1 == 0
+    end
+
     local function isAsciiId(value)
         return type(value) == "string"
             and string.match(value, "^[a-z][a-z0-9_]*$") ~= nil
@@ -365,8 +371,14 @@
                         if type(plan) ~= "table" then
                             addError(errors, "missing_plan_data", path .. ".mechanismData.plan", "계획 설정이 없습니다.")
                         else
-                            local hasLifetime = isFiniteNonNegative(plan.durationTurns) and plan.durationTurns > 0
-                                or isFiniteNonNegative(plan.charges) and plan.charges > 0
+                            if plan.durationTurns ~= nil and not isPositiveInteger(plan.durationTurns) then
+                                addError(errors, "invalid_plan_duration", path .. ".mechanismData.plan.durationTurns", "계획 지속 턴은 1 이상의 정수여야 합니다.")
+                            end
+                            if plan.charges ~= nil and not isPositiveInteger(plan.charges) then
+                                addError(errors, "invalid_plan_charges", path .. ".mechanismData.plan.charges", "계획 충전은 1 이상의 정수여야 합니다.")
+                            end
+                            local hasLifetime = isPositiveInteger(plan.durationTurns)
+                                or isPositiveInteger(plan.charges)
                                 or type(plan.expires) == "function"
                             if not hasLifetime then
                                 addError(errors, "unlimited_plan", path .. ".mechanismData.plan", "계획 수명이 제한되지 않았습니다.")
@@ -380,6 +392,67 @@
                         end
                     elseif plan ~= nil then
                         addError(errors, "unexpected_plan_data", path .. ".mechanismData.plan", "계획 메커니즘이 없는 카드에 계획 설정이 있습니다.")
+                    end
+
+                    local selectionPreview = card.selectionPreview
+                    if selectionPreview ~= nil then
+                        local previewPath = path .. ".selectionPreview"
+                        if card.owner ~= "player" or not seenMechanisms.chain then
+                            addError(errors, "preview_requires_player_chain", previewPath, "선택 단계 효과는 플레이어 연계 카드에만 선언할 수 있습니다.")
+                        end
+                        if card.resolve ~= nil then
+                            addError(errors, "preview_with_resolve", path .. ".resolve", "선택 단계 효과 카드에는 v1 resolve를 함께 둘 수 없습니다.")
+                        end
+                        if type(selectionPreview) ~= "table" then
+                            addError(errors, "invalid_selection_preview", previewPath, "선택 단계 효과 정책이 테이블이 아닙니다.")
+                        else
+                            for field in pairs(selectionPreview) do
+                                if field ~= "effects" then
+                                    addError(errors, "unexpected_preview_field", previewPath .. "." .. tostring(field), "선택 단계 효과 정책에 허용되지 않은 필드가 있습니다.")
+                                end
+                            end
+
+                            if not isArray(selectionPreview.effects) or #selectionPreview.effects == 0 then
+                                addError(errors, "invalid_preview_effects", previewPath .. ".effects", "선택 단계 효과는 비어 있지 않은 배열이어야 합니다.")
+                            else
+                                local seenEffectIds = {}
+                                for effectIndex, effect in ipairs(selectionPreview.effects) do
+                                    local effectPath = previewPath .. ".effects[" .. effectIndex .. "]"
+                                    if type(effect) ~= "table" then
+                                        addError(errors, "invalid_preview_effect", effectPath, "선택 단계 효과가 테이블이 아닙니다.")
+                                    else
+                                        for field in pairs(effect) do
+                                            if field ~= "id" and field ~= "op" and field ~= "target" and field ~= "amount" then
+                                                addError(errors, "unexpected_preview_effect_field", effectPath .. "." .. tostring(field), "선택 단계 효과에 허용되지 않은 필드가 있습니다.")
+                                            end
+                                        end
+                                        if not isAsciiId(effect.id) then
+                                            addError(errors, "invalid_preview_effect_id", effectPath .. ".id", "선택 단계 효과 ID는 ASCII ID여야 합니다.")
+                                        elseif seenEffectIds[effect.id] then
+                                            addError(errors, "duplicate_preview_effect_id", effectPath .. ".id", "선택 단계 효과 ID가 중복되었습니다.")
+                                        else
+                                            seenEffectIds[effect.id] = true
+                                        end
+
+                                        local registeredOp = type(registry) == "table"
+                                            and type(registry.effectOps) == "table"
+                                            and registry.effectOps[effect.op]
+                                            or nil
+                                        if not registeredOp then
+                                            addError(errors, "unknown_preview_op", effectPath .. ".op", "등록되지 않은 선택 단계 효과 작업입니다.")
+                                        elseif effect.op ~= "draw_cards" then
+                                            addError(errors, "unsupported_preview_op", effectPath .. ".op", "선택 단계 효과 v1은 draw_cards만 지원합니다.")
+                                        end
+                                        if effect.target ~= "player" then
+                                            addError(errors, "invalid_preview_target", effectPath .. ".target", "선택 단계 드로우 대상은 player여야 합니다.")
+                                        end
+                                        if not isPositiveInteger(effect.amount) then
+                                            addError(errors, "invalid_preview_amount", effectPath .. ".amount", "선택 단계 드로우 수량은 1 이상의 정수여야 합니다.")
+                                        end
+                                    end
+                                end
+                            end
+                        end
                     end
 
                     validateNarration(card, path, hasPlan, errors)
@@ -568,6 +641,17 @@
                 else
                     if not isFiniteNonNegative(battle.startingResistance) or battle.startingResistance == 0 then
                         addError(errors, "invalid_starting_resistance", path .. ".battle.startingResistance", "시작 저항이 양수의 유한한 숫자가 아닙니다.")
+                    end
+                    if not isPositiveInteger(battle.baseDrawCount) then
+                        addError(errors, "invalid_base_draw_count", path .. ".battle.baseDrawCount", "기본 드로우 수는 1 이상의 정수여야 합니다.")
+                    end
+                    if not isPositiveInteger(battle.maxHandSize) then
+                        addError(errors, "invalid_hand_size", path .. ".battle.maxHandSize", "최대 손패는 1 이상의 정수여야 합니다.")
+                    end
+                    if isPositiveInteger(battle.baseDrawCount)
+                        and isPositiveInteger(battle.maxHandSize)
+                        and battle.baseDrawCount > battle.maxHandSize then
+                        addError(errors, "draw_exceeds_hand_limit", path .. ".battle.baseDrawCount", "기본 드로우 수는 최대 손패보다 클 수 없습니다.")
                     end
                     if type(registry) ~= "table"
                         or type(registry.moods) ~= "table"

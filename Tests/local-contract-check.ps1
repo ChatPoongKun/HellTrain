@@ -31,6 +31,7 @@ local function loadLore(path)
 end
 
 local modules = {
+    init = loadLore("System/init.lua"),
     staticData = loadLore("System/staticData.lua"),
     stateSchema = loadLore("System/stateSchema.lua"),
     viewBuilder = loadLore("System/viewBuilder.lua"),
@@ -62,13 +63,14 @@ local lorePaths = {
     ["Environments.db"] = "DB/Environments.db",
     ["YooJiyoung.db"] = "Char/YooJiyoung.db",
 }
+local loreOverrides = {}
 
 function getLoreBooks(triggerId, name)
     local path = lorePaths[name]
     if not path then
         return {}
     end
-    return { { content = readFile(path) } }
+    return { { content = loreOverrides[name] or readFile(path) } }
 end
 
 local function clone(value, active)
@@ -149,6 +151,39 @@ assert(staticLoad.counts.cards == 10)
 assert(staticLoad.counts.traits == 1)
 assert(staticLoad.counts.environments == 1)
 assert(staticLoad.counts.characters == 1)
+assert(staticData.characters.yoo_jiyoung.battle.baseDrawCount == 3)
+assert(staticData.characters.yoo_jiyoung.battle.maxHandSize == 5)
+
+local fractionalPlanSource, durationReplacementCount = string.gsub(
+    readFile("DB/PlayerCards.db"),
+    "durationTurns = 1",
+    "durationTurns = 0.5",
+    1
+)
+assert(durationReplacementCount == 1, "fractional duration fixture replacement failed")
+local chargeReplacementCount
+fractionalPlanSource, chargeReplacementCount = string.gsub(
+    fractionalPlanSource,
+    "charges = 1",
+    "charges = 0.5",
+    1
+)
+assert(chargeReplacementCount == 1, "fractional charge fixture replacement failed")
+loreOverrides["PlayerCards.db"] = fractionalPlanSource
+local fractionalPlanReport = runScript("test", "staticData", "loadAll")
+loreOverrides["PlayerCards.db"] = nil
+assertError(
+    "fractional static plan duration",
+    fractionalPlanReport,
+    "invalid_plan_duration",
+    "cards.subtle_approach.mechanismData.plan.durationTurns"
+)
+assertError(
+    "fractional static plan charges",
+    fractionalPlanReport,
+    "invalid_plan_charges",
+    "cards.subtle_approach.mechanismData.plan.charges"
+)
 
 local baseState = {
     schemaVersion = 1,
@@ -161,7 +196,8 @@ local baseState = {
     rng = { seed = 12345, cursor = 0 },
     player = {
         stealth = 30,
-        maxHandSize = 3,
+        baseDrawCount = 3,
+        maxHandSize = 5,
         perkIds = {},
         planSlot = { occupied = false },
     },
@@ -170,6 +206,8 @@ local baseState = {
         resistance = 30,
         mood = "ignore",
         traitIds = { "reserved" },
+        baseDrawCount = 3,
+        maxHandSize = 5,
         planSlot = {
             occupied = true,
             cardInstanceId = "character-plan-001",
@@ -225,6 +263,68 @@ assertError(
 local nanState = clone(baseState)
 nanState.player.perkIds = { 0 / 0 }
 assert(runScript("test", "stateSchema", "validateBattleState", nanState, staticData).ok == false)
+
+local unsafeRng = clone(baseState)
+unsafeRng.rng.seed = 9007199254740992
+assertError(
+    "unsafe rng seed",
+    runScript("test", "stateSchema", "validateBattleState", unsafeRng, staticData),
+    "invalid_rng_seed",
+    "$.rng.seed"
+)
+
+local missingBaseDraw = clone(baseState)
+missingBaseDraw.player.baseDrawCount = nil
+assertError(
+    "missing player base draw",
+    runScript("test", "stateSchema", "validateBattleState", missingBaseDraw, staticData),
+    "invalid_base_draw_count",
+    "$.player.baseDrawCount"
+)
+
+local oversizedBaseDraw = clone(baseState)
+oversizedBaseDraw.character.baseDrawCount = 6
+assertError(
+    "character base draw over hand limit",
+    runScript("test", "stateSchema", "validateBattleState", oversizedBaseDraw, staticData),
+    "draw_exceeds_hand_limit",
+    "$.character.baseDrawCount"
+)
+
+local oversizedHand = clone(baseState)
+table.insert(oversizedHand.cardInstances, {
+    instanceId = "player-004", cardId = "play_it_cool", owner = "player", zone = "hand", position = 4,
+})
+table.insert(oversizedHand.cardInstances, {
+    instanceId = "player-005", cardId = "hypnotic_whisper", owner = "player", zone = "hand", position = 5,
+})
+table.insert(oversizedHand.cardInstances, {
+    instanceId = "player-006", cardId = "subtle_approach", owner = "player", zone = "hand", position = 6,
+})
+assertError(
+    "player hand over limit",
+    runScript("test", "stateSchema", "validateBattleState", oversizedHand, staticData),
+    "hand_limit_exceeded",
+    "$.cardInstances"
+)
+
+local zeroTurnPlan = clone(baseState)
+zeroTurnPlan.character.planSlot.remainingTurns = 0
+assertError(
+    "occupied plan with zero duration",
+    runScript("test", "stateSchema", "validateBattleState", zeroTurnPlan, staticData),
+    "invalid_remaining_turns",
+    "$.character.planSlot.remainingTurns"
+)
+
+local zeroChargePlan = clone(baseState)
+zeroChargePlan.character.planSlot.remainingCharges = 0
+assertError(
+    "occupied plan with zero charges",
+    runScript("test", "stateSchema", "validateBattleState", zeroChargePlan, staticData),
+    "invalid_remaining_charges",
+    "$.character.planSlot.remainingCharges"
+)
 
 local orphanPlanState = clone(baseState)
 orphanPlanState.character.planSlot = { occupied = false }

@@ -1,5 +1,6 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
+    local MAX_SAFE_INTEGER = 9007199254740991
 
     local VALID_STATUS = {
         active = true,
@@ -49,6 +50,11 @@
         return isFinite(value)
             and value % 1 == 0
             and (minimum == nil or value >= minimum)
+    end
+
+    local function isSafeInteger(value, minimum)
+        return isInteger(value, minimum)
+            and math.abs(value) <= MAX_SAFE_INTEGER
     end
 
     local function isAsciiId(value)
@@ -330,14 +336,14 @@
         local hasLifetime = false
         if slot.remainingTurns ~= nil then
             hasLifetime = true
-            if not isInteger(slot.remainingTurns, 0) then
-                addError(errors, "invalid_remaining_turns", path .. ".remainingTurns", "남은 지속 턴은 0 이상의 정수여야 합니다.")
+            if not isInteger(slot.remainingTurns, 1) then
+                addError(errors, "invalid_remaining_turns", path .. ".remainingTurns", "점유된 계획의 남은 지속 턴은 1 이상의 정수여야 합니다.")
             end
         end
         if slot.remainingCharges ~= nil then
             hasLifetime = true
-            if not isInteger(slot.remainingCharges, 0) then
-                addError(errors, "invalid_remaining_charges", path .. ".remainingCharges", "남은 충전은 0 이상의 정수여야 합니다.")
+            if not isInteger(slot.remainingCharges, 1) then
+                addError(errors, "invalid_remaining_charges", path .. ".remainingCharges", "점유된 계획의 남은 충전은 1 이상의 정수여야 합니다.")
             end
         end
         if not hasLifetime then
@@ -438,11 +444,11 @@
             addError(errors, "invalid_rng", "$.rng", "rng가 테이블이 아닙니다.")
         else
             checkAllowedKeys(state.rng, { seed = true, cursor = true }, "$.rng", errors)
-            if not isInteger(state.rng.seed, 0) then
-                addError(errors, "invalid_rng_seed", "$.rng.seed", "난수 시드는 0 이상의 정수여야 합니다.")
+            if not isSafeInteger(state.rng.seed, 0) then
+                addError(errors, "invalid_rng_seed", "$.rng.seed", "난수 시드는 0 이상이고 안전한 숫자 범위 안의 정수여야 합니다.")
             end
-            if not isInteger(state.rng.cursor, 0) then
-                addError(errors, "invalid_rng_cursor", "$.rng.cursor", "난수 커서는 0 이상의 정수여야 합니다.")
+            if not isSafeInteger(state.rng.cursor, 0) then
+                addError(errors, "invalid_rng_cursor", "$.rng.cursor", "난수 커서는 0 이상이고 안전한 숫자 범위 안의 정수여야 합니다.")
             end
         end
 
@@ -451,6 +457,7 @@
         else
             checkAllowedKeys(state.player, {
                 stealth = true,
+                baseDrawCount = true,
                 maxHandSize = true,
                 perkIds = true,
                 planSlot = true,
@@ -458,8 +465,16 @@
             if not isFinite(state.player.stealth) then
                 addError(errors, "invalid_stealth", "$.player.stealth", "은폐는 유한한 숫자여야 합니다.")
             end
-            if not isInteger(state.player.maxHandSize, 0) then
-                addError(errors, "invalid_hand_size", "$.player.maxHandSize", "최대 손패는 0 이상의 정수여야 합니다.")
+            if not isInteger(state.player.baseDrawCount, 1) then
+                addError(errors, "invalid_base_draw_count", "$.player.baseDrawCount", "기본 드로우 수는 1 이상의 정수여야 합니다.")
+            end
+            if not isInteger(state.player.maxHandSize, 1) then
+                addError(errors, "invalid_hand_size", "$.player.maxHandSize", "최대 손패는 1 이상의 정수여야 합니다.")
+            end
+            if isInteger(state.player.baseDrawCount, 1)
+                and isInteger(state.player.maxHandSize, 1)
+                and state.player.baseDrawCount > state.player.maxHandSize then
+                addError(errors, "draw_exceeds_hand_limit", "$.player.baseDrawCount", "기본 드로우 수는 최대 손패보다 클 수 없습니다.")
             end
             validateIdArray(state.player.perkIds, "$.player.perkIds", errors, isAsciiId)
         end
@@ -472,6 +487,8 @@
                 resistance = true,
                 mood = true,
                 traitIds = true,
+                baseDrawCount = true,
+                maxHandSize = true,
                 planSlot = true,
             }, "$.character", errors)
             if not isAsciiId(state.character.characterId) then
@@ -482,6 +499,17 @@
             end
             if not isAsciiId(state.character.mood) then
                 addError(errors, "invalid_mood", "$.character.mood", "무드 ID가 올바르지 않습니다.")
+            end
+            if not isInteger(state.character.baseDrawCount, 1) then
+                addError(errors, "invalid_base_draw_count", "$.character.baseDrawCount", "기본 드로우 수는 1 이상의 정수여야 합니다.")
+            end
+            if not isInteger(state.character.maxHandSize, 1) then
+                addError(errors, "invalid_hand_size", "$.character.maxHandSize", "최대 손패는 1 이상의 정수여야 합니다.")
+            end
+            if isInteger(state.character.baseDrawCount, 1)
+                and isInteger(state.character.maxHandSize, 1)
+                and state.character.baseDrawCount > state.character.maxHandSize then
+                addError(errors, "draw_exceeds_hand_limit", "$.character.baseDrawCount", "기본 드로우 수는 최대 손패보다 클 수 없습니다.")
             end
             validateIdArray(state.character.traitIds, "$.character.traitIds", errors, isAsciiId)
         end
@@ -564,6 +592,17 @@
             end
             if count ~= maximum then
                 addError(errors, "non_contiguous_positions", "$.cardInstances", group .. " 영역의 position이 1부터 이어지지 않습니다.")
+            end
+            if group == "player:hand"
+                and type(state.player) == "table"
+                and isInteger(state.player.maxHandSize, 1)
+                and count > state.player.maxHandSize then
+                addError(errors, "hand_limit_exceeded", "$.cardInstances", "플레이어 손패가 최대 손패를 초과했습니다.")
+            elseif group == "character:hand"
+                and type(state.character) == "table"
+                and isInteger(state.character.maxHandSize, 1)
+                and count > state.character.maxHandSize then
+                addError(errors, "hand_limit_exceeded", "$.cardInstances", "캐릭터 손패가 최대 손패를 초과했습니다.")
             end
         end
 

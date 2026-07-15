@@ -9,7 +9,9 @@
 ```text
 정적 Lua DB(함수·비공개 정보 포함)
 → 공통 전투 엔진
-→ battleState / pendingTurn(JSON 저장 가능)
+→ battleState(JSON 저장 가능)
+→ turnDraft(JSON 선택 초안) / 전송 projection
+→ pendingTurn(JSON 저장 가능)
 → 명시적 허용 목록 View 생성기
 → battleView(공개 데이터만 포함)
 → CBS 전용 데이터 브리지
@@ -18,7 +20,7 @@
 
 - 정적 DB 테이블을 상태나 View에 복사하지 않는다.
 - 게임 ID와 레지스트리 열거값은 `lower_snake_case`, `cardId` 같은 스키마 필드명은 lowerCamelCase를 사용한다.
-- `battleState`와 `pendingTurn`은 문자열, 유한한 숫자, 불리언, 연속 배열과 문자열 키 객체만 가진다.
+- `battleState`, `turnDraft`와 `pendingTurn`은 문자열, 유한한 숫자, 불리언, 연속 배열과 문자열 키 객체만 가진다.
 - 함수, 스레드, userdata, 메타테이블, 순환 참조, 희소 배열과 혼합 키 테이블은 오류다.
 - `battleView`는 빈 테이블에서 시작해 화면에 허용한 필드만 새로 조립한다.
 - 채팅 변수는 화면 출력물이며 게임 상태의 원본이나 세이브 입력으로 다시 읽지 않는다.
@@ -45,7 +47,8 @@
 
     player = {
         stealth = 30,
-        maxHandSize = 3,
+        baseDrawCount = 3,
+        maxHandSize = 5,
         perkIds = {},
         planSlot = { occupied = false },
     },
@@ -55,6 +58,8 @@
         resistance = 30,
         mood = "ignore",
         traitIds = { "reserved" },
+        baseDrawCount = 3,
+        maxHandSize = 5,
         planSlot = { occupied = false },
     },
 
@@ -82,6 +87,8 @@
 
 `characterIntent.cardInstanceIds`는 판정용 비공개 값이다. 화면에는 `publicActionTag`만 전달한다.
 
+`rng.seed`와 `rng.cursor`는 0 이상이면서 IEEE-754 안전 정수 범위 안에 있어야 한다. `baseDrawCount`는 턴 시작에 시도할 기본 드로우 수이고 `maxHandSize`는 어떤 드로우로도 넘을 수 없는 손패 상한이다. 양측 기본값은 각각 3과 5지만 캐릭터 정의와 효과에 따라 서로 독립적으로 달라질 수 있다. 점유된 계획의 `remainingTurns`와 `remainingCharges`는 존재한다면 항상 1 이상이어야 하며 0이 된 계획은 같은 연산에서 버림 영역으로 이동한 완료 상태만 저장한다.
+
 임시 카드 보정의 내부 명령 형식은 전투 엔진 단계에서 확정한다. 그 전까지 `temporaryModifiers`를 생략하거나 빈 배열로만 두며 임의 JSON payload는 허용하지 않는다.
 
 `stateSchema.validateBattleState`와 `validatePendingTurn`은 정적 데이터를 생략하면 구조만 검사하고 `referencesValidated = false`를 반환한다. 전체 정적 데이터를 전달하면 참조까지 검사해 `true`를 반환한다. 일부 컬렉션만 있거나 메타테이블이 섞인 정적 데이터는 구조화 오류이며, 생성 API도 이 값을 그대로 보존한다.
@@ -102,7 +109,13 @@
 
 계획 카드는 `zone = "plan"`인 같은 카드 인스턴스와 일치해야 한다. `remainingTurns`, `remainingCharges` 또는 이후 버전에 추가할 명시적 만료 조건 중 하나 이상으로 수명이 제한되어야 한다.
 
-## 3. `pendingTurn` 버전 1
+## 3. `turnDraft` 버전 1
+
+`turnDraft`는 카드 상세 focus, 등록 목록과 결정적 선택 프리뷰를 권위 `battleState`에서 분리한다. 카드 클릭은 입력 상태와 권위 RNG를 변경하지 않고 매번 같은 권위 상태에서 프리뷰를 다시 계산한다. 권위 상태 전체의 결정적 fingerprint가 다르면 stale draft를 자동 보정하지 않고 거부한다.
+
+전송 projection만 권위 상태의 복제본에 등록 카드 이동과 선언형 선택 단계 드로우를 적용한다. 이 중간 `workingState`는 카드 해결과 턴 종료 정리가 끝나기 전에는 확정 상태로 저장하거나 일반 View 입력으로 사용하지 않는다. 전체 스키마와 상태 전이는 `TurnDraftContract.md`를 따른다.
+
+## 4. `pendingTurn` 버전 1
 
 대기 트랜잭션은 턴 판정 결과를 정상 출력 전까지 확정 상태와 분리한다.
 
@@ -142,7 +155,9 @@
 - `events`, `publicResult.events`, `llmEvent.events`의 개별 사건 스키마는 전투 엔진 단계에서 확정한다. 버전 1에서는 JSON 저장 가능 연속 배열이라는 경계만 검사한다.
 - 같은 해결 시점에 저항과 은폐가 모두 0 이하라면 `afterState.status`는 `victory`다.
 
-## 4. `battleView` 버전 1
+현재 pending v1의 `beforeState.selection`과 `selectedCards.player` 일치 규칙은 권위 손패에 아직 들어오지 않은 프리뷰 카드 선택을 직접 표현할 수 없다. 실제 전송 연결 전에 원본 `beforeState`, 선택 projection과 프리뷰 영수증을 분리하는 명시적 스키마 개정이 필요하다. `beforeState`를 내부 workingState로 몰래 바꾸거나 현재 validator를 우회하지 않는다.
+
+## 5. `battleView` 버전 1
 
 최상위 필드는 다음과 같다.
 
@@ -165,6 +180,8 @@ playable, reasonCode, selected, selectionOrder
 ```
 
 카드의 `canPlay`, `resolve`, `moodEffects`, `mechanismData`, `narration`과 `prototype`은 View에 들어가지 않는다. 비용과 피해의 최종값은 엔진 보정기가 생기기 전까지 기본값과 같다.
+
+현재 `System/viewBuilder.lua`의 battleView v1은 아직 `turnDraft`를 입력으로 받지 않으며 주 행동이 없는 선택을 전송 불가로 계산한다. 이는 승인된 무선택 패스와 눈치보기 단독 패스를 반영하기 전의 임시 UI 계약이다. UI 단계에서 draft focus, 프리뷰 카드, 등록 순서와 세 가지 projection mode를 View 허용 목록에 추가할 때 함께 변경하며, 그 전에는 `battleView.selection.canSubmit`을 새 패스 규칙의 권위 판정으로 사용하지 않는다.
 
 ### 태그 조각
 
@@ -194,7 +211,7 @@ playable, reasonCode, selected, selectionOrder
 - `privateProfile`, `selectionProfile`, `actorThought`, 원본 사건, `beforeState`, `afterState`와 대기 결과는 View에 들어가지 않는다.
 - 발동하지 않고 만료되거나 교체된 상대 계획은 `empty`로 돌아가며 과거 정체를 남기지 않는다.
 
-## 5. CBS 전용 브리지
+## 6. CBS 전용 브리지
 
 RisuAI 채팅 변수는 문자열만 저장한다. 최신 CBS는 JSON 배열·딕셔너리를 읽지만, 중첩 객체를 템플릿에 다시 넣을 때 CBS 인자 구분자 `::`와 중괄호 문장이 충돌할 수 있다.
 
@@ -225,7 +242,7 @@ HTML에서는 깊은 `element` 대신 한 단계씩 `dictelement`를 사용한�
 {{/each}}
 ```
 
-## 6. 완료 검증
+## 7. 완료 검증
 
 다음은 구현 완료 기준이다. 로컬 순수 함수 검증과 실제 웹 RisuAI의 로어북·CBS 통합 검증을 구분하며, 실제 환경에서 확인하지 않은 항목을 완료로 처리하지 않는다.
 

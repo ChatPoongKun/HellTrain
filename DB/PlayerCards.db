@@ -136,16 +136,16 @@ return {
                 "카드를 1장 뽑습니다.",
                 "이 카드 때문에 발동할 상대 ::tag[plan]::을 억제하지만 그 정보는 공개하지 않습니다.",
             },
-            resolve = function(context)
-                return {
+            selectionPreview = {
+                effects = {
                     {
+                        id = "draw_one",
                         op = "draw_cards",
                         target = "player",
                         amount = 1,
-                        cause = "cardEffect",
                     },
-                }
-            end,
+                },
+            },
             narration = {
                 play = {
                     actorAction = "곧바로 움직이지 않고 상대의 시선과 주변 상황을 살핀다.",
