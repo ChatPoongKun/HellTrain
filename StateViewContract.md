@@ -11,6 +11,7 @@
 → 공통 전투 엔진
 → battleState(JSON 저장 가능)
 → turnDraft(JSON 선택 초안) / 전송 projection
+→ turnResolution(JSON 판정 원본)
 → pendingTurn(JSON 저장 가능)
 → 명시적 허용 목록 View 생성기
 → battleView(공개 데이터만 포함)
@@ -89,7 +90,7 @@
 
 `rng.seed`와 `rng.cursor`는 0 이상이면서 IEEE-754 안전 정수 범위 안에 있어야 한다. `baseDrawCount`는 턴 시작에 시도할 기본 드로우 수이고 `maxHandSize`는 어떤 드로우로도 넘을 수 없는 손패 상한이다. 양측 기본값은 각각 3과 5지만 캐릭터 정의와 효과에 따라 서로 독립적으로 달라질 수 있다. 점유된 계획의 `remainingTurns`와 `remainingCharges`는 존재한다면 항상 1 이상이어야 하며 0이 된 계획은 같은 연산에서 버림 영역으로 이동한 완료 상태만 저장한다.
 
-임시 카드 보정의 내부 명령 형식은 전투 엔진 단계에서 확정한다. 그 전까지 `temporaryModifiers`를 생략하거나 빈 배열로만 두며 임의 JSON payload는 허용하지 않는다.
+버전 1은 일반 수치 보정 파이프라인을 지원하지 않으므로 `temporaryModifiers`를 생략하거나 빈 배열로만 둔다. 비어 있지 않은 임의 JSON payload는 상태·projection 경계와 턴 해결기에서 구조화 오류로 거부하며, 실제 보정 콘텐츠를 추가할 때 별도 형식과 연산 순서를 승인한다.
 
 `stateSchema.validateBattleState`와 `validatePendingTurn`은 정적 데이터를 생략하면 구조만 검사하고 `referencesValidated = false`를 반환한다. 전체 정적 데이터를 전달하면 참조까지 검사해 `true`를 반환한다. 일부 컬렉션만 있거나 메타테이블이 섞인 정적 데이터는 구조화 오류이며, 생성 API도 이 값을 그대로 보존한다.
 
@@ -113,7 +114,7 @@
 
 `turnDraft`는 카드 상세 focus, 등록 목록과 결정적 선택 프리뷰를 권위 `battleState`에서 분리한다. 카드 클릭은 입력 상태와 권위 RNG를 변경하지 않고 매번 같은 권위 상태에서 프리뷰를 다시 계산한다. 권위 상태 전체의 결정적 fingerprint가 다르면 stale draft를 자동 보정하지 않고 거부한다.
 
-전송 projection만 권위 상태의 복제본에 등록 카드 이동과 선언형 선택 단계 드로우를 적용한다. 이 중간 `workingState`는 카드 해결과 턴 종료 정리가 끝나기 전에는 확정 상태로 저장하거나 일반 View 입력으로 사용하지 않는다. 전체 스키마와 상태 전이는 `TurnDraftContract.md`를 따른다.
+전송 projection만 권위 상태의 복제본에 등록 카드 이동과 선언형 선택 단계 드로우를 적용한다. 후속 턴 해결기는 권위 상태와 projection을 함께 받아 `turnDraft.validateProjection`으로 선택, preview, RNG와 workingState 전체를 재생·대조한 뒤에만 그 복제본을 사용한다. 이 중간 `workingState`는 카드 해결과 턴 종료 정리가 끝나기 전에는 확정 상태로 저장하거나 일반 View 입력으로 사용하지 않는다. 선택 스키마와 상태 전이는 `TurnDraftContract.md`, 카드 해결과 사건 원본은 `TurnResolutionContract.md`를 따른다.
 
 ## 4. `pendingTurn` 버전 1
 
@@ -152,10 +153,10 @@
 - `beforeState`는 현재 확정 상태의 스냅숏이다.
 - `afterState.lastCommittedTurnId`는 이 트랜잭션의 `turnId`다.
 - 재시도와 재생성에서는 저장된 `afterState`와 `llmEvent`를 재사용하고 판정하지 않는다.
-- `events`, `publicResult.events`, `llmEvent.events`의 개별 사건 스키마는 전투 엔진 단계에서 확정한다. 버전 1에서는 JSON 저장 가능 연속 배열이라는 경계만 검사한다.
+- `turnResult.events`는 검증된 `turnResolution.events`에서 가져오며 개별 판정 사건은 `TurnResolutionContract.md`의 사건 로그 스키마를 따른다. `publicResult`와 `llmEvent`는 그 원본을 그대로 복사하지 않고 각각의 공개 허용 목록으로 변환한다. 현재 `stateSchema`의 pending v1 validator는 아직 개별 사건의 허용 필드를 전부 검사하지 않고 JSON 저장 가능한 연속 배열 경계만 검사한다.
 - 같은 해결 시점에 저항과 은폐가 모두 0 이하라면 `afterState.status`는 `victory`다.
 
-현재 pending v1의 `beforeState.selection`과 `selectedCards.player` 일치 규칙은 권위 손패에 아직 들어오지 않은 프리뷰 카드 선택을 직접 표현할 수 없다. 실제 전송 연결 전에 원본 `beforeState`, 선택 projection과 프리뷰 영수증을 분리하는 명시적 스키마 개정이 필요하다. `beforeState`를 내부 workingState로 몰래 바꾸거나 현재 validator를 우회하지 않는다.
+현재 pending v1의 `beforeState.selection`과 `selectedCards.player` 일치 규칙은 권위 손패에 아직 들어오지 않은 프리뷰 카드 선택을 직접 표현할 수 없다. `turnResolution.source`는 권위 `beforeState`와 검증된 projection 영수증을 분리하지만, 실제 전송 연결 전에는 pending 스키마와 validator도 이 영수증을 명시적으로 받도록 개정해야 한다. `beforeState`를 내부 workingState로 몰래 바꾸거나 현재 validator를 우회하지 않는다.
 
 ## 5. `battleView` 버전 1
 

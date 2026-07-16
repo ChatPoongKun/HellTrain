@@ -341,6 +341,26 @@ currentTurnState.player.planSlot = {
 currentTurnState.selection.playerCardInstanceIds = { "read" }
 local played = operation("current turn hand to used", "moveHandToUsed", currentTurnState, "read")
 assertIds("used order after play", zoneIds(played.state, "player", "used"), { "old-used", "read" })
+local restored = operation("unused selection restored to hand", "moveUsedToHand", played.state, "read")
+assertIds("restored card appended to hand", zoneIds(restored.state, "player", "hand"), { "h02", "h03", "read" })
+assertIds("resolved prefix remains used", zoneIds(restored.state, "player", "used"), { "old-used" })
+assertFailed("restore requires used source", call("moveUsedToHand", currentTurnState, "read"))
+local fullHandWithUsed = fixture({
+    card("full01", "player", "hand", 1),
+    card("full02", "player", "hand", 2),
+    card("full03", "player", "hand", 3),
+    card("full04", "player", "hand", 4),
+    card("full05", "player", "hand", 5),
+    card("cannot-restore", "player", "used", 1),
+})
+fullHandWithUsed.selection.playerCardInstanceIds = { "cannot-restore" }
+local fullHandSnapshot = canonical(fullHandWithUsed)
+local overCapRestore = operation("structural restore may temporarily exceed hand cap", "moveUsedToHand", fullHandWithUsed, "cannot-restore")
+assert(#zoneIds(overCapRestore.state, "player", "hand") == 6, "structural restore did not preserve the unplayed card")
+assert(canonical(fullHandWithUsed) == fullHandSnapshot, "structural restore mutated full-hand input")
+local overCapCleanup = operation("structural over-cap restore cleanup", "endTurnCleanup", overCapRestore.state)
+assert(#zoneIds(overCapCleanup.state, "player", "hand") == 0, "cleanup retained an over-cap hand")
+assertBattleState("structural restore final state", overCapCleanup.state)
 local workingStateValidation = runScript(
     "card-zones-check",
     "stateSchema",

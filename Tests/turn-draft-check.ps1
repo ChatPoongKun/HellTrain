@@ -204,6 +204,28 @@ local function project(label, battleState, draft)
     return report.projection
 end
 
+local function validateProjectedTurn(label, battleState, projection)
+    local report = assertOk(
+        label,
+        invoke(label, "validateProjection", battleState, projection, nil)
+    )
+    assert(type(report.projection) == "table", label .. " did not return a projection")
+    assert(report.projection ~= projection, label .. " returned the input projection reference")
+    assert(
+        canonical(report.projection) == canonical(projection),
+        label .. " changed a valid projection"
+    )
+    return report.projection
+end
+
+local function assertProjectionRejected(label, battleState, projection, expectedCode)
+    local report = invoke(label, "validateProjection", battleState, projection, nil)
+    if expectedCode ~= nil then
+        return assertHasError(label, report, expectedCode)
+    end
+    return assertFailed(label, report)
+end
+
 local function makeCard(instanceId, cardId, owner, zone, position)
     return {
         instanceId = instanceId,
@@ -547,6 +569,7 @@ assert(noSelectionProjection.projectedRng.cursor == baseState.rng.cursor)
 assert(canonical(noSelectionProjection.workingState) == canonical(baseState), "no-selection pass changed working state")
 assertConserved("no-selection conservation", baseState, noSelectionProjection.workingState)
 assertState("no-selection projected state", noSelectionProjection.workingState)
+validateProjectedTurn("validate no-selection pass projection", baseState, noSelectionProjection)
 
 local eyeOnlyProjection = project("project eye-only chain pass", baseState, eyeOnly)
 assert(eyeOnlyProjection.mode == "chain_pass")
@@ -556,6 +579,7 @@ assert(eyeOnlyProjection.projectedRng.cursor == baseState.rng.cursor)
 assert(findCard(eyeOnlyProjection.workingState, EYE).zone == "used", "eye was not moved to used before drawing")
 assert(findCard(eyeOnlyProjection.workingState, PREVIEW_MAIN).zone == "hand", "preview was not drawn into hand")
 assertConserved("eye-only projection conservation", baseState, eyeOnlyProjection.workingState)
+validateProjectedTurn("validate eye-only chain-pass projection", baseState, eyeOnlyProjection)
 
 local eyeCleanup = assertOk(
     "eye-only cleanup",
@@ -574,24 +598,132 @@ assert(baseProjection.mode == "action")
 assertIds("base projected selection", baseProjection.selectedCardInstanceIds, { BASE_A })
 assertEmptyPreview("base projection", baseProjection.preview)
 assertConserved("base projection conservation", baseState, baseProjection.workingState)
+validateProjectedTurn("validate base action projection", baseState, baseProjection)
 
 local eyeBaseProjection = project("project eye plus base", baseState, eyeThenBase)
 assert(eyeBaseProjection.mode == "action")
 assertIds("eye plus base projected selection", eyeBaseProjection.selectedCardInstanceIds, { EYE, BASE_A })
 assertPreview("eye plus base projection", eyeBaseProjection.preview, { PREVIEW_MAIN })
 assertConserved("eye plus base conservation", baseState, eyeBaseProjection.workingState)
+validateProjectedTurn("validate eye plus base action projection", baseState, eyeBaseProjection)
 
 local eyePreviewProjection = project("project eye plus preview", baseState, eyePreview)
 assert(eyePreviewProjection.mode == "action")
 assertIds("eye plus preview projected selection", eyePreviewProjection.selectedCardInstanceIds, { EYE, PREVIEW_MAIN })
 assertPreview("eye plus preview projection", eyePreviewProjection.preview, { PREVIEW_MAIN })
 assertConserved("eye plus preview conservation", baseState, eyePreviewProjection.workingState)
+validateProjectedTurn("validate eye plus preview action projection", baseState, eyePreviewProjection)
 
 local resetProjection = project("project reset base", baseState, resetToBase)
 assert(resetProjection.mode == "action")
 assertIds("reset base projected selection", resetProjection.selectedCardInstanceIds, { BASE_B })
 assertEmptyPreview("reset base projection", resetProjection.preview)
 assert(resetProjection.projectedRng.cursor == baseState.rng.cursor)
+validateProjectedTurn("validate reset action projection", baseState, resetProjection)
+
+-- A projection is an untrusted commit request. Validation replays only its selected
+-- IDs and rejects every caller-supplied derived field that differs from that replay.
+local zoneTamperedProjection = clone(baseProjection)
+local zoneTamperedCard = assert(findCard(zoneTamperedProjection.workingState, BASE_A))
+zoneTamperedCard.zone = "removed"
+zoneTamperedCard.position = 1
+assertProjectionRejected(
+    "working-state zone tamper rejection",
+    baseState,
+    zoneTamperedProjection,
+    "projection_mismatch"
+)
+
+local rngTamperedProjection = clone(eyeOnlyProjection)
+rngTamperedProjection.workingState.rng.cursor = rngTamperedProjection.workingState.rng.cursor + 1
+assertProjectionRejected(
+    "working-state rng tamper rejection",
+    baseState,
+    rngTamperedProjection,
+    "projection_mismatch"
+)
+
+local selectionTamperedProjection = clone(baseProjection)
+selectionTamperedProjection.workingState.selection.playerCardInstanceIds = { BASE_B }
+assertProjectionRejected(
+    "working-state selection tamper rejection",
+    baseState,
+    selectionTamperedProjection,
+    "projection_mismatch"
+)
+
+local projectedRngTamperedProjection = clone(eyeOnlyProjection)
+projectedRngTamperedProjection.projectedRng.cursor = projectedRngTamperedProjection.projectedRng.cursor + 1
+assertProjectionRejected(
+    "projected rng tamper rejection",
+    baseState,
+    projectedRngTamperedProjection,
+    "projection_mismatch"
+)
+
+local previewTamperedProjection = clone(eyeOnlyProjection)
+previewTamperedProjection.preview.drawnInstanceIds[1] = BASE_B
+previewTamperedProjection.preview.availableDrawnInstanceIds[1] = BASE_B
+assertProjectionRejected(
+    "projection preview tamper rejection",
+    baseState,
+    previewTamperedProjection,
+    "projection_mismatch"
+)
+
+local selectedIdsTamperedProjection = clone(baseProjection)
+selectedIdsTamperedProjection.selectedCardInstanceIds = { BASE_B }
+assertProjectionRejected(
+    "projection selected ids tamper rejection",
+    baseState,
+    selectedIdsTamperedProjection,
+    "projection_mismatch"
+)
+
+local modeTamperedProjection = clone(baseProjection)
+modeTamperedProjection.mode = "pass"
+assertProjectionRejected(
+    "projection mode tamper rejection",
+    baseState,
+    modeTamperedProjection,
+    "projection_mismatch"
+)
+
+local mainFlagTamperedProjection = clone(baseProjection)
+mainFlagTamperedProjection.hasMainAction = false
+assertProjectionRejected(
+    "projection main flag tamper rejection",
+    baseState,
+    mainFlagTamperedProjection,
+    "projection_mismatch"
+)
+
+local passFlagTamperedProjection = clone(eyeOnlyProjection)
+passFlagTamperedProjection.passAfterChain = false
+assertProjectionRejected(
+    "projection pass flag tamper rejection",
+    baseState,
+    passFlagTamperedProjection,
+    "projection_mismatch"
+)
+
+local sourceTamperedProjection = clone(baseProjection)
+sourceTamperedProjection.source.fingerprint = "tampered"
+assertProjectionRejected(
+    "projection source tamper rejection",
+    baseState,
+    sourceTamperedProjection,
+    "projection_stale"
+)
+
+local unknownFieldProjection = clone(baseProjection)
+unknownFieldProjection.untrustedExtra = true
+assertProjectionRejected(
+    "projection unknown field rejection",
+    baseState,
+    unknownFieldProjection,
+    "unexpected_field"
+)
 
 -- At maximum hand size, eye leaves hand before its draw, so the preview fills exactly that one slot.
 local maxHandState = makeState({
@@ -616,6 +748,7 @@ assert(#zoneIds(maxHandProjection.workingState, "player", "hand") == 5, "preview
 assert(findCard(maxHandProjection.workingState, EYE).zone == "used")
 assert(findCard(maxHandProjection.workingState, PREVIEW_MAIN).zone == "hand")
 assertConserved("maximum-hand conservation", maxHandState, maxHandProjection.workingState)
+validateProjectedTurn("validate maximum-hand chain-pass projection", maxHandState, maxHandProjection)
 
 -- An empty deck reshuffles discard deterministically only in the draft branch.
 local shuffleState = makeState({
@@ -643,6 +776,7 @@ assert(shuffleProjection.projectedRng.seed == 42 and shuffleProjection.projected
 assert(findCard(shuffleProjection.workingState, "discard-p2").zone == "hand")
 assert(canonical(shuffleState) == shuffleSnapshot, "reshuffle projection mutated authority")
 assertConserved("reshuffle projection conservation", shuffleState, shuffleProjection.workingState)
+validateProjectedTurn("validate reshuffle chain-pass projection", shuffleState, shuffleProjection)
 
 -- used, plan and removed are never candidates for a speculative draw.
 local exclusionState = makeState({
@@ -700,6 +834,7 @@ assert(findCard(emptySupplyProjection.workingState, "used-decoy").zone == "used"
 assert(findCard(emptySupplyProjection.workingState, "plan-decoy").zone == "plan")
 assert(findCard(emptySupplyProjection.workingState, "removed-decoy").zone == "removed")
 assertConserved("empty supply conservation", emptySupplyState, emptySupplyProjection.workingState)
+validateProjectedTurn("validate empty-supply chain-pass projection", emptySupplyState, emptySupplyProjection)
 
 -- A draft is anchored to an exact authoritative state and may not be silently rebased.
 local function assertStale(label, changedState, draft)

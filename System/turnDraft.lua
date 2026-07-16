@@ -1123,38 +1123,34 @@
         return focusCard(state, staticData, validated.draft, instanceId)
     end
 
-    local function project(state, staticData, draft)
-        local validated, errors = validateInternal(state, staticData, draft)
-        if errors then
-            return failure(errors)
-        end
-
-        local selectedIds = copyArray(validated.draft.registeredCardInstanceIds)
+    local function buildProjection(state, sourceValue, replay)
+        local selectedIds = copyArray(replay.registeredCardInstanceIds)
         local mode = "pass"
         if #selectedIds > 0 then
-            mode = validated.replay.mainActionCount == 1 and "action" or "chain_pass"
-        end
-        local workingState, stateCloneError = cloneValue(validated.replay.workingState, "$.workingState")
-        if stateCloneError then
-            return failure({ stateCloneError })
-        end
-        local preview, previewCloneError = cloneValue(validated.replay.preview, "$.preview")
-        if previewCloneError then
-            return failure({ previewCloneError })
-        end
-        local source, sourceCloneError = cloneValue(validated.draft.source, "$.source")
-        if sourceCloneError then
-            return failure({ sourceCloneError })
+            mode = replay.mainActionCount == 1 and "action" or "chain_pass"
         end
 
-        local projection = {
+        local workingState, stateCloneError = cloneValue(replay.workingState, "$.workingState")
+        if stateCloneError then
+            return nil, stateCloneError
+        end
+        local preview, previewCloneError = cloneValue(replay.preview, "$.preview")
+        if previewCloneError then
+            return nil, previewCloneError
+        end
+        local source, sourceCloneError = cloneValue(sourceValue, "$.source")
+        if sourceCloneError then
+            return nil, sourceCloneError
+        end
+
+        return {
             schemaVersion = SCHEMA_VERSION,
             kind = "turnDraftProjection",
-            battleId = validated.state.battleId,
-            turnNumber = validated.state.turnNumber,
+            battleId = state.battleId,
+            turnNumber = state.turnNumber,
             mode = mode,
-            hasMainAction = validated.replay.mainActionCount == 1,
-            passAfterChain = #selectedIds > 0 and validated.replay.mainActionCount == 0,
+            hasMainAction = replay.mainActionCount == 1,
+            passAfterChain = #selectedIds > 0 and replay.mainActionCount == 0,
             selectedCardInstanceIds = selectedIds,
             source = source,
             preview = preview,
@@ -1163,8 +1159,183 @@
                 cursor = workingState.rng.cursor,
             },
             workingState = workingState,
-        }
+        }, nil
+    end
+
+    local function project(state, staticData, draft)
+        local validated, errors = validateInternal(state, staticData, draft)
+        if errors then
+            return failure(errors)
+        end
+
+        local projection, projectionError = buildProjection(
+            validated.state,
+            validated.draft.source,
+            validated.replay
+        )
+        if projectionError then
+            return failure({ projectionError })
+        end
         return success(validated.draft, projection)
+    end
+
+    local function validateProjectionShape(projection)
+        local errors = {}
+        if type(projection) ~= "table" or getmetatable(projection) ~= nil then
+            return {
+                makeError(
+                    "invalid_projection",
+                    "$.projection",
+                    "turnDraftProjection이 일반 테이블이 아닙니다."
+                ),
+            }
+        end
+
+        checkAllowedKeys(projection, {
+            schemaVersion = true,
+            kind = true,
+            battleId = true,
+            turnNumber = true,
+            mode = true,
+            hasMainAction = true,
+            passAfterChain = true,
+            selectedCardInstanceIds = true,
+            source = true,
+            preview = true,
+            projectedRng = true,
+            workingState = true,
+        }, "$.projection", errors)
+        if projection.schemaVersion ~= SCHEMA_VERSION then
+            table.insert(errors, makeError(
+                "unsupported_projection_schema",
+                "$.projection.schemaVersion",
+                "지원하지 않는 turnDraftProjection 스키마입니다."
+            ))
+        end
+        if projection.kind ~= "turnDraftProjection" then
+            table.insert(errors, makeError(
+                "invalid_projection_kind",
+                "$.projection.kind",
+                "projection kind는 turnDraftProjection이어야 합니다."
+            ))
+        end
+        if not isRuntimeId(projection.battleId) then
+            table.insert(errors, makeError(
+                "invalid_battle_id",
+                "$.projection.battleId",
+                "projection 전투 ID가 올바르지 않습니다."
+            ))
+        end
+        if not isInteger(projection.turnNumber, 1) then
+            table.insert(errors, makeError(
+                "invalid_turn_number",
+                "$.projection.turnNumber",
+                "projection 턴 번호가 올바르지 않습니다."
+            ))
+        end
+        if projection.mode ~= "pass"
+            and projection.mode ~= "chain_pass"
+            and projection.mode ~= "action" then
+            table.insert(errors, makeError(
+                "invalid_projection_mode",
+                "$.projection.mode",
+                "알 수 없는 projection mode입니다."
+            ))
+        end
+        if projection.hasMainAction ~= true and projection.hasMainAction ~= false then
+            table.insert(errors, makeError(
+                "invalid_projection_flag",
+                "$.projection.hasMainAction",
+                "hasMainAction은 불리언이어야 합니다."
+            ))
+        end
+        if projection.passAfterChain ~= true and projection.passAfterChain ~= false then
+            table.insert(errors, makeError(
+                "invalid_projection_flag",
+                "$.projection.passAfterChain",
+                "passAfterChain은 불리언이어야 합니다."
+            ))
+        end
+        validateIdArray(
+            projection.selectedCardInstanceIds,
+            "$.projection.selectedCardInstanceIds",
+            errors
+        )
+        if type(projection.source) ~= "table" or getmetatable(projection.source) ~= nil then
+            table.insert(errors, makeError(
+                "invalid_projection_source",
+                "$.projection.source",
+                "projection 원본 표식이 올바르지 않습니다."
+            ))
+        end
+        validatePreviewShape(projection.preview, "$.projection.preview", errors)
+        validateRng(projection.projectedRng, "$.projection.projectedRng", errors)
+        if type(projection.workingState) ~= "table" or getmetatable(projection.workingState) ~= nil then
+            table.insert(errors, makeError(
+                "invalid_working_state",
+                "$.projection.workingState",
+                "projection workingState가 일반 테이블이 아닙니다."
+            ))
+        end
+        return errors
+    end
+
+    local function validateProjection(state, staticData, projection)
+        local stateCopy, normalizedStaticData, authorityErrors = validateAuthority(state, staticData)
+        if authorityErrors then
+            return failure(authorityErrors)
+        end
+
+        local projectionCopy, cloneError = cloneValue(projection, "$.projection")
+        if cloneError then
+            return failure({ cloneError })
+        end
+        local shapeErrors = validateProjectionShape(projectionCopy)
+        if #shapeErrors > 0 then
+            return failure(shapeErrors)
+        end
+
+        local expectedSource, sourceError = buildSource(stateCopy)
+        if sourceError then
+            return failure({ sourceError })
+        end
+        if not deepEqual(projectionCopy.source, expectedSource) then
+            return failure({
+                makeError(
+                    "projection_stale",
+                    "$.projection.source",
+                    "projection을 만든 뒤 권위 전투 상태가 변경되었습니다."
+                ),
+            })
+        end
+
+        local replay, replayErrors = replaySelection(
+            stateCopy,
+            normalizedStaticData,
+            projectionCopy.selectedCardInstanceIds,
+            false
+        )
+        if replayErrors then
+            return failure(replayErrors)
+        end
+        local expectedProjection, projectionError = buildProjection(
+            stateCopy,
+            expectedSource,
+            replay
+        )
+        if projectionError then
+            return failure({ projectionError })
+        end
+        if not deepEqual(projectionCopy, expectedProjection) then
+            return failure({
+                makeError(
+                    "projection_mismatch",
+                    "$.projection",
+                    "projection이 권위 상태에서 같은 선택을 재생한 결과와 다릅니다."
+                ),
+            })
+        end
+        return success(nil, expectedProjection)
     end
 
     local arguments = { ... }
@@ -1176,6 +1347,7 @@
         cancelCard = cancelCard,
         clickCard = clickCard,
         project = project,
+        validateProjection = validateProjection,
     }
     local handler = actions[action]
     if not handler then

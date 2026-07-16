@@ -203,6 +203,7 @@
         end
 
         local seenIds = {}
+        local instancesById = {}
         local positions = {}
         local groupCounts = {}
         for index, instance in ipairs(state.cardInstances) do
@@ -216,6 +217,7 @@
                     table.insert(errors, makeError("duplicate_instance_id", path .. ".instanceId", "카드 인스턴스 ID가 중복되었습니다."))
                 else
                     seenIds[instance.instanceId] = true
+                    instancesById[instance.instanceId] = instance
                 end
                 if type(instance.cardId) ~= "string" or instance.cardId == "" then
                     table.insert(errors, makeError("invalid_card_id", path .. ".cardId", "카드 ID가 없습니다."))
@@ -274,12 +276,35 @@
                     rootPath .. "." .. owner .. ".maxHandSize",
                     "최대 손패는 1 이상의 정수여야 합니다."
                 ))
-            elseif (groupCounts[owner .. ":hand"] or 0) > ownerState.maxHandSize then
-                table.insert(errors, makeError(
-                    "hand_limit_exceeded",
-                    rootPath .. ".cardInstances",
-                    owner .. " 손패가 최대 손패를 초과했습니다."
-                ))
+            else
+                local handCount = groupCounts[owner .. ":hand"] or 0
+                if handCount > ownerState.maxHandSize then
+                    local overflowAllowed = false
+                    if owner == "player"
+                        and type(state.selection) == "table"
+                        and type(state.selection.playerCardInstanceIds) == "table" then
+                        local restoredSelectionCount = 0
+                        local counted = {}
+                        for _, instanceId in ipairs(state.selection.playerCardInstanceIds) do
+                            local selected = instancesById[instanceId]
+                            if selected
+                                and selected.owner == "player"
+                                and selected.zone == "hand"
+                                and not counted[instanceId] then
+                                counted[instanceId] = true
+                                restoredSelectionCount = restoredSelectionCount + 1
+                            end
+                        end
+                        overflowAllowed = restoredSelectionCount >= handCount - ownerState.maxHandSize
+                    end
+                    if not overflowAllowed then
+                        table.insert(errors, makeError(
+                            "hand_limit_exceeded",
+                            rootPath .. ".cardInstances",
+                            owner .. " 손패가 최대 손패를 초과했습니다."
+                        ))
+                    end
+                end
             end
         end
         return errors
@@ -685,6 +710,57 @@
         return success(nextState, { instanceId }, {})
     end
 
+    local function moveUsedToHand(state, instanceId)
+        if type(instanceId) ~= "string" or instanceId == "" then
+            return failure({ makeError("invalid_instance_id", "$.instanceId", "카드 인스턴스 ID가 없습니다.") })
+        end
+
+        local nextState, errors = prepareState(state)
+        if errors then
+            return failure(errors)
+        end
+        normalizeAll(nextState)
+
+        local instance = findInstance(nextState, instanceId)
+        if not instance then
+            return failure({ makeError("instance_not_found", "$.instanceId", "카드 인스턴스를 찾을 수 없습니다.") })
+        end
+        if instance.zone ~= "used" then
+            return failure({ makeError("invalid_source_zone", "$.instanceId", "hand 영역으로 복원할 카드는 used 영역에 있어야 합니다.") })
+        end
+        if instance.owner ~= "player" then
+            return failure({ makeError("invalid_restore_owner", "$.instanceId", "used → hand 구조 복원은 플레이어 등록 카드에만 사용할 수 있습니다.") })
+        end
+        local registered = false
+        for _, selectedId in ipairs(
+            type(nextState.selection) == "table"
+                and type(nextState.selection.playerCardInstanceIds) == "table"
+                and nextState.selection.playerCardInstanceIds
+                or {}
+        ) do
+            if selectedId == instanceId then
+                registered = true
+                break
+            end
+        end
+        if not registered then
+            return failure({ makeError("restore_requires_selection", "$.instanceId", "등록 선택에 없는 used 카드는 손패로 복원할 수 없습니다.") })
+        end
+
+        local ownerState = nextState[instance.owner]
+        if type(ownerState) ~= "table" or not isInteger(ownerState.maxHandSize, 1) then
+            return failure({ makeError(
+                "invalid_hand_size",
+                "$." .. tostring(instance.owner) .. ".maxHandSize",
+                "최대 손패는 1 이상의 정수여야 합니다."
+            ) })
+        end
+        instance.zone = "hand"
+        instance.position = nextPosition(nextState, instance.owner, "hand")
+        normalizeAll(nextState)
+        return success(nextState, { instanceId }, {})
+    end
+
     local function moveToRemoved(state, instanceId)
         if type(instanceId) ~= "string" or instanceId == "" then
             return failure({ makeError("invalid_instance_id", "$.instanceId", "카드 인스턴스 ID가 없습니다.") })
@@ -1016,6 +1092,7 @@
         shuffleDeck = shuffleDeck,
         draw = draw,
         moveHandToUsed = moveHandToUsed,
+        moveUsedToHand = moveUsedToHand,
         moveToRemoved = moveToRemoved,
         placePlan = placePlan,
         consumePlanCharge = consumePlanCharge,

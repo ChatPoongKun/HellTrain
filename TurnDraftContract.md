@@ -8,7 +8,7 @@
 권위 battleState + 정적 DB
 → turnDraft(JSON 선택 초안)
 → turnDraftProjection(전송 시 다시 계산하는 내부 workingState)
-→ 후속 순수 턴 해결기
+→ 후속 순수 턴 해결기(`TurnResolutionContract.md`)
 → 정리된 afterState
 ```
 
@@ -98,6 +98,7 @@ runScript(triggerId, "turnDraft", action, battleState, staticData, draft, instan
 | `cancelCard` | 등록 카드 취소와 의존 프리뷰 연쇄 정리 |
 | `clickCard` | 실제 UI의 첫 클릭 focus, 두 번째 등록, 등록 카드 재클릭 취소 |
 | `project` | 전송 시 사용할 선택 단계 workingState를 권위 상태에서 다시 계산 |
+| `validateProjection` | 권위 상태에서 선택을 재생해 projection 전체가 변조되지 않았는지 검사 |
 
 모든 성공·실패 경로는 입력 `battleState`와 입력 draft를 변경하지 않는다. 등록하려는 카드는 원래 플레이어 손패 또는 앞선 등록 카드가 만든 현재 프리뷰에 있어야 한다.
 
@@ -129,7 +130,9 @@ projection의 `mode`는 다음 셋이다.
 
 따라서 별도 턴 종료 버튼은 필요 없다. RisuAI 전송이 유일한 확정점이며, 무선택 전송도 정상 패스다. 눈치보기만 등록하고 전송하면 눈치보기를 사용해 1장을 실제 드로우한 뒤 주 행동 없이 패스한다. 그 카드는 등록되지 않았다면 턴 종료에 다른 남은 손패와 함께 버린다.
 
-projection은 `selectedCardInstanceIds`, `preview`, `projectedRng`와 내부 `workingState`를 반환한다. 후속 실제 턴 해결기는 이 workingState에서 계속 진행하며 선택 단계 효과를 다시 적용하지 않는다. 현재 `pendingTurn.beforeState`와 preview 카드 선택의 연결 방식은 후속 트랜잭션 단계에서 별도 스키마로 확정한다.
+projection은 `selectedCardInstanceIds`, `preview`, `projectedRng`와 내부 `workingState`를 반환한다. 후속 실제 턴 해결기는 이 workingState에서 계속 진행하며 선택 단계 효과를 다시 적용하지 않는다. 검증된 projection에서 카드 비용, 트리거, 중간 승패, 무드와 정리를 처리하는 순서는 `TurnResolutionContract.md`를 따른다. 현재 `pendingTurn.beforeState`와 preview 카드 선택의 연결 방식은 후속 트랜잭션 단계에서 별도 스키마로 확정한다.
+
+후속 턴 해결기는 projection의 `workingState`를 그대로 신뢰하지 않는다. `validateProjection(authoritativeState, staticData, projection)`이 같은 권위 상태에서 `selectedCardInstanceIds`를 다시 재생하고 `source`, mode·flags, preview, RNG, 모든 카드 영역과 workingState 전체를 대조한 결과만 입력으로 사용한다. source가 오래됐으면 `projection_stale`, 내부 값이 다르면 `projection_mismatch`로 원자적으로 거부한다.
 
 ## 7. 검증
 
@@ -139,6 +142,7 @@ projection은 `selectedCardInstanceIds`, `preview`, `projectedRng`와 내부 `wo
 - 무선택 패스, 눈치보기 단독 패스와 눈치보기+주 행동
 - 최대 손패, discard 재섞기, 빈 덱과 제외 영역 경계
 - preview 및 RNG 변조와 권위 상태 변경의 stale 거부
+- projection의 선택, mode, preview, RNG와 workingState 변조 거부
 - 모든 action의 입력 불변성과 카드 보존
 - 별도 Lua 프로세스 사이의 동일 결정성 벡터
 

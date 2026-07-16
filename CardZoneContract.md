@@ -56,6 +56,7 @@ RNG 상태는 다음 두 안전 정수만 저장한다.
 | `shuffleDeck(state, owner)` | 현재 덱만 결정적으로 섞음 |
 | `draw(state, owner, amount)` | 최대 손패의 빈자리까지만 현재 턴 손패로 드로우 |
 | `moveHandToUsed(state, instanceId)` | 선언한 카드를 턴 종료 전까지 재드로우되지 않는 `used`로 이동 |
+| `moveUsedToHand(state, instanceId)` | 아직 선언하지 못한 등록 카드를 `used`에서 현재 손패 끝으로 복원 |
 | `moveToRemoved(state, instanceId)` | 카드를 이번 세션에서 제외되는 `removed`로 이동 |
 | `placePlan(state, side, instanceId, planSpec)` | 기존 계획을 버리고 새 계획을 단일 슬롯에 배치 |
 | `consumePlanCharge(state, side)` | 성공 발동을 공개하고 충전을 소비하며 0이면 즉시 버림 |
@@ -71,6 +72,8 @@ RNG 상태는 다음 두 안전 정수만 저장한다.
 덱이 비면 같은 소유자의 `discard` 전체만 섞어 덱으로 되돌린 뒤 남은 수량을 뽑는다. `hand`, `used`, `removed`, `plan`은 재섞기에 포함하지 않는다. 덱과 버림을 모두 사용해도 부족하면 가능한 수량만 드로우한다.
 
 턴 종료의 버림 순서는 기존 `discard` 뒤에 `used`의 사용 순서, 남은 `hand`의 손패 순서다. `removed`와 점유 중인 `plan`은 유지한다. 플레이어 선택과 캐릭터 의도는 빈 목록으로 초기화한다.
+
+projection에서 미리 `used`로 옮긴 플레이어 카드가 앞선 해결 때문에 사용할 수 없게 되면 턴 해결기는 `moveUsedToHand`를 현재 카드부터 선택 순서대로 호출한다. 복원 카드는 기존 손패 뒤에 붙는다. 앞 효과의 드로우가 빈자리를 이미 채웠다면 이 내부 workingState의 손패는 구조 정리가 끝날 때까지만 `maxHandSize`를 넘을 수 있다. 이는 드로우가 상한을 넘긴 것이 아니라 projection의 미선언 카드를 원래 의미대로 되돌리는 구조적 복원이며, 일반 View나 저장 상태로 노출하지 않는다. 이미 해결한 접두 카드는 `used`에 남고, 복원 카드는 같은 턴 `endTurnCleanup`에서 미사용 손패로 버려져 최종 `battleState`는 다시 손패 상한을 만족해야 한다.
 
 현재 턴에 새로 뽑은 카드를 같은 턴 선택에 추가하는 UI 흐름은 카드 영역 모듈의 책임이 아니다. 승인된 `turnDraft`가 권위 상태와 RNG를 변경하지 않은 채 선택 프리뷰를 다시 계산하고, 전송 projection에서만 이 모듈의 `moveHandToUsed`와 `draw`를 권위 상태의 복제본에 적용한다. 상세 상태 전이는 `TurnDraftContract.md`를 따른다.
 
