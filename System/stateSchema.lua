@@ -1,6 +1,7 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
     local MAX_SAFE_INTEGER = 9007199254740991
+    local FINGERPRINT_ALGORITHM = "canonical_poly131_137_receipt_v2"
 
     local VALID_STATUS = {
         active = true,
@@ -250,6 +251,141 @@
         return true
     end
 
+    local function fingerprintFailure(code, path, message)
+        error({
+            code = code,
+            path = path,
+            message = message,
+        }, 0)
+    end
+
+    local function inspectCanonicalTable(value, path)
+        if type(value) ~= "table" or getmetatable(value) ~= nil then
+            fingerprintFailure("invalid_table", path, "fingerprint 대상은 일반 테이블이어야 합니다.")
+        end
+
+        local numericCount = 0
+        local maximum = 0
+        local hasNumeric = false
+        local hasString = false
+        local stringKeys = {}
+        for key in pairs(value) do
+            if type(key) == "number" then
+                hasNumeric = true
+                numericCount = numericCount + 1
+                if not isInteger(key, 1) then
+                    fingerprintFailure("invalid_array_index", path, "배열 인덱스는 1 이상의 정수여야 합니다.")
+                end
+                if key > maximum then
+                    maximum = key
+                end
+            elseif type(key) == "string" then
+                hasString = true
+                table.insert(stringKeys, key)
+            else
+                fingerprintFailure("invalid_object_key", path, "객체 키는 문자열이어야 합니다.")
+            end
+        end
+        if hasNumeric and hasString then
+            fingerprintFailure("mixed_table", path, "숫자 인덱스와 문자열 키를 함께 사용할 수 없습니다.")
+        end
+        if hasNumeric and numericCount ~= maximum then
+            fingerprintFailure("sparse_array", path, "배열 인덱스는 1부터 빈틈없이 이어져야 합니다.")
+        end
+        table.sort(stringKeys)
+        return hasNumeric, maximum, stringKeys
+    end
+
+    local function canonicalJson(value, path, active)
+        local valueType = type(value)
+        if valueType == "nil" then
+            return "n"
+        end
+        if valueType == "boolean" then
+            return value and "t" or "f"
+        end
+        if valueType == "number" then
+            if not isFinite(value) then
+                fingerprintFailure("non_finite_number", path, "NaN과 무한대는 fingerprint에 사용할 수 없습니다.")
+            end
+            return "d" .. string.format("%.17g", value) .. ";"
+        end
+        if valueType == "string" then
+            return "s" .. tostring(#value) .. ":" .. value
+        end
+        if valueType ~= "table" then
+            fingerprintFailure("unsupported_type", path, "fingerprint에 사용할 수 없는 자료형입니다: " .. valueType)
+        end
+
+        active = active or {}
+        if active[value] then
+            fingerprintFailure("circular_reference", path, "순환 참조가 있는 값은 fingerprint에 사용할 수 없습니다.")
+        end
+        active[value] = true
+
+        local isArray, length, stringKeys = inspectCanonicalTable(value, path)
+        local parts = {}
+        if isArray then
+            parts[1] = "["
+            for index = 1, length do
+                parts[#parts + 1] = canonicalJson(value[index], path .. "[" .. index .. "]", active)
+            end
+            parts[#parts + 1] = "]"
+        else
+            parts[1] = "{"
+            for _, key in ipairs(stringKeys) do
+                parts[#parts + 1] = "k" .. tostring(#key) .. ":" .. key
+                parts[#parts + 1] = canonicalJson(value[key], objectPath(path, key), active)
+            end
+            parts[#parts + 1] = "}"
+        end
+        active[value] = nil
+        return table.concat(parts)
+    end
+
+    local function fingerprintAuthorityState(state)
+        local authorityState = {}
+        for key, value in pairs(state) do
+            if key == "turnStartReceipt" and type(value) == "table" then
+                local receipt = {}
+                for receiptKey, receiptValue in pairs(value) do
+                    if receiptKey ~= "authorityFingerprint" then
+                        receipt[receiptKey] = receiptValue
+                    end
+                end
+                authorityState[key] = receipt
+            else
+                authorityState[key] = value
+            end
+        end
+
+        local ok, canonical = pcall(canonicalJson, authorityState, "$", {})
+        if not ok then
+            if type(canonical) == "table" and canonical.code and canonical.path and canonical.message then
+                return nil, canonical
+            end
+            return nil, {
+                code = "fingerprint_failed",
+                path = "$",
+                message = "전투 상태 fingerprint 생성에 실패했습니다: " .. tostring(canonical),
+            }
+        end
+
+        local hashA = 0
+        local hashB = 0
+        for index = 1, #canonical do
+            local byte = string.byte(canonical, index)
+            hashA = (hashA * 131 + byte) % 2147483647
+            hashB = (hashB * 137 + byte) % 2147483629
+        end
+        return {
+            algorithm = FINGERPRINT_ALGORITHM,
+            length = #canonical,
+            hashA = hashA,
+            hashB = hashB,
+        }, nil
+    end
+
     local function hasCompleteStaticData(staticData)
         return type(staticData) == "table"
             and getmetatable(staticData) == nil
@@ -372,6 +508,1244 @@
         end
     end
 
+    local function validateTurnStartEventSource(value, path, errors)
+        if type(value) ~= "table" then
+            addError(errors, "invalid_event_source", path, "턴 시작 사건의 source가 객체가 아닙니다.")
+            return
+        end
+        checkAllowedKeys(value, {
+            kind = true,
+            id = true,
+            side = true,
+            instanceId = true,
+        }, path, errors)
+        if not isAsciiId(value.kind) then
+            addError(errors, "invalid_event_source", path .. ".kind", "사건 source.kind는 lower_snake_case여야 합니다.")
+        end
+        if not isAsciiId(value.id) then
+            addError(errors, "invalid_event_source", path .. ".id", "사건 source.id는 lower_snake_case여야 합니다.")
+        end
+        if value.side ~= nil and not VALID_OWNER[value.side] then
+            addError(errors, "invalid_event_side", path .. ".side", "사건 source.side는 player 또는 character여야 합니다.")
+        end
+        if value.instanceId ~= nil and not isRuntimeId(value.instanceId) then
+            addError(errors, "invalid_instance_id", path .. ".instanceId", "사건 source.instanceId가 올바르지 않습니다.")
+        end
+    end
+
+    local function validateTurnStartEventCause(value, path, errors)
+        if type(value) ~= "table" then
+            addError(errors, "invalid_event_cause", path, "턴 시작 사건의 cause가 객체가 아닙니다.")
+            return
+        end
+        checkAllowedKeys(value, {
+            kind = true,
+            resolutionId = true,
+            eventId = true,
+        }, path, errors)
+        if not isAsciiId(value.kind) then
+            addError(errors, "invalid_event_cause", path .. ".kind", "사건 cause.kind는 lower_snake_case여야 합니다.")
+        end
+        if value.resolutionId ~= nil and not isRuntimeId(value.resolutionId) then
+            addError(errors, "invalid_resolution_id", path .. ".resolutionId", "사건 cause.resolutionId가 올바르지 않습니다.")
+        end
+        if value.eventId ~= nil and not isRuntimeId(value.eventId) then
+            addError(errors, "invalid_event_id", path .. ".eventId", "사건 cause.eventId가 올바르지 않습니다.")
+        end
+    end
+
+    local function validateTurnStartEvents(events, turnId, path, errors)
+        local eventCount = getArrayLength(events, path, errors)
+        if eventCount == nil then
+            return
+        end
+
+        for index = 1, eventCount do
+            local event = events[index]
+            local eventPath = path .. "[" .. index .. "]"
+            if type(event) ~= "table" then
+                addError(errors, "invalid_turn_start_event", eventPath, "턴 시작 사건이 객체가 아닙니다.")
+            else
+                checkAllowedKeys(event, {
+                    eventId = true,
+                    sequence = true,
+                    type = true,
+                    phase = true,
+                    resolutionId = true,
+                    side = true,
+                    source = true,
+                    cause = true,
+                    payload = true,
+                }, eventPath, errors)
+
+                if event.sequence ~= index then
+                    addError(errors, "invalid_event_sequence", eventPath .. ".sequence", "턴 시작 사건 sequence는 배열 순서와 일치해야 합니다.")
+                end
+                if isRuntimeId(turnId) then
+                    local expectedEventId = turnId .. "-event-" .. string.format("%03d", index)
+                    if event.eventId ~= expectedEventId then
+                        addError(errors, "invalid_event_id", eventPath .. ".eventId", "턴 시작 사건 ID가 turnId와 순번에 일치하지 않습니다.")
+                    end
+                elseif not isRuntimeId(event.eventId) then
+                    addError(errors, "invalid_event_id", eventPath .. ".eventId", "턴 시작 사건 ID가 올바르지 않습니다.")
+                end
+                if not isAsciiId(event.type) then
+                    addError(errors, "invalid_event_type", eventPath .. ".type", "사건 type은 lower_snake_case여야 합니다.")
+                end
+                if event.phase ~= "turn_start" then
+                    addError(errors, "invalid_event_phase", eventPath .. ".phase", "turnStartReceipt 사건 phase는 turn_start여야 합니다.")
+                end
+                if event.resolutionId ~= nil and not isRuntimeId(event.resolutionId) then
+                    addError(errors, "invalid_resolution_id", eventPath .. ".resolutionId", "사건 resolutionId가 올바르지 않습니다.")
+                end
+                if event.side ~= nil and not VALID_OWNER[event.side] then
+                    addError(errors, "invalid_event_side", eventPath .. ".side", "사건 side는 player 또는 character여야 합니다.")
+                end
+
+                validateTurnStartEventSource(event.source, eventPath .. ".source", errors)
+                if event.cause ~= nil then
+                    validateTurnStartEventCause(event.cause, eventPath .. ".cause", errors)
+                end
+                if event.payload ~= nil then
+                    local payloadKind = inspectTable(event.payload, eventPath .. ".payload", errors)
+                    if payloadKind ~= "object" then
+                        addError(errors, "invalid_event_payload", eventPath .. ".payload", "사건 payload는 비어 있지 않은 JSON 객체여야 합니다.")
+                    end
+                end
+            end
+        end
+    end
+
+    local function rngEqual(left, right)
+        return type(left) == "table"
+            and type(right) == "table"
+            and left.seed == right.seed
+            and left.cursor == right.cursor
+    end
+
+    local function validateReceiptRng(value, path, errors)
+        if type(value) ~= "table" then
+            addError(errors, "invalid_receipt_rng", path, "영수증 RNG가 객체가 아닙니다.")
+            return false
+        end
+        checkAllowedKeys(value, {
+            seed = true,
+            cursor = true,
+        }, path, errors)
+        local valid = true
+        if not isSafeInteger(value.seed, 0) then
+            addError(errors, "invalid_receipt_rng", path .. ".seed", "영수증 RNG seed는 0 이상의 안전한 정수여야 합니다.")
+            valid = false
+        end
+        if not isSafeInteger(value.cursor, 0) then
+            addError(errors, "invalid_receipt_rng", path .. ".cursor", "영수증 RNG cursor는 0 이상의 안전한 정수여야 합니다.")
+            valid = false
+        end
+        return valid
+    end
+
+    local function validateAuthorityFingerprint(value, path, errors)
+        if type(value) ~= "table" then
+            addError(errors, "invalid_authority_fingerprint", path, "권위 상태 fingerprint가 객체가 아닙니다.")
+            return false
+        end
+        checkAllowedKeys(value, {
+            algorithm = true,
+            length = true,
+            hashA = true,
+            hashB = true,
+        }, path, errors)
+
+        local valid = true
+        if value.algorithm ~= FINGERPRINT_ALGORITHM then
+            addError(
+                errors,
+                "invalid_fingerprint_algorithm",
+                path .. ".algorithm",
+                "지원하지 않는 권위 상태 fingerprint 알고리즘입니다."
+            )
+            valid = false
+        end
+        for _, field in ipairs({ "length", "hashA", "hashB" }) do
+            if not isSafeInteger(value[field], 0) then
+                addError(
+                    errors,
+                    "invalid_authority_fingerprint",
+                    path .. "." .. field,
+                    "권위 상태 fingerprint 수치는 0 이상의 안전한 정수여야 합니다."
+                )
+                valid = false
+            end
+        end
+        return valid
+    end
+
+    local function validateDrawReport(report, side, state, path, errors)
+        if type(report) ~= "table" then
+            addError(errors, "invalid_draw_receipt", path, "기본 드로우 영수증이 객체가 아닙니다.")
+            return
+        end
+        checkAllowedKeys(report, {
+            requested = true,
+            drawnInstanceIds = true,
+            rngBefore = true,
+            rngAfter = true,
+        }, path, errors)
+
+        local ownerState = type(state) == "table" and state[side] or nil
+        local expectedRequested = type(ownerState) == "table" and ownerState.baseDrawCount or nil
+        if not isInteger(report.requested, 1) then
+            addError(errors, "invalid_draw_requested", path .. ".requested", "기본 드로우 요청 수는 1 이상의 정수여야 합니다.")
+        elseif isInteger(expectedRequested, 1) and report.requested ~= expectedRequested then
+            addError(
+                errors,
+                "receipt_draw_count_mismatch",
+                path .. ".requested",
+                "기본 드로우 요청 수가 현재 진영의 baseDrawCount와 다릅니다."
+            )
+        end
+
+        local drawnCount = getArrayLength(report.drawnInstanceIds, path .. ".drawnInstanceIds", errors)
+        if drawnCount ~= nil then
+            validateIdArray(report.drawnInstanceIds, path .. ".drawnInstanceIds", errors, isRuntimeId)
+            if isInteger(report.requested, 1) and drawnCount > report.requested then
+                addError(errors, "draw_count_exceeded", path .. ".drawnInstanceIds", "실제 드로우 수가 요청 수보다 많습니다.")
+            end
+        end
+
+        local beforeValid = validateReceiptRng(report.rngBefore, path .. ".rngBefore", errors)
+        local afterValid = validateReceiptRng(report.rngAfter, path .. ".rngAfter", errors)
+        if beforeValid and afterValid then
+            if report.rngAfter.seed ~= report.rngBefore.seed then
+                addError(errors, "receipt_rng_seed_changed", path .. ".rngAfter.seed", "드로우 중 RNG seed가 바뀔 수 없습니다.")
+            end
+            if report.rngAfter.cursor < report.rngBefore.cursor then
+                addError(errors, "receipt_rng_reversed", path .. ".rngAfter.cursor", "드로우 중 RNG cursor가 이전으로 돌아갈 수 없습니다.")
+            end
+        end
+    end
+
+    local function validateDraws(draws, state, path, errors)
+        if type(draws) ~= "table" then
+            addError(errors, "invalid_draw_receipts", path, "기본 드로우 영수증 묶음이 객체가 아닙니다.")
+            return
+        end
+        checkAllowedKeys(draws, {
+            player = true,
+            character = true,
+        }, path, errors)
+        validateDrawReport(draws.player, "player", state, path .. ".player", errors)
+        validateDrawReport(draws.character, "character", state, path .. ".character", errors)
+
+        local playerAfter = type(draws.player) == "table" and draws.player.rngAfter or nil
+        local characterBefore = type(draws.character) == "table" and draws.character.rngBefore or nil
+        if type(playerAfter) == "table"
+            and type(characterBefore) == "table"
+            and not rngEqual(playerAfter, characterBefore) then
+            addError(
+                errors,
+                "receipt_rng_discontinuity",
+                path .. ".character.rngBefore",
+                "캐릭터 드로우 RNG 시작점이 플레이어 드로우 종료점과 다릅니다."
+            )
+        end
+    end
+
+    local function validateCandidateTotals(totals, path, errors)
+        if type(totals) ~= "table" then
+            addError(errors, "invalid_selection_totals", path, "후보 효과 합계가 객체가 아닙니다.")
+            return
+        end
+        local fields = {
+            "recoverResistance",
+            "loseStealth",
+            "damageResistance",
+            "recoverStealth",
+        }
+        checkAllowedKeys(totals, {
+            recoverResistance = true,
+            loseStealth = true,
+            damageResistance = true,
+            recoverStealth = true,
+        }, path, errors)
+        for _, field in ipairs(fields) do
+            if not isFinite(totals[field]) or totals[field] < 0 then
+                addError(
+                    errors,
+                    "invalid_selection_total",
+                    path .. "." .. field,
+                    "후보 효과 합계는 0 이상의 유한한 숫자여야 합니다."
+                )
+            end
+        end
+    end
+
+    local function validateSelectionContext(context, path, errors)
+        if type(context) ~= "table" then
+            addError(errors, "invalid_selection_context", path, "선택 시점 컨텍스트가 객체가 아닙니다.")
+            return nil
+        end
+        checkAllowedKeys(context, {
+            turnNumber = true,
+            player = true,
+            character = true,
+            characterHand = true,
+        }, path, errors)
+        if not isInteger(context.turnNumber, 1) then
+            addError(errors, "invalid_turn_number", path .. ".turnNumber", "선택 시점 턴 번호는 1 이상의 정수여야 합니다.")
+        end
+
+        if type(context.player) ~= "table" then
+            addError(errors, "invalid_selection_context", path .. ".player", "선택 시점 플레이어 컨텍스트가 객체가 아닙니다.")
+        else
+            checkAllowedKeys(context.player, {
+                stealth = true,
+                handCount = true,
+            }, path .. ".player", errors)
+            if not isFinite(context.player.stealth) then
+                addError(errors, "invalid_selection_context", path .. ".player.stealth", "선택 시점 은폐가 유한한 숫자가 아닙니다.")
+            end
+            if not isSafeInteger(context.player.handCount, 0) then
+                addError(errors, "invalid_selection_context", path .. ".player.handCount", "선택 시점 플레이어 손패 수가 안전한 비음수 정수가 아닙니다.")
+            end
+        end
+
+        if type(context.character) ~= "table" then
+            addError(errors, "invalid_selection_context", path .. ".character", "선택 시점 캐릭터 컨텍스트가 객체가 아닙니다.")
+        else
+            checkAllowedKeys(context.character, {
+                resistance = true,
+                mood = true,
+            }, path .. ".character", errors)
+            if not isFinite(context.character.resistance) then
+                addError(errors, "invalid_selection_context", path .. ".character.resistance", "선택 시점 저항이 유한한 숫자가 아닙니다.")
+            end
+            if not isAsciiId(context.character.mood) then
+                addError(errors, "invalid_selection_context", path .. ".character.mood", "선택 시점 무드 ID가 올바르지 않습니다.")
+            end
+        end
+
+        local handCount = getArrayLength(context.characterHand, path .. ".characterHand", errors)
+        local seen = {}
+        if handCount ~= nil then
+            for index = 1, handCount do
+                local entry = context.characterHand[index]
+                local entryPath = path .. ".characterHand[" .. index .. "]"
+                if type(entry) ~= "table" then
+                    addError(errors, "invalid_selection_hand_entry", entryPath, "선택 시점 손패 항목이 객체가 아닙니다.")
+                else
+                    checkAllowedKeys(entry, {
+                        instanceId = true,
+                        cardId = true,
+                        actionTag = true,
+                        handPosition = true,
+                    }, entryPath, errors)
+                    if not isRuntimeId(entry.instanceId) then
+                        addError(errors, "invalid_instance_id", entryPath .. ".instanceId", "선택 시점 손패 인스턴스 ID가 올바르지 않습니다.")
+                    elseif seen[entry.instanceId] then
+                        addError(errors, "duplicate_id", entryPath .. ".instanceId", "선택 시점 손패 인스턴스 ID가 중복되었습니다.")
+                    else
+                        seen[entry.instanceId] = true
+                    end
+                    if not isAsciiId(entry.cardId) then
+                        addError(errors, "invalid_card_id", entryPath .. ".cardId", "선택 시점 손패 카드 ID가 올바르지 않습니다.")
+                    end
+                    if not isAsciiId(entry.actionTag) then
+                        addError(errors, "invalid_action_tag", entryPath .. ".actionTag", "선택 시점 손패 행동 태그가 올바르지 않습니다.")
+                    end
+                    if entry.handPosition ~= index then
+                        addError(errors, "invalid_hand_position", entryPath .. ".handPosition", "선택 시점 캐릭터 손패 위치는 안정 순서의 1부터 연속되어야 합니다.")
+                    end
+                end
+            end
+        end
+        return handCount
+    end
+
+    local function validateSelectionCandidate(candidate, path, errors)
+        if type(candidate) ~= "table" then
+            addError(errors, "invalid_selection_candidate", path, "캐릭터 선택 후보가 객체가 아닙니다.")
+            return
+        end
+        checkAllowedKeys(candidate, {
+            instanceId = true,
+            cardId = true,
+            actionTag = true,
+            handPosition = true,
+            score = true,
+            projectedPlayerStealth = true,
+            lethal = true,
+            weight = true,
+            totals = true,
+            planChargesEvaluated = true,
+        }, path, errors)
+
+        if not isRuntimeId(candidate.instanceId) then
+            addError(errors, "invalid_instance_id", path .. ".instanceId", "후보 카드 인스턴스 ID가 올바르지 않습니다.")
+        end
+        if not isAsciiId(candidate.cardId) then
+            addError(errors, "invalid_card_id", path .. ".cardId", "후보 카드 ID가 올바르지 않습니다.")
+        end
+        if not isAsciiId(candidate.actionTag) then
+            addError(errors, "invalid_action_tag", path .. ".actionTag", "후보 행동 태그가 올바르지 않습니다.")
+        end
+        if not isInteger(candidate.handPosition, 1) then
+            addError(errors, "invalid_hand_position", path .. ".handPosition", "후보 손패 위치는 1 이상의 정수여야 합니다.")
+        end
+        if not isSafeInteger(candidate.score) then
+            addError(errors, "invalid_selection_score", path .. ".score", "후보 점수는 안전한 정수여야 합니다.")
+        end
+        if not isFinite(candidate.projectedPlayerStealth) then
+            addError(errors, "invalid_projected_stealth", path .. ".projectedPlayerStealth", "예상 플레이어 은폐가 유한한 숫자가 아닙니다.")
+        end
+        if candidate.lethal ~= true and candidate.lethal ~= false then
+            addError(errors, "invalid_lethal_flag", path .. ".lethal", "lethal은 불리언이어야 합니다.")
+        elseif isFinite(candidate.projectedPlayerStealth)
+            and candidate.lethal ~= (candidate.projectedPlayerStealth <= 0) then
+            addError(errors, "lethal_projection_mismatch", path .. ".lethal", "lethal 값이 예상 플레이어 은폐와 다릅니다.")
+        end
+        if not isSafeInteger(candidate.weight, 0) then
+            addError(errors, "invalid_selection_weight", path .. ".weight", "후보 가중치는 0 이상의 안전한 정수여야 합니다.")
+        end
+
+        validateCandidateTotals(candidate.totals, path .. ".totals", errors)
+        if not isSafeInteger(candidate.planChargesEvaluated, 0) then
+            addError(
+                errors,
+                "invalid_plan_charge_count",
+                path .. ".planChargesEvaluated",
+                "평가한 계획 충전 수는 0 이상의 안전한 정수여야 합니다."
+            )
+        end
+    end
+
+    local function validateSelectionDraw(draw, path, errors)
+        if type(draw) ~= "table" then
+            addError(errors, "invalid_selection_draw", path, "선택 추첨 영수증이 객체가 아닙니다.")
+            return
+        end
+
+        if draw.kind == "pass" then
+            checkAllowedKeys(draw, { kind = true }, path, errors)
+        elseif draw.kind == "single" then
+            checkAllowedKeys(draw, { kind = true, totalWeight = true }, path, errors)
+            if not isSafeInteger(draw.totalWeight, 1) then
+                addError(errors, "invalid_draw_weight", path .. ".totalWeight", "단독 후보 가중치는 1 이상의 안전한 정수여야 합니다.")
+            end
+        elseif draw.kind == "weighted" then
+            checkAllowedKeys(draw, {
+                kind = true,
+                totalWeight = true,
+                roll = true,
+            }, path, errors)
+            if not isSafeInteger(draw.totalWeight, 1) then
+                addError(errors, "invalid_draw_weight", path .. ".totalWeight", "가중 추첨의 총 가중치는 1 이상의 안전한 정수여야 합니다.")
+            end
+            if not isSafeInteger(draw.roll, 1) then
+                addError(errors, "invalid_draw_roll", path .. ".roll", "가중 추첨 roll은 1 이상의 안전한 정수여야 합니다.")
+            elseif isSafeInteger(draw.totalWeight, 1) and draw.roll > draw.totalWeight then
+                addError(errors, "invalid_draw_roll", path .. ".roll", "가중 추첨 roll이 총 가중치를 초과합니다.")
+            end
+        else
+            checkAllowedKeys(draw, {
+                kind = true,
+                totalWeight = true,
+                roll = true,
+            }, path, errors)
+            addError(errors, "invalid_selection_draw", path .. ".kind", "알 수 없는 선택 추첨 방식입니다.")
+        end
+    end
+
+    local function findStateInstance(state, instanceId)
+        if type(state) ~= "table" or type(state.cardInstances) ~= "table" then
+            return nil
+        end
+        for _, instance in ipairs(state.cardInstances) do
+            if type(instance) == "table" and instance.instanceId == instanceId then
+                return instance
+            end
+        end
+        return nil
+    end
+
+    local function countStateZone(state, owner, zone)
+        local count = 0
+        for _, instance in ipairs(type(state) == "table" and type(state.cardInstances) == "table" and state.cardInstances or {}) do
+            if type(instance) == "table" and instance.owner == owner and instance.zone == zone then
+                count = count + 1
+            end
+        end
+        return count
+    end
+
+    local function buildExpectedSelectionContext(state, events, staticData)
+        local revealEventIds = {}
+        for _, event in ipairs(type(events) == "table" and events or {}) do
+            if type(event) == "table" and event.type == "action_tag_revealed" and isRuntimeId(event.eventId) then
+                revealEventIds[event.eventId] = true
+            end
+        end
+
+        local playerStealth = type(state.player) == "table" and state.player.stealth or nil
+        local playerHandCount = countStateZone(state, "player", "hand")
+        local characterResistance = type(state.character) == "table" and state.character.resistance or nil
+        local characterMood = type(state.character) == "table" and state.character.mood or nil
+        local postSelectionCharacterDraws = {}
+
+        if type(events) == "table" then
+            for index = #events, 1, -1 do
+                local event = events[index]
+                local causedByReveal = type(event) == "table"
+                    and event.type == "effect_applied"
+                    and type(event.cause) == "table"
+                    and revealEventIds[event.cause.eventId] == true
+                local payload = causedByReveal and event.payload or nil
+                if type(payload) == "table" then
+                    if (payload.op == "lose_stealth" or payload.op == "recover_stealth")
+                        and payload.target == "player"
+                        and isFinite(payload.before) then
+                        playerStealth = payload.before
+                    elseif (payload.op == "recover_resistance" or payload.op == "damage_resistance")
+                        and payload.target == "character"
+                        and isFinite(payload.before) then
+                        characterResistance = payload.before
+                    elseif (payload.op == "shift_mood" or payload.op == "set_mood")
+                        and payload.target == "character"
+                        and type(payload.before) == "string" then
+                        characterMood = payload.before
+                    elseif payload.op == "draw_cards" and payload.target == "player" then
+                        local drawnCount = type(payload.drawnInstanceIds) == "table" and #payload.drawnInstanceIds or 0
+                        playerHandCount = playerHandCount - drawnCount
+                    elseif payload.op == "draw_cards" and payload.target == "character" then
+                        for _, instanceId in ipairs(type(payload.drawnInstanceIds) == "table" and payload.drawnInstanceIds or {}) do
+                            postSelectionCharacterDraws[instanceId] = true
+                        end
+                    end
+                end
+            end
+        end
+
+        local hand = {}
+        for sourceIndex, instance in ipairs(type(state.cardInstances) == "table" and state.cardInstances or {}) do
+            if type(instance) == "table"
+                and instance.owner == "character"
+                and instance.zone == "hand"
+                and not postSelectionCharacterDraws[instance.instanceId] then
+                hand[#hand + 1] = {
+                    instance = instance,
+                    sourceIndex = sourceIndex,
+                }
+            end
+        end
+        table.sort(hand, function(left, right)
+            if left.instance.position ~= right.instance.position then
+                return left.instance.position < right.instance.position
+            end
+            if left.instance.instanceId ~= right.instance.instanceId then
+                return left.instance.instanceId < right.instance.instanceId
+            end
+            return left.sourceIndex < right.sourceIndex
+        end)
+
+        local characterHand = {}
+        for index, entry in ipairs(hand) do
+            local instance = entry.instance
+            local card = type(staticData) == "table" and type(staticData.cards) == "table" and staticData.cards[instance.cardId] or nil
+            characterHand[index] = {
+                instanceId = instance.instanceId,
+                cardId = instance.cardId,
+                actionTag = type(card) == "table" and card.actionTag or nil,
+                handPosition = instance.position,
+            }
+        end
+
+        return {
+            turnNumber = state.turnNumber,
+            player = {
+                stealth = playerStealth,
+                handCount = playerHandCount,
+            },
+            character = {
+                resistance = characterResistance,
+                mood = characterMood,
+            },
+            characterHand = characterHand,
+        }
+    end
+
+    local function selectionContextEqual(left, right)
+        if type(left) ~= "table" or type(right) ~= "table"
+            or left.turnNumber ~= right.turnNumber
+            or type(left.player) ~= "table" or type(right.player) ~= "table"
+            or left.player.stealth ~= right.player.stealth
+            or left.player.handCount ~= right.player.handCount
+            or type(left.character) ~= "table" or type(right.character) ~= "table"
+            or left.character.resistance ~= right.character.resistance
+            or left.character.mood ~= right.character.mood
+            or type(left.characterHand) ~= "table" or type(right.characterHand) ~= "table"
+            or #left.characterHand ~= #right.characterHand then
+            return false
+        end
+        for index, expected in ipairs(right.characterHand) do
+            local actual = left.characterHand[index]
+            if type(actual) ~= "table"
+                or actual.instanceId ~= expected.instanceId
+                or actual.cardId ~= expected.cardId
+                or actual.actionTag ~= expected.actionTag
+                or actual.handPosition ~= expected.handPosition then
+                return false
+            end
+        end
+        return true
+    end
+
+    local function callReceiptValidator(moduleName, moduleAction, ...)
+        if type(runScript) ~= "function" then
+            return nil, "스크립트 실행기를 찾을 수 없습니다."
+        end
+        local ok, report = pcall(runScript, triggerId, moduleName, moduleAction, ...)
+        if not ok then
+            return nil, tostring(report)
+        end
+        if type(report) ~= "table" then
+            return nil, "하위 검증기가 테이블 결과를 반환하지 않았습니다."
+        end
+        return report, nil
+    end
+
+    local function validateCharacterSelection(selection, state, staticData, referencesValidated, events, path, errors)
+        if type(selection) ~= "table" then
+            addError(errors, "invalid_character_selection_receipt", path, "캐릭터 선택 영수증이 객체가 아닙니다.")
+            return
+        end
+        checkAllowedKeys(selection, {
+            schemaVersion = true,
+            kind = true,
+            battleId = true,
+            turnNumber = true,
+            characterId = true,
+            selectionContext = true,
+            candidates = true,
+            weightedPoolInstanceIds = true,
+            lethalPriorityApplied = true,
+            weightOffset = true,
+            rngBefore = true,
+            rngAfter = true,
+            draw = true,
+            selectedInstanceId = true,
+            selectedCardId = true,
+            publicActionTag = true,
+        }, path, errors)
+
+        if selection.schemaVersion ~= SCHEMA_VERSION then
+            addError(errors, "invalid_selection_schema", path .. ".schemaVersion", "지원하지 않는 캐릭터 선택 영수증 스키마입니다.")
+        end
+        if selection.kind ~= "characterIntentSelection" then
+            addError(errors, "invalid_selection_kind", path .. ".kind", "kind는 characterIntentSelection이어야 합니다.")
+        end
+        if not isRuntimeId(selection.battleId) then
+            addError(errors, "invalid_battle_id", path .. ".battleId", "선택 영수증 battleId가 올바르지 않습니다.")
+        elseif selection.battleId ~= state.battleId then
+            addError(errors, "selection_battle_mismatch", path .. ".battleId", "선택 영수증 battleId가 현재 전투와 다릅니다.")
+        end
+        if not isInteger(selection.turnNumber, 1) then
+            addError(errors, "invalid_turn_number", path .. ".turnNumber", "선택 영수증 턴 번호는 1 이상의 정수여야 합니다.")
+        elseif selection.turnNumber ~= state.turnNumber then
+            addError(errors, "selection_turn_mismatch", path .. ".turnNumber", "선택 영수증 턴 번호가 현재 전투와 다릅니다.")
+        end
+        if not isAsciiId(selection.characterId) then
+            addError(errors, "invalid_character_id", path .. ".characterId", "선택 영수증 캐릭터 ID가 올바르지 않습니다.")
+        elseif type(state.character) == "table" and selection.characterId ~= state.character.characterId then
+            addError(errors, "selection_character_mismatch", path .. ".characterId", "선택 영수증 캐릭터 ID가 현재 전투와 다릅니다.")
+        end
+
+        local contextPath = path .. ".selectionContext"
+        local contextHandCount = validateSelectionContext(selection.selectionContext, contextPath, errors)
+        if type(selection.selectionContext) == "table" then
+            if selection.selectionContext.turnNumber ~= selection.turnNumber then
+                addError(errors, "selection_context_turn_mismatch", contextPath .. ".turnNumber", "선택 시점 컨텍스트의 턴 번호가 선택 영수증과 다릅니다.")
+            end
+            local contextMood = type(selection.selectionContext.character) == "table"
+                and selection.selectionContext.character.mood
+                or nil
+            if referencesValidated and isAsciiId(contextMood) then
+                local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
+                if type(moods) ~= "table" or moods[contextMood] == nil then
+                    addError(errors, "unknown_mood", contextPath .. ".character.mood", "선택 시점 무드가 정적 레지스트리에 없습니다.")
+                end
+            end
+            local expectedContext = referencesValidated and buildExpectedSelectionContext(state, events, staticData) or nil
+            if expectedContext ~= nil and not selectionContextEqual(selection.selectionContext, expectedContext) then
+                addError(
+                    errors,
+                    "selection_context_state_mismatch",
+                    contextPath,
+                    "선택 시점 컨텍스트가 현재 상태와 행동 태그 공개 이후 효과를 역산한 결과와 다릅니다."
+                )
+            end
+        end
+
+        local candidateCount = getArrayLength(selection.candidates, path .. ".candidates", errors)
+        local candidateById = {}
+        local positionSeen = {}
+        if candidateCount ~= nil then
+            for index = 1, candidateCount do
+                local candidate = selection.candidates[index]
+                local candidatePath = path .. ".candidates[" .. index .. "]"
+                validateSelectionCandidate(candidate, candidatePath, errors)
+                if type(candidate) == "table" then
+                    if isRuntimeId(candidate.instanceId) then
+                        if candidateById[candidate.instanceId] then
+                            addError(errors, "duplicate_selection_candidate", candidatePath .. ".instanceId", "후보 인스턴스 ID가 중복되었습니다.")
+                        else
+                            candidateById[candidate.instanceId] = candidate
+                        end
+                    end
+                    if isInteger(candidate.handPosition, 1) then
+                        if positionSeen[candidate.handPosition] then
+                            addError(errors, "duplicate_hand_position", candidatePath .. ".handPosition", "후보 손패 위치가 중복되었습니다.")
+                        end
+                        positionSeen[candidate.handPosition] = true
+                    end
+                end
+            end
+        end
+
+        if candidateCount ~= nil and contextHandCount ~= nil then
+            if candidateCount ~= contextHandCount then
+                addError(errors, "selection_candidate_count_mismatch", path .. ".candidates", "후보 목록이 선택 시점 캐릭터 손패 전체와 장수가 다릅니다.")
+            end
+            local comparisonCount = math.min(candidateCount, contextHandCount)
+            for index = 1, comparisonCount do
+                local candidate = selection.candidates[index]
+                local handEntry = selection.selectionContext.characterHand[index]
+                local candidatePath = path .. ".candidates[" .. index .. "]"
+                if type(candidate) == "table" and type(handEntry) == "table" then
+                    if candidate.instanceId ~= handEntry.instanceId
+                        or candidate.cardId ~= handEntry.cardId
+                        or candidate.actionTag ~= handEntry.actionTag
+                        or candidate.handPosition ~= handEntry.handPosition then
+                        addError(errors, "selection_candidate_hand_mismatch", candidatePath, "후보의 순서·인스턴스·카드·행동 태그·위치가 선택 시점 손패와 다릅니다.")
+                    end
+                    local totals = candidate.totals
+                    if type(totals) == "table"
+                        and isFinite(totals.recoverResistance)
+                        and isFinite(totals.loseStealth)
+                        and isFinite(totals.damageResistance)
+                        and isFinite(totals.recoverStealth) then
+                        local expectedScore = totals.recoverResistance
+                            + totals.loseStealth
+                            - totals.damageResistance
+                            - totals.recoverStealth
+                        if candidate.score ~= expectedScore then
+                            addError(errors, "selection_score_mismatch", candidatePath .. ".score", "후보 점수가 효과 합계의 순저항 감소치와 다릅니다.")
+                        end
+                        local contextStealth = type(selection.selectionContext.player) == "table"
+                            and selection.selectionContext.player.stealth
+                            or nil
+                        if isFinite(contextStealth) then
+                            local expectedStealth = contextStealth
+                                - totals.loseStealth
+                                + totals.recoverStealth
+                            if candidate.projectedPlayerStealth ~= expectedStealth then
+                                addError(errors, "selection_projection_mismatch", candidatePath .. ".projectedPlayerStealth", "예상 플레이어 은폐가 선택 시점 효과 합계와 다릅니다.")
+                            end
+                        end
+                    end
+                    if referencesValidated and isAsciiId(candidate.cardId) then
+                        local card = staticData.cards[candidate.cardId]
+                        local expectedCharges = 0
+                        if type(card) == "table"
+                            and type(card.mechanisms) == "table" then
+                            for _, mechanismId in ipairs(card.mechanisms) do
+                                if mechanismId == "plan" then
+                                    local plan = type(card.mechanismData) == "table" and card.mechanismData.plan or nil
+                                    expectedCharges = type(plan) == "table" and plan.charges or nil
+                                    break
+                                end
+                            end
+                        end
+                        if candidate.planChargesEvaluated ~= expectedCharges then
+                            addError(errors, "selection_plan_charges_mismatch", candidatePath .. ".planChargesEvaluated", "평가한 계획 충전 수가 정적 카드 정의와 다릅니다.")
+                        end
+                    end
+                end
+            end
+        end
+
+        if referencesValidated and type(selection.selectionContext) == "table" then
+            local replayReport, replayCallError = callReceiptValidator(
+                "characterSelector",
+                "validateReceipt",
+                staticData,
+                selection
+            )
+            if replayCallError ~= nil then
+                addError(errors, "selection_replay_unavailable", path, "캐릭터 선택 효과 재생 검증을 실행할 수 없습니다: " .. replayCallError)
+            elseif replayReport.ok ~= true then
+                local nestedErrors = type(replayReport.errors) == "table" and replayReport.errors or {}
+                if #nestedErrors == 0 then
+                    addError(errors, "selection_replay_failed", path, "캐릭터 선택 효과 재생 검증이 실패했습니다.")
+                else
+                    for _, nested in ipairs(nestedErrors) do
+                        local nestedPath = type(nested) == "table" and nested.path or "$"
+                        if type(nestedPath) == "string" and string.sub(nestedPath, 1, 9) == "$.receipt" then
+                            nestedPath = path .. string.sub(nestedPath, 10)
+                        else
+                            nestedPath = path
+                        end
+                        addError(
+                            errors,
+                            type(nested) == "table" and tostring(nested.code) or "selection_replay_failed",
+                            nestedPath,
+                            type(nested) == "table" and tostring(nested.message) or "캐릭터 선택 효과 재생 검증이 실패했습니다."
+                        )
+                    end
+                end
+            elseif replayReport.valid ~= true then
+                addError(errors, "selection_replay_failed", path, "캐릭터 선택 효과 재생 검증기가 valid 결과를 반환하지 않았습니다.")
+            end
+        end
+
+        validateIdArray(selection.weightedPoolInstanceIds, path .. ".weightedPoolInstanceIds", errors, isRuntimeId)
+        local poolCount = type(selection.weightedPoolInstanceIds) == "table" and #selection.weightedPoolInstanceIds or 0
+        local poolIdSet = {}
+        for index, instanceId in ipairs(type(selection.weightedPoolInstanceIds) == "table" and selection.weightedPoolInstanceIds or {}) do
+            if candidateById[instanceId] == nil then
+                addError(errors, "unknown_selection_pool_candidate", path .. ".weightedPoolInstanceIds[" .. index .. "]", "가중 추첨 후보가 candidates에 없습니다.")
+            elseif poolIdSet[instanceId] then
+                addError(errors, "duplicate_selection_pool_candidate", path .. ".weightedPoolInstanceIds[" .. index .. "]", "가중 추첨 후보가 중복되었습니다.")
+            else
+                poolIdSet[instanceId] = true
+            end
+        end
+
+        if selection.lethalPriorityApplied ~= true and selection.lethalPriorityApplied ~= false then
+            addError(errors, "invalid_lethal_priority", path .. ".lethalPriorityApplied", "lethalPriorityApplied는 불리언이어야 합니다.")
+        end
+        local beforeValid = validateReceiptRng(selection.rngBefore, path .. ".rngBefore", errors)
+        local afterValid = validateReceiptRng(selection.rngAfter, path .. ".rngAfter", errors)
+        if beforeValid and afterValid then
+            if selection.rngAfter.seed ~= selection.rngBefore.seed then
+                addError(errors, "receipt_rng_seed_changed", path .. ".rngAfter.seed", "캐릭터 선택 중 RNG seed가 바뀔 수 없습니다.")
+            end
+            if selection.rngAfter.cursor < selection.rngBefore.cursor then
+                addError(errors, "receipt_rng_reversed", path .. ".rngAfter.cursor", "캐릭터 선택 중 RNG cursor가 이전으로 돌아갈 수 없습니다.")
+            end
+        end
+        validateSelectionDraw(selection.draw, path .. ".draw", errors)
+
+        local intent = type(state) == "table" and state.characterIntent or nil
+        local intentIds = type(intent) == "table" and intent.cardInstanceIds or nil
+        local selected = selection.selectedInstanceId ~= nil
+        if not selected then
+            if selection.selectedCardId ~= nil
+                or selection.publicActionTag ~= nil
+                or selection.weightOffset ~= nil then
+                addError(errors, "selection_pass_field_conflict", path, "패스 영수증에는 선택 카드 필드를 둘 수 없습니다.")
+            end
+            if type(selection.draw) ~= "table" or selection.draw.kind ~= "pass" then
+                addError(errors, "selection_pass_draw_mismatch", path .. ".draw", "패스 영수증의 draw.kind는 pass여야 합니다.")
+            end
+            if candidateCount ~= nil and candidateCount ~= 0 then
+                addError(errors, "selection_pass_has_candidates", path .. ".candidates", "패스 영수증에는 후보가 없어야 합니다.")
+            end
+            if poolCount ~= 0 then
+                addError(errors, "selection_pass_has_pool", path .. ".weightedPoolInstanceIds", "패스 영수증에는 가중 추첨 후보가 없어야 합니다.")
+            end
+            if selection.lethalPriorityApplied ~= false then
+                addError(errors, "selection_pass_lethal_priority", path .. ".lethalPriorityApplied", "패스에는 치명 우선순위를 적용할 수 없습니다.")
+            end
+            if beforeValid and afterValid and not rngEqual(selection.rngBefore, selection.rngAfter) then
+                addError(errors, "selection_pass_consumed_rng", path .. ".rngAfter", "패스는 RNG를 소비할 수 없습니다.")
+            end
+            if type(intentIds) ~= "table" or #intentIds ~= 0 or (type(intent) == "table" and intent.publicActionTag ~= nil) then
+                addError(errors, "character_selection_intent_mismatch", "$.characterIntent", "패스 영수증과 현재 characterIntent가 다릅니다.")
+            end
+            return
+        end
+
+        if not isRuntimeId(selection.selectedInstanceId) then
+            addError(errors, "invalid_instance_id", path .. ".selectedInstanceId", "선택한 카드 인스턴스 ID가 올바르지 않습니다.")
+        end
+        if not isAsciiId(selection.selectedCardId) then
+            addError(errors, "invalid_card_id", path .. ".selectedCardId", "선택한 카드 ID가 올바르지 않습니다.")
+        end
+        if not isAsciiId(selection.publicActionTag) then
+            addError(errors, "invalid_action_tag", path .. ".publicActionTag", "선택한 공개 행동 태그가 올바르지 않습니다.")
+        end
+        if not isSafeInteger(selection.weightOffset, 0) then
+            addError(errors, "invalid_selection_weight_offset", path .. ".weightOffset", "점수 가중치 평행이동 값은 0 이상의 안전한 정수여야 합니다.")
+        end
+        if type(selection.draw) ~= "table"
+            or (selection.draw.kind ~= "single" and selection.draw.kind ~= "weighted") then
+            addError(errors, "selection_selected_draw_mismatch", path .. ".draw", "선택 영수증은 single 또는 weighted 추첨을 사용해야 합니다.")
+        end
+        if candidateCount == 0 then
+            addError(errors, "selection_missing_candidates", path .. ".candidates", "선택 영수증에는 후보가 필요합니다.")
+        end
+        if poolCount == 0 then
+            addError(errors, "selection_missing_weighted_pool", path .. ".weightedPoolInstanceIds", "선택 영수증에는 가중 추첨 후보가 필요합니다.")
+        end
+
+        local selectedCandidate = candidateById[selection.selectedInstanceId]
+        if selectedCandidate == nil then
+            addError(errors, "selected_candidate_missing", path .. ".selectedInstanceId", "선택한 인스턴스가 candidates에 없습니다.")
+        else
+            if selectedCandidate.cardId ~= selection.selectedCardId then
+                addError(errors, "selected_card_mismatch", path .. ".selectedCardId", "선택 카드 ID가 후보와 다릅니다.")
+            end
+            if selectedCandidate.actionTag ~= selection.publicActionTag then
+                addError(errors, "selected_action_tag_mismatch", path .. ".publicActionTag", "선택 행동 태그가 후보와 다릅니다.")
+            end
+        end
+
+        local anyLethal = false
+        if type(selection.candidates) == "table" then
+            for _, candidate in ipairs(selection.candidates) do
+                if type(candidate) == "table" and candidate.lethal == true then
+                    anyLethal = true
+                    break
+                end
+            end
+        end
+        if (selection.lethalPriorityApplied == true) ~= anyLethal then
+            addError(errors, "lethal_priority_mismatch", path .. ".lethalPriorityApplied", "치명 우선순위가 후보의 lethal 값과 다릅니다.")
+        end
+
+        local expectedPool = {}
+        local expectedPoolSet = {}
+        local minimumPoolScore = nil
+        local anyPositivePoolScore = false
+        if type(selection.candidates) == "table" then
+            for _, candidate in ipairs(selection.candidates) do
+                if type(candidate) == "table"
+                    and isRuntimeId(candidate.instanceId)
+                    and isSafeInteger(candidate.score)
+                    and (not anyLethal or candidate.lethal == true) then
+                    expectedPool[#expectedPool + 1] = candidate.instanceId
+                    expectedPoolSet[candidate.instanceId] = true
+                    if minimumPoolScore == nil or candidate.score < minimumPoolScore then
+                        minimumPoolScore = candidate.score
+                    end
+                    if candidate.score > 0 then
+                        anyPositivePoolScore = true
+                    end
+                end
+            end
+        end
+
+        local poolMatches = #expectedPool == poolCount
+        if poolMatches then
+            for index = 1, poolCount do
+                if expectedPool[index] ~= selection.weightedPoolInstanceIds[index] then
+                    poolMatches = false
+                    break
+                end
+            end
+        end
+        if not poolMatches then
+            addError(errors, "selection_weighted_pool_mismatch", path .. ".weightedPoolInstanceIds", "가중 추첨 후보 배열이 치명 우선순위 결과와 다릅니다.")
+        end
+
+        local expectedOffset = nil
+        if minimumPoolScore ~= nil then
+            expectedOffset = anyPositivePoolScore and 0 or (1 - minimumPoolScore)
+            if not isSafeInteger(expectedOffset, 0) then
+                addError(errors, "invalid_selection_weight_offset", path .. ".weightOffset", "후보 점수에서 안전한 평행이동 값을 계산할 수 없습니다.")
+            elseif selection.weightOffset ~= expectedOffset then
+                addError(errors, "selection_weight_offset_mismatch", path .. ".weightOffset", "점수 가중치 평행이동 값이 후보 점수와 다릅니다.")
+            end
+        end
+
+        local totalWeight = 0
+        if type(selection.candidates) == "table" then
+            for index, candidate in ipairs(selection.candidates) do
+                if type(candidate) == "table" and isSafeInteger(candidate.score) then
+                    local expectedWeight = 0
+                    if expectedPoolSet[candidate.instanceId] and isSafeInteger(expectedOffset, 0) then
+                        local adjusted = candidate.score + expectedOffset
+                        if isSafeInteger(adjusted) and adjusted > 0 then
+                            expectedWeight = adjusted
+                        end
+                    end
+                    if candidate.weight ~= expectedWeight then
+                        addError(errors, "selection_weight_mismatch", path .. ".candidates[" .. index .. "].weight", "후보 가중치가 총효과 점수 정책과 다릅니다.")
+                    end
+                    if expectedPoolSet[candidate.instanceId] and isSafeInteger(expectedWeight, 0) then
+                        if isSafeInteger(totalWeight + expectedWeight, 0) then
+                            totalWeight = totalWeight + expectedWeight
+                        else
+                            addError(errors, "selection_total_weight_overflow", path .. ".candidates", "가중 추첨 총합이 안전한 정수 범위를 벗어났습니다.")
+                        end
+                    end
+                end
+            end
+        end
+        if totalWeight <= 0 and poolCount > 0 then
+            addError(errors, "selection_zero_total_weight", path .. ".candidates", "가중 추첨 후보의 총 가중치는 1 이상이어야 합니다.")
+        end
+        if selectedCandidate ~= nil and not expectedPoolSet[selection.selectedInstanceId] then
+            addError(errors, "selected_candidate_outside_pool", path .. ".selectedInstanceId", "선택된 카드는 가중 추첨 후보에 포함되어야 합니다.")
+        end
+
+        local draw = selection.draw
+        if type(draw) == "table" and draw.kind == "single" then
+            if poolCount ~= 1 or selection.weightedPoolInstanceIds[1] ~= selection.selectedInstanceId then
+                addError(errors, "single_draw_mismatch", path .. ".draw", "single 추첨은 유일한 가중 추첨 후보를 선택해야 합니다.")
+            elseif draw.totalWeight ~= totalWeight then
+                addError(errors, "draw_weight_mismatch", path .. ".draw.totalWeight", "single 총 가중치가 후보 가중치와 다릅니다.")
+            end
+            if beforeValid and afterValid and not rngEqual(selection.rngBefore, selection.rngAfter) then
+                addError(errors, "single_selection_consumed_rng", path .. ".rngAfter", "single 선택은 RNG를 소비할 수 없습니다.")
+            end
+        elseif type(draw) == "table" and draw.kind == "weighted" then
+            if poolCount < 2 then
+                addError(errors, "weighted_draw_missing_candidates", path .. ".weightedPoolInstanceIds", "weighted 추첨에는 후보가 둘 이상 필요합니다.")
+            end
+            if draw.totalWeight ~= totalWeight then
+                addError(errors, "draw_weight_mismatch", path .. ".draw.totalWeight", "weighted 총 가중치가 추첨 후보 가중치 합과 다릅니다.")
+            end
+            if isSafeInteger(draw.roll, 1) then
+                local cumulative = 0
+                local rolledInstanceId = nil
+                for _, instanceId in ipairs(type(selection.weightedPoolInstanceIds) == "table" and selection.weightedPoolInstanceIds or {}) do
+                    local candidate = candidateById[instanceId]
+                    if candidate and isSafeInteger(candidate.weight, 0) then
+                        cumulative = cumulative + candidate.weight
+                        if candidate.weight > 0 and draw.roll <= cumulative then
+                            rolledInstanceId = instanceId
+                            break
+                        end
+                    end
+                end
+                if rolledInstanceId ~= selection.selectedInstanceId then
+                    addError(errors, "weighted_result_mismatch", path .. ".selectedInstanceId", "weighted roll 결과와 선택 인스턴스가 다릅니다.")
+                end
+            end
+            if beforeValid and isSafeInteger(totalWeight, 1) then
+                local rngReplay, rngReplayCallError = callReceiptValidator(
+                    "deterministicRng",
+                    "nextInteger",
+                    selection.rngBefore,
+                    1,
+                    totalWeight
+                )
+                if rngReplayCallError ~= nil then
+                    addError(errors, "selection_rng_replay_unavailable", path .. ".draw", "선택 RNG를 재생할 수 없습니다: " .. rngReplayCallError)
+                elseif rngReplay.ok ~= true then
+                    addError(errors, "selection_rng_replay_failed", path .. ".draw", "결정적 선택 RNG 재생이 실패했습니다.")
+                else
+                    if rngReplay.value ~= draw.roll then
+                        addError(errors, "selection_roll_replay_mismatch", path .. ".draw.roll", "기록된 roll이 rngBefore와 총 가중치의 결정적 재생 결과와 다릅니다.")
+                    end
+                    if afterValid and not rngEqual(rngReplay.rng, selection.rngAfter) then
+                        addError(errors, "selection_rng_after_replay_mismatch", path .. ".rngAfter", "기록된 rngAfter가 결정적 가중 추첨 재생 결과와 다릅니다.")
+                    end
+                end
+            end
+            if beforeValid and afterValid and selection.rngAfter.cursor <= selection.rngBefore.cursor then
+                addError(errors, "weighted_selection_rng_missing", path .. ".rngAfter.cursor", "weighted 선택은 RNG cursor를 전진시켜야 합니다.")
+            end
+        end
+
+        if type(intentIds) ~= "table"
+            or #intentIds ~= 1
+            or intentIds[1] ~= selection.selectedInstanceId
+            or type(intent) ~= "table"
+            or intent.publicActionTag ~= selection.publicActionTag then
+            addError(errors, "character_selection_intent_mismatch", "$.characterIntent", "선택 영수증과 현재 characterIntent가 다릅니다.")
+        end
+
+        local instance = findStateInstance(state, selection.selectedInstanceId)
+        if instance == nil
+            or instance.owner ~= "character"
+            or instance.zone ~= "hand"
+            or instance.cardId ~= selection.selectedCardId then
+            addError(errors, "selected_instance_mismatch", path .. ".selectedInstanceId", "선택 인스턴스가 현재 캐릭터 손패·카드와 일치하지 않습니다.")
+        end
+        if referencesValidated and isAsciiId(selection.selectedCardId) then
+            local card = staticData.cards[selection.selectedCardId]
+            if type(card) ~= "table"
+                or card.owner ~= "character"
+                or card.actionTag ~= selection.publicActionTag then
+                addError(errors, "selected_static_card_mismatch", path .. ".selectedCardId", "선택 카드와 정적 카드 행동 태그가 일치하지 않습니다.")
+            end
+        end
+    end
+
+    local function validateTurnStartReceipt(receipt, state, staticData, referencesValidated, errors)
+        local path = "$.turnStartReceipt"
+        if type(receipt) ~= "table" then
+            addError(errors, "invalid_turn_start_receipt", path, "turnStartReceipt가 객체가 아닙니다.")
+            return
+        end
+
+        checkAllowedKeys(receipt, {
+            schemaVersion = true,
+            kind = true,
+            turnId = true,
+            turnNumber = true,
+            authorityFingerprint = true,
+            draws = true,
+            characterSelection = true,
+            baseline = true,
+            transient = true,
+            events = true,
+        }, path, errors)
+        if receipt.schemaVersion ~= SCHEMA_VERSION then
+            addError(errors, "invalid_receipt_schema", path .. ".schemaVersion", "지원하지 않는 turnStartReceipt 스키마입니다.")
+        end
+        if receipt.kind ~= "turnStartReceipt" then
+            addError(errors, "invalid_receipt_kind", path .. ".kind", "kind는 turnStartReceipt여야 합니다.")
+        end
+        if not isRuntimeId(receipt.turnId) then
+            addError(errors, "invalid_turn_id", path .. ".turnId", "turnStartReceipt turnId가 올바르지 않습니다.")
+        elseif state.lastCommittedTurnId == receipt.turnId then
+            addError(errors, "turn_already_committed", path .. ".turnId", "이미 확정한 turnId를 현재 턴 초기화에 사용할 수 없습니다.")
+        end
+        if not isInteger(receipt.turnNumber, 1) then
+            addError(errors, "invalid_turn_number", path .. ".turnNumber", "turnStartReceipt 턴 번호는 1 이상의 정수여야 합니다.")
+        elseif receipt.turnNumber ~= state.turnNumber then
+            addError(errors, "receipt_turn_mismatch", path .. ".turnNumber", "turnStartReceipt 턴 번호가 현재 전투 턴과 다릅니다.")
+        end
+        if state.status ~= "active" then
+            addError(errors, "receipt_requires_active", path, "turnStartReceipt는 active 전투 상태에만 존재할 수 있습니다.")
+        end
+
+        local fingerprintPath = path .. ".authorityFingerprint"
+        local fingerprintValid = validateAuthorityFingerprint(receipt.authorityFingerprint, fingerprintPath, errors)
+        if fingerprintValid then
+            local expectedFingerprint, fingerprintError = fingerprintAuthorityState(state)
+            if fingerprintError then
+                addError(errors, fingerprintError.code, fingerprintError.path, fingerprintError.message)
+            elseif receipt.authorityFingerprint.algorithm ~= expectedFingerprint.algorithm
+                or receipt.authorityFingerprint.length ~= expectedFingerprint.length
+                or receipt.authorityFingerprint.hashA ~= expectedFingerprint.hashA
+                or receipt.authorityFingerprint.hashB ~= expectedFingerprint.hashB then
+                addError(
+                    errors,
+                    "receipt_authority_mismatch",
+                    fingerprintPath,
+                    "turnStartReceipt가 현재 권위 battleState와 일치하지 않습니다."
+                )
+            end
+        end
+
+        validateDraws(receipt.draws, state, path .. ".draws", errors)
+        validateCharacterSelection(
+            receipt.characterSelection,
+            state,
+            staticData,
+            referencesValidated,
+            receipt.events,
+            path .. ".characterSelection",
+            errors
+        )
+        local characterDrawAfter = type(receipt.draws) == "table"
+            and type(receipt.draws.character) == "table"
+            and receipt.draws.character.rngAfter
+            or nil
+        local selectionRngBefore = type(receipt.characterSelection) == "table"
+            and receipt.characterSelection.rngBefore
+            or nil
+        if type(characterDrawAfter) == "table"
+            and type(selectionRngBefore) == "table"
+            and not rngEqual(characterDrawAfter, selectionRngBefore) then
+            addError(
+                errors,
+                "receipt_rng_discontinuity",
+                path .. ".characterSelection.rngBefore",
+                "캐릭터 선택 RNG 시작점이 캐릭터 드로우 종료점과 다릅니다."
+            )
+        end
+
+        local baseline = receipt.baseline
+        if type(baseline) ~= "table" then
+            addError(errors, "invalid_receipt_baseline", path .. ".baseline", "turnStartReceipt baseline이 객체가 아닙니다.")
+        else
+            checkAllowedKeys(baseline, {
+                stealth = true,
+                resistance = true,
+                mood = true,
+            }, path .. ".baseline", errors)
+            if not isFinite(baseline.stealth) then
+                addError(errors, "invalid_receipt_baseline", path .. ".baseline.stealth", "baseline 은폐가 유한한 숫자가 아닙니다.")
+            end
+            if not isFinite(baseline.resistance) then
+                addError(errors, "invalid_receipt_baseline", path .. ".baseline.resistance", "baseline 저항이 유한한 숫자가 아닙니다.")
+            end
+            if not isAsciiId(baseline.mood) then
+                addError(errors, "invalid_receipt_baseline", path .. ".baseline.mood", "baseline 무드 ID가 올바르지 않습니다.")
+            elseif referencesValidated then
+                local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
+                if type(moods) ~= "table" or not moods[baseline.mood] then
+                    addError(errors, "unknown_mood", path .. ".baseline.mood", "baseline 무드가 레지스트리에 없습니다.")
+                end
+            end
+        end
+
+        local transient = receipt.transient
+        if type(transient) ~= "table" then
+            addError(errors, "invalid_receipt_transient", path .. ".transient", "turnStartReceipt transient가 객체가 아닙니다.")
+        else
+            checkAllowedKeys(transient, {
+                skipRemaining = true,
+                directMoodChanged = true,
+                moodLock = true,
+            }, path .. ".transient", errors)
+
+            local skipRemaining = transient.skipRemaining
+            if type(skipRemaining) ~= "table" then
+                addError(errors, "invalid_skip_state", path .. ".transient.skipRemaining", "skipRemaining이 객체가 아닙니다.")
+            else
+                checkAllowedKeys(skipRemaining, {
+                    player = true,
+                    character = true,
+                }, path .. ".transient.skipRemaining", errors)
+                for _, side in ipairs({ "player", "character" }) do
+                    if skipRemaining[side] ~= true and skipRemaining[side] ~= false then
+                        addError(errors, "invalid_skip_state", path .. ".transient.skipRemaining." .. side, "skipRemaining 값은 불리언이어야 합니다.")
+                    end
+                end
+            end
+
+            if transient.directMoodChanged ~= true and transient.directMoodChanged ~= false then
+                addError(errors, "invalid_direct_mood_flag", path .. ".transient.directMoodChanged", "directMoodChanged는 불리언이어야 합니다.")
+            end
+
+            if transient.moodLock ~= nil then
+                local moodLock = transient.moodLock
+                local moodLockPath = path .. ".transient.moodLock"
+                if type(moodLock) ~= "table" then
+                    addError(errors, "invalid_mood_lock", moodLockPath, "moodLock이 객체가 아닙니다.")
+                else
+                    checkAllowedKeys(moodLock, {
+                        mood = true,
+                        ["until"] = true,
+                        cause = true,
+                    }, moodLockPath, errors)
+                    if not isAsciiId(moodLock.mood) then
+                        addError(errors, "invalid_mood_lock", moodLockPath .. ".mood", "moodLock 무드 ID가 올바르지 않습니다.")
+                    elseif referencesValidated then
+                        local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
+                        if type(moods) ~= "table" or not moods[moodLock.mood] then
+                            addError(errors, "unknown_mood", moodLockPath .. ".mood", "moodLock 무드가 레지스트리에 없습니다.")
+                        end
+                    end
+                    if moodLock["until"] ~= "turn_end" then
+                        addError(errors, "invalid_mood_lock_until", moodLockPath .. ".until", "v1 moodLock 종료점은 turn_end여야 합니다.")
+                    end
+                    if not isAsciiId(moodLock.cause) then
+                        addError(errors, "invalid_mood_lock_cause", moodLockPath .. ".cause", "moodLock cause는 lower_snake_case여야 합니다.")
+                    end
+                end
+            end
+        end
+
+        validateTurnStartEvents(receipt.events, receipt.turnId, path .. ".events", errors)
+    end
+
     local function validateBattleState(state, staticData)
         local errors = {}
         local staticDataProvided = staticData ~= nil
@@ -411,6 +1785,7 @@
             cardInstances = true,
             selection = true,
             characterIntent = true,
+            turnStartReceipt = true,
         }, "$", errors)
 
         if state.schemaVersion ~= SCHEMA_VERSION then
@@ -741,6 +2116,10 @@
             end
         end
 
+        if state.turnStartReceipt ~= nil then
+            validateTurnStartReceipt(state.turnStartReceipt, state, staticData, referencesValidated, errors)
+        end
+
         if type(state.player) == "table" and type(state.character) == "table"
             and isFinite(state.player.stealth) and isFinite(state.character.resistance) then
             if state.character.resistance <= 0 and state.status ~= "victory" then
@@ -763,6 +2142,132 @@
         local report = result(errors, state)
         report.referencesValidated = referencesValidated
         return report
+    end
+
+    local function fingerprintBattleState(state, staticData)
+        local validation = validateBattleState(state, staticData)
+        if not validation.ok then
+            return validation
+        end
+        if validation.referencesValidated ~= true then
+            local errors = {}
+            addError(
+                errors,
+                "static_references_not_validated",
+                "$.staticData",
+                "battleState fingerprint에는 전체 정적 데이터 참조 검증이 필요합니다."
+            )
+            local report = result(errors)
+            report.referencesValidated = false
+            return report
+        end
+
+        local authorityFingerprint, fingerprintError = fingerprintAuthorityState(state)
+        if fingerprintError then
+            local errors = {}
+            addError(errors, fingerprintError.code, fingerprintError.path, fingerprintError.message)
+            local report = result(errors)
+            report.referencesValidated = true
+            return report
+        end
+        return {
+            ok = true,
+            schemaVersion = SCHEMA_VERSION,
+            errors = {},
+            referencesValidated = true,
+            fingerprint = authorityFingerprint,
+        }
+    end
+
+    local function sealTurnStartReceipt(state, staticData)
+        local errors = {}
+        if type(state) ~= "table" or type(state.turnStartReceipt) ~= "table" then
+            addError(errors, "missing_unsealed_turn_receipt", "$.turnStartReceipt", "봉인할 turnStartReceipt가 없습니다.")
+            return result(errors)
+        end
+        if state.turnStartReceipt.authorityFingerprint ~= nil then
+            addError(errors, "turn_receipt_already_sealed", "$.turnStartReceipt.authorityFingerprint", "이미 authorityFingerprint가 있는 영수증은 다시 봉인할 수 없습니다.")
+            return result(errors)
+        end
+
+        local authorityFingerprint, fingerprintError = fingerprintAuthorityState(state)
+        if fingerprintError then
+            addError(errors, fingerprintError.code, fingerprintError.path, fingerprintError.message)
+            return result(errors)
+        end
+
+        local function cloneValue(value, path, active)
+            local valueType = type(value)
+            if valueType == "nil" or valueType == "string" or valueType == "boolean" then
+                return value, nil
+            end
+            if valueType == "number" then
+                if not isFinite(value) then
+                    return nil, { code = "non_finite_number", path = path, message = "NaN과 무한대는 봉인 상태에 사용할 수 없습니다." }
+                end
+                return value, nil
+            end
+            if valueType ~= "table" or getmetatable(value) ~= nil then
+                return nil, { code = "unsupported_type", path = path, message = "봉인 상태에 사용할 수 없는 값입니다." }
+            end
+            active = active or {}
+            if active[value] then
+                return nil, { code = "circular_reference", path = path, message = "순환 참조가 있는 상태는 봉인할 수 없습니다." }
+            end
+            active[value] = true
+            local copy = {}
+            for key, item in pairs(value) do
+                local itemCopy, itemError = cloneValue(item, objectPath(path, key), active)
+                if itemError then
+                    active[value] = nil
+                    return nil, itemError
+                end
+                copy[key] = itemCopy
+            end
+            active[value] = nil
+            return copy, nil
+        end
+
+        local sealedState, cloneError = cloneValue(state, "$", {})
+        if cloneError then
+            addError(errors, cloneError.code, cloneError.path, cloneError.message)
+            return result(errors)
+        end
+        sealedState.turnStartReceipt.authorityFingerprint = authorityFingerprint
+
+        local reportFingerprint, reportFingerprintError = cloneValue(
+            authorityFingerprint,
+            "$.fingerprint",
+            {}
+        )
+        if reportFingerprintError then
+            addError(
+                errors,
+                reportFingerprintError.code,
+                reportFingerprintError.path,
+                reportFingerprintError.message
+            )
+            return result(errors)
+        end
+
+        local validation = validateBattleState(sealedState, staticData)
+        if not validation.ok then
+            return validation
+        end
+        if validation.referencesValidated ~= true then
+            addError(errors, "static_references_not_validated", "$.staticData", "turnStartReceipt 봉인에는 전체 정적 데이터 참조 검증이 필요합니다.")
+            local report = result(errors)
+            report.referencesValidated = false
+            return report
+        end
+        return {
+            ok = true,
+            schemaVersion = SCHEMA_VERSION,
+            errors = {},
+            referencesValidated = true,
+            state = sealedState,
+            fingerprint = reportFingerprint,
+        }
     end
 
     local function validateEventEnvelope(value, path, errors)
@@ -1030,6 +2535,10 @@
         return constructBattleState(arguments[1], arguments[2])
     elseif action == "validateBattleState" then
         return validateBattleState(arguments[1], arguments[2])
+    elseif action == "fingerprintBattleState" then
+        return fingerprintBattleState(arguments[1], arguments[2])
+    elseif action == "sealTurnStartReceipt" then
+        return sealTurnStartReceipt(arguments[1], arguments[2])
     elseif action == "newPendingTurn" then
         return constructPendingTurn(arguments[1], arguments[2])
     elseif action == "validatePendingTurn" then

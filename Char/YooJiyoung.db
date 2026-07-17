@@ -50,11 +50,6 @@ return {
                     "turn_to_corner",
                     "silent_glare",
                 },
-                selectionProfile = {
-                    preferredActionTags = { "evade", "block", "vigilance" },
-                    excludedActionTags = { "expose" },
-                    description = "상황을 크게 만들기보다 몸을 피하고 가리며 작은 목소리로 경고하는 행동을 우선합니다.",
-                },
             },
         },
     },

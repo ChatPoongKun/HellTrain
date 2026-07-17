@@ -8,10 +8,10 @@
 resolveTurn(authoritativeState, staticData, projection, { turnId = "battle-0001-turn-001" })
 ```
 
-입력 `authoritativeState`는 현재 확정된 `active` 전투 상태이고 `projection`은 같은 상태에서 만든 `turnDraftProjection`이다. 해결기는 가장 먼저 `turnDraft.validateProjection(authoritativeState, staticData, projection)`을 호출해 projection을 권위 상태에서 다시 재생한다. 호출자가 넘긴 `projection.workingState`를 단독으로 신뢰하거나 현재 상태에 맞춰 자동 보정하지 않는다.
+입력 `authoritativeState`는 현재 확정된 `active` 전투 상태이고 `projection`은 같은 상태에서 만든 `turnDraftProjection`이다. 해결기는 옵션과 `turnStartReceipt`의 턴 식별자를 먼저 대조한 뒤 `turnDraft.validateProjection(authoritativeState, staticData, projection)`을 호출해 projection을 권위 상태에서 다시 재생한다. 호출자가 넘긴 `projection.workingState`를 단독으로 신뢰하거나 현재 상태에 맞춰 자동 보정하지 않는다.
 
 ```text
-권위 battleState + 정적 DB + turnDraftProjection
+권위 battleState(+ turnStartReceipt) + 정적 DB + turnDraftProjection
 → projection 전체 재생 검증
 → 플레이어 카드 해결
 → 캐릭터 의도 카드 해결
@@ -23,7 +23,9 @@ resolveTurn(authoritativeState, staticData, projection, { turnId = "battle-0001-
 - 같은 입력과 `turnId`는 사건 배열까지 같은 결과를 만든다. 콜백에서 현재 시각, 전역 난수와 RisuAI 상태 함수를 사용하지 않는다.
 - 하나의 콜백, 명령 또는 최종 상태 검증이 실패하면 부분 상태나 부분 로그를 성공 결과로 반환하지 않는다.
 - projection에서 이미 적용한 선택 단계 드로우와 플레이어 등록 카드의 `hand → used` 이동은 다시 적용하지 않는다.
-- `turn_start` 트리거, 기본 드로우와 캐릭터 의도 선택은 projection보다 앞선 턴 초기화 단계의 책임이다. `resolveTurn`은 `turn_start`를 다시 만들지 않는다. 따라서 `subtle_approach`처럼 `turn_start`에 반응하는 계획은 다음 턴 initializer가 처리한 상태를 draft의 권위 상태로 사용해야 한다. 현재 `battleState`에는 턴 시작 무드 잠금 receipt를 저장할 필드가 없으므로, initializer 연결 단계에서 함수 없는 receipt 또는 명시적 state 필드를 추가하기 전까지 이 계획의 실제 턴 간 연결을 완료로 보지 않는다.
+- `turn_start` 트리거, 기본 드로우와 캐릭터 의도 선택은 projection보다 앞선 턴 초기화 단계의 책임이다. `resolveTurn`은 `turn_start`를 다시 만들지 않는다. initializer는 그 결과를 적용한 권위 상태에 함수 없는 `turnStartReceipt`를 함께 저장한다.
+- 영수증이 있으면 `turnId`가 해결 옵션과, `turnNumber`가 현재 상태와 정확히 일치해야 한다. `authorityFingerprint`는 receipt를 제외한 현재 권위 상태 전체와 같아야 하고, `draws`·`characterSelection`은 RNG 순서 및 실제 `characterIntent`와 일치해야 한다. 영수증 사건·기준값·일시 상태는 재실행할 명령이 아니라 initializer가 이미 적용한 결과의 인계값이다. 불일치는 자동 보정하지 않고 해결을 거부한다.
+- 영수증이 없는 상태는 기존 저장 상태와 독립 모듈 fixture를 위한 하위 호환 경로다. 이 경우 사건은 빈 배열, 일시 상태는 기본값, 성과 기준은 권위 상태의 현재 수치에서 시작한다. initializer가 연결된 실제 턴은 영수증 경로를 사용한다.
 - `main.lua`, UI, `pendingTurn`, 공개 사건과 LLM 사건 변환은 이 순수 해결기의 책임이 아니다.
 
 ## 2. 내부 working state와 해결 순서
@@ -31,24 +33,26 @@ resolveTurn(authoritativeState, staticData, projection, { turnId = "battle-0001-
 projection 재생 검증이 반환한 복제본을 다음 내부 값과 함께 사용한다.
 
 ```lua
+local receipt = authoritativeState.turnStartReceipt -- 없으면 legacy fallback
 local working = {
     state = validatedProjection.workingState,
     transient = {
-        skipRemaining = { player = false, character = false },
-        moodLock = nil,
-        directMoodChanged = false,
+        skipRemaining = receipt and receipt.transient.skipRemaining
+            or { player = false, character = false },
+        moodLock = receipt and receipt.transient.moodLock or nil,
+        moodLockApplied = receipt and receipt.transient.moodLock ~= nil or false,
+        directMoodChanged = receipt and receipt.transient.directMoodChanged or false,
         halted = false,
         haltReason = nil,
     },
-    startValues = {
-        stealth = authoritativeState.player.stealth,
-        resistance = authoritativeState.character.resistance,
-        mood = authoritativeState.character.mood,
-    },
+    startValues = receipt and receipt.baseline or currentAuthorityValues,
+    events = receipt and clone(receipt.events) or {},
     nextResolutionOrdinal = 1,
-    nextEventOrdinal = 1,
+    nextEventOrdinal = #(receipt and receipt.events or {}) + 1,
 }
 ```
+
+`receipt.events`는 `turn_start` phase의 연속 사건 배열이어야 하며 `turnId-event-001..n`을 이미 점유한다. 해결기가 만드는 첫 사건은 `n + 1`부터 이어진다. `moodLockApplied`는 외부 저장 필드가 아니라 `receipt.transient.moodLock`의 존재에서 파생하는 내부 표시다.
 
 플레이어 카드는 `projection.selectedCardInstanceIds` 순서로 먼저 해결한다. 그 다음 `working.state.characterIntent.cardInstanceIds` 순서로 캐릭터 카드를 해결한다. 자동으로 발동한 계획, 특징, 퍽과 환경은 카드 사용이 아니므로 별도의 `card_declared` 또는 `card_resolved` 입력 사건을 만들지 않으며 다른 계획을 재귀적으로 발동시키지 않는다.
 
@@ -75,13 +79,13 @@ local working = {
 
 1. 현재 상태에서 최종 은폐 비용과 `canPlay`를 계산한다.
 2. 플레이어 카드라면 엄격한 `stealth > finalCost`를 확인하고 비용을 지불한다. 캐릭터 카드라면 손패에서 `used`로 옮긴다.
-3. `card_declared` 입력 사건을 만들고 사건 시작 snapshot에서 반응할 사용 전 트리거를 모두 수집한다.
+3. `card_declared` 입력 사건을 만들고 공용 `triggerPipeline.run`으로 사건 시작 snapshot에서 반응할 사용 전 트리거를 수집·해결한다.
 4. 현재 카드에 `insight`가 있으면 수집한 상대 계획 중 이 `resolutionId`에 인과적으로 속한 계획만 억제한다.
 5. 억제하지 않은 사용 전 트리거를 7절의 고정 순서로 적용한다.
 6. `base.resistanceDamage`를 적용한다.
 7. `resolve(context)`가 반환한 일반 효과 명령을 검증하고 순서대로 적용한다.
 8. 그 시점의 현재 무드에 해당하는 `moodEffects[currentMood]`를 보호 호출하고 반환 명령을 적용한다.
-9. `card_resolved` 입력 사건을 만들고 그 사건의 사용 후 트리거 batch를 수집·적용한다.
+9. `card_resolved` 입력 사건을 만들고 공용 `triggerPipeline.run`으로 사용 후 트리거 batch를 수집·해결한다.
 10. `plan` 배치, `remove` 이동 또는 일반 `used` 유지 등 카드의 완료 영역을 확정한다.
 11. 카드와 모든 사용 후 트리거가 끝난 상태에서만 8절의 중간 승패 checkpoint를 실행한다.
 
@@ -124,6 +128,8 @@ projection 전체나 이미 해결한 접두 구간을 되돌리지 않는다. �
 
 트리거의 입력 사건과 결과 로그 사건은 서로 다른 자료형이다. 트리거 입력 사건은 현재 batch의 조건 판정에만 쓰는 읽기 전용 값이며 `GameRegistry.db.events`에 등록된 ID를 사용한다. 결과 로그를 다시 트리거 입력으로 공급하지 않는다.
 
+initializer와 resolver는 후보 수집·정렬·조건 판정·명령 적용·계획 공개 및 충전 소비를 각자 복제하지 않고 `System/triggerPipeline.lua`의 `run` 진입점 하나를 사용한다. resolver는 `card_declared`, `card_resolved`, `turn_end`, `session_end`를 이 경로로 보낸다. 현재 카드, 간파 진영과 phase는 옵션으로 전달하며 `session_end`에는 `allowGameplayCommands = false`를 전달한다.
+
 하나의 입력 사건이 시작되면 상태 snapshot을 한 번 만들고 그 snapshot에서 모든 후보의 조건을 수집한다. 앞 트리거의 효과로 뒤 트리거의 이번 batch 참가 여부를 다시 계산하지 않는다. 수집한 후보는 다음 키로 정렬한다.
 
 ```text
@@ -141,6 +147,8 @@ Lua 테이블의 `pairs` 순서는 안정 순서로 사용하지 않는다. `sou
 환경처럼 `event`와 `side`만 선언한 후보는 그 필드로 일치 여부를 판정한다. 계획 등 추가 `trigger(context, inputEvent)`가 있는 후보는 동일한 snapshot과 같은 입력 사건을 받는다. 조건 콜백 오류나 불리언이 아닌 반환값은 전체 턴 해결 오류다. 실제 명령 적용은 수집·filter가 끝난 뒤 위 순서대로 한다.
 
 `insight`는 현재 카드 해결의 `card_declared` batch에서 수집한 **opposing plan**만 제거한다. 같은 사건의 특징, 퍽과 환경은 억제하지 않는다. 다른 카드의 해결, `turn_start`, `turn_end`와 독립 사건의 계획에도 전파되지 않는다. 억제 사실 때문에 숨은 계획 ID나 조건을 공개 사건으로 누출하지 않는다.
+
+파이프라인이 반환한 `records`는 배열 순서 그대로 해결기의 `appendEvent`를 거친다. 이 단계에서 기존 `turn_start` 사건 뒤의 `eventId`와 `sequence`, 현재 `phase`, 카드 `resolutionId` 및 인과를 붙인다. 트리거의 `effect_applied`는 출처 종류에 맞는 `plan_trigger`, `trait_trigger`, `perk_trigger`, `environment_trigger` 인과를 사용하고, 같은 카드 batch의 나머지 기록은 해당 `card_resolution`, 턴 전체 batch는 `turn_event` 인과를 사용한다.
 
 ## 8. 중간 승패, 마지막 턴과 종료 처리
 
@@ -165,7 +173,7 @@ character.resistance > 0 and player.stealth <= 0 → defeat
 
 1. 양측 행동열이 끝났고 마지막 허용 턴이 아니면 `turn_end` 입력 사건의 gameplay trigger batch를 해결하고 승패를 한 번 더 확인한다.
 2. 여전히 active라면 9절의 공통 무드를 적용하거나 명시적 사유로 생략한다.
-3. 현재 `turnNumber`에서 구조적 `endTurnCleanup`을 실행한다.
+3. 현재 `turnNumber`에서 구조적 `endTurnCleanup`을 실행하고 소비가 끝난 `turnStartReceipt`를 제거한다. 정리 결과에 영수증이 남으면 전체 해결을 거부한다.
 4. 승패가 latch되었다면 정리된 snapshot에서 `session_end` 입력 사건과 세션 종료 처리를 실행한다. session-end 처리는 latch된 결과를 다시 열거나 반대로 바꿀 수 없다.
 5. 최종 상태와 카드 보존을 검증한다.
 
@@ -184,6 +192,8 @@ moodPerformance       = resistancePerformance - stealthSpent
 ```
 
 `endingStealth`와 `endingResistance`는 플레이어·캐릭터 카드, 환경, 계획, 특징과 퍽의 gameplay 효과가 끝난 시점의 실제 값이다. 회복은 같은 턴의 감소를 상쇄하지만 `stealthSpent`를 음수로 만들지 않는다.
+
+`turnStartReceipt`가 있으면 `startingStealth`와 `startingResistance`는 initializer 효과가 적용되기 전 `receipt.baseline`에서 가져온다. 따라서 `turn_start`에서 발생한 수치 변화도 그 턴의 성과에 정확히 포함된다. 영수증이 없는 하위 호환 경로에서만 권위 상태의 현재 수치를 시작값으로 사용한다. initializer에서 실제 직접 무드 변경이 있었다면 `receipt.transient.directMoodChanged`, 활성 잠금이 생겼다면 `receipt.transient.moodLock`이 공통 판정 억제 사유를 인계한다.
 
 무드 순서는 다음과 같다.
 
@@ -237,14 +247,14 @@ rejection ←5→ suspicion ←4→ ignore ←4→ confusion ←5→ compliance
 - `turnNumber`는 해결한 턴의 번호이며 active `afterState.turnNumber`가 다음 번호로 증가해도 바뀌지 않는다.
 - `source.authority`와 `source.projectedRng`는 검증된 projection에서 함수 없이 복제한 영수증이다. `workingState`와 preview 전체를 결과에 중복 저장하지 않는다.
 - `selectedCards`는 사용자가 등록한 플레이어 선택과 미리 선택된 캐릭터 의도를 기록한다. 뒤에서 사용할 수 없어진 카드도 선택 영수증에는 남으며 실제 선언 여부는 사건 로그가 구분한다.
-- `metrics`는 진단과 공통 무드 계산의 수치다. 공통 무드를 생략해도 성과 세 값은 결정적으로 기록하고 `commonMoodApplied = false`로 둔다.
-- `afterState.lastCommittedTurnId = turnId`다. 선택과 캐릭터 의도는 비우고, 카드 위치와 계획 슬롯을 정리한 뒤 전체 정적 참조를 포함한 `stateSchema.validateBattleState`를 통과해야 한다.
+- `metrics`는 진단과 공통 무드 계산의 수치다. 영수증이 있으면 시작 수치는 `turnStartReceipt.baseline`, 없으면 권위 상태의 현재 수치다. 공통 무드를 생략해도 성과 세 값은 결정적으로 기록하고 `commonMoodApplied = false`로 둔다.
+- `afterState.lastCommittedTurnId = turnId`이고 `afterState.turnStartReceipt`는 존재하지 않는다. 선택과 캐릭터 의도는 비우고, 카드 위치와 계획 슬롯을 정리한 뒤 전체 정적 참조를 포함한 `stateSchema.validateBattleState`를 통과해야 한다.
 
 `turnResolution`은 내부 판정 원본이다. 숨은 계획과 캐릭터 카드가 포함될 수 있으므로 그 자체를 `battleView`, 공개 결과나 LLM 요청에 복사하지 않는다. 공개/LLM 변환기는 별도의 허용 목록으로 새 객체를 조립한다.
 
 ## 11. 사건 로그 버전 1
 
-`events`는 발생 순서대로 `sequence = 1..n`인 연속 배열이다. 모든 항목의 공통 형태는 다음과 같다.
+`events`는 발생 순서대로 `sequence = 1..n`인 연속 배열이다. `turnStartReceipt`가 있으면 검증된 `receipt.events`를 복제해 배열 앞에 그대로 두고 해결 사건을 다음 순번부터 덧붙인다. 해결기는 이 사건들을 다시 트리거로 실행하지 않는다. 모든 항목의 공통 형태는 다음과 같다.
 
 ```lua
 {
@@ -272,7 +282,7 @@ rejection ←5→ suspicion ←4→ ignore ←4→ confusion ←5→ compliance
 }
 ```
 
-- `eventId`와 `resolutionId`는 `turnId`와 단조 증가 ordinal로 만든다. 테이블 주소, 현재 시각과 난수를 사용하지 않는다.
+- `eventId`와 `resolutionId`는 `turnId`와 단조 증가 ordinal로 만든다. 영수증 사건이 `event-001..n`을 사용했다면 해결기의 첫 사건은 `event-(n+1)`이다. 테이블 주소, 현재 시각과 난수를 사용하지 않는다.
 - `type`과 `phase`, `source.kind`, `cause.kind`는 `lower_snake_case`다.
 - `phase`는 적어도 `player_card`, `character_card`, `turn_end`, `session_end`, `cleanup`을 구분한다.
 - `source`는 실제 효과나 상태 전이의 정적 출처다. `cause`는 그 출처가 이번에 실행된 직접 인과를 가리킨다.
@@ -308,6 +318,8 @@ rejection ←5→ suspicion ←4→ ignore ←4→ confusion ←5→ compliance
 - 카드 post-trigger 뒤 중간 승패, 동시 0의 승리 우선과 남은 행동 중단
 - 마지막 허용 턴의 완전한 카드 해결 뒤 제한 턴 패배와 공통 무드 생략
 - shift/set no-op, 실제 직접 변경과 무드 잠금의 서로 다른 공통 무드 처리
+- `turnStartReceipt`의 turnId/turnNumber, authority fingerprint, 드로우 RNG, 캐릭터 의도 불일치와 사건 ID 위변조 거부
+- 영수증 사건 보존과 후속 event ordinal 연속성, baseline 성과, skip/directMoodChanged/moodLock 인계 및 정리 후 제거
 - 기본 `5-4-4-5`, 유지영 순응 방향 `6-5-5-6`과 거절 방향 불변
 - 모든 카드 영역 보존, 연속 position, 0 수명 계획 부재와 입력 불변성
 - 같은 입력을 별도 Lua 프로세스에서 반복했을 때 afterState와 사건 로그의 동일성

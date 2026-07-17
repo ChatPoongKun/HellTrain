@@ -32,8 +32,11 @@ end
 
 local modules = {
     init = loadLore("System/init.lua"),
+    deterministicRng = loadLore("System/deterministicRng.lua"),
+    effectEngine = loadLore("System/effectEngine.lua"),
     staticData = loadLore("System/staticData.lua"),
     stateSchema = loadLore("System/stateSchema.lua"),
+    characterSelector = loadLore("System/characterSelector.lua"),
     viewBuilder = loadLore("System/viewBuilder.lua"),
     dataBridge = loadLore("System/dataBridge.lua"),
 }
@@ -252,6 +255,470 @@ local structuralState = assertOk(
     runScript("test", "stateSchema", "validateBattleState", baseState, nil)
 )
 assert(structuralState.referencesValidated == false)
+
+local receiptState = clone(baseState)
+local baseFingerprintReport = assertOk(
+    "battleState authority fingerprint",
+    runScript("test", "stateSchema", "fingerprintBattleState", receiptState, staticData)
+)
+local baseFingerprint = baseFingerprintReport.fingerprint
+assert(baseFingerprint.algorithm == "canonical_poly131_137_receipt_v2")
+assert(type(baseFingerprint.length) == "number")
+assert(type(baseFingerprint.hashA) == "number")
+assert(type(baseFingerprint.hashB) == "number")
+local reorderedFingerprint = assertOk(
+    "battleState reordered authority fingerprint",
+    runScript("test", "stateSchema", "fingerprintBattleState", reverseClone(receiptState), staticData)
+).fingerprint
+assert(reorderedFingerprint.algorithm == baseFingerprint.algorithm)
+assert(reorderedFingerprint.length == baseFingerprint.length)
+assert(reorderedFingerprint.hashA == baseFingerprint.hashA)
+assert(reorderedFingerprint.hashB == baseFingerprint.hashB)
+assertError(
+    "battleState fingerprint requires references",
+    runScript("test", "stateSchema", "fingerprintBattleState", receiptState, nil),
+    "static_references_not_validated",
+    "$.staticData"
+)
+
+receiptState.turnStartReceipt = {
+    schemaVersion = 1,
+    kind = "turnStartReceipt",
+    turnId = "battle-0001-turn-001",
+    turnNumber = 1,
+    draws = {
+        player = {
+            requested = 3,
+            drawnInstanceIds = {},
+            rngBefore = { seed = 12345, cursor = 0 },
+            rngAfter = { seed = 12345, cursor = 0 },
+        },
+        character = {
+            requested = 3,
+            drawnInstanceIds = {},
+            rngBefore = { seed = 12345, cursor = 0 },
+            rngAfter = { seed = 12345, cursor = 0 },
+        },
+    },
+    characterSelection = {
+        schemaVersion = 1,
+        kind = "characterIntentSelection",
+        battleId = "battle-0001",
+        turnNumber = 1,
+        characterId = "yoo_jiyoung",
+        selectionContext = {
+            turnNumber = 1,
+            player = {
+                stealth = 30,
+                handCount = 3,
+            },
+            character = {
+                resistance = 30,
+                mood = "ignore",
+            },
+            characterHand = {
+                {
+                    instanceId = "character-hand-001",
+                    cardId = "quiet_warning",
+                    actionTag = "vigilance",
+                    handPosition = 1,
+                },
+            },
+        },
+        candidates = {
+            {
+                instanceId = "character-hand-001",
+                cardId = "quiet_warning",
+                actionTag = "vigilance",
+                handPosition = 1,
+                score = 2,
+                projectedPlayerStealth = 28,
+                lethal = false,
+                weight = 2,
+                totals = {
+                    recoverResistance = 0,
+                    loseStealth = 2,
+                    damageResistance = 0,
+                    recoverStealth = 0,
+                },
+                planChargesEvaluated = 0,
+            },
+        },
+        weightedPoolInstanceIds = { "character-hand-001" },
+        lethalPriorityApplied = false,
+        weightOffset = 0,
+        rngBefore = { seed = 12345, cursor = 0 },
+        rngAfter = { seed = 12345, cursor = 0 },
+        draw = {
+            kind = "single",
+            totalWeight = 2,
+        },
+        selectedInstanceId = "character-hand-001",
+        selectedCardId = "quiet_warning",
+        publicActionTag = "vigilance",
+    },
+    baseline = {
+        stealth = 30,
+        resistance = 30,
+        mood = "ignore",
+    },
+    transient = {
+        skipRemaining = {
+            player = false,
+            character = false,
+        },
+        directMoodChanged = false,
+        moodLock = {
+            mood = "ignore",
+            ["until"] = "turn_end",
+            cause = "plan",
+        },
+    },
+    events = {
+        {
+            eventId = "battle-0001-turn-001-event-001",
+            sequence = 1,
+            type = "trigger_resolved",
+            phase = "turn_start",
+            side = "player",
+            source = {
+                kind = "plan",
+                id = "subtle_approach",
+                side = "player",
+                instanceId = "player-plan-001",
+            },
+            cause = { kind = "turn_event" },
+            payload = {
+                inputEventType = "turn_start",
+                commandCount = 1,
+            },
+        },
+        {
+            eventId = "battle-0001-turn-001-event-002",
+            sequence = 2,
+            type = "cards_drawn",
+            phase = "turn_start",
+            side = "player",
+            source = {
+                kind = "system",
+                id = "card_zones",
+            },
+            cause = { kind = "turn_rule", eventId = "battle-0001-turn-001-event-001" },
+            payload = {
+                requested = 3,
+                drawn = 3,
+            },
+        },
+    },
+}
+local unsealedReceiptState = receiptState
+local sealedReceiptReport = assertOk(
+    "seal turnStartReceipt",
+    runScript("test", "stateSchema", "sealTurnStartReceipt", unsealedReceiptState, staticData)
+)
+assert(unsealedReceiptState.turnStartReceipt.authorityFingerprint == nil, "receipt sealing mutated its input state")
+receiptState = sealedReceiptReport.state
+assert(receiptState ~= unsealedReceiptState
+    and receiptState.player ~= unsealedReceiptState.player
+    and receiptState.turnStartReceipt.characterSelection ~= unsealedReceiptState.turnStartReceipt.characterSelection,
+    "receipt sealing returned aliases into its input state")
+local sealedStateHashA = receiptState.turnStartReceipt.authorityFingerprint.hashA
+sealedReceiptReport.fingerprint.hashA = (sealedReceiptReport.fingerprint.hashA + 1) % 2147483647
+assert(receiptState.turnStartReceipt.authorityFingerprint.hashA == sealedStateHashA,
+    "receipt sealing returned sibling aliases between state and fingerprint")
+assert(receiptState.turnStartReceipt.authorityFingerprint.algorithm == "canonical_poly131_137_receipt_v2")
+local receiptValidated = assertOk(
+    "battleState turnStartReceipt",
+    runScript("test", "stateSchema", "validateBattleState", receiptState, staticData)
+)
+assert(receiptValidated.referencesValidated == true)
+local structuralReceipt = assertOk(
+    "battleState turnStartReceipt structural-only",
+    runScript("test", "stateSchema", "validateBattleState", receiptState, nil)
+)
+assert(structuralReceipt.referencesValidated == false)
+local receiptFingerprint = assertOk(
+    "battleState fingerprint includes sealed receipt",
+    runScript("test", "stateSchema", "fingerprintBattleState", receiptState, staticData)
+).fingerprint
+assert(receiptFingerprint.algorithm == receiptState.turnStartReceipt.authorityFingerprint.algorithm)
+assert(receiptFingerprint.length == receiptState.turnStartReceipt.authorityFingerprint.length)
+assert(receiptFingerprint.hashA == receiptState.turnStartReceipt.authorityFingerprint.hashA)
+assert(receiptFingerprint.hashB == receiptState.turnStartReceipt.authorityFingerprint.hashB)
+assert(receiptFingerprint.length > baseFingerprint.length, "turnStartReceipt was omitted from authority fingerprint")
+
+local alteredFingerprint = clone(receiptState)
+alteredFingerprint.turnStartReceipt.authorityFingerprint.hashA =
+    (alteredFingerprint.turnStartReceipt.authorityFingerprint.hashA + 1) % 2147483647
+assertError(
+    "turnStartReceipt altered authority fingerprint",
+    runScript("test", "stateSchema", "validateBattleState", alteredFingerprint, staticData),
+    "receipt_authority_mismatch",
+    "$.turnStartReceipt.authorityFingerprint"
+)
+
+local alteredAuthority = clone(receiptState)
+alteredAuthority.rng.cursor = alteredAuthority.rng.cursor + 1
+assertError(
+    "turnStartReceipt altered authority state",
+    runScript("test", "stateSchema", "validateBattleState", alteredAuthority, staticData),
+    "receipt_authority_mismatch",
+    "$.turnStartReceipt.authorityFingerprint"
+)
+
+local alteredIntent = clone(receiptState)
+alteredIntent.characterIntent = { cardInstanceIds = {} }
+assertError(
+    "turnStartReceipt altered character intent",
+    runScript("test", "stateSchema", "validateBattleState", alteredIntent, staticData),
+    "character_selection_intent_mismatch",
+    "$.characterIntent"
+)
+
+local alteredDrawRequested = clone(receiptState)
+alteredDrawRequested.turnStartReceipt.draws.player.requested = 2
+assertError(
+    "turnStartReceipt altered draw request",
+    runScript("test", "stateSchema", "validateBattleState", alteredDrawRequested, staticData),
+    "receipt_draw_count_mismatch",
+    "$.turnStartReceipt.draws.player.requested"
+)
+
+local duplicateDrawId = clone(receiptState)
+duplicateDrawId.turnStartReceipt.draws.player.drawnInstanceIds = { "player-001", "player-001" }
+assertError(
+    "turnStartReceipt duplicate drawn instance",
+    runScript("test", "stateSchema", "validateBattleState", duplicateDrawId, staticData),
+    "duplicate_id",
+    "$.turnStartReceipt.draws.player.drawnInstanceIds[2]"
+)
+
+local brokenDrawRng = clone(receiptState)
+brokenDrawRng.turnStartReceipt.draws.player.rngAfter.cursor = 1
+assertError(
+    "turnStartReceipt draw rng discontinuity",
+    runScript("test", "stateSchema", "validateBattleState", brokenDrawRng, staticData),
+    "receipt_rng_discontinuity",
+    "$.turnStartReceipt.draws.character.rngBefore"
+)
+
+local brokenSelectionRng = clone(receiptState)
+brokenSelectionRng.turnStartReceipt.characterSelection.rngBefore.cursor = 1
+brokenSelectionRng.turnStartReceipt.characterSelection.rngAfter.cursor = 1
+assertError(
+    "turnStartReceipt selection rng discontinuity",
+    runScript("test", "stateSchema", "validateBattleState", brokenSelectionRng, staticData),
+    "receipt_rng_discontinuity",
+    "$.turnStartReceipt.characterSelection.rngBefore"
+)
+
+local contradictorySelection = clone(receiptState)
+contradictorySelection.turnStartReceipt.characterSelection.selectedInstanceId = nil
+assertError(
+    "turnStartReceipt contradictory selection fields",
+    runScript("test", "stateSchema", "validateBattleState", contradictorySelection, staticData),
+    "selection_pass_field_conflict",
+    "$.turnStartReceipt.characterSelection"
+)
+
+local selectionFunction = clone(receiptState)
+selectionFunction.turnStartReceipt.characterSelection.candidates[1].totals.resolve = function() end
+assertError(
+    "turnStartReceipt selection function",
+    runScript("test", "stateSchema", "validateBattleState", selectionFunction, staticData),
+    "unsupported_type",
+    "$.turnStartReceipt.characterSelection.candidates[1].totals.resolve"
+)
+
+local alteredSelectionWeight = clone(receiptState)
+alteredSelectionWeight.turnStartReceipt.characterSelection.candidates[1].weight = 1
+assertError(
+    "turnStartReceipt altered selection weight",
+    runScript("test", "stateSchema", "validateBattleState", alteredSelectionWeight, staticData),
+    "selection_weight_mismatch",
+    "$.turnStartReceipt.characterSelection.candidates[1].weight"
+)
+
+local alteredWeightOffset = clone(receiptState)
+alteredWeightOffset.turnStartReceipt.characterSelection.weightOffset = 1
+assertError(
+    "turnStartReceipt altered weight offset",
+    runScript("test", "stateSchema", "validateBattleState", alteredWeightOffset, staticData),
+    "selection_weight_offset_mismatch",
+    "$.turnStartReceipt.characterSelection.weightOffset"
+)
+
+local alteredWeightedPool = clone(receiptState)
+alteredWeightedPool.turnStartReceipt.characterSelection.weightedPoolInstanceIds = {}
+assertError(
+    "turnStartReceipt missing weighted pool",
+    runScript("test", "stateSchema", "validateBattleState", alteredWeightedPool, staticData),
+    "selection_missing_weighted_pool",
+    "$.turnStartReceipt.characterSelection.weightedPoolInstanceIds"
+)
+
+local alteredSelectionDraw = clone(receiptState)
+alteredSelectionDraw.turnStartReceipt.characterSelection.draw.totalWeight = 3
+assertError(
+    "turnStartReceipt altered draw total",
+    runScript("test", "stateSchema", "validateBattleState", alteredSelectionDraw, staticData),
+    "draw_weight_mismatch",
+    "$.turnStartReceipt.characterSelection.draw.totalWeight"
+)
+
+local removedAffinityField = clone(receiptState)
+removedAffinityField.turnStartReceipt.characterSelection.candidates[1].affinity = "preferred"
+assertError(
+    "turnStartReceipt removed affinity field",
+    runScript("test", "stateSchema", "validateBattleState", removedAffinityField, staticData),
+    "unknown_field",
+    "$.turnStartReceipt.characterSelection.candidates[1].affinity"
+)
+
+local receiptUnknownField = clone(receiptState)
+receiptUnknownField.turnStartReceipt.turnNubmer = receiptUnknownField.turnStartReceipt.turnNumber
+assertError(
+    "turnStartReceipt unknown field",
+    runScript("test", "stateSchema", "validateBattleState", receiptUnknownField, staticData),
+    "unknown_field",
+    "$.turnStartReceipt.turnNubmer"
+)
+
+local receiptTurnMismatch = clone(receiptState)
+receiptTurnMismatch.turnStartReceipt.turnNumber = 2
+assertError(
+    "turnStartReceipt turn mismatch",
+    runScript("test", "stateSchema", "validateBattleState", receiptTurnMismatch, staticData),
+    "receipt_turn_mismatch",
+    "$.turnStartReceipt.turnNumber"
+)
+
+local committedReceipt = clone(receiptState)
+committedReceipt.lastCommittedTurnId = committedReceipt.turnStartReceipt.turnId
+assertError(
+    "turnStartReceipt committed turnId",
+    runScript("test", "stateSchema", "validateBattleState", committedReceipt, staticData),
+    "turn_already_committed",
+    "$.turnStartReceipt.turnId"
+)
+
+local endedReceipt = clone(receiptState)
+endedReceipt.status = "defeat"
+endedReceipt.player.stealth = 0
+assertError(
+    "turnStartReceipt ended state",
+    runScript("test", "stateSchema", "validateBattleState", endedReceipt, staticData),
+    "receipt_requires_active",
+    "$.turnStartReceipt"
+)
+
+local unknownBaselineMood = clone(receiptState)
+unknownBaselineMood.turnStartReceipt.baseline.mood = "missing_mood"
+assertError(
+    "turnStartReceipt unknown baseline mood",
+    runScript("test", "stateSchema", "validateBattleState", unknownBaselineMood, staticData),
+    "unknown_mood",
+    "$.turnStartReceipt.baseline.mood"
+)
+
+local badSkipReceipt = clone(receiptState)
+badSkipReceipt.turnStartReceipt.transient.skipRemaining.character = "false"
+assertError(
+    "turnStartReceipt invalid skip state",
+    runScript("test", "stateSchema", "validateBattleState", badSkipReceipt, staticData),
+    "invalid_skip_state",
+    "$.turnStartReceipt.transient.skipRemaining.character"
+)
+
+local badDirectMoodReceipt = clone(receiptState)
+badDirectMoodReceipt.turnStartReceipt.transient.directMoodChanged = 0
+assertError(
+    "turnStartReceipt invalid direct mood flag",
+    runScript("test", "stateSchema", "validateBattleState", badDirectMoodReceipt, staticData),
+    "invalid_direct_mood_flag",
+    "$.turnStartReceipt.transient.directMoodChanged"
+)
+
+local unknownLockMood = clone(receiptState)
+unknownLockMood.turnStartReceipt.transient.moodLock.mood = "missing_mood"
+assertError(
+    "turnStartReceipt unknown lock mood",
+    runScript("test", "stateSchema", "validateBattleState", unknownLockMood, staticData),
+    "unknown_mood",
+    "$.turnStartReceipt.transient.moodLock.mood"
+)
+
+local badLockUntil = clone(receiptState)
+badLockUntil.turnStartReceipt.transient.moodLock["until"] = "session_end"
+assertError(
+    "turnStartReceipt invalid lock until",
+    runScript("test", "stateSchema", "validateBattleState", badLockUntil, staticData),
+    "invalid_mood_lock_until",
+    "$.turnStartReceipt.transient.moodLock.until"
+)
+
+local badEventSequence = clone(receiptState)
+badEventSequence.turnStartReceipt.events[2].sequence = 3
+assertError(
+    "turnStartReceipt event sequence",
+    runScript("test", "stateSchema", "validateBattleState", badEventSequence, staticData),
+    "invalid_event_sequence",
+    "$.turnStartReceipt.events[2].sequence"
+)
+
+local badEventId = clone(receiptState)
+badEventId.turnStartReceipt.events[1].eventId = "battle-0001-turn-001-event-002"
+assertError(
+    "turnStartReceipt event id",
+    runScript("test", "stateSchema", "validateBattleState", badEventId, staticData),
+    "invalid_event_id",
+    "$.turnStartReceipt.events[1].eventId"
+)
+
+local badEventPhase = clone(receiptState)
+badEventPhase.turnStartReceipt.events[1].phase = "player_card"
+assertError(
+    "turnStartReceipt event phase",
+    runScript("test", "stateSchema", "validateBattleState", badEventPhase, staticData),
+    "invalid_event_phase",
+    "$.turnStartReceipt.events[1].phase"
+)
+
+local badEventType = clone(receiptState)
+badEventType.turnStartReceipt.events[1].type = "TriggerResolved"
+assertError(
+    "turnStartReceipt event type",
+    runScript("test", "stateSchema", "validateBattleState", badEventType, staticData),
+    "invalid_event_type",
+    "$.turnStartReceipt.events[1].type"
+)
+
+local badEventSource = clone(receiptState)
+badEventSource.turnStartReceipt.events[1].source.kind = "Plan"
+assertError(
+    "turnStartReceipt event source",
+    runScript("test", "stateSchema", "validateBattleState", badEventSource, staticData),
+    "invalid_event_source",
+    "$.turnStartReceipt.events[1].source.kind"
+)
+
+local badEventCause = clone(receiptState)
+badEventCause.turnStartReceipt.events[1].cause.kind = "TurnEvent"
+assertError(
+    "turnStartReceipt event cause",
+    runScript("test", "stateSchema", "validateBattleState", badEventCause, staticData),
+    "invalid_event_cause",
+    "$.turnStartReceipt.events[1].cause.kind"
+)
+
+local badEventPayload = clone(receiptState)
+badEventPayload.turnStartReceipt.events[1].payload = { "not", "an", "object" }
+assertError(
+    "turnStartReceipt event payload",
+    runScript("test", "stateSchema", "validateBattleState", badEventPayload, staticData),
+    "invalid_event_payload",
+    "$.turnStartReceipt.events[1].payload"
+)
 
 assertError(
     "incomplete static data",
@@ -762,13 +1229,16 @@ print("note: actual RisuAI lore/CBS integration is not covered")
 Push-Location $projectRoot
 $firstWirePath = $null
 $secondWirePath = $null
+$luaTestPath = $null
 try {
     $firstWirePath = [IO.Path]::GetTempFileName()
     $secondWirePath = [IO.Path]::GetTempFileName()
-    $env:RISU_LOCAL_CONTRACT_LUA = $luaTest
+    $luaTestPath = [IO.Path]::GetTempFileName()
+    [IO.File]::WriteAllText($luaTestPath, $luaTest, [Text.UTF8Encoding]::new($false))
+    $env:RISU_LOCAL_CONTRACT_LUA_PATH = $luaTestPath
     $env:RISU_LOCAL_CONTRACT_WIRE_PATH = $firstWirePath
 
-    $firstOutput = @(& $luaHost -e 'assert(load(os.getenv([[RISU_LOCAL_CONTRACT_LUA]]),[[local-contract-check]],[[t]],_G))()' 2>&1)
+    $firstOutput = @(& $luaHost -e 'assert(loadfile(os.getenv([[RISU_LOCAL_CONTRACT_LUA_PATH]]),[[t]],_G))()' 2>&1)
     $firstExitCode = $LASTEXITCODE
     if ($firstExitCode -ne 0) {
         $firstOutput | ForEach-Object { Write-Output $_ }
@@ -777,7 +1247,7 @@ try {
     $firstWireOutput = [IO.File]::ReadAllLines($firstWirePath, [Text.UTF8Encoding]::new($false))
 
     $env:RISU_LOCAL_CONTRACT_WIRE_PATH = $secondWirePath
-    $secondOutput = @(& $luaHost -e 'assert(load(os.getenv([[RISU_LOCAL_CONTRACT_LUA]]),[[local-contract-check]],[[t]],_G))()' 2>&1)
+    $secondOutput = @(& $luaHost -e 'assert(loadfile(os.getenv([[RISU_LOCAL_CONTRACT_LUA_PATH]]),[[t]],_G))()' 2>&1)
     $secondExitCode = $LASTEXITCODE
     if ($secondExitCode -ne 0) {
         $secondOutput | ForEach-Object { Write-Output $_ }
@@ -884,13 +1354,16 @@ try {
         ForEach-Object { Write-Output $_ }
 }
 finally {
-    Remove-Item Env:RISU_LOCAL_CONTRACT_LUA -ErrorAction SilentlyContinue
+    Remove-Item Env:RISU_LOCAL_CONTRACT_LUA_PATH -ErrorAction SilentlyContinue
     Remove-Item Env:RISU_LOCAL_CONTRACT_WIRE_PATH -ErrorAction SilentlyContinue
     if ($firstWirePath) {
         Remove-Item -LiteralPath $firstWirePath -Force -ErrorAction SilentlyContinue
     }
     if ($secondWirePath) {
         Remove-Item -LiteralPath $secondWirePath -Force -ErrorAction SilentlyContinue
+    }
+    if ($luaTestPath) {
+        Remove-Item -LiteralPath $luaTestPath -Force -ErrorAction SilentlyContinue
     }
     Pop-Location
 }

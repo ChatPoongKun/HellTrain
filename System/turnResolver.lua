@@ -1,12 +1,6 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
     local MOOD_BOUNDARIES = { 5, 4, 4, 5 }
-    local TRIGGER_CATEGORY_ORDER = {
-        plan = 1,
-        trait = 2,
-        perk = 3,
-        environment = 4,
-    }
 
     local function makeError(code, path, message)
         return {
@@ -256,6 +250,33 @@
         end
         staticData = normalizeStaticData(staticData)
 
+        local turnStartReceipt = type(authorityState) == "table" and authorityState.turnStartReceipt or nil
+        if turnStartReceipt ~= nil then
+            if type(turnStartReceipt) ~= "table" or getmetatable(turnStartReceipt) ~= nil then
+                return failure({
+                    makeError("invalid_turn_start_receipt", "$.authorityState.turnStartReceipt", "turnStartReceipt가 일반 테이블이 아닙니다."),
+                })
+            end
+            if turnStartReceipt.turnId ~= normalizedOptions.turnId then
+                return failure({
+                    makeError(
+                        "receipt_turn_id_mismatch",
+                        "$.authorityState.turnStartReceipt.turnId",
+                        "turnStartReceipt turnId가 해결할 turnId와 다릅니다."
+                    ),
+                })
+            end
+            if turnStartReceipt.turnNumber ~= authorityState.turnNumber then
+                return failure({
+                    makeError(
+                        "receipt_turn_mismatch",
+                        "$.authorityState.turnStartReceipt.turnNumber",
+                        "turnStartReceipt 턴 번호가 현재 전투 턴과 다릅니다."
+                    ),
+                })
+            end
+        end
+
         local projectionReport, projectionErrors = callModule(
             "turnDraft",
             "validateProjection",
@@ -298,20 +319,56 @@
         local turnId = normalizedOptions.turnId
         local resolvedTurnNumber = authorityState.turnNumber
         local events = {}
+        if turnStartReceipt ~= nil then
+            local receiptEvents, receiptEventsError = cloneData(
+                turnStartReceipt.events,
+                "$.authorityState.turnStartReceipt.events"
+            )
+            if receiptEventsError then
+                return failure({ receiptEventsError })
+            end
+            if not isDenseArray(receiptEvents) then
+                return failure({
+                    makeError(
+                        "invalid_turn_start_events",
+                        "$.authorityState.turnStartReceipt.events",
+                        "turnStartReceipt 사건이 연속 배열이 아닙니다."
+                    ),
+                })
+            end
+            events = receiptEvents
+        end
         local nextResolutionOrdinal = 1
+        local transientSeed = {
+            skipRemaining = { player = false, character = false },
+            directMoodChanged = false,
+            moodLockApplied = false,
+            halted = false,
+        }
+        if turnStartReceipt ~= nil then
+            local receiptTransient, receiptTransientError = cloneData(
+                turnStartReceipt.transient,
+                "$.authorityState.turnStartReceipt.transient"
+            )
+            if receiptTransientError then
+                return failure({ receiptTransientError })
+            end
+            transientSeed.skipRemaining = receiptTransient.skipRemaining
+            transientSeed.directMoodChanged = receiptTransient.directMoodChanged
+            if receiptTransient.moodLock ~= nil then
+                transientSeed.moodLock = receiptTransient.moodLock
+                transientSeed.moodLockApplied = true
+            end
+        end
         local working = {
             state = workingState,
-            transient = {
-                skipRemaining = { player = false, character = false },
-                directMoodChanged = false,
-                moodLockApplied = false,
-                halted = false,
-            },
+            transient = transientSeed,
         }
+        local baseline = turnStartReceipt ~= nil and turnStartReceipt.baseline or nil
         local startValues = {
-            stealth = authorityState.player.stealth,
-            resistance = authorityState.character.resistance,
-            mood = authorityState.character.mood,
+            stealth = baseline ~= nil and baseline.stealth or authorityState.player.stealth,
+            resistance = baseline ~= nil and baseline.resistance or authorityState.character.resistance,
+            mood = baseline ~= nil and baseline.mood or authorityState.character.mood,
         }
 
         local function source(kind, id, side, instanceId)
@@ -426,291 +483,97 @@
             return true, nil
         end
 
-        local function sideRank(side, actingSide)
-            if actingSide ~= nil and side == actingSide then
-                return 1
-            end
-            if actingSide ~= nil and (side == "player" or side == "character") then
-                return 2
-            end
-            if actingSide == nil and side == "player" then
-                return 1
-            end
-            if actingSide == nil and side == "character" then
-                return 2
-            end
-            return 3
-        end
-
-        local function collectTriggers(inputEvent, phase, currentCard, currentInstance)
-            local snapshot, snapshotError = cloneData(working.state, "$.triggerSnapshot")
-            if snapshotError then
-                return nil, { snapshotError }
-            end
-            local candidates = {}
-
-            local function addCandidate(kind, sourceId, ownerSide, declarationIndex, spec, planState)
-                if type(spec) ~= "table" or type(spec.resolve) ~= "function" then
-                    return false, {
-                        makeError("invalid_trigger", "$.staticData", "트리거 정의가 올바르지 않습니다: " .. tostring(sourceId)),
-                    }
-                end
-                candidates[#candidates + 1] = {
-                    kind = kind,
-                    categoryOrder = TRIGGER_CATEGORY_ORDER[kind],
-                    sourceId = sourceId,
-                    side = ownerSide,
-                    declarationIndex = declarationIndex or 1,
-                    spec = spec,
-                    planState = planState,
+        local function applyTriggerPipeline(
+            inputEvent,
+            phase,
+            resolutionId,
+            currentCard,
+            currentInstance,
+            insightSide,
+            allowGameplayCommands
+        )
+            local pipelineOptions = { phase = phase }
+            if currentCard ~= nil and currentInstance ~= nil then
+                pipelineOptions.currentCard = {
+                    id = currentCard.id,
+                    instanceId = currentInstance.instanceId,
+                    owner = currentCard.owner,
+                    actionTag = currentCard.actionTag,
                 }
-                return true, nil
+            end
+            if insightSide ~= nil then
+                pipelineOptions.insightSide = insightSide
+            end
+            if allowGameplayCommands == false then
+                pipelineOptions.allowGameplayCommands = false
             end
 
-            for _, planSide in ipairs({ "player", "character" }) do
-                local ownerState = snapshot[planSide]
-                local slot = type(ownerState) == "table" and ownerState.planSlot or nil
-                if type(slot) == "table" and slot.occupied == true then
-                    local card = staticData.cards[slot.cardId]
-                    local planData = type(card) == "table"
-                        and type(card.mechanismData) == "table"
-                        and card.mechanismData.plan
-                        or nil
-                    if type(planData) ~= "table" then
-                        return nil, {
-                            makeError("missing_plan_definition", "$.staticData.cards." .. tostring(slot.cardId), "계획 정의를 찾을 수 없습니다."),
-                        }
-                    end
-                    local planState = {
-                        side = planSide,
-                        cardId = slot.cardId,
-                        cardInstanceId = slot.cardInstanceId,
-                        revealed = slot.revealed,
+            local pipelineReport, pipelineErrors = callModule(
+                "triggerPipeline",
+                "run",
+                staticData,
+                { state = working.state, transient = working.transient },
+                inputEvent,
+                pipelineOptions
+            )
+            if pipelineErrors then
+                return false, pipelineErrors
+            end
+            if type(pipelineReport.state) ~= "table"
+                or type(pipelineReport.transient) ~= "table"
+                or not isDenseArray(pipelineReport.records) then
+                return false, {
+                    makeError(
+                        "invalid_trigger_pipeline_result",
+                        "$.runtime.triggerPipeline",
+                        "triggerPipeline.run 결과가 올바르지 않습니다."
+                    ),
+                }
+            end
+
+            working.state = pipelineReport.state
+            working.transient = pipelineReport.transient
+            for index, record in ipairs(pipelineReport.records) do
+                local recordCopy, recordError = cloneData(
+                    record,
+                    "$.runtime.triggerPipeline.records[" .. index .. "]"
+                )
+                if recordError then
+                    return false, { recordError }
+                end
+                if type(recordCopy) ~= "table"
+                    or type(recordCopy.type) ~= "string"
+                    or type(recordCopy.source) ~= "table"
+                    or type(recordCopy.source.kind) ~= "string" then
+                    return false, {
+                        makeError(
+                            "invalid_trigger_pipeline_record",
+                            "$.runtime.triggerPipeline.records[" .. index .. "]",
+                            "triggerPipeline record envelope가 올바르지 않습니다."
+                        ),
                     }
-                    if slot.remainingTurns ~= nil then
-                        planState.remainingTurns = slot.remainingTurns
-                    end
-                    if slot.remainingCharges ~= nil then
-                        planState.remainingCharges = slot.remainingCharges
-                    end
-                    local added, addErrors = addCandidate("plan", slot.cardId, planSide, 1, planData, planState)
-                    if not added then
-                        return nil, addErrors
-                    end
                 end
-            end
 
-            for _, traitId in ipairs(snapshot.character.traitIds or {}) do
-                local trait = staticData.traits[traitId]
-                if type(trait) ~= "table" then
-                    return nil, { makeError("unknown_trait", "$.character.traitIds", "특징을 찾을 수 없습니다: " .. tostring(traitId)) }
-                end
-                if trait.triggers ~= nil then
-                    if not isDenseArray(trait.triggers) then
-                        return nil, { makeError("invalid_triggers", "$.staticData.traits." .. traitId, "특징 트리거가 배열이 아닙니다.") }
+                local eventCause
+                if recordCopy.type == "effect_applied" then
+                    eventCause = { kind = recordCopy.source.kind .. "_trigger" }
+                    if resolutionId ~= nil then
+                        eventCause.resolutionId = resolutionId
                     end
-                    for index, spec in ipairs(trait.triggers) do
-                        local added, addErrors = addCandidate("trait", traitId, trait.owner, index, spec, nil)
-                        if not added then
-                            return nil, addErrors
-                        end
-                    end
-                end
-            end
-
-            for _, perkId in ipairs(snapshot.player.perkIds or {}) do
-                local perk = type(staticData.perks) == "table" and staticData.perks[perkId] or nil
-                if type(perk) ~= "table" then
-                    return nil, { makeError("unknown_perk", "$.player.perkIds", "퍽을 찾을 수 없습니다: " .. tostring(perkId)) }
-                end
-                if perk.triggers ~= nil then
-                    if not isDenseArray(perk.triggers) then
-                        return nil, { makeError("invalid_triggers", "$.staticData.perks." .. perkId, "퍽 트리거가 배열이 아닙니다.") }
-                    end
-                    for index, spec in ipairs(perk.triggers) do
-                        local added, addErrors = addCandidate("perk", perkId, perk.owner or "player", index, spec, nil)
-                        if not added then
-                            return nil, addErrors
-                        end
-                    end
-                end
-            end
-
-            local environment = staticData.environments[snapshot.environmentId]
-            if type(environment) ~= "table" then
-                return nil, { makeError("unknown_environment", "$.environmentId", "환경을 찾을 수 없습니다.") }
-            end
-            if not isDenseArray(environment.triggers) then
-                return nil, { makeError("invalid_triggers", "$.staticData.environments." .. environment.id, "환경 트리거가 배열이 아닙니다.") }
-            end
-            for index, spec in ipairs(environment.triggers) do
-                local added, addErrors = addCandidate("environment", environment.id, nil, index, spec, nil)
-                if not added then
-                    return nil, addErrors
-                end
-            end
-
-            table.sort(candidates, function(left, right)
-                if left.categoryOrder ~= right.categoryOrder then
-                    return left.categoryOrder < right.categoryOrder
-                end
-                local leftSide = sideRank(left.side, inputEvent.side)
-                local rightSide = sideRank(right.side, inputEvent.side)
-                if leftSide ~= rightSide then
-                    return leftSide < rightSide
-                end
-                if left.sourceId ~= right.sourceId then
-                    return left.sourceId < right.sourceId
-                end
-                return left.declarationIndex < right.declarationIndex
-            end)
-
-            local matched = {}
-            for _, candidate in ipairs(candidates) do
-                local context = buildContext(
-                    snapshot,
-                    phase,
-                    currentCard,
-                    currentInstance,
-                    candidate.planState
-                )
-                local conditionReport, conditionErrors = callModule(
-                    "effectEngine",
-                    "evaluateTriggerCondition",
-                    staticData,
-                    candidate.spec,
-                    context,
-                    inputEvent
-                )
-                if conditionErrors then
-                    return nil, conditionErrors
-                end
-                if conditionReport.matched == true then
-                    candidate.context = context
-                    matched[#matched + 1] = candidate
-                end
-            end
-            return matched, nil
-        end
-
-        local function applyTriggerBatch(candidates, inputEvent, phase, resolutionId, insightSide, allowGameplayCommands)
-            for _, candidate in ipairs(candidates) do
-                local triggerSource = source(
-                    candidate.kind,
-                    candidate.sourceId,
-                    candidate.side,
-                    candidate.planState and candidate.planState.cardInstanceId or nil
-                )
-                local suppressed = insightSide ~= nil
-                    and candidate.kind == "plan"
-                    and candidate.side ~= insightSide
-                if suppressed then
-                    appendEvent(
-                        "trigger_suppressed",
-                        phase,
-                        triggerSource,
-                        {
-                            inputEventType = inputEvent.type,
-                            reasonCode = "insight",
-                            hidden = candidate.side == "character",
-                        },
-                        resolutionId,
-                        candidate.side,
-                        resolutionId and resolutionCause(resolutionId) or { kind = "turn_event" }
-                    )
+                elseif resolutionId ~= nil then
+                    eventCause = resolutionCause(resolutionId)
                 else
-                    local resolveReport, resolveErrors = callModule(
-                        "effectEngine",
-                        "evaluateTriggerResolve",
-                        staticData,
-                        candidate.spec,
-                        candidate.context,
-                        inputEvent
-                    )
-                    if resolveErrors then
-                        return false, resolveErrors
-                    end
-                    if allowGameplayCommands == false and #resolveReport.commands > 0 then
-                        return false, {
-                            makeError(
-                                "unsupported_session_end_commands",
-                                "$.staticData." .. candidate.kind .. "." .. candidate.sourceId,
-                                "session_end v1 트리거는 전투 자원을 변경하는 명령을 반환할 수 없습니다."
-                            ),
-                        }
-                    end
-                    local beforePlanSlot = nil
-                    if candidate.kind == "plan" then
-                        local slotError
-                        beforePlanSlot, slotError = cloneData(
-                            working.state[candidate.side].planSlot,
-                            "$.plan.before"
-                        )
-                        if slotError then
-                            return false, { slotError }
-                        end
-                    end
-                    local applied, applyErrors = applyCommands(
-                        resolveReport.commands,
-                        triggerSource,
-                        phase,
-                        resolutionId,
-                        candidate.side,
-                        candidate.kind .. "_trigger"
-                    )
-                    if not applied then
-                        return false, applyErrors
-                    end
-
-                    if candidate.kind == "plan" then
-                        local zoneReport, zoneErrors = callModule(
-                            "cardZones",
-                            "consumePlanCharge",
-                            working.state,
-                            candidate.side
-                        )
-                        if zoneErrors then
-                            return false, zoneErrors
-                        end
-                        working.state = zoneReport.state
-                        local afterPlanSlot, slotError = cloneData(
-                            working.state[candidate.side].planSlot,
-                            "$.plan.after"
-                        )
-                        if slotError then
-                            return false, { slotError }
-                        end
-                        local planChange = {
-                            action = "triggered",
-                            before = beforePlanSlot,
-                            after = afterPlanSlot,
-                            discarded = afterPlanSlot.occupied ~= true,
-                            movedInstanceIds = zoneReport.movedInstanceIds or {},
-                        }
-                        appendEvent(
-                            "plan_changed",
-                            phase,
-                            triggerSource,
-                            planChange,
-                            resolutionId,
-                            candidate.side,
-                            resolutionId and resolutionCause(resolutionId) or { kind = "turn_event" }
-                        )
-                    end
-
-                    appendEvent(
-                        "trigger_resolved",
-                        phase,
-                        triggerSource,
-                        {
-                            inputEventType = inputEvent.type,
-                            commandCount = #resolveReport.commands,
-                        },
-                        resolutionId,
-                        candidate.side,
-                        resolutionId and resolutionCause(resolutionId) or { kind = "turn_event" }
-                    )
+                    eventCause = { kind = "turn_event" }
                 end
+                appendEvent(
+                    recordCopy.type,
+                    phase,
+                    recordCopy.source,
+                    recordCopy.payload,
+                    resolutionId,
+                    recordCopy.side,
+                    eventCause
+                )
             end
             return true, nil
         end
@@ -1044,15 +907,12 @@
                 actionTag = card.actionTag,
                 resolutionId = resolutionId,
             }
-            local preTriggers, preErrors = collectTriggers(declaredInput, phase, card, instance)
-            if preErrors then
-                return false, preErrors
-            end
-            local preApplied, preApplyErrors = applyTriggerBatch(
-                preTriggers,
+            local preApplied, preApplyErrors = applyTriggerPipeline(
                 declaredInput,
                 phase,
                 resolutionId,
+                card,
+                instance,
                 hasMechanism(card, "insight") and expectedSide or nil
             )
             if not preApplied then
@@ -1149,15 +1009,12 @@
                 actionTag = card.actionTag,
                 resolutionId = resolutionId,
             }
-            local postTriggers, postErrors = collectTriggers(resolvedInput, phase, card, instance)
-            if postErrors then
-                return false, postErrors
-            end
-            local postApplied, postApplyErrors = applyTriggerBatch(
-                postTriggers,
+            local postApplied, postApplyErrors = applyTriggerPipeline(
                 resolvedInput,
                 phase,
                 resolutionId,
+                card,
+                instance,
                 nil
             )
             if not postApplied then
@@ -1267,11 +1124,15 @@
                 type = "turn_end",
                 turnNumber = resolvedTurnNumber,
             }
-            local endTriggers, endTriggerErrors = collectTriggers(turnEndInput, "turn_end", nil, nil)
-            if endTriggerErrors then
-                return failure(endTriggerErrors)
-            end
-            local endApplied, endApplyErrors = applyTriggerBatch(endTriggers, turnEndInput, "turn_end", nil, nil)
+            local endApplied, endApplyErrors = applyTriggerPipeline(
+                turnEndInput,
+                "turn_end",
+                nil,
+                nil,
+                nil,
+                nil,
+                nil
+            )
             if not endApplied then
                 return failure(endApplyErrors)
             end
@@ -1460,6 +1321,15 @@
             return failure(cleanupErrors)
         end
         working.state = cleanupReport.state
+        if working.state.turnStartReceipt ~= nil then
+            return failure({
+                makeError(
+                    "turn_start_receipt_not_cleared",
+                    "$.afterState.turnStartReceipt",
+                    "턴 종료 정리 후 turnStartReceipt가 제거되지 않았습니다."
+                ),
+            })
+        end
         local battleEnded = working.state.status ~= "active"
         if not battleEnded then
             working.state.turnNumber = resolvedTurnNumber + 1
@@ -1490,14 +1360,11 @@
                 status = working.state.status,
                 turnNumber = resolvedTurnNumber,
             }
-            local sessionTriggers, sessionErrors = collectTriggers(sessionEndInput, "session_end", nil, nil)
-            if sessionErrors then
-                return failure(sessionErrors)
-            end
-            local sessionApplied, sessionApplyErrors = applyTriggerBatch(
-                sessionTriggers,
+            local sessionApplied, sessionApplyErrors = applyTriggerPipeline(
                 sessionEndInput,
                 "session_end",
+                nil,
+                nil,
                 nil,
                 nil,
                 false

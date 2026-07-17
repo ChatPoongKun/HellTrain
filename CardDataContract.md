@@ -372,7 +372,6 @@ mechanismData = {
 
         trigger = function(context, event)
             return event.type == "turn_start"
-                and event.side == "player"
                 and context.mood == "ignore"
         end,
 
@@ -394,6 +393,20 @@ mechanismData = {
 계획 데이터는 `durationTurns`, `charges`, `expires` 중 하나 이상으로 수명이 제한되어야 한다. `durationTurns`와 `charges`를 사용한다면 1 이상의 정수여야 한다. `durationTurns`는 배치한 턴에는 감소하지 않고 다음 턴 종료부터 감소한다. 턴 종료 감소로 남은 지속시간이 0이 되면 즉시 버린 카드 더미로 이동한다.
 
 `trigger`는 발동 가능 여부만 반환하고 상태를 변경하지 않는다. `resolve`가 반환한 명령을 엔진이 적용한 뒤에만 충전을 소비하며, 그 결과 남은 충전이 0이면 즉시 버린 카드 더미로 이동한다. 간파로 억제되면 충전을 소비하지 않지만 지속 턴은 정상적으로 흐른다. 완료된 상태에는 남은 지속시간이나 충전이 0인 점유 계획을 저장하지 않는다.
+
+캐릭터 계획 카드는 비공개 카드 선택 점수를 재현할 수 있도록 함수 없는 `selectionAssumption`을 추가로 가진다.
+
+```lua
+selectionAssumption = {
+    event = {
+        type = "card_declared",
+        side = "player",
+    },
+    chargePolicy = "all",
+}
+```
+
+이 값은 실제 계획을 미리 발동시키는 명령이 아니다. 선택기는 대표 사건을 `trigger`와 `resolve`에 보호 호출하고 모든 충전의 효과를 총효과 점수에 합산한다. 대표 사건이 실제 발동 조건과 맞지 않거나 `chargePolicy`가 `all`이 아니면 임의 확률을 추측하지 않고 오류로 중단한다. 플레이어 계획에는 캐릭터 선택용 가정을 기록하지 않는다.
 
 상대 View에는 슬롯 점유 여부를 항상 전달하고, `durationTurns`가 있는 계획은 남은 지속 턴도 전달한다. 이름, 규칙과 조건은 첫 발동 또는 별도 관찰 효과 전에는 넣지 않으며, 공개된 뒤에는 슬롯에서 벗어날 때까지 전달한다. 남은 충전은 공개 여부와 무관하게 숨기고 이를 확인하는 별도 효과가 있을 때만 전달한다. 함수는 어떤 View에도 넣지 않는다. 발동하지 않고 만료되거나 교체된 계획은 공개하지 않는다.
 
@@ -659,6 +672,7 @@ return {
 - 설정값이 필요한 메커니즘에 대응하는 `mechanismData`가 있는지 검사
 - `plan` 메커니즘과 `mechanismData.plan`이 함께 존재하는지 검사
 - 계획에 제한된 수명이 있는지 검사
+- 캐릭터 계획의 `selectionAssumption`이 등록 사건·진영과 `chargePolicy = "all"`을 사용하는지 검사
 - `selectionPreview`가 플레이어 연계 카드에만 있고 v1의 선언형 `draw_cards` 형식을 따르는지 검사
 - 선택 단계 효과 ID, 대상과 양의 정수 수량을 검사하고 같은 카드의 일반 `resolve` 병기를 거부
 - `canPlay`, `resolve`, 무드 효과와 계획 콜백이 함수인지 검사

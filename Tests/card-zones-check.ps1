@@ -29,12 +29,35 @@ end
 local modules = {
     deterministicRng = loadLore("System/deterministicRng.lua"),
     cardZones = loadLore("System/cardZones.lua"),
+    effectEngine = loadLore("System/effectEngine.lua"),
+    staticData = loadLore("System/staticData.lua"),
     stateSchema = loadLore("System/stateSchema.lua"),
+    turnDraft = loadLore("System/turnDraft.lua"),
+    triggerPipeline = loadLore("System/triggerPipeline.lua"),
+    characterSelector = loadLore("System/characterSelector.lua"),
+    turnInitializer = loadLore("System/turnInitializer.lua"),
 }
 
 function runScript(triggerId, name, ...)
     local module = assert(modules[name], "unknown module: " .. tostring(name))
     return module(triggerId, ...)
+end
+
+local lorePaths = {
+    ["GameRegistry.db"] = "DB/GameRegistry.db",
+    ["PlayerCards.db"] = "DB/PlayerCards.db",
+    ["CharacterCards.db"] = "DB/CharacterCards.db",
+    ["CharTraits.db"] = "DB/CharTraits.db",
+    ["Environments.db"] = "DB/Environments.db",
+    ["YooJiyoung.db"] = "Char/YooJiyoung.db",
+}
+
+function getLoreBooks(triggerId, name)
+    local path = lorePaths[name]
+    if not path then
+        return {}
+    end
+    return { { content = readFile(path) } }
 end
 
 local function call(action, ...)
@@ -241,6 +264,11 @@ local function operation(label, action, beforeState, ...)
     return report
 end
 
+local integrationStaticData = assertOk(
+    "cleanup receipt static load",
+    runScript("card-zones-check", "staticData", "loadAll")
+).data
+
 local configured = fixture()
 assert(configured.player.baseDrawCount == 3 and configured.player.maxHandSize == 5)
 assert(configured.character.baseDrawCount == 3 and configured.character.maxHandSize == 5)
@@ -389,6 +417,7 @@ local cleanupCards = {
 local cleanupState = fixture(cleanupCards, 33)
 cleanupState.selection.playerCardInstanceIds = { "h01" }
 cleanupState.characterIntent = { cardInstanceIds = { "ch01" }, publicActionTag = "fixture_action" }
+assertBattleState("cleanup input battleState", cleanupState)
 local cleaned = operation("end turn cleanup order", "endTurnCleanup", cleanupState)
 assertIds("player cleanup order", zoneIds(cleaned.state, "player", "discard"), { "d00", "u01", "u02", "h01", "h02" })
 assertIds("character cleanup order", zoneIds(cleaned.state, "character", "discard"), { "cu01", "ch01" })
@@ -397,6 +426,70 @@ assert(#cleaned.state.selection.playerCardInstanceIds == 0, "cleanup did not res
 assert(#cleaned.state.characterIntent.cardInstanceIds == 0, "cleanup did not reset character intent")
 assert(cleaned.state.characterIntent.publicActionTag == nil, "cleanup retained public character intent")
 assertBattleState("cleanup completed battleState", cleaned.state)
+
+local receiptAuthority = {
+    schemaVersion = 1,
+    kind = "battleState",
+    battleId = "zone-receipt-battle",
+    status = "active",
+    turnNumber = 1,
+    turnLimit = 20,
+    environmentId = "uncrowded",
+    rng = { seed = 33, cursor = 0 },
+    player = {
+        stealth = 30,
+        baseDrawCount = 3,
+        maxHandSize = 5,
+        perkIds = {},
+        planSlot = { occupied = false },
+    },
+    character = {
+        characterId = "yoo_jiyoung",
+        resistance = 30,
+        mood = "ignore",
+        traitIds = { "reserved" },
+        baseDrawCount = 3,
+        maxHandSize = 5,
+        planSlot = { occupied = false },
+    },
+    cardInstances = {},
+    selection = { playerCardInstanceIds = {} },
+    characterIntent = { cardInstanceIds = {} },
+}
+local receiptInitialized = assertOk(
+    "prepare cleanup receipt",
+    runScript(
+        "card-zones-check",
+        "turnInitializer",
+        "prepareTurn",
+        receiptAuthority,
+        integrationStaticData,
+        { turnId = "zone-receipt-battle-turn-001" }
+    )
+)
+assert(type(receiptInitialized.state.turnStartReceipt) == "table", "initializer did not attach cleanup receipt")
+assertOk(
+    "cleanup receipt input battleState",
+    runScript(
+        "card-zones-check",
+        "stateSchema",
+        "validateBattleState",
+        receiptInitialized.state,
+        integrationStaticData
+    )
+)
+local receiptCleaned = operation("end turn cleanup removes receipt", "endTurnCleanup", receiptInitialized.state)
+assert(receiptCleaned.state.turnStartReceipt == nil, "cleanup retained turnStartReceipt")
+assertOk(
+    "cleanup receipt output battleState",
+    runScript(
+        "card-zones-check",
+        "stateSchema",
+        "validateBattleState",
+        receiptCleaned.state,
+        integrationStaticData
+    )
+)
 
 local removeCards = {
     card("remove-me", "player", "hand", 1),

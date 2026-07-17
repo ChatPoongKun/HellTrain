@@ -994,6 +994,7 @@
         nextState.characterIntent = {
             cardInstanceIds = {},
         }
+        nextState.turnStartReceipt = nil
 
         for _, side in ipairs({ "player", "character" }) do
             local slot = nextState[side].planSlot

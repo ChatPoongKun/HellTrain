@@ -119,6 +119,13 @@ return {
                 plan = {
                     durationTurns = 1,
                     charges = 1,
+                    selectionAssumption = {
+                        event = {
+                            type = "card_declared",
+                            side = "player",
+                        },
+                        chargePolicy = "all",
+                    },
                     trigger = function(context, event)
                         return event.type == "card_declared"
                             and event.side == "player"

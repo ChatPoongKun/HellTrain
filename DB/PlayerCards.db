@@ -18,12 +18,11 @@ return {
             },
             mechanismData = {
                 plan = {
+                    event = "turn_start",
                     durationTurns = 1,
                     charges = 1,
                     trigger = function(context, event)
-                        return event.type == "turn_start"
-                            and event.side == "player"
-                            and context.mood == "ignore"
+                        return context.mood == "ignore"
                     end,
                     resolve = function(context, event)
                         return {

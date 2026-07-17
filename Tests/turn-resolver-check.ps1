@@ -32,6 +32,9 @@ local modules = {
     effectEngine = loadLore("System/effectEngine.lua"),
     staticData = loadLore("System/staticData.lua"),
     stateSchema = loadLore("System/stateSchema.lua"),
+    triggerPipeline = loadLore("System/triggerPipeline.lua"),
+    characterSelector = loadLore("System/characterSelector.lua"),
+    turnInitializer = loadLore("System/turnInitializer.lua"),
     turnDraft = loadLore("System/turnDraft.lua"),
     turnResolver = loadLore("System/turnResolver.lua"),
 }
@@ -227,7 +230,7 @@ local function makeState(options, data)
         intent.publicActionTag = assert(data.cards[lastInstance.cardId]).actionTag
     end
 
-    return {
+    local state = {
         schemaVersion = 1,
         kind = "battleState",
         battleId = options.battleId or "resolver-battle",
@@ -256,6 +259,49 @@ local function makeState(options, data)
         selection = { playerCardInstanceIds = {} },
         characterIntent = intent,
     }
+    if options.turnStartReceipt ~= nil then
+        state.turnStartReceipt = clone(options.turnStartReceipt)
+    end
+    return state
+end
+
+local function attachTurnStartReceipt(state, turnId, options)
+    options = options or {}
+    local initialized = assertOk(
+        "turn-start receipt authority",
+        runScript(
+            "turn-resolver-check",
+            "turnInitializer",
+            "prepareTurn",
+            state,
+            staticData,
+            { turnId = turnId }
+        )
+    )
+    local initializedState = initialized.state
+    local receipt = initializedState.turnStartReceipt
+    assert(type(receipt) == "table", "turn initializer did not attach a receipt")
+    if options.baseline ~= nil then
+        receipt.baseline = clone(options.baseline)
+    end
+    if options.transient ~= nil then
+        receipt.transient = clone(options.transient)
+    end
+    if options.events ~= nil then
+        receipt.events = clone(options.events)
+    end
+    receipt.authorityFingerprint = nil
+    initializedState = assertOk(
+        "turn-start receipt override",
+        runScript(
+            "turn-resolver-check",
+            "stateSchema",
+            "sealTurnStartReceipt",
+            initializedState,
+            staticData
+        )
+    ).state
+    return initializedState
 end
 
 local function planSlot(instanceId, cardId, placedTurn, duration, charges)
@@ -436,6 +482,7 @@ local function resolve(label, state, projection, turnId, data)
     assert(type(resolution.metrics) == "table", label .. " metrics missing")
     assert(type(resolution.afterState) == "table" and resolution.afterState ~= state, label .. " afterState missing or aliased")
     assert(resolution.afterState.lastCommittedTurnId == turnId, label .. " afterState was not marked committed")
+    assert(resolution.afterState.turnStartReceipt == nil, label .. " retained turnStartReceipt after cleanup")
     assertEventEnvelope(label, resolution.events, turnId)
     assertState(label .. " afterState", resolution.afterState, data)
     assertOk(
@@ -509,6 +556,131 @@ local function assertMetrics(label, resolution, expected)
             .. " but got " .. tostring(resolution.metrics[key]))
     end
 end
+
+-- A turn-start receipt is the authoritative handoff from initialization. Its
+-- events remain at the head of the final log, its baseline drives performance,
+-- and its transient mood lock survives until the resolver's mood checkpoint.
+local receiptTurnId = "resolver-receipt-turn-001"
+local receiptState = makeState({
+    battleId = "resolver-receipt",
+    stealth = 30,
+    resistance = 30,
+    traitIds = {},
+})
+receiptState = attachTurnStartReceipt(receiptState, receiptTurnId, {
+    baseline = { stealth = 32, resistance = 36, mood = "ignore" },
+    transient = {
+        skipRemaining = { player = false, character = false },
+        directMoodChanged = false,
+        moodLock = { mood = "ignore", ["until"] = "turn_end", cause = "plan" },
+    },
+})
+local receiptProjection = makeProjection("turn-start receipt", receiptState, {})
+
+local receiptIdMismatch = runScript(
+    "turn-resolver-check",
+    "turnResolver",
+    "resolveTurn",
+    receiptState,
+    staticData,
+    receiptProjection,
+    { turnId = "resolver-receipt-turn-other" }
+)
+assertHasError("receipt turnId mismatch", receiptIdMismatch, "receipt_turn_id_mismatch")
+
+local receiptTurnMismatchState = clone(receiptState)
+receiptTurnMismatchState.turnStartReceipt.turnNumber = receiptTurnMismatchState.turnNumber + 1
+local receiptTurnMismatch = runScript(
+    "turn-resolver-check",
+    "turnResolver",
+    "resolveTurn",
+    receiptTurnMismatchState,
+    staticData,
+    receiptProjection,
+    { turnId = receiptTurnId }
+)
+assertHasError("receipt turn number mismatch", receiptTurnMismatch, "receipt_turn_mismatch")
+
+local receiptTamperedState = clone(receiptState)
+receiptTamperedState.turnStartReceipt.events[1].eventId = receiptTurnId .. "-event-999"
+local receiptTampered = runScript(
+    "turn-resolver-check",
+    "turnResolver",
+    "resolveTurn",
+    receiptTamperedState,
+    staticData,
+    receiptProjection,
+    { turnId = receiptTurnId }
+)
+local receiptTamperError = assertHasError("tampered receipt event", receiptTampered, "module_rejected")
+assert(string.find(receiptTamperError.message, "receipt_authority_mismatch", 1, true) ~= nil,
+    "tampered receipt did not fail at the authority fingerprint boundary")
+
+local receiptFirstEvent = canonical(receiptState.turnStartReceipt.events[1])
+local receiptEventCount = #receiptState.turnStartReceipt.events
+local receiptResolution = resolve(
+    "turn-start receipt",
+    receiptState,
+    receiptProjection,
+    receiptTurnId
+)
+assert(canonical(receiptResolution.events[1]) == receiptFirstEvent, "turn-start event was not preserved verbatim")
+assert(receiptResolution.events[receiptEventCount + 1].eventId
+        == receiptTurnId .. "-event-" .. string.format("%03d", receiptEventCount + 1),
+    "resolver event numbering did not continue after turn-start events")
+assertMetrics("receipt baseline", receiptResolution, {
+    startingStealth = 32,
+    endingStealth = 30,
+    startingResistance = 36,
+    endingResistance = 30,
+    resistancePerformance = 6,
+    stealthSpent = 2,
+    moodPerformance = 4,
+    commonMoodApplied = false,
+})
+assert(receiptResolution.afterState.character.mood == "ignore", "receipt mood lock did not survive handoff")
+local receiptMood = onlyEvent("receipt mood lock", receiptResolution, "mood_evaluated")
+assert(receiptMood.payload.reasonCode == "mood_locked", "receipt mood lock reason changed")
+
+-- Skip and direct-mood flags are also resolver inputs, not effects to replay.
+local receiptSkipTurnId = "resolver-receipt-skip-turn-001"
+local receiptSkipState = makeState({
+    battleId = "resolver-receipt-skip",
+    cards = {
+        makeCard("receipt-warning", "quiet_warning", "character", "hand", 1),
+    },
+})
+receiptSkipState = attachTurnStartReceipt(receiptSkipState, receiptSkipTurnId, {
+    transient = {
+        skipRemaining = { player = false, character = true },
+        directMoodChanged = true,
+    },
+})
+local receiptSkipProjection = makeProjection("receipt transient flags", receiptSkipState, {})
+local receiptSkipResolution = resolve(
+    "receipt transient flags",
+    receiptSkipState,
+    receiptSkipProjection,
+    receiptSkipTurnId
+)
+assertCardEventIds("receipt character skip", receiptSkipResolution, "card_declared", {})
+local receiptSkippedCharacter = onlyEvent(
+    "receipt character skip",
+    receiptSkipResolution,
+    "action_sequence_stopped",
+    function(event)
+        return event.payload.side == "character"
+    end
+)
+assert(receiptSkippedCharacter.payload.reasonCode == "skip_actions", "receipt skip reason changed")
+assertIds("receipt skipped character ids", receiptSkippedCharacter.payload.unresolvedInstanceIds, {
+    "receipt-warning",
+})
+local receiptDirectMood = onlyEvent("receipt direct mood", receiptSkipResolution, "mood_evaluated")
+assert(receiptDirectMood.payload.reasonCode == "direct_mood_changed",
+    "receipt directMoodChanged flag was not handed off")
+assert(findCard(receiptSkipResolution.afterState, "receipt-warning").zone == "discard",
+    "receipt-skipped character card was not cleaned up")
 
 -- A player card declaration snapshots both matching sources. The character plan
 -- resolves before the environment, consumes its charge, and base damage follows.

@@ -83,6 +83,9 @@
         cardInstanceIds = {}, -- 비공개
         publicActionTag = nil,
     },
+
+    -- 턴 초기화가 끝난 active 상태에서만 존재하는 선택 필드
+    turnStartReceipt = nil,
 }
 ```
 
@@ -109,6 +112,148 @@
 ```
 
 계획 카드는 `zone = "plan"`인 같은 카드 인스턴스와 일치해야 한다. `remainingTurns`, `remainingCharges` 또는 이후 버전에 추가할 명시적 만료 조건 중 하나 이상으로 수명이 제한되어야 한다.
+
+### 턴 시작 영수증
+
+`turnStartReceipt`는 현재 턴의 `turn_start` batch, 기본 드로우와 캐릭터 의도 선택을 마친 권위 상태임을 나타내는 함수 없는 영수증이다. 아직 초기화하지 않은 active 상태와 전투 종료 상태에는 이 필드를 두지 않는다. 같은 `turnId`로 initializer를 다시 호출할 때는 저장된 영수증을 재사용하며, 다른 `turnId`로 같은 턴을 다시 초기화하지 않는다.
+
+```lua
+turnStartReceipt = {
+    schemaVersion = 1,
+    kind = "turnStartReceipt",
+    turnId = "battle-0001-turn-001",
+    turnNumber = 1,
+
+    -- 이 receipt 필드를 제외한 초기화 완료 battleState의 canonical fingerprint
+    authorityFingerprint = {
+        algorithm = "canonical_poly131_137_receipt_v2",
+        length = 1842,
+        hashA = 123456789,
+        hashB = 987654321,
+    },
+
+    draws = {
+        player = {
+            requested = 3,
+            drawnInstanceIds = { "player-001", "player-002", "player-003" },
+            rngBefore = { seed = 42, cursor = 0 },
+            rngAfter = { seed = 42, cursor = 0 },
+        },
+        character = {
+            requested = 3,
+            drawnInstanceIds = { "character-001", "character-002", "character-003" },
+            rngBefore = { seed = 42, cursor = 0 },
+            rngAfter = { seed = 42, cursor = 0 },
+        },
+    },
+
+    -- CharacterSelectionContract의 비공개 판정 영수증
+    characterSelection = {
+        schemaVersion = 1,
+        kind = "characterIntentSelection",
+        battleId = "battle-0001",
+        turnNumber = 1,
+        characterId = "yoo_jiyoung",
+        selectionContext = {
+            turnNumber = 1,
+            player = { stealth = 30, handCount = 3 },
+            character = { resistance = 30, mood = "ignore" },
+            characterHand = {
+                {
+                    instanceId = "character-003",
+                    cardId = "turn_to_corner",
+                    actionTag = "evade",
+                    handPosition = 1,
+                },
+            },
+        },
+        candidates = {
+            {
+                instanceId = "character-003",
+                cardId = "turn_to_corner",
+                actionTag = "evade",
+                handPosition = 1,
+                score = 3,
+                projectedPlayerStealth = 30,
+                lethal = false,
+                weight = 3,
+                totals = {
+                    recoverResistance = 3,
+                    loseStealth = 0,
+                    damageResistance = 0,
+                    recoverStealth = 0,
+                },
+                planChargesEvaluated = 0,
+            },
+        },
+        weightedPoolInstanceIds = { "character-003" },
+        lethalPriorityApplied = false,
+        weightOffset = 0,
+        rngBefore = { seed = 42, cursor = 0 },
+        rngAfter = { seed = 42, cursor = 0 },
+        draw = { kind = "single", totalWeight = 3 },
+        selectedInstanceId = "character-003",
+        selectedCardId = "turn_to_corner",
+        publicActionTag = "evade",
+    },
+
+    baseline = {
+        stealth = 30,
+        resistance = 30,
+        mood = "ignore",
+    },
+
+    transient = {
+        skipRemaining = {
+            player = false,
+            character = false,
+        },
+        directMoodChanged = false,
+
+        -- 실제 lock_mood가 적용되었을 때만 존재
+        moodLock = {
+            mood = "ignore",
+            ["until"] = "turn_end",
+            cause = "plan",
+        },
+    },
+
+    events = {
+        {
+            eventId = "battle-0001-turn-001-event-001",
+            sequence = 1,
+            type = "trigger_resolved",
+            phase = "turn_start",
+            side = "player",
+            source = {
+                kind = "plan",
+                id = "subtle_approach",
+                side = "player",
+                instanceId = "player-plan-001",
+            },
+            cause = { kind = "turn_event" },
+            payload = {
+                inputEventType = "turn_start",
+                commandCount = 1,
+            },
+        },
+    },
+}
+```
+
+- `turnNumber`는 같은 `battleState.turnNumber`와 일치하고, `turnId`는 `lastCommittedTurnId`와 달라야 한다.
+- `authorityFingerprint`는 초기화 완료 `battleState`와 `turnStartReceipt` 전체를 정렬 canonical 형식으로 직렬화하되, 자기참조를 피하기 위해 `turnStartReceipt.authorityFingerprint` 필드 하나만 제외하고 131/137 다항 해시를 적용한 결과다. 필드는 정확히 `algorithm`, `length`, `hashA`, `hashB`이며 알고리즘은 `canonical_poly131_137_receipt_v2`다. `validateBattleState`는 같은 경계로 재계산하여 상태·후보 감사·selectionContext·사건 payload 중 하나라도 달라지면 `receipt_authority_mismatch`로 거부한다.
+- initializer만 사용하는 `stateSchema.sealTurnStartReceipt`는 `authorityFingerprint`가 아직 없는 영수증만 받는다. 전체 canonical fingerprint를 계산해 복제 상태에 삽입한 뒤 정적 참조를 포함한 `validateBattleState`를 통과한 봉인 상태만 반환한다. 일반 `fingerprintBattleState`는 미봉인 영수증을 허용하지 않는다.
+- `draws.player`와 `draws.character`는 각각 정확히 `requested`, `drawnInstanceIds`, `rngBefore`, `rngAfter`를 가진다. `requested`는 해당 진영의 `baseDrawCount`와 같고, 실제 드로우 ID는 중복 없는 연속 runtime-ID 배열이다. 모든 RNG는 `seed`, `cursor`만 가진 안전한 비음수 정수 객체이며 `player.rngAfter == character.rngBefore`여야 한다.
+- `characterSelection`은 `CharacterSelectionContract`의 함수 없는 비공개 영수증을 그대로 보존하되, 모든 top-level·`selectionContext`·candidate·`totals`·`draw`·RNG 필드를 엄격한 allowlist로 검증한다. `battleId`, `turnNumber`, `characterId`는 현재 상태와 같아야 하고 `draws.character.rngAfter == characterSelection.rngBefore`여야 한다.
+- 선택 영수증에 카드가 있으면 현재 `characterIntent`는 그 인스턴스와 공개 태그 한 장에 정확히 일치하며, 인스턴스·카드 ID·정적 카드의 `actionTag`도 서로 일치해야 한다. 치명 우선에 따른 `weightedPoolInstanceIds`, 점수 기반 `weightOffset`·후보 가중치와 고정 시드 `draw`도 서로 재계산 가능해야 한다. 패스 영수증은 후보·가중 풀·선택 필드를 갖지 않고 `characterIntent`도 비어 있어야 한다. 선택/패스 선택 필드를 섞은 모순된 영수증은 거부한다.
+- `characterSelection.rngAfter`는 선택 직후 RNG다. 그 뒤 `action_tag_revealed` 트리거가 카드 드로우나 재섞기로 RNG를 더 소비할 수 있으므로 최종 `battleState.rng`와 같다고 강제하지 않는다. 최종 RNG를 포함한 전체 권위 상태는 `authorityFingerprint`가 별도로 묶는다.
+- persisted receipt 검증은 `selectionContext`로 모든 후보의 정적 효과를 `effectEngine`에서 재평가하고 `deterministicRng.nextInteger`로 roll과 `rngAfter` 전체를 재생한다. 공개 태그 트리거가 수치·무드·손패를 바꿨다면 해당 `effect_applied` 기록을 역산해 선택 시점을 복원한다.
+- `baseline`은 `turn_start` 명령을 적용하기 전의 은폐·저항·무드다. 후속 resolver는 이 값을 턴 전체 성과의 시작점으로 사용한다.
+- `transient`에는 `skipRemaining`, `directMoodChanged`와 선택적 `moodLock`만 둔다. 잠금 무드는 레지스트리에 있어야 하며 v1 종료점은 `turn_end`뿐이다.
+- `events`는 `sequence = 1..n`인 연속 배열이다. `eventId`는 `turnId-event-%03d`, `phase`는 모두 `turn_start`이며 `type`, `source.kind`, `source.id`, 선택적 `cause.kind`는 `lower_snake_case`다.
+- `draws`와 `characterSelection`은 같은 턴 재호출의 판정·재현을 위한 비공개 감사 자료다. 일반 사건 payload나 `battleView`·LLM 입력에 그대로 복사하지 않는다. 공개 가능한 캐릭터 선택 정보는 별도 projection의 `publicActionTag`뿐이다.
+- `turnDraft`는 receipt를 포함한 권위 상태 전체를 fingerprint한다. `turnResolver`는 receipt의 사건·baseline·transient를 이어받고, 해결을 마치면 receipt를 제거한 뒤 다음 턴 또는 종료 상태를 저장한다.
 
 ## 3. `turnDraft` 버전 1
 
@@ -209,7 +354,7 @@ playable, reasonCode, selected, selectionOrder
 - 상대의 미공개 계획은 `status = "hidden"`, 지속시간 존재 여부와 남은 지속 턴만 가진다.
 - 공개된 계획도 남은 충전, 조건 함수, 효과 함수와 `mechanismData`를 포함하지 않는다.
 - 플레이어 자신의 계획은 정체를 표시할 수 있지만 남은 충전은 버전 1 View에서 표시하지 않는다.
-- `privateProfile`, `selectionProfile`, `actorThought`, 원본 사건, `beforeState`, `afterState`와 대기 결과는 View에 들어가지 않는다.
+- `privateProfile`, `actorThought`, 원본 사건, `beforeState`, `afterState`와 대기 결과는 View에 들어가지 않는다.
 - 발동하지 않고 만료되거나 교체된 상대 계획은 `empty`로 돌아가며 과거 정체를 남기지 않는다.
 
 ## 6. CBS 전용 브리지

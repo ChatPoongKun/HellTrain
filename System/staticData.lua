@@ -295,6 +295,93 @@
         end
     end
 
+    local function validatePlanSelectionAssumption(card, plan, path, registry, errors)
+        local assumption = plan.selectionAssumption
+        if card.owner == "character" and assumption == nil then
+            addError(
+                errors,
+                "missing_plan_selection_assumption",
+                path .. ".selectionAssumption",
+                "캐릭터 계획에는 선택 점수용 발동 가정이 필요합니다."
+            )
+            return
+        end
+        if assumption == nil then
+            return
+        end
+        if card.owner ~= "character" then
+            addError(
+                errors,
+                "unexpected_plan_selection_assumption",
+                path .. ".selectionAssumption",
+                "선택 점수용 계획 발동 가정은 캐릭터 카드에만 사용할 수 있습니다."
+            )
+        end
+        if type(assumption) ~= "table" then
+            addError(
+                errors,
+                "invalid_plan_selection_assumption",
+                path .. ".selectionAssumption",
+                "계획 선택 가정이 테이블이 아닙니다."
+            )
+            return
+        end
+
+        for field in pairs(assumption) do
+            if field ~= "event" and field ~= "chargePolicy" then
+                addError(
+                    errors,
+                    "unexpected_plan_selection_assumption_field",
+                    path .. ".selectionAssumption." .. tostring(field),
+                    "계획 선택 가정에 허용되지 않은 필드가 있습니다."
+                )
+            end
+        end
+
+        local event = assumption.event
+        local eventPath = path .. ".selectionAssumption.event"
+        if type(event) ~= "table" then
+            addError(errors, "invalid_plan_selection_event", eventPath, "계획 선택 가정 사건이 테이블이 아닙니다.")
+        else
+            for field in pairs(event) do
+                if field ~= "type" and field ~= "side" then
+                    addError(
+                        errors,
+                        "unexpected_plan_selection_event_field",
+                        eventPath .. "." .. tostring(field),
+                        "계획 선택 가정 사건에는 type과 side만 사용할 수 있습니다."
+                    )
+                end
+            end
+            if type(registry) ~= "table"
+                or type(registry.events) ~= "table"
+                or type(event.type) ~= "string"
+                or not registry.events[event.type] then
+                addError(errors, "unknown_plan_selection_event", eventPath .. ".type", "등록되지 않은 계획 선택 가정 사건입니다.")
+            end
+            if event.side ~= "player" and event.side ~= "character" then
+                addError(errors, "invalid_plan_selection_side", eventPath .. ".side", "계획 선택 가정 진영이 올바르지 않습니다.")
+            end
+        end
+
+        if assumption.chargePolicy ~= "all" then
+            addError(
+                errors,
+                "invalid_plan_selection_charge_policy",
+                path .. ".selectionAssumption.chargePolicy",
+                "캐릭터 계획 선택 점수는 모든 충전을 합산해야 합니다."
+            )
+        end
+        if not isPositiveInteger(plan.charges) then
+            addError(
+                errors,
+                "plan_selection_requires_charges",
+                path .. ".charges",
+                "캐릭터 계획 선택 점수에는 양의 충전 수가 필요합니다."
+            )
+        end
+    end
+
     local function validateCards(cards, registry, errors)
         if type(cards) ~= "table" then
             addError(errors, "missing_cards", "cards", "카드 컬렉션이 없습니다.")
@@ -389,6 +476,13 @@
                             if type(plan.resolve) ~= "function" then
                                 addError(errors, "invalid_plan_resolve", path .. ".mechanismData.plan.resolve", "계획 효과가 함수가 아닙니다.")
                             end
+                            validatePlanSelectionAssumption(
+                                card,
+                                plan,
+                                path .. ".mechanismData.plan",
+                                registry,
+                                errors
+                            )
                         end
                     elseif plan ~= nil then
                         addError(errors, "unexpected_plan_data", path .. ".mechanismData.plan", "계획 메커니즘이 없는 카드에 계획 설정이 있습니다.")
@@ -597,23 +691,6 @@
         end
     end
 
-    local function validateCharacterTagList(values, path, registry, errors)
-        if not isArray(values) then
-            addError(errors, "invalid_action_tags", path, "행동 태그 목록이 배열이 아닙니다.")
-            return
-        end
-
-        for index, actionTag in ipairs(values) do
-            local action = type(registry) == "table"
-                and type(registry.actionTags) == "table"
-                and registry.actionTags[actionTag]
-                or nil
-            if not action or action.owner ~= "character" then
-                addError(errors, "invalid_character_action", path .. "[" .. index .. "]", "캐릭터 행동 태그가 아닙니다.")
-            end
-        end
-    end
-
     local function validateCharacters(characters, cards, traits, registry, errors)
         if type(characters) ~= "table" then
             addError(errors, "missing_characters", "characters", "캐릭터 컬렉션이 없습니다.")
@@ -681,13 +758,6 @@
                         end
                     end
 
-                    local profile = battle.selectionProfile
-                    if type(profile) ~= "table" then
-                        addError(errors, "missing_selection_profile", path .. ".battle.selectionProfile", "행동 선택 성향이 없습니다.")
-                    else
-                        validateCharacterTagList(profile.preferredActionTags, path .. ".battle.selectionProfile.preferredActionTags", registry, errors)
-                        validateCharacterTagList(profile.excludedActionTags, path .. ".battle.selectionProfile.excludedActionTags", registry, errors)
-                    end
                 end
             end
         end
