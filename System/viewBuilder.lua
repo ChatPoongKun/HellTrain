@@ -574,6 +574,7 @@
         local selectedIds = {}
         local previewIds = {}
         local focusedInstanceId = nil
+        local interactionToken = nil
         if state.status == "active" and pendingInput ~= nil then
             local pendingValidation, pendingCallError = callRuntime(
                 "stateSchema",
@@ -629,6 +630,32 @@
                 appendNestedErrors(errors, "$.context.draft", draftValidation)
                 return failure(errors)
             end
+            local tokenReport, tokenCallError = callRuntime(
+                "turnDraft",
+                "interactionToken",
+                state,
+                data,
+                draftValidation.draft
+            )
+            if tokenCallError then
+                table.insert(errors, tokenCallError)
+                return failure(errors)
+            end
+            if tokenReport.ok ~= true then
+                appendNestedErrors(errors, "$.context.draft", tokenReport)
+                return failure(errors)
+            end
+            if type(tokenReport.interactionToken) ~= "string"
+                or string.match(tokenReport.interactionToken, "^draftv1_%d+_%d+_%d+$") == nil then
+                addError(
+                    errors,
+                    "invalid_interaction_token",
+                    "$.context.draft",
+                    "turnDraft가 유효한 UI 상호작용 토큰을 반환하지 않았습니다."
+                )
+                return failure(errors)
+            end
+            interactionToken = tokenReport.interactionToken
             phase = generationLocked and "awaitingOutput" or "selecting"
             locked = generationLocked == true
             local startReceipt = type(state.turnStartReceipt) == "table" and state.turnStartReceipt or nil
@@ -891,6 +918,9 @@
                 label = outcomeLabels[displayState.status],
             },
         }
+        if interactionToken ~= nil then
+            view.interactionToken = interactionToken
+        end
 
         if #errors > 0 then
             return failure(errors)
@@ -1131,6 +1161,7 @@
             turnId = true,
             phase = true,
             locked = true,
+            interactionToken = true,
             turn = true,
             environment = true,
             player = true,
@@ -1157,6 +1188,15 @@
             addError(errors, "invalid_locked", "$.locked", "locked는 불리언이어야 합니다.")
         elseif (view.phase == "selecting" and view.locked) or (view.phase ~= "selecting" and not view.locked) then
             addError(errors, "phase_lock_mismatch", "$.locked", "phase와 locked 값이 일치하지 않습니다.")
+        end
+        if view.interactionToken ~= nil
+            and (type(view.interactionToken) ~= "string"
+                or string.match(view.interactionToken, "^draftv1_%d+_%d+_%d+$") == nil) then
+            addError(errors, "invalid_interaction_token", "$.interactionToken", "UI 상호작용 토큰이 올바르지 않습니다.")
+        elseif view.phase == "selecting" and view.interactionToken == nil then
+            addError(errors, "missing_interaction_token", "$.interactionToken", "선택 가능한 View에는 상호작용 토큰이 필요합니다.")
+        elseif view.phase == "ended" and view.interactionToken ~= nil then
+            addError(errors, "ended_interaction_token", "$.interactionToken", "종료 View에는 상호작용 토큰을 넣을 수 없습니다.")
         end
 
         if type(view.turn) ~= "table" then

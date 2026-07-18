@@ -334,11 +334,13 @@ pending 저장에는 전체 projection 대신 `turnDraft.sealProjection`이 만�
 최상위 필드는 다음과 같다.
 
 ```text
-schemaVersion, kind, battleId, turnId, phase, locked
+schemaVersion, kind, battleId, turnId, phase, locked, interactionToken?
 turn, environment, player, character, hand, selection, zones, lastTurn, outcome
 ```
 
 `phase`는 `selecting`, `awaitingOutput`, `ended` 중 하나다. `buildBattleView(state, staticData, context)`의 context는 phase에 따라 엄격히 나뉜다.
+
+draft에서 만든 View는 `turnDraft.interactionToken`이 반환한 `interactionToken`을 가진다. 카드 버튼은 이 값을 인스턴스 ID와 함께 컨트롤러에 전달한다. 선택 가능한 View에는 반드시 존재하고, 종료 View에는 존재하지 않는다. 현재 pendingTurn을 표시하는 출력 대기 View에는 없으며, 다음 턴 draft를 보존한 재생성 잠금 View에는 있으나 버튼은 잠겨 있다.
 
 - active 선택 중에는 `{ draft = turnDraft }`가 필수다. draft를 검증해 focus, 등록 순서와 공개 프리뷰를 만든다.
 - active 출력 대기에는 `{ pendingTurn = pendingTurn }`을 사용한다. 먼저 `stateSchema.validatePendingTurn`, 다음으로 전달된 현재 확정 `state`에 대한 `turnDraft.validateProjectionReceipt`를 순서대로 성공시킨다.

@@ -988,6 +988,8 @@ local passView = assertOk(
 ).view
 assert(passView.selection.mode == "pass" and passView.selection.canSubmit == true)
 assert(passView.selection.count == 0 and passView.selection.hasMainAction == false)
+assert(type(passView.interactionToken) == "string"
+    and string.match(passView.interactionToken, "^draftv1_%d+_%d+_%d+$") ~= nil)
 local endedViewState = clone(viewState)
 endedViewState.status = "defeat"
 endedViewState.player.stealth = 0
@@ -996,6 +998,7 @@ local endedView = assertOk(
     runScript("test", "viewBuilder", "buildBattleView", endedViewState, staticData)
 ).view
 assert(endedView.phase == "ended" and endedView.locked == true)
+assert(endedView.interactionToken == nil)
 assertError(
     "ended View rejects draft context",
     runScript("test", "viewBuilder", "buildBattleView", endedViewState, staticData, { draft = emptyViewDraft }),
@@ -1056,6 +1059,7 @@ local generationLockedView = assertOk(
     })
 ).view
 assert(generationLockedView.phase == "awaitingOutput" and generationLockedView.locked == true)
+assert(generationLockedView.interactionToken == view.interactionToken)
 assert(generationLockedView.selection.count == 2 and generationLockedView.selection.canSubmit == false)
 assert(generationLockedView.selection.reasonCode == "awaiting_output")
 assert(generationLockedView.selection.focusedInstanceId == nil)
@@ -1366,6 +1370,7 @@ local waitingView = assertOk(
     runScript("test", "viewBuilder", "buildBattleView", pendingBefore, staticData, { pendingTurn = pending })
 ).view
 assert(waitingView.phase == "awaitingOutput" and waitingView.locked == true)
+assert(waitingView.interactionToken == nil)
 assert(waitingView.character.resistance == 30, "afterState leaked before output")
 assert(waitingView.selection.mode == "action" and waitingView.selection.focusedInstanceId == nil)
 assert(waitingView.hand.items[4].instanceId == "player-preview-001"

@@ -94,6 +94,7 @@ runScript(triggerId, "turnDraft", action, battleState, staticData, draft, instan
 |---|---|
 | `newDraft` | 현재 권위 상태에서 빈 draft 생성 |
 | `validate` | 스키마, source, 등록 순서와 프리뷰 재계산 결과 검사 |
+| `interactionToken` | 검증된 draft 전체의 정규 fingerprint를 `draftv1_<length>_<hashA>_<hashB>` 토큰으로 반환 |
 | `focusCard` | 상세 표시 카드만 변경 |
 | `registerCard` | 카드를 사용 목록에 정규 순서로 등록 |
 | `cancelCard` | 등록 카드 취소와 의존 프리뷰 연쇄 정리 |
@@ -104,6 +105,8 @@ runScript(triggerId, "turnDraft", action, battleState, staticData, draft, instan
 | `validateProjectionReceipt` | 영수증의 선택 ID를 권위 상태에서 다시 재생해 projection과 영수증을 재구성·대조 |
 
 모든 성공·실패 경로는 입력 `battleState`와 입력 draft를 변경하지 않는다. 등록하려는 카드는 원래 플레이어 손패 또는 앞선 등록 카드가 만든 현재 프리뷰에 있어야 한다.
+
+`interactionToken`은 UI가 렌더링한 draft와 클릭 시점의 저장 draft가 같은지 확인하는 낙관적 동시성 표식이다. 토큰이 오래되었다면 호출자는 클릭 전이를 적용하지 않고 현재 View만 다시 게시해야 한다. 이 토큰은 비밀이나 권한 표식이 아니며, 모든 실제 검증은 여전히 권위 상태와 draft를 기준으로 한다.
 
 ## 5. 등록과 취소 규칙
 

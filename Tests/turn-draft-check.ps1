@@ -430,6 +430,18 @@ assertEmptyPreview("new draft", emptyDraft.preview)
 
 local validatedDraft = draftAction("validate new draft", "validate", baseState, emptyDraft, nil)
 assert(canonical(validatedDraft) == canonical(emptyDraft), "draft validation changed a valid draft")
+local emptyInteractionToken = assertOk(
+    "empty draft interaction token",
+    invoke("empty draft interaction token", "interactionToken", baseState, emptyDraft, nil)
+).interactionToken
+local repeatedInteractionToken = assertOk(
+    "repeat empty draft interaction token",
+    invoke("repeat empty draft interaction token", "interactionToken", baseState, emptyDraft, nil)
+).interactionToken
+assert(type(emptyInteractionToken) == "string"
+    and string.match(emptyInteractionToken, "^draftv1_%d+_%d+_%d+$") ~= nil,
+    "interaction token format is invalid")
+assert(repeatedInteractionToken == emptyInteractionToken, "equal drafts produced different interaction tokens")
 
 local zeroSeedState = standardState()
 zeroSeedState.rng.seed = 0
@@ -452,6 +464,11 @@ local focusedBase = draftAction("focus base", "focusCard", baseState, emptyDraft
 assert(focusedBase.focusedInstanceId == BASE_A)
 assertIds("focus base registration", focusedBase.registeredCardInstanceIds, {})
 assertEmptyPreview("focus base", focusedBase.preview)
+local focusedInteractionToken = assertOk(
+    "focused draft interaction token",
+    invoke("focused draft interaction token", "interactionToken", baseState, focusedBase, nil)
+).interactionToken
+assert(focusedInteractionToken ~= emptyInteractionToken, "changed draft reused the previous interaction token")
 
 local focusedEye = draftAction("focus eye", "focusCard", baseState, emptyDraft, EYE)
 assert(focusedEye.focusedInstanceId == EYE)

@@ -19,7 +19,7 @@
         }
     end
 
-    local function success(draft, projection, receipt)
+    local function success(draft, projection, receipt, interactionToken)
         return {
             ok = true,
             schemaVersion = SCHEMA_VERSION,
@@ -27,6 +27,7 @@
             draft = draft,
             projection = projection,
             receipt = receipt,
+            interactionToken = interactionToken,
         }
     end
 
@@ -913,6 +914,24 @@
         return success(validated.draft)
     end
 
+    local function getInteractionToken(state, staticData, draft)
+        local validated, errors = validateInternal(state, staticData, draft)
+        if errors then
+            return failure(errors)
+        end
+        local draftFingerprint, fingerprintError = fingerprint(validated.draft)
+        if fingerprintError then
+            return failure({ fingerprintError })
+        end
+        local token = table.concat({
+            "draftv1",
+            tostring(draftFingerprint.length),
+            tostring(draftFingerprint.hashA),
+            tostring(draftFingerprint.hashB),
+        }, "_")
+        return success(validated.draft, nil, nil, token)
+    end
+
     local function focusCard(state, staticData, draft, instanceId)
         local validated, errors = validateInternal(state, staticData, draft)
         if errors then
@@ -1501,6 +1520,7 @@
     local actions = {
         newDraft = newDraft,
         validate = validateDraft,
+        interactionToken = getInteractionToken,
         focusCard = focusCard,
         registerCard = registerCard,
         cancelCard = cancelCard,
