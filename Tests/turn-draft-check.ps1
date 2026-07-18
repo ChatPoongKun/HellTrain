@@ -431,6 +431,22 @@ assertEmptyPreview("new draft", emptyDraft.preview)
 local validatedDraft = draftAction("validate new draft", "validate", baseState, emptyDraft, nil)
 assert(canonical(validatedDraft) == canonical(emptyDraft), "draft validation changed a valid draft")
 
+local zeroSeedState = standardState()
+zeroSeedState.rng.seed = 0
+assertState("zero-seed authority state", zeroSeedState)
+local zeroSeedDraft = draftAction("zero-seed new draft", "newDraft", zeroSeedState, nil, nil)
+draftAction("zero-seed validate draft", "validate", zeroSeedState, zeroSeedDraft, nil)
+local zeroSeedProjection = project("zero-seed pass projection", zeroSeedState, zeroSeedDraft)
+local zeroSeedReceipt = assertOk(
+    "zero-seed seal projection",
+    invoke("zero-seed seal projection", "sealProjection", zeroSeedState, zeroSeedProjection, nil)
+).receipt
+assert(zeroSeedReceipt.projectedRng.seed == 0)
+assertOk(
+    "zero-seed replay receipt",
+    invoke("zero-seed replay receipt", "validateProjectionReceipt", zeroSeedState, zeroSeedReceipt, nil)
+)
+
 -- Focus only opens details. It never registers or speculatively draws.
 local focusedBase = draftAction("focus base", "focusCard", baseState, emptyDraft, BASE_A)
 assert(focusedBase.focusedInstanceId == BASE_A)
@@ -613,6 +629,71 @@ assertIds("eye plus preview projected selection", eyePreviewProjection.selectedC
 assertPreview("eye plus preview projection", eyePreviewProjection.preview, { PREVIEW_MAIN })
 assertConserved("eye plus preview conservation", baseState, eyePreviewProjection.workingState)
 validateProjectedTurn("validate eye plus preview action projection", baseState, eyePreviewProjection)
+
+-- A persisted projection receipt keeps only the replay inputs and derived RNG
+-- boundary. Preview cards are proven by replay instead of storing workingState.
+local sealedPreview = assertOk(
+    "seal eye plus preview projection",
+    invoke("seal eye plus preview projection", "sealProjection", baseState, eyePreviewProjection, nil)
+)
+local previewReceipt = sealedPreview.receipt
+assert(type(previewReceipt) == "table" and previewReceipt.kind == "turnDraftProjectionReceipt")
+assert(previewReceipt.mode == "action")
+assertIds("sealed preview selection", previewReceipt.selectedCardInstanceIds, { EYE, PREVIEW_MAIN })
+assert(previewReceipt.preview == nil and previewReceipt.workingState == nil
+    and previewReceipt.focusedInstanceId == nil, "projection receipt retained non-minimal state")
+assert(previewReceipt.source ~= sealedPreview.projection.source
+    and previewReceipt.projectedRng ~= sealedPreview.projection.projectedRng,
+    "projection receipt aliases the returned projection")
+
+local replayedReceipt = assertOk(
+    "validate eye plus preview receipt",
+    invoke("validate eye plus preview receipt", "validateProjectionReceipt", baseState, previewReceipt, nil)
+)
+assert(canonical(replayedReceipt.receipt) == canonical(previewReceipt), "valid receipt changed during replay")
+assert(canonical(replayedReceipt.projection) == canonical(eyePreviewProjection), "receipt did not rebuild full projection")
+assert(findCard(replayedReceipt.projection.workingState, PREVIEW_MAIN).zone == "used",
+    "receipt replay did not prove the preview-only selected card")
+local receiptSnapshot = canonical(previewReceipt)
+replayedReceipt.receipt.selectedCardInstanceIds[1] = BASE_B
+replayedReceipt.projection.preview.drawnInstanceIds[1] = BASE_B
+assert(canonical(previewReceipt) == receiptSnapshot, "receipt replay returned aliases into its input")
+
+local receiptExtra = clone(previewReceipt)
+receiptExtra.preview = clone(eyePreviewProjection.preview)
+assertHasError(
+    "projection receipt rejects preview payload",
+    invoke("projection receipt rejects preview payload", "validateProjectionReceipt", baseState, receiptExtra, nil),
+    "unexpected_field"
+)
+local receiptWorking = clone(previewReceipt)
+receiptWorking.workingState = clone(eyePreviewProjection.workingState)
+assertHasError(
+    "projection receipt rejects working state",
+    invoke("projection receipt rejects working state", "validateProjectionReceipt", baseState, receiptWorking, nil),
+    "unexpected_field"
+)
+local receiptModeTamper = clone(previewReceipt)
+receiptModeTamper.mode = "chain_pass"
+assertHasError(
+    "projection receipt mode tamper",
+    invoke("projection receipt mode tamper", "validateProjectionReceipt", baseState, receiptModeTamper, nil),
+    "projection_receipt_mismatch"
+)
+local receiptRngTamper = clone(previewReceipt)
+receiptRngTamper.projectedRng.cursor = receiptRngTamper.projectedRng.cursor + 1
+assertHasError(
+    "projection receipt rng tamper",
+    invoke("projection receipt rng tamper", "validateProjectionReceipt", baseState, receiptRngTamper, nil),
+    "projection_receipt_mismatch"
+)
+local receiptSourceTamper = clone(previewReceipt)
+receiptSourceTamper.source.fingerprint.hashA = receiptSourceTamper.source.fingerprint.hashA + 1
+assertHasError(
+    "projection receipt source tamper",
+    invoke("projection receipt source tamper", "validateProjectionReceipt", baseState, receiptSourceTamper, nil),
+    "projection_receipt_stale"
+)
 
 local resetProjection = project("project reset base", baseState, resetToBase)
 assert(resetProjection.mode == "action")

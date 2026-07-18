@@ -2,6 +2,7 @@
     local SCHEMA_VERSION = 1
     local MAX_SAFE_INTEGER = 9007199254740991
     local FINGERPRINT_ALGORITHM = "canonical_poly131_137_receipt_v2"
+    local DRAFT_FINGERPRINT_ALGORITHM = "canonical_poly131_137_v1"
 
     local VALID_STATUS = {
         active = true,
@@ -380,6 +381,34 @@
         end
         return {
             algorithm = FINGERPRINT_ALGORITHM,
+            length = #canonical,
+            hashA = hashA,
+            hashB = hashB,
+        }, nil
+    end
+
+    local function fingerprintDraftAuthorityState(state)
+        local ok, canonical = pcall(canonicalJson, state, "$", {})
+        if not ok then
+            if type(canonical) == "table" and canonical.code and canonical.path and canonical.message then
+                return nil, canonical
+            end
+            return nil, {
+                code = "fingerprint_failed",
+                path = "$",
+                message = "드래프트 권위 상태 fingerprint 생성에 실패했습니다: " .. tostring(canonical),
+            }
+        end
+
+        local hashA = 0
+        local hashB = 0
+        for index = 1, #canonical do
+            local byte = string.byte(canonical, index)
+            hashA = (hashA * 131 + byte) % 2147483647
+            hashB = (hashB * 137 + byte) % 2147483629
+        end
+        return {
+            algorithm = DRAFT_FINGERPRINT_ALGORITHM,
             length = #canonical,
             hashA = hashA,
             hashB = hashB,
@@ -2294,6 +2323,110 @@
         return true
     end
 
+    local function fingerprintsEqual(left, right)
+        return type(left) == "table"
+            and type(right) == "table"
+            and left.algorithm == right.algorithm
+            and left.length == right.length
+            and left.hashA == right.hashA
+            and left.hashB == right.hashB
+    end
+
+    local function validateDraftFingerprint(value, path, errors)
+        if type(value) ~= "table" then
+            addError(errors, "invalid_projection_fingerprint", path, "projection 원본 fingerprint가 객체가 아닙니다.")
+            return false
+        end
+        checkAllowedKeys(value, {
+            algorithm = true,
+            length = true,
+            hashA = true,
+            hashB = true,
+        }, path, errors)
+        local valid = true
+        if value.algorithm ~= DRAFT_FINGERPRINT_ALGORITHM then
+            addError(errors, "invalid_projection_fingerprint_algorithm", path .. ".algorithm", "지원하지 않는 projection 원본 fingerprint 알고리즘입니다.")
+            valid = false
+        end
+        for _, field in ipairs({ "length", "hashA", "hashB" }) do
+            if not isSafeInteger(value[field], 0) then
+                addError(errors, "invalid_projection_fingerprint", path .. "." .. field, "projection 원본 fingerprint 수치는 0 이상의 안전한 정수여야 합니다.")
+                valid = false
+            end
+        end
+        return valid
+    end
+
+    local function validateProjectionReceiptShape(receipt, path, errors)
+        if type(receipt) ~= "table" then
+            addError(errors, "invalid_projection_receipt", path, "projectionReceipt가 객체가 아닙니다.")
+            return
+        end
+        checkAllowedKeys(receipt, {
+            schemaVersion = true,
+            kind = true,
+            mode = true,
+            selectedCardInstanceIds = true,
+            source = true,
+            projectedRng = true,
+        }, path, errors)
+        if receipt.schemaVersion ~= SCHEMA_VERSION then
+            addError(errors, "unsupported_projection_receipt_schema", path .. ".schemaVersion", "지원하지 않는 projectionReceipt 스키마입니다.")
+        end
+        if receipt.kind ~= "turnDraftProjectionReceipt" then
+            addError(errors, "invalid_projection_receipt_kind", path .. ".kind", "kind는 turnDraftProjectionReceipt여야 합니다.")
+        end
+        if receipt.mode ~= "pass" and receipt.mode ~= "chain_pass" and receipt.mode ~= "action" then
+            addError(errors, "invalid_projection_mode", path .. ".mode", "알 수 없는 projection mode입니다.")
+        end
+        validateIdArray(receipt.selectedCardInstanceIds, path .. ".selectedCardInstanceIds", errors, isRuntimeId)
+        local selectedCount = type(receipt.selectedCardInstanceIds) == "table" and #receipt.selectedCardInstanceIds or 0
+        if receipt.mode == "pass" and selectedCount ~= 0 then
+            addError(errors, "projection_pass_has_selection", path .. ".selectedCardInstanceIds", "pass projection에는 등록 카드가 없어야 합니다.")
+        elseif (receipt.mode == "chain_pass" or receipt.mode == "action") and selectedCount == 0 then
+            addError(errors, "projection_mode_missing_selection", path .. ".selectedCardInstanceIds", "카드가 있는 projection mode에는 등록 카드가 필요합니다.")
+        end
+
+        local source = receipt.source
+        if type(source) ~= "table" then
+            addError(errors, "invalid_projection_source", path .. ".source", "projection 원본 표식이 객체가 아닙니다.")
+        else
+            checkAllowedKeys(source, {
+                battleId = true,
+                status = true,
+                turnNumber = true,
+                lastCommittedTurnId = true,
+                rng = true,
+                fingerprint = true,
+            }, path .. ".source", errors)
+            if not isRuntimeId(source.battleId) then
+                addError(errors, "invalid_battle_id", path .. ".source.battleId", "projection 원본 battleId가 올바르지 않습니다.")
+            end
+            if source.status ~= "active" then
+                addError(errors, "invalid_projection_source_status", path .. ".source.status", "projection 원본 상태는 active여야 합니다.")
+            end
+            if not isInteger(source.turnNumber, 1) then
+                addError(errors, "invalid_turn_number", path .. ".source.turnNumber", "projection 원본 턴 번호가 올바르지 않습니다.")
+            end
+            if source.lastCommittedTurnId ~= nil and not isRuntimeId(source.lastCommittedTurnId) then
+                addError(errors, "invalid_turn_id", path .. ".source.lastCommittedTurnId", "projection 원본 마지막 확정 턴 ID가 올바르지 않습니다.")
+            end
+            validateReceiptRng(source.rng, path .. ".source.rng", errors)
+            validateDraftFingerprint(source.fingerprint, path .. ".source.fingerprint", errors)
+        end
+        validateReceiptRng(receipt.projectedRng, path .. ".projectedRng", errors)
+        if type(source) == "table" and type(source.rng) == "table" and type(receipt.projectedRng) == "table" then
+            if receipt.projectedRng.seed ~= source.rng.seed then
+                addError(errors, "projection_rng_seed_changed", path .. ".projectedRng.seed", "projection 중 RNG seed가 바뀔 수 없습니다.")
+            end
+            if isInteger(source.rng.cursor, 0)
+                and isInteger(receipt.projectedRng.cursor, 0)
+                and receipt.projectedRng.cursor < source.rng.cursor then
+                addError(errors, "projection_rng_reversed", path .. ".projectedRng.cursor", "projection RNG cursor가 이전으로 돌아갈 수 없습니다.")
+            end
+        end
+    end
+
     local function validatePendingTurn(pending, staticData)
         local errors = {}
         local staticDataProvided = staticData ~= nil
@@ -2325,6 +2458,7 @@
             turnId = true,
             status = true,
             beforeState = true,
+            projectionReceipt = true,
             selectedCards = true,
             turnResult = true,
             afterState = true,
@@ -2354,6 +2488,8 @@
         if not afterResult.ok then
             appendNestedErrors(errors, "$.afterState", afterResult)
         end
+
+        validateProjectionReceiptShape(pending.projectionReceipt, "$.projectionReceipt", errors)
 
         if type(pending.selectedCards) ~= "table" then
             addError(errors, "invalid_selected_cards", "$.selectedCards", "selectedCards가 테이블이 아닙니다.")
@@ -2393,6 +2529,35 @@
             if pending.beforeState.status ~= "active" then
                 addError(errors, "before_state_not_active", "$.beforeState.status", "종료된 전투에서 새 대기 턴을 만들 수 없습니다.")
             end
+            local beforeSelection = type(pending.beforeState.selection) == "table"
+                and pending.beforeState.selection.playerCardInstanceIds
+                or nil
+            if type(beforeSelection) ~= "table" or #beforeSelection ~= 0 then
+                addError(errors, "pending_authority_selection_not_empty", "$.beforeState.selection.playerCardInstanceIds", "pendingTurn의 권위 beforeState에는 플레이어 드래프트 선택을 저장할 수 없습니다.")
+            end
+            local startReceipt = pending.beforeState.turnStartReceipt
+            if type(startReceipt) ~= "table" then
+                addError(errors, "pending_missing_turn_start_receipt", "$.beforeState.turnStartReceipt", "pendingTurn beforeState에는 봉인된 turnStartReceipt가 필요합니다.")
+            elseif startReceipt.turnId ~= pending.turnId then
+                addError(errors, "pending_turn_id_mismatch", "$.turnId", "pendingTurn turnId가 beforeState.turnStartReceipt와 다릅니다.")
+            end
+            if pending.afterState.turnStartReceipt ~= nil then
+                addError(errors, "pending_after_turn_receipt_present", "$.afterState.turnStartReceipt", "해결된 afterState에는 turnStartReceipt를 남길 수 없습니다.")
+            end
+            local afterSelection = type(pending.afterState.selection) == "table"
+                and pending.afterState.selection.playerCardInstanceIds
+                or nil
+            if type(afterSelection) ~= "table" or #afterSelection ~= 0 then
+                addError(errors, "pending_after_selection_not_empty", "$.afterState.selection.playerCardInstanceIds", "해결된 afterState에는 플레이어 선택을 남길 수 없습니다.")
+            end
+            local afterIntent = pending.afterState.characterIntent
+            local afterIntentIds = type(afterIntent) == "table" and afterIntent.cardInstanceIds or nil
+            if type(afterIntentIds) ~= "table" or #afterIntentIds ~= 0 then
+                addError(errors, "pending_after_character_intent_not_empty", "$.afterState.characterIntent.cardInstanceIds", "해결된 afterState에는 캐릭터 선택을 남길 수 없습니다.")
+            end
+            if type(afterIntent) == "table" and afterIntent.publicActionTag ~= nil then
+                addError(errors, "pending_after_public_action_present", "$.afterState.characterIntent.publicActionTag", "해결된 afterState에는 공개 행동 태그를 남길 수 없습니다.")
+            end
             if isInteger(pending.beforeState.turnNumber, 1)
                 and isInteger(pending.afterState.turnNumber, 1)
                 and pending.afterState.turnNumber < pending.beforeState.turnNumber then
@@ -2426,15 +2591,52 @@
                 end
             end
 
+            local projectionReceipt = pending.projectionReceipt
+            if type(projectionReceipt) == "table" then
+                local source = projectionReceipt.source
+                if type(source) == "table" then
+                    if source.battleId ~= pending.battleId
+                        or source.battleId ~= pending.beforeState.battleId then
+                        addError(errors, "projection_battle_mismatch", "$.projectionReceipt.source.battleId", "projectionReceipt battleId가 pendingTurn 권위 상태와 다릅니다.")
+                    end
+                    if source.status ~= pending.beforeState.status then
+                        addError(errors, "projection_status_mismatch", "$.projectionReceipt.source.status", "projectionReceipt 상태가 beforeState와 다릅니다.")
+                    end
+                    if source.turnNumber ~= pending.beforeState.turnNumber then
+                        addError(errors, "projection_turn_mismatch", "$.projectionReceipt.source.turnNumber", "projectionReceipt 턴 번호가 beforeState와 다릅니다.")
+                    end
+                    if source.lastCommittedTurnId ~= pending.beforeState.lastCommittedTurnId then
+                        addError(errors, "projection_commit_mismatch", "$.projectionReceipt.source.lastCommittedTurnId", "projectionReceipt 마지막 확정 턴 ID가 beforeState와 다릅니다.")
+                    end
+                    if not rngEqual(source.rng, pending.beforeState.rng) then
+                        addError(errors, "projection_rng_mismatch", "$.projectionReceipt.source.rng", "projectionReceipt 시작 RNG가 beforeState와 다릅니다.")
+                    end
+                    local expectedFingerprint, fingerprintError = fingerprintDraftAuthorityState(pending.beforeState)
+                    if fingerprintError then
+                        addError(errors, fingerprintError.code, fingerprintError.path, fingerprintError.message)
+                    elseif not fingerprintsEqual(source.fingerprint, expectedFingerprint) then
+                        addError(errors, "projection_fingerprint_mismatch", "$.projectionReceipt.source.fingerprint", "projectionReceipt fingerprint가 beforeState 전체와 다릅니다.")
+                    end
+                end
+                local projectedRng = projectionReceipt.projectedRng
+                if type(projectedRng) == "table"
+                    and type(afterRng) == "table"
+                    and isInteger(projectedRng.cursor, 0)
+                    and isInteger(afterRng.cursor, 0)
+                    and afterRng.cursor < projectedRng.cursor then
+                    addError(errors, "after_rng_before_projection", "$.afterState.rng.cursor", "afterState RNG cursor는 선택 projection이 소비한 위치보다 이전일 수 없습니다.")
+                end
+            end
+
             if type(pending.selectedCards) == "table" then
-                local selected = type(pending.beforeState.selection) == "table"
-                    and pending.beforeState.selection.playerCardInstanceIds
+                local selected = type(projectionReceipt) == "table"
+                    and projectionReceipt.selectedCardInstanceIds
                     or nil
                 local intent = type(pending.beforeState.characterIntent) == "table"
                     and pending.beforeState.characterIntent.cardInstanceIds
                     or nil
                 if not arraysEqual(pending.selectedCards.player, selected) then
-                    addError(errors, "player_selection_mismatch", "$.selectedCards.player", "beforeState의 플레이어 선택과 다릅니다.")
+                    addError(errors, "player_selection_mismatch", "$.selectedCards.player", "projectionReceipt의 플레이어 선택과 다릅니다.")
                 end
                 if not arraysEqual(pending.selectedCards.character, intent) then
                     addError(errors, "character_selection_mismatch", "$.selectedCards.character", "beforeState의 캐릭터 선택과 다릅니다.")
@@ -2444,6 +2646,7 @@
 
         local report = result(errors, pending)
         report.referencesValidated = referencesValidated
+        report.projectionReplayValidated = false
         return report
     end
 
@@ -2527,6 +2730,7 @@
         end
         local report = result({}, pending)
         report.referencesValidated = validation.referencesValidated
+        report.projectionReplayValidated = false
         return report
     end
 

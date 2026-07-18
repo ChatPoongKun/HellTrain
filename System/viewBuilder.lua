@@ -471,7 +471,42 @@
         return counts
     end
 
-    local function buildBattleView(state, staticData, pendingTurn)
+    local function callRuntime(moduleName, moduleAction, ...)
+        if type(runScript) ~= "function" then
+            return nil, {
+                code = "runtime_unavailable",
+                path = "$.runtime." .. moduleName,
+                message = "스크립트 실행기를 찾을 수 없습니다.",
+            }
+        end
+        local ok, report = pcall(runScript, triggerId, moduleName, moduleAction, ...)
+        if not ok then
+            return nil, {
+                code = "runtime_call_error",
+                path = "$.runtime." .. moduleName,
+                message = moduleName .. "." .. moduleAction .. " 실행에 실패했습니다: " .. tostring(report),
+            }
+        end
+        if type(report) ~= "table" then
+            return nil, {
+                code = "invalid_runtime_result",
+                path = "$.runtime." .. moduleName,
+                message = "하위 모듈 결과가 테이블이 아닙니다.",
+            }
+        end
+        return report, nil
+    end
+
+    local function findInstance(instances, instanceId)
+        for _, instance in ipairs(type(instances) == "table" and instances or {}) do
+            if instance.instanceId == instanceId then
+                return instance
+            end
+        end
+        return nil
+    end
+
+    local function buildBattleView(state, staticData, context)
         local errors = {}
         local data = normalizeStaticData(staticData)
         if type(data) ~= "table"
@@ -484,9 +519,26 @@
             return failure(errors)
         end
 
-        local stateValidation = runScript(triggerId, "stateSchema", "validateBattleState", state, data)
-        if type(stateValidation) ~= "table" or stateValidation.ok ~= true then
+        local stateValidation, stateCallError = callRuntime("stateSchema", "validateBattleState", state, data)
+        if stateCallError then
+            table.insert(errors, stateCallError)
+            return failure(errors)
+        end
+        if stateValidation.ok ~= true then
             appendNestedErrors(errors, "$.state", stateValidation)
+            return failure(errors)
+        end
+
+        if context ~= nil and (type(context) ~= "table" or getmetatable(context) ~= nil) then
+            addError(errors, "invalid_view_context", "$.context", "battleView context는 메타테이블 없는 객체여야 합니다.")
+            return failure(errors)
+        end
+        context = context or {}
+        checkAllowedKeys(context, { draft = true, pendingTurn = true }, "$.context", errors)
+        local draftInput = rawget(context, "draft")
+        local pendingInput = rawget(context, "pendingTurn")
+        if draftInput ~= nil and pendingInput ~= nil then
+            addError(errors, "ambiguous_view_context", "$.context", "draft와 pendingTurn을 동시에 표시할 수 없습니다.")
             return failure(errors)
         end
 
@@ -494,27 +546,77 @@
         local phase
         local locked
         local turnId
-        if pendingTurn ~= nil then
-            if type(pendingTurn) ~= "table" or getmetatable(pendingTurn) ~= nil then
-                addError(errors, "invalid_pending_marker", "$.pendingTurn", "대기 View에는 메타테이블 없는 pendingTurn이 필요합니다.")
+        local selectedIds = {}
+        local previewIds = {}
+        local focusedInstanceId = nil
+        if state.status == "active" and pendingInput ~= nil then
+            local pendingValidation, pendingCallError = callRuntime(
+                "stateSchema",
+                "validatePendingTurn",
+                pendingInput,
+                data
+            )
+            if pendingCallError then
+                table.insert(errors, pendingCallError)
                 return failure(errors)
             end
-            if rawget(pendingTurn, "status") ~= "awaitingOutput" then
-                addError(errors, "invalid_pending_status", "$.pendingTurn.status", "대기 View의 상태는 awaitingOutput이어야 합니다.")
+            if pendingValidation.ok ~= true then
+                appendNestedErrors(errors, "$.context.pendingTurn", pendingValidation)
                 return failure(errors)
             end
-            if not isRuntimeId(rawget(pendingTurn, "turnId")) then
-                addError(errors, "invalid_pending_turn_id", "$.pendingTurn.turnId", "대기 View의 turnId가 올바르지 않습니다.")
+            local receiptValidation, receiptCallError = callRuntime(
+                "turnDraft",
+                "validateProjectionReceipt",
+                state,
+                data,
+                pendingInput.projectionReceipt
+            )
+            if receiptCallError then
+                table.insert(errors, receiptCallError)
+                return failure(errors)
+            end
+            if receiptValidation.ok ~= true then
+                appendNestedErrors(errors, "$.context.pendingTurn.projectionReceipt", receiptValidation)
                 return failure(errors)
             end
             phase = "awaitingOutput"
             locked = true
-            turnId = rawget(pendingTurn, "turnId")
+            turnId = pendingInput.turnId
+            selectedIds = receiptValidation.receipt.selectedCardInstanceIds
+            previewIds = receiptValidation.projection.preview.availableDrawnInstanceIds
         elseif state.status == "active" then
+            if draftInput == nil then
+                addError(errors, "missing_turn_draft", "$.context.draft", "선택 중 battleView에는 검증할 turnDraft가 필요합니다.")
+                return failure(errors)
+            end
+            local draftValidation, draftCallError = callRuntime(
+                "turnDraft",
+                "validate",
+                state,
+                data,
+                draftInput
+            )
+            if draftCallError then
+                table.insert(errors, draftCallError)
+                return failure(errors)
+            end
+            if draftValidation.ok ~= true then
+                appendNestedErrors(errors, "$.context.draft", draftValidation)
+                return failure(errors)
+            end
             phase = "selecting"
             locked = false
-            turnId = string.format("%s-turn-%03d", state.battleId, state.turnNumber)
+            local startReceipt = type(state.turnStartReceipt) == "table" and state.turnStartReceipt or nil
+            turnId = startReceipt and startReceipt.turnId
+                or string.format("%s-turn-%03d", state.battleId, state.turnNumber)
+            selectedIds = draftValidation.draft.registeredCardInstanceIds
+            previewIds = draftValidation.draft.preview.availableDrawnInstanceIds
+            focusedInstanceId = draftValidation.draft.focusedInstanceId
         else
+            if draftInput ~= nil or pendingInput ~= nil then
+                addError(errors, "ended_view_context", "$.context", "종료된 battleView에는 draft나 pendingTurn을 사용할 수 없습니다.")
+                return failure(errors)
+            end
             phase = "ended"
             locked = true
             turnId = state.lastCommittedTurnId or string.format("%s-turn-%03d", state.battleId, state.turnNumber)
@@ -528,10 +630,12 @@
         end
 
         local selectedOrder = {}
-        for index, instanceId in ipairs(displayState.selection.playerCardInstanceIds) do
+        for index, instanceId in ipairs(selectedIds) do
             selectedOrder[instanceId] = index
         end
 
+        local displayEntries = {}
+        local visibleSet = {}
         local handInstances = {}
         for _, instance in ipairs(displayState.cardInstances) do
             if instance.owner == "player" and instance.zone == "hand" then
@@ -541,10 +645,28 @@
         table.sort(handInstances, function(left, right)
             return left.position < right.position
         end)
+        for _, instance in ipairs(handInstances) do
+            visibleSet[instance.instanceId] = true
+            table.insert(displayEntries, { instance = instance, origin = "hand" })
+        end
+        for index, instanceId in ipairs(previewIds) do
+            if visibleSet[instanceId] then
+                addError(errors, "duplicate_preview_card", "$.preview[" .. index .. "]", "프리뷰 카드가 권위 손패와 중복되었습니다.")
+            else
+                local instance = findInstance(displayState.cardInstances, instanceId)
+                if type(instance) ~= "table" or instance.owner ~= "player" then
+                    addError(errors, "invalid_preview_card", "$.preview[" .. index .. "]", "프리뷰 카드 인스턴스를 권위 상태에서 찾을 수 없습니다.")
+                else
+                    visibleSet[instanceId] = true
+                    table.insert(displayEntries, { instance = instance, origin = "preview" })
+                end
+            end
+        end
 
         local handItems = {}
         local playableById = {}
-        for slot, instance in ipairs(handInstances) do
+        for slot, entry in ipairs(displayEntries) do
+            local instance = entry.instance
             local card = data.cards[instance.cardId]
             local summary = buildSafeCardSummary(card, data.registry, "$.hand.items[" .. slot .. "]", errors)
             if summary then
@@ -563,6 +685,7 @@
 
                 table.insert(handItems, {
                     slot = slot,
+                    origin = entry.origin,
                     instanceId = instance.instanceId,
                     cardId = summary.cardId,
                     name = summary.name,
@@ -585,33 +708,30 @@
         local mainActionCount = 0
         local mainActionIndex = nil
         local selectedPlayable = true
-        for index, instanceId in ipairs(displayState.selection.playerCardInstanceIds) do
-            local instance
-            for _, candidate in ipairs(displayState.cardInstances) do
-                if candidate.instanceId == instanceId then
-                    instance = candidate
-                    break
-                end
-            end
+        for index, instanceId in ipairs(selectedIds) do
+            local instance = findInstance(displayState.cardInstances, instanceId)
             local card = instance and data.cards[instance.cardId] or nil
             if card and not hasMechanism(card, "chain") then
                 mainActionCount = mainActionCount + 1
                 mainActionIndex = index
             end
-            if playableById[instanceId] ~= true then
+            if visibleSet[instanceId] ~= true or playableById[instanceId] ~= true then
                 selectedPlayable = false
             end
         end
 
-        local selectedCount = #displayState.selection.playerCardInstanceIds
+        local selectedCount = #selectedIds
         local hasMainAction = mainActionCount == 1
-        local mainActionLast = mainActionIndex == selectedCount
-        local canSubmit = not locked and hasMainAction and mainActionLast and selectedPlayable
+        local mainActionLast = mainActionCount == 0 or mainActionIndex == selectedCount
+        local mode = selectedCount == 0 and "pass"
+            or (hasMainAction and "action" or "chain_pass")
+        local canSubmit = not locked
+            and mainActionCount <= 1
+            and mainActionLast
+            and selectedPlayable
         local selectionReason = "none"
         if locked then
             selectionReason = phase == "awaitingOutput" and "awaiting_output" or "battle_ended"
-        elseif mainActionCount == 0 then
-            selectionReason = "missing_main_action"
         elseif mainActionCount > 1 then
             selectionReason = "multiple_main_actions"
         elseif not mainActionLast then
@@ -639,6 +759,17 @@
         local remaining = displayState.turnLimit - displayState.turnNumber + 1
         if remaining < 0 then
             remaining = 0
+        end
+
+        local selectionView = {
+            count = selectedCount,
+            mode = mode,
+            hasMainAction = hasMainAction,
+            canSubmit = canSubmit,
+            reasonCode = selectionReason,
+        }
+        if phase == "selecting" and focusedInstanceId ~= nil then
+            selectionView.focusedInstanceId = focusedInstanceId
         end
 
         local view = {
@@ -677,12 +808,7 @@
                 count = #handItems,
                 items = handItems,
             },
-            selection = {
-                count = selectedCount,
-                hasMainAction = hasMainAction,
-                canSubmit = canSubmit,
-                reasonCode = selectionReason,
-            },
+            selection = selectionView,
             zones = countZones(displayState.cardInstances),
             outcome = {
                 status = displayState.status,
@@ -844,6 +970,7 @@
         end
         checkAllowedKeys(value, {
             slot = true,
+            origin = true,
             instanceId = true,
             cardId = true,
             name = true,
@@ -862,6 +989,9 @@
         }, path, errors)
         if not isInteger(value.slot, 1) then
             addError(errors, "invalid_card_slot", path .. ".slot", "손패 슬롯이 올바르지 않습니다.")
+        end
+        if value.origin ~= "hand" and value.origin ~= "preview" then
+            addError(errors, "invalid_card_origin", path .. ".origin", "카드 표시 origin은 hand 또는 preview여야 합니다.")
         end
         if not isRuntimeId(value.instanceId) then
             addError(errors, "invalid_instance_id", path .. ".instanceId", "카드 인스턴스 ID가 올바르지 않습니다.")
@@ -1071,10 +1201,34 @@
                 addError(errors, "hand_count_mismatch", "$.hand.count", "손패 개수와 항목 수가 다릅니다.")
             end
             if handCount then
+                local instanceSeen = {}
+                local previewStarted = false
                 for index = 1, handCount do
-                    validateCardView(view.hand.items[index], "$.hand.items[" .. index .. "]", errors)
-                    if type(view.hand.items[index]) == "table" and view.hand.items[index].slot ~= index then
-                        addError(errors, "hand_slot_mismatch", "$.hand.items[" .. index .. "].slot", "손패 배열 순서와 슬롯이 다릅니다.")
+                    local item = view.hand.items[index]
+                    local itemPath = "$.hand.items[" .. index .. "]"
+                    validateCardView(item, itemPath, errors)
+                    if type(item) == "table" and item.slot ~= index then
+                        addError(errors, "hand_slot_mismatch", itemPath .. ".slot", "손패 배열 순서와 슬롯이 다릅니다.")
+                    end
+                    if type(item) == "table" and isRuntimeId(item.instanceId) then
+                        if instanceSeen[item.instanceId] then
+                            addError(errors, "duplicate_view_card", itemPath .. ".instanceId", "같은 카드 인스턴스를 View에 중복 표시할 수 없습니다.")
+                        end
+                        instanceSeen[item.instanceId] = true
+                    end
+                    if type(item) == "table" then
+                        if item.origin == "preview" then
+                            previewStarted = true
+                        elseif item.origin == "hand" and previewStarted then
+                            addError(errors, "view_origin_order", itemPath .. ".origin", "권위 손패 카드는 프리뷰 카드보다 앞에 표시해야 합니다.")
+                        end
+                        if view.phase == "awaitingOutput"
+                            and (item.playable ~= false or item.reasonCode ~= "awaiting_output") then
+                            addError(errors, "awaiting_card_not_locked", itemPath, "출력 대기 중인 카드는 awaiting_output으로 잠겨야 합니다.")
+                        elseif view.phase == "ended"
+                            and (item.playable ~= false or item.reasonCode ~= "battle_ended") then
+                            addError(errors, "ended_card_not_locked", itemPath, "종료된 전투의 카드는 battle_ended로 잠겨야 합니다.")
+                        end
                     end
                 end
             end
@@ -1085,15 +1239,25 @@
         else
             checkAllowedKeys(view.selection, {
                 count = true,
+                mode = true,
                 hasMainAction = true,
                 canSubmit = true,
                 reasonCode = true,
+                focusedInstanceId = true,
             }, "$.selection", errors)
             if not isInteger(view.selection.count, 0)
+                or (view.selection.mode ~= "pass"
+                    and view.selection.mode ~= "chain_pass"
+                    and view.selection.mode ~= "action")
                 or (view.selection.hasMainAction ~= true and view.selection.hasMainAction ~= false)
                 or (view.selection.canSubmit ~= true and view.selection.canSubmit ~= false)
                 or type(view.selection.reasonCode) ~= "string" then
                 addError(errors, "invalid_selection_value", "$.selection", "선택 표시 값이 올바르지 않습니다.")
+            end
+            if view.selection.focusedInstanceId ~= nil and not isRuntimeId(view.selection.focusedInstanceId) then
+                addError(errors, "invalid_focus", "$.selection.focusedInstanceId", "상세 표시 카드 인스턴스 ID가 올바르지 않습니다.")
+            elseif view.phase ~= "selecting" and view.selection.focusedInstanceId ~= nil then
+                addError(errors, "locked_view_focus", "$.selection.focusedInstanceId", "출력 대기 또는 종료 View에는 focus를 보존하지 않습니다.")
             end
             if type(view.hand) == "table" and type(view.hand.items) == "table" then
                 local selectedCount = 0
@@ -1101,7 +1265,11 @@
                 local mainActionCount = 0
                 local mainActionOrder = nil
                 local selectedPlayable = true
+                local focusedVisible = view.selection.focusedInstanceId == nil
                 for _, item in ipairs(view.hand.items) do
+                    if type(item) == "table" and item.instanceId == view.selection.focusedInstanceId then
+                        focusedVisible = true
+                    end
                     if type(item) == "table" and item.selected == true then
                         selectedCount = selectedCount + 1
                         if isInteger(item.selectionOrder, 1) then
@@ -1129,6 +1297,9 @@
                 if view.selection.count ~= selectedCount then
                     addError(errors, "selection_count_mismatch", "$.selection.count", "선택 개수와 손패의 선택 표시가 다릅니다.")
                 end
+                if not focusedVisible then
+                    addError(errors, "focused_card_not_visible", "$.selection.focusedInstanceId", "focus 카드는 현재 표시 카드에 있어야 합니다.")
+                end
                 for order = 1, selectedCount do
                     if orders[order] ~= 1 then
                         addError(errors, "selection_order_gap", "$.hand.items", "선택 순서는 1부터 중복 없이 이어져야 합니다.")
@@ -1137,16 +1308,16 @@
                 end
 
                 local expectedHasMainAction = mainActionCount == 1
-                local mainActionLast = mainActionOrder == selectedCount
+                local mainActionLast = mainActionCount == 0 or mainActionOrder == selectedCount
+                local expectedMode = selectedCount == 0 and "pass"
+                    or (expectedHasMainAction and "action" or "chain_pass")
                 local expectedCanSubmit = view.locked == false
-                    and expectedHasMainAction
+                    and mainActionCount <= 1
                     and mainActionLast
                     and selectedPlayable
                 local expectedReason = "none"
                 if view.locked == true then
                     expectedReason = view.phase == "awaitingOutput" and "awaiting_output" or "battle_ended"
-                elseif mainActionCount == 0 then
-                    expectedReason = "missing_main_action"
                 elseif mainActionCount > 1 then
                     expectedReason = "multiple_main_actions"
                 elseif not mainActionLast then
@@ -1157,6 +1328,9 @@
 
                 if view.selection.hasMainAction ~= expectedHasMainAction then
                     addError(errors, "main_action_summary_mismatch", "$.selection.hasMainAction", "손패 선택에서 계산한 주 행동 여부와 다릅니다.")
+                end
+                if view.selection.mode ~= expectedMode then
+                    addError(errors, "selection_mode_mismatch", "$.selection.mode", "손패 선택에서 계산한 projection mode와 다릅니다.")
                 end
                 if view.selection.canSubmit ~= expectedCanSubmit then
                     addError(errors, "submit_summary_mismatch", "$.selection.canSubmit", "손패 선택에서 계산한 전송 가능 여부와 다릅니다.")

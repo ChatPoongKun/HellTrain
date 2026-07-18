@@ -259,7 +259,9 @@ turnStartReceipt = {
 
 `turnDraft`는 카드 상세 focus, 등록 목록과 결정적 선택 프리뷰를 권위 `battleState`에서 분리한다. 카드 클릭은 입력 상태와 권위 RNG를 변경하지 않고 매번 같은 권위 상태에서 프리뷰를 다시 계산한다. 권위 상태 전체의 결정적 fingerprint가 다르면 stale draft를 자동 보정하지 않고 거부한다.
 
-전송 projection만 권위 상태의 복제본에 등록 카드 이동과 선언형 선택 단계 드로우를 적용한다. 후속 턴 해결기는 권위 상태와 projection을 함께 받아 `turnDraft.validateProjection`으로 선택, preview, RNG와 workingState 전체를 재생·대조한 뒤에만 그 복제본을 사용한다. 이 중간 `workingState`는 카드 해결과 턴 종료 정리가 끝나기 전에는 확정 상태로 저장하거나 일반 View 입력으로 사용하지 않는다. 선택 스키마와 상태 전이는 `TurnDraftContract.md`, 카드 해결과 사건 원본은 `TurnResolutionContract.md`를 따른다.
+전송 projection만 권위 상태의 복제본에 등록 카드 이동과 선언형 선택 단계 드로우를 적용한다. 후속 턴 해결기는 권위 상태와 projection을 함께 받아 `turnDraft.validateProjection`으로 선택, preview, RNG와 workingState 전체를 재생·대조한 뒤에만 그 복제본을 사용한다. 이 중간 `workingState`는 카드 해결과 턴 종료 정리가 끝나기 전에는 확정 상태로 저장하거나 일반 View 입력으로 사용하지 않는다.
+
+pending 저장에는 전체 projection 대신 `turnDraft.sealProjection`이 만든 최소 `turnDraftProjectionReceipt`를 사용한다. 영수증은 `schemaVersion`, `kind`, `mode`, `selectedCardInstanceIds`, `source`, `projectedRng`만 가지며 preview·workingState·focus는 포함하지 않는다. 다시 사용할 때는 `turnDraft.validateProjectionReceipt`로 선택을 권위 상태에서 재생해 전체 projection을 복원한다. 선택 스키마와 상태 전이는 `TurnDraftContract.md`, 카드 해결과 사건 원본은 `TurnResolutionContract.md`를 따른다.
 
 ## 4. `pendingTurn` 버전 1
 
@@ -273,9 +275,17 @@ turnStartReceipt = {
     turnId = "battle-0001-turn-001",
     status = "awaitingOutput",
 
-    beforeState = battleStateSnapshot,
+    beforeState = battleStateSnapshot, -- selection.playerCardInstanceIds = {}
+    projectionReceipt = {
+        schemaVersion = 1,
+        kind = "turnDraftProjectionReceipt",
+        mode = "action",
+        selectedCardInstanceIds = { "player-001", "player-preview-001" },
+        source = projectionSource,
+        projectedRng = { seed = 12345, cursor = 1 },
+    },
     selectedCards = {
-        player = { "player-001" },
+        player = { "player-001", "player-preview-001" },
         character = { "character-004" },
     },
 
@@ -295,13 +305,16 @@ turnStartReceipt = {
 }
 ```
 
-- `beforeState`는 현재 확정 상태의 스냅숏이다.
-- `afterState.lastCommittedTurnId`는 이 트랜잭션의 `turnId`다.
+- `beforeState`는 현재 확정 상태의 스냅숏이며 플레이어 선택 배열은 항상 비어 있다. draft 선택이나 preview 카드를 권위 상태에 끼워 넣지 않는다.
+- `projectionReceipt.source`의 전투·상태·턴·마지막 확정 턴·RNG·전체 상태 fingerprint는 `beforeState`와 같아야 한다. `pendingTurn.turnId`는 `beforeState.turnStartReceipt.turnId`와 같아야 한다.
+- `selectedCards.player`는 `projectionReceipt.selectedCardInstanceIds`와, `selectedCards.character`는 `beforeState.characterIntent.cardInstanceIds`와 순서까지 같아야 한다.
+- `afterState.lastCommittedTurnId`는 이 트랜잭션의 `turnId`다. 해결이 끝난 상태이므로 `turnStartReceipt`는 없고 플레이어 selection과 캐릭터 intent·공개 행동 태그도 모두 비어 있어야 한다.
+- `afterState.rng.cursor`는 최소한 `projectionReceipt.projectedRng.cursor` 이상이어야 한다. 이 교차 연결은 선택 단계보다 이전 RNG를 결과로 저장하는 실수만 막으며, turnResult와 afterState 전체 의미 대조는 추후 `battleRuntime` 책임이다.
 - 재시도와 재생성에서는 저장된 `afterState`와 `llmEvent`를 재사용하고 판정하지 않는다.
 - `turnResult.events`는 검증된 `turnResolution.events`에서 가져오며 개별 판정 사건은 `TurnResolutionContract.md`의 사건 로그 스키마를 따른다. `publicResult`와 `llmEvent`는 그 원본을 그대로 복사하지 않고 각각의 공개 허용 목록으로 변환한다. 현재 `stateSchema`의 pending v1 validator는 아직 개별 사건의 허용 필드를 전부 검사하지 않고 JSON 저장 가능한 연속 배열 경계만 검사한다.
 - 같은 해결 시점에 저항과 은폐가 모두 0 이하라면 `afterState.status`는 `victory`다.
 
-현재 pending v1의 `beforeState.selection`과 `selectedCards.player` 일치 규칙은 권위 손패에 아직 들어오지 않은 프리뷰 카드 선택을 직접 표현할 수 없다. `turnResolution.source`는 권위 `beforeState`와 검증된 projection 영수증을 분리하지만, 실제 전송 연결 전에는 pending 스키마와 validator도 이 영수증을 명시적으로 받도록 개정해야 한다. `beforeState`를 내부 workingState로 몰래 바꾸거나 현재 validator를 우회하지 않는다.
+`stateSchema.validatePendingTurn`은 strict shape와 위 교차 연결을 검사하지만 카드 DB 의미에 따른 선택·프리뷰·RNG 재생은 하지 않는다. 성공 보고서의 `projectionReplayValidated = false`가 이 경계를 명시한다. 소비자는 별도로 `turnDraft.validateProjectionReceipt(beforeState, staticData, projectionReceipt)`를 성공시켜야 한다. `battleView`는 출력 대기 View를 만들 때 이를 수행하고, 추후 `battleRuntime`도 저장 결과를 재사용하거나 확정하기 직전에 다시 수행해야 한다.
 
 ## 5. `battleView` 버전 1
 
@@ -312,12 +325,19 @@ schemaVersion, kind, battleId, turnId, phase, locked
 turn, environment, player, character, hand, selection, zones, outcome
 ```
 
-`phase`는 `selecting`, `awaitingOutput`, `ended` 중 하나다. 출력 대기 중에는 `locked = true`이며 화면 수치는 `pendingTurn.afterState`가 아니라 View 생성기에 첫 번째 인자로 전달한 현재 확정 `battleState`를 사용한다. View 생성기는 대기 표식에서 `status`와 `turnId`만 읽고 `beforeState`, `afterState`와 `turnResult`를 검증하거나 참조하지 않는다.
+`phase`는 `selecting`, `awaitingOutput`, `ended` 중 하나다. `buildBattleView(state, staticData, context)`의 context는 phase에 따라 엄격히 나뉜다.
+
+- active 선택 중에는 `{ draft = turnDraft }`가 필수다. draft를 검증해 focus, 등록 순서와 공개 프리뷰를 만든다.
+- active 출력 대기에는 `{ pendingTurn = pendingTurn }`만 사용한다. 먼저 `stateSchema.validatePendingTurn`, 다음으로 전달된 현재 확정 `state`에 대한 `turnDraft.validateProjectionReceipt`를 순서대로 성공시킨다.
+- 종료 상태에는 draft와 pendingTurn을 모두 전달하지 않는다.
+- draft와 pendingTurn을 동시에 전달하면 모호한 context로 거부한다.
+
+출력 대기 중에는 `locked = true`이며 화면 수치와 zone 수는 `pendingTurn.afterState`나 projection workingState가 아니라 첫 번째 인자의 현재 확정 `battleState`를 사용한다. 영수증 재생 결과에서는 선택 ID와 공개 프리뷰 ID만 가져오며 focus는 보존하지 않는다. 따라서 대기 View는 선택된 프리뷰 카드까지 잠긴 상태로 재현하지만 아직 공개하면 안 되는 판정 결과는 표시하지 않는다.
 
 손패 항목은 다음 공개 필드만 가진다.
 
 ```text
-slot, instanceId, cardId, name
+slot, origin, instanceId, cardId, name
 descriptionSegments, ruleLines
 actionTag, mechanisms
 baseStealthCost, finalStealthCost
@@ -325,9 +345,11 @@ baseResistanceDamage, finalResistanceDamage
 playable, reasonCode, selected, selectionOrder
 ```
 
-카드의 `canPlay`, `resolve`, `moodEffects`, `mechanismData`, `narration`과 `prototype`은 View에 들어가지 않는다. 비용과 피해의 최종값은 엔진 보정기가 생기기 전까지 기본값과 같다.
+`origin`은 권위 손패의 `hand` 또는 재생된 공개 드로우의 `preview`다. 손패를 위치 순서로 먼저 나열하고 아직 권위 zone이 deck·discard에 남아 있는 프리뷰 카드를 그 뒤에 덧붙인다. 등록 카드는 `selected`와 1부터 이어지는 `selectionOrder`로 표시한다.
 
-현재 `System/viewBuilder.lua`의 battleView v1은 아직 `turnDraft`를 입력으로 받지 않으며 주 행동이 없는 선택을 전송 불가로 계산한다. 이는 승인된 무선택 패스와 눈치보기 단독 패스를 반영하기 전의 임시 UI 계약이다. UI 단계에서 draft focus, 프리뷰 카드, 등록 순서와 세 가지 projection mode를 View 허용 목록에 추가할 때 함께 변경하며, 그 전에는 `battleView.selection.canSubmit`을 새 패스 규칙의 권위 판정으로 사용하지 않는다.
+`selection`은 `count`, `mode`, `hasMainAction`, `canSubmit`, `reasonCode`와 선택 중에만 존재할 수 있는 `focusedInstanceId`를 가진다. `mode`는 `pass`, `chain_pass`, `action` 중 하나다. 잠기지 않았고 등록 카드가 모두 사용 가능하며 연계 뒤 주 행동이 최대 한 장인 정규 순서라면 세 mode 모두 전송할 수 있다. 따라서 무선택 패스와 눈치보기 단독 연계 후 패스도 `canSubmit = true`다.
+
+카드의 `canPlay`, `resolve`, `moodEffects`, `mechanismData`, `narration`과 `prototype`은 View에 들어가지 않는다. 비용과 피해의 최종값은 엔진 보정기가 생기기 전까지 기본값과 같다.
 
 ### 태그 조각
 
@@ -399,6 +421,9 @@ HTML에서는 깊은 `element` 대신 한 단계씩 `dictelement`를 사용한�
 - 함수, 순환 참조, 희소·혼합 키와 알 수 없는 View 필드는 경로를 포함한 오류가 된다.
 - 미공개 계획, 캐릭터 선택 카드, 비공개 프로필, 묘사와 충전 수가 인코딩 결과에 없다.
 - `awaitingOutput` View에는 `afterState`의 결과가 나타나지 않는다.
+- 프리뷰 카드는 손패 뒤에 `origin = "preview"`로 나타나며 선택·출력 대기에서 같은 등록 순서를 재현한다.
+- 빈 선택 `pass`와 연계만 선택한 `chain_pass`가 전송 가능하고, 출력 대기 View는 모든 카드를 잠그며 focus를 제거한다.
+- projection 영수증 변조, 빈 draft 누락, 모호한 context와 View의 origin·mode·focus 불일치를 거부한다.
 - 게시 검증이 실패하면 기존 `battleView` 채팅 변수를 바꾸지 않는다.
 
 `Tests/local-contract-check.ps1`은 위 항목을 로컬 Lua 호스트에서 검사하고 wire를 스키마 경로대로 한 층씩 다시 해제해 자료형과 순서를 확인한다. 이는 실제 RisuAI의 로어북 검색, `setChatVar` 저장 권한, `getvar`·`dictelement`·`#each` 해석이나 HTML 렌더링을 실행한 검사가 아니다.

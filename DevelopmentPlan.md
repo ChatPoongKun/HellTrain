@@ -111,11 +111,14 @@ LLM 생성을 시작하는 유일한 방법은 사용자가 RisuAI의 전송 버
 ```text
 turnId
 beforeState
+projectionReceipt
 selectedCards
 turnResult
 afterState
 status = awaitingOutput
 ```
+
+`beforeState.selection.playerCardInstanceIds`는 비워 두고 플레이어의 확정 등록 순서는 `projectionReceipt.selectedCardInstanceIds`와 `selectedCards.player`에 보존한다. 이 영수증은 preview나 workingState를 저장하지 않으며, 대기 View를 만들 때와 추후 결과를 재사용·확정할 때마다 권위 `beforeState`에서 의미 재생 검증한다. `stateSchema`의 pending shape·교차 연결 검증 성공만으로 이 의미 검증을 대신하지 않는다.
 
 `turnResult`가 만들어진 뒤에는 같은 턴을 다시 판정하거나 난수를 다시 사용하지 않는다. 생성 실패, 재시도와 출력 재생성에서도 같은 결과를 사용한다. `afterState`는 정상적인 LLM 출력이 도착하기 전까지 현재 전투 상태로 승격하지 않는다.
 
@@ -284,7 +287,7 @@ Lua는 이 과정에서 LLM을 직접 호출하거나 RisuAI의 전송을 대신
 
 각 카드의 선언 전, 해결, 해결 후 시점을 구분해야 계획과 간파가 예측 가능한 순서로 작동한다. 자동으로 발동한 계획은 새로운 카드 사용으로 취급하지 않으며 다른 계획을 재귀적으로 발동시키지 않는다.
 
-전송 시에는 `beforeState`, 선택 목록, 확정된 결과와 `afterState`를 묶어 보관한다. 출력이 성공한 뒤에만 `afterState`를 반영하고, 같은 `turnId`의 결과는 중복 적용하지 않는다.
+전송 시에는 선택 projection을 검증해 최소 `projectionReceipt`로 봉인하고, 빈 선택의 `beforeState`, 선택 목록, 확정된 결과와 `afterState`를 묶어 보관한다. 영수증은 결과 재사용·확정 직전에도 다시 재생 검증한다. 출력이 성공한 뒤에만 `afterState`를 반영하고, 같은 `turnId`의 결과는 중복 적용하지 않는다.
 
 완료 기준은 동일한 시작 상태와 선택에서 항상 같은 결과와 이벤트 순서가 발생하며, 생성 실패와 재시도에서도 판정이나 상태 반영이 중복되지 않는 것이다.
 
@@ -330,7 +333,7 @@ LLM 호출은 사용자가 RisuAI 전송 버튼을 누른 정상 생성 경로�
 
 게임 상태와 카드 DB에서 화면별 View 테이블을 생성하고 `toChatVar`를 통해 구조화된 채팅 변수로 전달한다. 먼저 `battleView`로 고정 수치 조회와 가변 손패 반복을 검증한 뒤 같은 방식으로 `deckView`와 `collectionView`를 확장한다.
 
-이 단계에서는 Lua DB의 실행 함수가 View에 포함되지 않는지, 목록 순서와 값의 자료형이 직렬화 전후에 유지되는지, 빈 목록과 1~5장의 손패가 같은 HTML 템플릿에서 정상적으로 표시되는지 확인한다. 선택 중, 출력 대기와 다음 턴 상태도 같은 `battleView` 스키마로 표현하고 출력 대기 중에는 모든 행동 버튼을 잠근다. 현재 파싱 함수가 요구사항을 충족하지 못하는 부분은 이때 보완한다.
+이 단계에서는 Lua DB의 실행 함수가 View에 포함되지 않는지, 목록 순서와 값의 자료형이 직렬화 전후에 유지되는지, 빈 목록과 1~5장의 손패가 같은 HTML 템플릿에서 정상적으로 표시되는지 확인한다. 선택 중 View는 검증된 `turnDraft`, 출력 대기 View는 검증된 `pendingTurn`과 의미 재생된 projection 영수증을 context로 사용한다. 두 context를 섞지 않고, 출력 대기 중에는 모든 행동 버튼과 focus를 잠근다.
 
 전투 UI 메시지에는 전용 마커와 `turnId`를 부여한다. 정상 출력이 도착할 때 이전 UI만 제거하고 새 출력 아래에 현재 UI를 추가하며, 모델 요청에서는 UI 메시지를 제외한다.
 
@@ -399,6 +402,7 @@ LLM 출력 후에는 무드 성과 계산과 저항·은폐 변화를 짧게 확
 - Lua가 저수준 LLM 함수를 호출하거나 전송을 자동화하지 않는다.
 - `editRequest`는 프리셋을 포함한 정상 요청을 보존하고 확정된 턴 사건만 추가한다.
 - 등록 카드가 없는 전송과 연계 카드만 있는 전송도 각각 패스와 연계 후 패스로 정상 진행된다.
+- 대기 트랜잭션의 projection 영수증은 shape 검증과 별도로 권위 `beforeState`에서 재생 검증되며 preview 선택 순서가 권위 selection을 오염시키지 않는다.
 - 캐릭터 카드와 정확한 턴 결과는 정상 출력이 도착하기 전에 공개되지 않는다.
 - 생성 실패, 재시도와 출력 재생성은 같은 `turnResult`를 사용하며 효과와 난수를 다시 처리하지 않는다.
 - 같은 `turnId`의 `afterState`는 정상 출력 뒤 한 번만 반영된다.

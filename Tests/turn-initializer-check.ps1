@@ -303,7 +303,7 @@ local publicView = assertOk("initialized public view", runScript(
     "buildBattleView",
     initialized.state,
     staticData,
-    nil
+    { draft = initialized.draft }
 )).view
 local publicCanonical = canonical(publicView)
 assert(string.find(publicCanonical, "close_collar", 1, true) == nil, "public view leaked selected character card id")

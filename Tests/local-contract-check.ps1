@@ -37,6 +37,8 @@ local modules = {
     staticData = loadLore("System/staticData.lua"),
     stateSchema = loadLore("System/stateSchema.lua"),
     characterSelector = loadLore("System/characterSelector.lua"),
+    cardZones = loadLore("System/cardZones.lua"),
+    turnDraft = loadLore("System/turnDraft.lua"),
     viewBuilder = loadLore("System/viewBuilder.lua"),
     dataBridge = loadLore("System/dataBridge.lua"),
 }
@@ -116,6 +118,34 @@ local function reverseClone(value, active)
     end
     active[value] = nil
     return copy
+end
+
+local function deepEqual(left, right, visited)
+    if type(left) ~= type(right) then
+        return false
+    end
+    if type(left) ~= "table" then
+        return left == right
+    end
+
+    visited = visited or {}
+    if visited[left] == right then
+        return true
+    end
+    visited[left] = right
+
+    local leftCount = 0
+    for key, value in pairs(left) do
+        leftCount = leftCount + 1
+        if not deepEqual(value, right[key], visited) then
+            return false
+        end
+    end
+    local rightCount = 0
+    for _ in pairs(right) do
+        rightCount = rightCount + 1
+    end
+    return leftCount == rightCount
 end
 
 local function failReport(label, report)
@@ -913,15 +943,83 @@ local ruleTokens = assertOk(
 ).segments
 assert(#ruleTokens == 3 and ruleTokens[2].id == "plan")
 
+local viewState = clone(baseState)
+viewState.selection = { playerCardInstanceIds = {} }
+local emptyViewDraft = assertOk(
+    "battleView draft",
+    runScript("test", "turnDraft", "newDraft", viewState, staticData)
+).draft
+assertError(
+    "selecting View requires draft",
+    runScript("test", "viewBuilder", "buildBattleView", viewState, staticData),
+    "missing_turn_draft",
+    "$.context.draft"
+)
+assertError(
+    "View context is mutually exclusive",
+    runScript("test", "viewBuilder", "buildBattleView", viewState, staticData, {
+        draft = emptyViewDraft,
+        pendingTurn = {},
+    }),
+    "ambiguous_view_context",
+    "$.context"
+)
+local passView = assertOk(
+    "empty pass battleView",
+    runScript("test", "viewBuilder", "buildBattleView", viewState, staticData, { draft = emptyViewDraft })
+).view
+assert(passView.selection.mode == "pass" and passView.selection.canSubmit == true)
+assert(passView.selection.count == 0 and passView.selection.hasMainAction == false)
+local endedViewState = clone(viewState)
+endedViewState.status = "defeat"
+endedViewState.player.stealth = 0
+local endedView = assertOk(
+    "ended battleView",
+    runScript("test", "viewBuilder", "buildBattleView", endedViewState, staticData)
+).view
+assert(endedView.phase == "ended" and endedView.locked == true)
+assertError(
+    "ended View rejects draft context",
+    runScript("test", "viewBuilder", "buildBattleView", endedViewState, staticData, { draft = emptyViewDraft }),
+    "ended_view_context",
+    "$.context"
+)
+local viewDraft = clone(emptyViewDraft)
+viewDraft = assertOk(
+    "battleView register chain",
+    runScript("test", "turnDraft", "registerCard", viewState, staticData, viewDraft, "player-001")
+).draft
+viewDraft = assertOk(
+    "battleView register main",
+    runScript("test", "turnDraft", "registerCard", viewState, staticData, viewDraft, "player-002")
+).draft
+
+local viewStateSnapshot = clone(viewState)
+local viewDraftSnapshot = clone(viewDraft)
 local view = assertOk(
     "battleView",
-    runScript("test", "viewBuilder", "buildBattleView", baseState, staticData)
+    runScript("test", "viewBuilder", "buildBattleView", viewState, staticData, { draft = viewDraft })
 ).view
+assert(deepEqual(viewState, viewStateSnapshot) and deepEqual(viewDraft, viewDraftSnapshot),
+    "battleView build mutated authority state or draft")
+local staticEyeName = staticData.cards.read_the_room.name
+local detachedView = assertOk(
+    "detached battleView",
+    runScript("test", "viewBuilder", "buildBattleView", viewState, staticData, { draft = viewDraft })
+).view
+detachedView.hand.items[1].name = "OUTPUT_ALIAS_TAMPER"
+detachedView.selection.mode = "pass"
+assert(deepEqual(viewState, viewStateSnapshot) and deepEqual(viewDraft, viewDraftSnapshot),
+    "mutating battleView output changed authority state or draft")
+assert(staticData.cards.read_the_room.name == staticEyeName,
+    "mutating battleView output changed static data")
 assert(view.hand.count == 3)
 assert(view.hand.items[1].instanceId == "player-001")
 assert(view.hand.items[2].instanceId == "player-002")
 assert(view.hand.items[3].instanceId == "player-003")
 assert(view.selection.canSubmit == true)
+assert(view.selection.mode == "action")
+assert(view.hand.items[1].origin == "hand")
 assert(view.character.mood.thresholdToCompliance == 5, "reserved must add 1 to compliance threshold")
 assert(view.character.mood.thresholdToRejection == 4)
 assert(view.character.publicAction.tag.id == "vigilance")
@@ -987,9 +1085,68 @@ for _ = 1, 10 do
     assert(repeated.encoded == encoded.encoded, "encoding is not deterministic")
 end
 
-local afterState = clone(baseState)
+local pendingBefore = clone(receiptState)
+pendingBefore.selection = { playerCardInstanceIds = {} }
+pendingBefore.turnStartReceipt.authorityFingerprint = nil
+table.insert(pendingBefore.cardInstances, {
+    instanceId = "player-preview-001",
+    cardId = "play_it_cool",
+    owner = "player",
+    zone = "deck",
+    position = 1,
+})
+pendingBefore = assertOk(
+    "seal pending authority",
+    runScript("test", "stateSchema", "sealTurnStartReceipt", pendingBefore, staticData)
+).state
+local pendingEmptyDraft = assertOk(
+    "pending draft",
+    runScript("test", "turnDraft", "newDraft", pendingBefore, staticData)
+).draft
+local pendingDraft = clone(pendingEmptyDraft)
+pendingDraft = assertOk(
+    "pending register read the room",
+    runScript("test", "turnDraft", "registerCard", pendingBefore, staticData, pendingDraft, "player-001")
+).draft
+assert(pendingDraft.preview.availableDrawnInstanceIds[1] == "player-preview-001")
+local pendingChainDraft = clone(pendingDraft)
+local chainPassView = assertOk(
+    "read the room preview View",
+    runScript("test", "viewBuilder", "buildBattleView", pendingBefore, staticData, { draft = pendingChainDraft })
+).view
+assert(chainPassView.selection.mode == "chain_pass" and chainPassView.selection.canSubmit == true)
+assert(chainPassView.hand.items[4].instanceId == "player-preview-001"
+    and chainPassView.hand.items[4].origin == "preview"
+    and chainPassView.hand.items[4].selected == false,
+    "read_the_room preview was not appended to the selectable View")
+pendingDraft = assertOk(
+    "pending register preview action",
+    runScript("test", "turnDraft", "registerCard", pendingBefore, staticData, pendingDraft, "player-preview-001")
+).draft
+local selectedPreviewView = assertOk(
+    "selected preview View",
+    runScript("test", "viewBuilder", "buildBattleView", pendingBefore, staticData, { draft = pendingDraft })
+).view
+assert(selectedPreviewView.selection.mode == "action" and selectedPreviewView.selection.canSubmit == true)
+assert(selectedPreviewView.selection.focusedInstanceId == "player-preview-001")
+assert(selectedPreviewView.hand.items[4].selected == true
+    and selectedPreviewView.hand.items[4].selectionOrder == 2)
+local pendingProjection = assertOk(
+    "pending projection",
+    runScript("test", "turnDraft", "project", pendingBefore, staticData, pendingDraft)
+).projection
+local pendingProjectionReceipt = assertOk(
+    "pending projection receipt",
+    runScript("test", "turnDraft", "sealProjection", pendingBefore, staticData, pendingProjection)
+).receipt
+assert(pendingProjectionReceipt.preview == nil and pendingProjectionReceipt.workingState == nil)
+
+local afterState = clone(pendingBefore)
+afterState.turnStartReceipt = nil
+afterState.selection = { playerCardInstanceIds = {} }
+afterState.characterIntent = { cardInstanceIds = {} }
 afterState.character.resistance = 987654
-afterState.rng.cursor = 1
+afterState.turnNumber = 2
 afterState.lastCommittedTurnId = "battle-0001-turn-001"
 local pending = {
     schemaVersion = 1,
@@ -997,9 +1154,10 @@ local pending = {
     battleId = "battle-0001",
     turnId = "battle-0001-turn-001",
     status = "awaitingOutput",
-    beforeState = clone(baseState),
+    beforeState = clone(pendingBefore),
+    projectionReceipt = clone(pendingProjectionReceipt),
     selectedCards = {
-        player = { "player-001", "player-002" },
+        player = { "player-001", "player-preview-001" },
         character = { "character-hand-001" },
     },
     turnResult = {
@@ -1010,7 +1168,12 @@ local pending = {
     afterState = afterState,
 }
 
-assertOk("pendingTurn", runScript("test", "stateSchema", "validatePendingTurn", pending, staticData))
+local pendingShape = assertOk("pendingTurn", runScript("test", "stateSchema", "validatePendingTurn", pending, staticData))
+assert(pendingShape.projectionReplayValidated == false, "stateSchema claimed semantic projection replay")
+assertOk(
+    "pending projection semantic replay",
+    runScript("test", "turnDraft", "validateProjectionReceipt", pending.beforeState, staticData, pending.projectionReceipt)
+)
 local structurallyConstructedPending = assertOk(
     "pendingTurn constructor structural-only",
     runScript("test", "stateSchema", "newPendingTurn", clone(pending), nil)
@@ -1021,6 +1184,67 @@ local fullyConstructedPending = assertOk(
     runScript("test", "stateSchema", "newPendingTurn", clone(pending), staticData)
 )
 assert(fullyConstructedPending.referencesValidated == true)
+assert(fullyConstructedPending.projectionReplayValidated == false)
+
+local afterReceiptPresent = clone(pending)
+afterReceiptPresent.afterState.turnStartReceipt = clone(pending.beforeState.turnStartReceipt)
+assertError(
+    "pending afterState clears turn receipt",
+    runScript("test", "stateSchema", "validatePendingTurn", afterReceiptPresent, staticData),
+    "pending_after_turn_receipt_present",
+    "$.afterState.turnStartReceipt"
+)
+
+local afterSelectionPresent = clone(pending)
+afterSelectionPresent.afterState.selection.playerCardInstanceIds = { "player-002" }
+assertError(
+    "pending afterState clears player selection",
+    runScript("test", "stateSchema", "validatePendingTurn", afterSelectionPresent, staticData),
+    "pending_after_selection_not_empty",
+    "$.afterState.selection.playerCardInstanceIds"
+)
+
+local afterIntentPresent = clone(pending)
+afterIntentPresent.afterState.characterIntent = {
+    cardInstanceIds = { "character-hand-001" },
+    publicActionTag = "vigilance",
+}
+assertError(
+    "pending afterState clears character intent",
+    runScript("test", "stateSchema", "validatePendingTurn", afterIntentPresent, staticData),
+    "pending_after_character_intent_not_empty",
+    "$.afterState.characterIntent.cardInstanceIds"
+)
+assertError(
+    "pending afterState clears public action",
+    runScript("test", "stateSchema", "validatePendingTurn", afterIntentPresent, staticData),
+    "pending_after_public_action_present",
+    "$.afterState.characterIntent.publicActionTag"
+)
+
+local afterRngBeforeProjection = clone(pending)
+afterRngBeforeProjection.projectionReceipt.projectedRng.cursor =
+    afterRngBeforeProjection.afterState.rng.cursor + 1
+assertError(
+    "pending after RNG covers projection",
+    runScript("test", "stateSchema", "validatePendingTurn", afterRngBeforeProjection, staticData),
+    "after_rng_before_projection",
+    "$.afterState.rng.cursor"
+)
+
+local fingerprintTamperedPending = clone(pending)
+fingerprintTamperedPending.beforeState.cardInstances[2].temporaryModifiers = {}
+fingerprintTamperedPending.beforeState.turnStartReceipt.authorityFingerprint = nil
+fingerprintTamperedPending.beforeState = assertOk(
+    "reseal harmlessly changed pending authority",
+    runScript("test", "stateSchema", "sealTurnStartReceipt", fingerprintTamperedPending.beforeState, staticData)
+).state
+assertError(
+    "pending source fingerprint covers optional state fields",
+    runScript("test", "stateSchema", "validatePendingTurn", fingerprintTamperedPending, staticData),
+    "projection_fingerprint_mismatch",
+    "$.projectionReceipt.source.fingerprint"
+)
 
 local skippedTurn = clone(pending)
 skippedTurn.afterState.turnNumber = skippedTurn.beforeState.turnNumber + 2
@@ -1036,40 +1260,148 @@ endedBefore.beforeState.status = "defeat"
 endedBefore.beforeState.turnNumber = endedBefore.beforeState.turnLimit
 assert(runScript("test", "stateSchema", "validatePendingTurn", endedBefore, staticData).ok == false)
 
-local pendingMarkerOnly = {
-    status = "awaitingOutput",
-    turnId = pending.turnId,
-    beforeState = setmetatable({}, {
-        __index = function()
-            error("PENDING_PRIVATE_READ")
-        end,
-        __pairs = function()
-            error("PENDING_PRIVATE_ITERATION")
-        end,
+local nonEmptyPendingAuthority = clone(pending)
+nonEmptyPendingAuthority.beforeState.selection.playerCardInstanceIds = { "player-001" }
+assertError(
+    "pending authority selection must stay empty",
+    runScript("test", "stateSchema", "validatePendingTurn", nonEmptyPendingAuthority, staticData),
+    "pending_authority_selection_not_empty",
+    "$.beforeState.selection.playerCardInstanceIds"
+)
+
+local pendingTurnMismatch = clone(pending)
+pendingTurnMismatch.turnId = "battle-0001-turn-999"
+pendingTurnMismatch.afterState.lastCommittedTurnId = pendingTurnMismatch.turnId
+assertError(
+    "pending turnId receipt mismatch",
+    runScript("test", "stateSchema", "validatePendingTurn", pendingTurnMismatch, staticData),
+    "pending_turn_id_mismatch",
+    "$.turnId"
+)
+
+local pendingReceiptRngTamper = clone(pending)
+pendingReceiptRngTamper.projectionReceipt.projectedRng.cursor =
+    pendingReceiptRngTamper.projectionReceipt.projectedRng.cursor + 1
+pendingReceiptRngTamper.afterState.rng.cursor =
+    pendingReceiptRngTamper.projectionReceipt.projectedRng.cursor
+assertOk(
+    "pending shape permits deferred semantic replay",
+    runScript("test", "stateSchema", "validatePendingTurn", pendingReceiptRngTamper, staticData)
+)
+assertError(
+    "pending semantic receipt tamper",
+    runScript("test", "turnDraft", "validateProjectionReceipt", pendingReceiptRngTamper.beforeState, staticData, pendingReceiptRngTamper.projectionReceipt),
+    "projection_receipt_mismatch",
+    "$.receipt"
+)
+assertError(
+    "awaiting View rejects semantic receipt tamper",
+    runScript("test", "viewBuilder", "buildBattleView", pendingBefore, staticData, {
+        pendingTurn = pendingReceiptRngTamper,
     }),
-    afterState = {
-        character = { resistance = 987654 },
-    },
-    turnResult = "PRIVATE_PENDING_CANARY",
-}
+    "projection_receipt_mismatch"
+)
+
+local alternateAuthority = clone(pendingBefore)
+alternateAuthority.cardInstances[2].temporaryModifiers = {}
+alternateAuthority.turnStartReceipt.authorityFingerprint = nil
+alternateAuthority = assertOk(
+    "seal alternate awaiting authority",
+    runScript("test", "stateSchema", "sealTurnStartReceipt", alternateAuthority, staticData)
+).state
+assertError(
+    "awaiting View rejects another valid authority",
+    runScript("test", "viewBuilder", "buildBattleView", alternateAuthority, staticData, { pendingTurn = pending }),
+    "projection_receipt_stale"
+)
+
+local pendingBeforeSnapshot = clone(pendingBefore)
+local pendingSnapshot = clone(pending)
 local waitingView = assertOk(
     "awaiting battleView",
-    runScript("test", "viewBuilder", "buildBattleView", baseState, staticData, pendingMarkerOnly)
+    runScript("test", "viewBuilder", "buildBattleView", pendingBefore, staticData, { pendingTurn = pending })
 ).view
 assert(waitingView.phase == "awaitingOutput" and waitingView.locked == true)
 assert(waitingView.character.resistance == 30, "afterState leaked before output")
+assert(waitingView.selection.mode == "action" and waitingView.selection.focusedInstanceId == nil)
+assert(waitingView.hand.items[4].instanceId == "player-preview-001"
+    and waitingView.hand.items[4].origin == "preview"
+    and waitingView.hand.items[4].selected == true
+    and waitingView.hand.items[4].selectionOrder == 2,
+    "awaiting View did not replay the selected preview card")
+local repeatedWaitingView = assertOk(
+    "deterministic awaiting battleView",
+    runScript("test", "viewBuilder", "buildBattleView", pendingBefore, staticData, { pendingTurn = pending })
+).view
+assert(deepEqual(waitingView, repeatedWaitingView), "awaiting View replay was not deterministic")
+assert(deepEqual(pendingBefore, pendingBeforeSnapshot) and deepEqual(pending, pendingSnapshot),
+    "awaiting View build mutated authority state or pendingTurn")
+repeatedWaitingView.hand.items[1].name = "PENDING_OUTPUT_ALIAS_TAMPER"
+repeatedWaitingView.selection.mode = "pass"
+assert(deepEqual(pendingBefore, pendingBeforeSnapshot) and deepEqual(pending, pendingSnapshot),
+    "mutating awaiting View output changed authority state or pendingTurn")
+assert(staticData.cards.read_the_room.name == staticEyeName,
+    "mutating awaiting View output changed static data")
+for _, item in ipairs(waitingView.hand.items) do
+    assert(item.playable == false and item.reasonCode == "awaiting_output")
+end
 local waitingEncoded = assertOk(
     "awaiting encode",
     runScript("test", "dataBridge", "encode", "battleView", waitingView)
 ).encoded
 assert(not waitingEncoded:find("987654", 1, true), "afterState value leaked into waiting View")
-assert(not waitingEncoded:find("PRIVATE_PENDING_CANARY", 1, true), "pending private marker leaked into View")
+assert(not waitingEncoded:find("internal_test", 1, true), "pending internal event leaked into View")
+assert(not waitingEncoded:find("llm_test", 1, true), "pending LLM event leaked into View")
+assert(not waitingEncoded:find("character-hand-001", 1, true), "character intent instance leaked into waiting View")
+assert(not waitingEncoded:find("projectedRng", 1, true), "projection RNG receipt leaked into waiting View")
 
-local revealedState = clone(baseState)
+local passProjection = assertOk(
+    "pending pass projection",
+    runScript("test", "turnDraft", "project", pendingBefore, staticData, pendingEmptyDraft)
+).projection
+local passReceipt = assertOk(
+    "pending pass receipt",
+    runScript("test", "turnDraft", "sealProjection", pendingBefore, staticData, passProjection)
+).receipt
+local passPending = clone(pending)
+passPending.projectionReceipt = passReceipt
+passPending.selectedCards.player = {}
+local waitingPassView = assertOk(
+    "awaiting pass battleView",
+    runScript("test", "viewBuilder", "buildBattleView", pendingBefore, staticData, { pendingTurn = passPending })
+).view
+assert(waitingPassView.selection.mode == "pass"
+    and waitingPassView.selection.canSubmit == false
+    and waitingPassView.selection.reasonCode == "awaiting_output")
+
+local chainProjection = assertOk(
+    "pending chain-pass projection",
+    runScript("test", "turnDraft", "project", pendingBefore, staticData, pendingChainDraft)
+).projection
+local chainReceipt = assertOk(
+    "pending chain-pass receipt",
+    runScript("test", "turnDraft", "sealProjection", pendingBefore, staticData, chainProjection)
+).receipt
+local chainPending = clone(pending)
+chainPending.projectionReceipt = chainReceipt
+chainPending.selectedCards.player = { "player-001" }
+local waitingChainView = assertOk(
+    "awaiting chain-pass battleView",
+    runScript("test", "viewBuilder", "buildBattleView", pendingBefore, staticData, { pendingTurn = chainPending })
+).view
+assert(waitingChainView.selection.mode == "chain_pass"
+    and waitingChainView.selection.canSubmit == false
+    and waitingChainView.selection.reasonCode == "awaiting_output")
+
+local revealedState = clone(viewState)
 revealedState.character.planSlot.revealed = true
+local revealedDraft = assertOk(
+    "revealed plan draft",
+    runScript("test", "turnDraft", "newDraft", revealedState, staticData)
+).draft
 local revealedView = assertOk(
     "revealed plan View",
-    runScript("test", "viewBuilder", "buildBattleView", revealedState, staticData)
+    runScript("test", "viewBuilder", "buildBattleView", revealedState, staticData, { draft = revealedDraft })
 ).view
 assert(revealedView.character.plan.status == "revealed")
 assert(revealedView.character.plan.card.cardId == "silent_glare")
@@ -1088,6 +1420,42 @@ assertError(
     runScript("test", "viewBuilder", "validateBattleView", badExtra),
     "unknown_field",
     "$.privateProfile"
+)
+
+local badOrigin = clone(view)
+badOrigin.hand.items[1].origin = "deck"
+assertError(
+    "invalid View card origin",
+    runScript("test", "viewBuilder", "validateBattleView", badOrigin),
+    "invalid_card_origin",
+    "$.hand.items[1].origin"
+)
+
+local badMode = clone(view)
+badMode.selection.mode = "legacy"
+assertError(
+    "invalid View selection mode",
+    runScript("test", "viewBuilder", "validateBattleView", badMode),
+    "invalid_selection_value",
+    "$.selection"
+)
+
+local missingFocus = clone(view)
+missingFocus.selection.focusedInstanceId = "missing-card-001"
+assertError(
+    "focused View card must be visible",
+    runScript("test", "viewBuilder", "validateBattleView", missingFocus),
+    "focused_card_not_visible",
+    "$.selection.focusedInstanceId"
+)
+
+local lockedFocus = clone(waitingView)
+lockedFocus.selection.focusedInstanceId = "player-001"
+assertError(
+    "awaiting View drops focus",
+    runScript("test", "viewBuilder", "validateBattleView", lockedFocus),
+    "locked_view_focus",
+    "$.selection.focusedInstanceId"
 )
 assertError(
     "bridge unknown View field",
@@ -1199,9 +1567,13 @@ for _, handSize in ipairs({ 0, 1, 3, 5 }) do
             position = index,
         })
     end
+    local handDraft = assertOk(
+        "hand draft " .. handSize,
+        runScript("test", "turnDraft", "newDraft", handState, staticData)
+    ).draft
     local sizedView = assertOk(
         "hand size " .. handSize,
-        runScript("test", "viewBuilder", "buildBattleView", handState, staticData)
+        runScript("test", "viewBuilder", "buildBattleView", handState, staticData, { draft = handDraft })
     ).view
     assert(sizedView.hand.count == handSize and #sizedView.hand.items == handSize)
     local sizedEncoded = assertOk(

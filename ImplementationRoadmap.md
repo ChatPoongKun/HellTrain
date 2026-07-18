@@ -36,13 +36,13 @@
 | 기존 `toChatVar` / `toState` | 초기 구현 | 전투 View 경로에는 사용하지 않고 상태 역변환 API도 만들지 않음. 기존 호출 정리는 후속 범위 |
 | `loadDB` / `saveDB` | JSON 전용 구현 | 진행 상태용으로 한정하며 정적 정의는 별도 `staticData.lua` 제한 로더를 사용 |
 | `System/staticData.lua` | 제한 로더·검증기 작성 및 로컬 통합 검사 통과 | 실제 RisuAI에서 로어북 검색·컴파일과 통합 검증 필요 |
-| `System/stateSchema.lua` | `battleState`·`pendingTurn`·턴 시작 영수증 생성/엄격 검증기 작성 및 로컬 검사 통과 | 실제 채팅 변수 저장 연결은 후속 범위 |
-| `System/viewBuilder.lua` | 공개 허용 목록 `battleView` 생성/검증기 작성 및 로컬 검사 통과 | 실제 CBS/HTML 출력 연결은 후속 범위 |
+| `System/stateSchema.lua` | `battleState`·턴 시작 영수증과 projection 영수증을 가진 `pendingTurn`의 strict shape·교차 연결 검증기 작성 및 로컬 검사 통과 | projection 의미 재생은 소비자 책임이며 실제 채팅 변수 저장 연결은 후속 범위 |
+| `System/viewBuilder.lua` | 검증된 draft·pendingTurn에서 선택·프리뷰·출력 대기를 재현하는 공개 허용 목록 `battleView` 생성/검증기 작성 및 로컬 검사 통과 | 실제 CBS/HTML 출력 연결은 후속 범위 |
 | `System/dataBridge.lua` | `cbs-json-nodes-v1` 검증·인코딩·게시 경계 작성 | 로컬 wire 재구성은 통과했으나 실제 RisuAI CBS 해석과 저장은 미검증 |
 | `System/deterministicRng.lua` | 고정 시드·커서 기반 범위 난수와 셔플 작성, 별도 프로세스 재현 검사 통과 | 실제 RisuAI Lua 런타임 교차 검증 필요 |
 | `System/cardZones.lua` | 드로우·재섞기·사용·제거·계획·턴 정리, 등록 카드 `used → hand` 복원과 보존 검사 작성 | initializer 포함 10턴 로컬 검사 통과, 실제 RisuAI 교차 검증 필요 |
 | `System/effectEngine.lua` | 선택 효과, `canPlay`·일반·무드·트리거 콜백과 효과 명령 검증·적용 구현 | 로컬 검사 통과, 실제 RisuAI 교차 검증 필요 |
-| `System/turnDraft.lua` | focus·등록·취소, 결정적 프리뷰, projection 생성·전체 재생 검증 구현 | `battleView`와 수동 전송 연결은 후속 승인 범위 |
+| `System/turnDraft.lua` | focus·등록·취소, 결정적 프리뷰, projection 전체 검증과 최소 projection 영수증 봉인·재생 검증 구현 | `battleView` 입력 경계는 로컬 연결, 실제 수동 전송은 후속 승인 범위 |
 | `System/turnResolver.lua` | initializer 영수증과 검증된 projection에서 카드·트리거·계획·승패·무드·정리를 해결하고 결정적 사건 로그 생성 | 로컬 다중 턴 연결 완료, 실제 저장·전송 연결은 후속 범위 |
 | `onButtonClick` | 작성됨 | 현재 존재하지 않는 전투 스크립트를 호출하는 버튼이 다수 있음 |
 | `editDisplay` | 빈 콜백 | 값을 반환하지 않아 실제 콜백 체인에서 문제가 될 수 있음 |
@@ -97,11 +97,11 @@
 | 환경 | 아이디어 4개 | 알파용 임시 수치이며 데이터화되지 않음 |
 | LLM 묘사 데이터 | 프로토타입 10장에 포함 | 실제 턴 사건 공개 경계와 출력 품질 검증은 남음 |
 
-프로토타입 플레이어 카드 6장과 유지영 카드 4장을 Lua DB로 이관했다. 제한 로더, 상태/View 경계, 선택 projection, 공용 트리거 파이프라인, `turn_start` initializer, 총효과 기반 캐릭터 선택과 10턴 자동 진행 검사는 통과했다. 실제 RisuAI 통합은 남아 있다. 카드의 최종 수치와 문구는 알파 콘텐츠 단계에서 조정한다.
+프로토타입 플레이어 카드 6장과 유지영 카드 4장을 Lua DB로 이관했다. 제한 로더, projection 영수증을 포함한 상태/View 경계, 선택 projection, 공용 트리거 파이프라인, `turn_start` initializer, 총효과 기반 캐릭터 선택과 10턴 자동 진행 검사는 통과했다. 실제 RisuAI 통합은 남아 있다. 카드의 최종 수치와 문구는 알파 콘텐츠 단계에서 조정한다.
 
 ### 3.5 테스트와 배포
 
-- `Tests/local-contract-check.ps1`이 정적 로드, 상태·View 스키마, 비공개 경계와 CBS wire의 자료형·순서를 로컬 Lua 호스트에서 검사한다.
+- `Tests/local-contract-check.ps1`이 정적 로드, pending projection 영수증의 shape·교차 연결, draft/대기 View 재생, 비공개 경계와 CBS wire의 자료형·순서를 로컬 Lua 호스트에서 검사한다.
 - `Tests/deterministic-rng-check.ps1`, `Tests/card-zones-check.ps1`, `Tests/turn-draft-check.ps1`, `Tests/effect-engine-check.ps1`, `Tests/trigger-pipeline-check.ps1`, `Tests/character-selector-check.ps1`, `Tests/turn-initializer-check.ps1`, `Tests/turn-resolver-check.ps1`, `Tests/multi-turn-check.ps1`이 난수 재현, 카드 보존, 승인된 선택·패스 전이, 효과 명령, 트리거 순서, 캐릭터 점수, 턴 시작 영수증, 결정적 단일 턴 해결과 10턴 반복을 검사한다.
 - 로컬 검사는 `lua` 명령이 없으면 설치된 Lua Language Server의 내장 호스트를 사용한다. 이는 실제 RisuAI 런타임 검사가 아니다.
 - UI/LLM 없이 `turn_start`와 캐릭터 선택을 포함한 10턴 자동 시뮬레이터가 같은 시드의 전체 추적 재현성과 카드 보존을 검사한다.
@@ -320,7 +320,7 @@ Codex 작업:
 
 ### 2단계: 데이터 계약과 최소 콘텐츠 이관
 
-상태: 진행 중. 플레이어 카드 6장, 유지영 카드 4장, 특징·환경·캐릭터 정의, 제한 로더와 `battleState`·`pendingTurn`·`battleView` 경계를 작성하고 로컬 계약 검사를 통과했다. 실제 RisuAI의 로어북 검색·컴파일, 채팅 변수 저장과 CBS 렌더링 검증은 아직 남아 있다.
+상태: 진행 중. 플레이어 카드 6장, 유지영 카드 4장, 특징·환경·캐릭터 정의, 제한 로더와 `battleState`·projection 영수증 기반 `pendingTurn`·draft-aware `battleView` 경계를 작성하고 로컬 계약 검사를 통과했다. 실제 RisuAI의 로어북 검색·컴파일, 채팅 변수 저장과 CBS 렌더링 검증은 아직 남아 있다.
 
 목표는 엔진과 화면이 함께 사용할 안정적인 카드·캐릭터 정의를 만드는 것이다.
 
@@ -330,7 +330,7 @@ Codex 작업:
 - 완료: 카드, 계획, 특징, 환경과 캐릭터 정의 스키마 구현
 - 완료: 필수 필드, ID 중복, 태그, 메커니즘과 계획 제한 검증기 작성
 - 완료(로컬): 실행 함수와 비공개 데이터가 세이브나 View에 섞이지 않도록 허용 목록 경계 구현
-- 완료(로컬): `battleState`, `pendingTurn`, `battleView`의 최소 스키마 작성
+- 완료(로컬): `battleState`, projection 영수증 기반 `pendingTurn`, draft·pending-aware `battleView`의 strict 스키마 작성
 - 완료(로컬): 전투 View 전용 브리지의 배열 순서, CBS 구문 보호와 숫자·불리언·빈 값 wire 검사
 - 남음(실제 환경): 새 Lua 로어북 등록, `setChatVar` 저장과 CBS `getvar`·`dictelement`·`#each` 해석 확인
 
@@ -348,7 +348,7 @@ Codex 작업:
 
 ### 3단계: LLM과 UI 없는 전투 엔진
 
-상태: 로컬 완료. 결정적 RNG, 카드 영역, 선택 projection, 공용 트리거 파이프라인, `turn_start` receipt·기본 드로우·캐릭터 의도를 조립하는 initializer, 총효과 기반 최소 카드 선택과 post-selection 턴 해결기를 10턴 반복하는 순수 함수 검사가 통과했다. 실제 RisuAI 런타임 연결은 4단계 범위다.
+상태: 로컬 완료. 결정적 RNG, 카드 영역, 선택 projection과 최소 재생 영수증, 공용 트리거 파이프라인, `turn_start` receipt·기본 드로우·캐릭터 의도를 조립하는 initializer, 총효과 기반 최소 카드 선택과 post-selection 턴 해결기를 10턴 반복하는 순수 함수 검사가 통과했다. 실제 RisuAI 런타임 연결은 4단계 범위다.
 
 목표는 같은 입력이 항상 같은 결과를 내는 순수 전투 판정을 먼저 완성하는 것이다.
 
@@ -357,6 +357,7 @@ Codex 작업:
 - 완료(로컬): 덱, 손패, 사용, 버림, 제거와 계획 슬롯 구현
 - 완료(로컬): 드로우 부족 시 재섞기와 턴 종료 정리 구현
 - 완료(로컬): projection 재생 검증, 은폐 비용, 저항 피해와 승패 중단 구현
+- 완료(로컬): projection 영수증 봉인과 권위 `beforeState` 기반 의미 재생, pending strict shape와 선택 교차 연결 구현
 - 완료(로컬): snapshot 기반 고정 트리거 순서와 결정적 사건 로그 구현
 - 완료(로컬): 연계, 제거, 계획, 간파의 현재 프로토타입 경로 구현
 - 완료(로컬): 무드 성과, `5-4-4-5` 경계와 유지영의 순응 기준 +1 구현
@@ -384,12 +385,14 @@ Codex 작업:
 
 Codex 작업:
 
+- 완료(로컬): draft focus·등록 순서·프리뷰와 pending 영수증을 각각 검증해 `selecting`·`awaitingOutput` View를 재생
+- 완료(로컬): 무선택 `pass`, 연계만 사용한 `chain_pass`, 주 행동 `action`의 전송 가능 요약과 대기 잠금 구현
 - `battleView`를 `toChatVar`로 전달
 - `battleui.html`의 하드코딩 값을 `dict_element`로 교체
 - 손패, 효과와 사건 목록을 CBS 반복문으로 교체
 - 카드 클릭은 `turnDraft`의 focus·등록·취소와 공개 프리뷰만 바꾸도록 구현
 - 무선택 패스, 연계 후 패스와 주 행동 사용을 같은 RisuAI 전송 흐름에 연결
-- 선택 중, 출력 대기와 결과 공개 View 구현
+- 결과 공개 View와 실제 상태 전환 연결
 - 손패 0, 1, 3, 5장 레이아웃 검증
 
 사용자 작업:
@@ -531,7 +534,7 @@ Codex 작업:
 4. 완료: `CardDataContract.md`와 유지영의 테스트 전투 데이터를 확정한다.
 5. 완료: 최신 웹 버전 사용과 `main.lua`/개별 로어북 등록 구조를 확인했다. 첫 메시지 서술은 후속 단계로 보류한다.
 6. 완료(로컬): DB 스키마, 상태/View 경계와 계약 검증기를 만든다. 실제 RisuAI 통합 확인은 4단계 연결 작업과 함께 수행한다.
-7. 완료(로컬): 결정적 난수, 카드 영역 순환, `turnDraft` projection 검증, 공용 트리거, `turn_start` receipt·initializer, 총효과 기반 캐릭터 선택과 비용·효과·간파·무드·승패를 포함한 턴 해결기를 10턴 자동 진행으로 검증했다.
+7. 완료(로컬): 결정적 난수, 카드 영역 순환, `turnDraft` projection·최소 영수증 검증, pending/View 재생 경계, 공용 트리거, `turn_start` receipt·initializer, 총효과 기반 캐릭터 선택과 비용·효과·간파·무드·승패를 포함한 턴 해결기를 10턴 자동 진행으로 검증했다.
 8. 실제 전투 모듈 구성이 준비되면 정확한 diff의 승인을 받아 `System/main.lua`에 런타임 훅을 연결한다.
 9. 전투 판정을 `battleView`와 정상 수동 전송 흐름에 연결하고 실제 훅 순서를 검증한다.
 

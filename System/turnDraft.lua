@@ -19,13 +19,14 @@
         }
     end
 
-    local function success(draft, projection)
+    local function success(draft, projection, receipt)
         return {
             ok = true,
             schemaVersion = SCHEMA_VERSION,
             errors = {},
             draft = draft,
             projection = projection,
+            receipt = receipt,
         }
     end
 
@@ -447,8 +448,8 @@
             return
         end
         checkAllowedKeys(value, { seed = true, cursor = true }, path, errors)
-        if not isSafeInteger(value.seed, 1) then
-            table.insert(errors, makeError("invalid_rng_seed", path .. ".seed", "RNG seed는 양의 안전 정수여야 합니다."))
+        if not isSafeInteger(value.seed, 0) then
+            table.insert(errors, makeError("invalid_rng_seed", path .. ".seed", "RNG seed는 0 이상의 안전 정수여야 합니다."))
         end
         if not isSafeInteger(value.cursor, 0) then
             table.insert(errors, makeError("invalid_rng_cursor", path .. ".cursor", "RNG cursor는 0 이상의 안전 정수여야 합니다."))
@@ -1338,6 +1339,164 @@
         return success(nil, expectedProjection)
     end
 
+    local function buildProjectionReceipt(projection)
+        local selectedIds, selectedError = cloneValue(
+            projection.selectedCardInstanceIds,
+            "$.projection.selectedCardInstanceIds"
+        )
+        if selectedError then
+            return nil, selectedError
+        end
+        local source, sourceError = cloneValue(projection.source, "$.projection.source")
+        if sourceError then
+            return nil, sourceError
+        end
+        local projectedRng, rngError = cloneValue(projection.projectedRng, "$.projection.projectedRng")
+        if rngError then
+            return nil, rngError
+        end
+        return {
+            schemaVersion = SCHEMA_VERSION,
+            kind = "turnDraftProjectionReceipt",
+            mode = projection.mode,
+            selectedCardInstanceIds = selectedIds,
+            source = source,
+            projectedRng = projectedRng,
+        }, nil
+    end
+
+    local function validateProjectionReceiptShape(receipt)
+        local errors = {}
+        if type(receipt) ~= "table" or getmetatable(receipt) ~= nil then
+            return {
+                makeError(
+                    "invalid_projection_receipt",
+                    "$.receipt",
+                    "turnDraftProjectionReceipt가 일반 테이블이 아닙니다."
+                ),
+            }
+        end
+        checkAllowedKeys(receipt, {
+            schemaVersion = true,
+            kind = true,
+            mode = true,
+            selectedCardInstanceIds = true,
+            source = true,
+            projectedRng = true,
+        }, "$.receipt", errors)
+        if receipt.schemaVersion ~= SCHEMA_VERSION then
+            table.insert(errors, makeError(
+                "unsupported_projection_receipt_schema",
+                "$.receipt.schemaVersion",
+                "지원하지 않는 projection 영수증 스키마입니다."
+            ))
+        end
+        if receipt.kind ~= "turnDraftProjectionReceipt" then
+            table.insert(errors, makeError(
+                "invalid_projection_receipt_kind",
+                "$.receipt.kind",
+                "projection 영수증 kind는 turnDraftProjectionReceipt여야 합니다."
+            ))
+        end
+        if receipt.mode ~= "pass"
+            and receipt.mode ~= "chain_pass"
+            and receipt.mode ~= "action" then
+            table.insert(errors, makeError(
+                "invalid_projection_mode",
+                "$.receipt.mode",
+                "알 수 없는 projection 영수증 mode입니다."
+            ))
+        end
+        validateIdArray(
+            receipt.selectedCardInstanceIds,
+            "$.receipt.selectedCardInstanceIds",
+            errors
+        )
+        if type(receipt.source) ~= "table" or getmetatable(receipt.source) ~= nil then
+            table.insert(errors, makeError(
+                "invalid_projection_source",
+                "$.receipt.source",
+                "projection 영수증 원본 표식이 올바르지 않습니다."
+            ))
+        end
+        validateRng(receipt.projectedRng, "$.receipt.projectedRng", errors)
+        return errors
+    end
+
+    local function sealProjection(state, staticData, projection)
+        local validated = validateProjection(state, staticData, projection)
+        if type(validated) ~= "table" or validated.ok ~= true then
+            return validated
+        end
+        local receipt, receiptError = buildProjectionReceipt(validated.projection)
+        if receiptError then
+            return failure({ receiptError })
+        end
+        return success(nil, validated.projection, receipt)
+    end
+
+    local function validateProjectionReceipt(state, staticData, receipt)
+        local stateCopy, normalizedStaticData, authorityErrors = validateAuthority(state, staticData)
+        if authorityErrors then
+            return failure(authorityErrors)
+        end
+
+        local receiptCopy, cloneError = cloneValue(receipt, "$.receipt")
+        if cloneError then
+            return failure({ cloneError })
+        end
+        local shapeErrors = validateProjectionReceiptShape(receiptCopy)
+        if #shapeErrors > 0 then
+            return failure(shapeErrors)
+        end
+
+        local expectedSource, sourceError = buildSource(stateCopy)
+        if sourceError then
+            return failure({ sourceError })
+        end
+        if not deepEqual(receiptCopy.source, expectedSource) then
+            return failure({
+                makeError(
+                    "projection_receipt_stale",
+                    "$.receipt.source",
+                    "projection 영수증을 만든 뒤 권위 전투 상태가 변경되었습니다."
+                ),
+            })
+        end
+
+        local replay, replayErrors = replaySelection(
+            stateCopy,
+            normalizedStaticData,
+            receiptCopy.selectedCardInstanceIds,
+            false
+        )
+        if replayErrors then
+            return failure(replayErrors)
+        end
+        local expectedProjection, projectionError = buildProjection(
+            stateCopy,
+            expectedSource,
+            replay
+        )
+        if projectionError then
+            return failure({ projectionError })
+        end
+        local expectedReceipt, receiptError = buildProjectionReceipt(expectedProjection)
+        if receiptError then
+            return failure({ receiptError })
+        end
+        if not deepEqual(receiptCopy, expectedReceipt) then
+            return failure({
+                makeError(
+                    "projection_receipt_mismatch",
+                    "$.receipt",
+                    "projection 영수증이 같은 선택을 권위 상태에서 재생한 결과와 다릅니다."
+                ),
+            })
+        end
+        return success(nil, expectedProjection, expectedReceipt)
+    end
+
     local arguments = { ... }
     local actions = {
         newDraft = newDraft,
@@ -1348,6 +1507,8 @@
         clickCard = clickCard,
         project = project,
         validateProjection = validateProjection,
+        sealProjection = sealProjection,
+        validateProjectionReceipt = validateProjectionReceipt,
     }
     local handler = actions[action]
     if not handler then
