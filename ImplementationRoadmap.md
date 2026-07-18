@@ -44,6 +44,7 @@
 | `System/effectEngine.lua` | 선택 효과, `canPlay`·일반·무드·트리거 콜백과 효과 명령 검증·적용 구현 | 로컬 검사 통과, 실제 RisuAI 교차 검증 필요 |
 | `System/turnDraft.lua` | focus·등록·취소, 결정적 프리뷰, projection 전체 검증과 최소 projection 영수증 봉인·재생 검증 구현 | `battleView` 입력 경계는 로컬 연결, 실제 수동 전송은 후속 승인 범위 |
 | `System/turnResolver.lua` | initializer 영수증과 검증된 projection에서 카드·트리거·계획·승패·무드·정리를 해결하고 결정적 사건 로그 생성 | 로컬 다중 턴 연결 완료, 실제 저장·전송 연결은 후속 범위 |
+| `System/turnEventProjector.lua` | 판정 원본의 트리거 입력·조건·명령을 재검증하고 post-output `publicResult`와 모델용 `llmEvent` 허용 목록으로 재구성 | 트리거 누락·중복·수치 위조, 숨은 계획·runtime ID·RNG·선택 감사 자료의 비누출과 별도 프로세스 결정성 통과, `battleRuntime`·요청·출력 훅 연결은 후속 범위 |
 | `onButtonClick` | 작성됨 | 현재 존재하지 않는 전투 스크립트를 호출하는 버튼이 다수 있음 |
 | `editDisplay` | 빈 콜백 | 값을 반환하지 않아 실제 콜백 체인에서 문제가 될 수 있음 |
 | `onStart` | 임시 차단 코드 | 초기화와 전송 제어 의도가 현재 이벤트 역할과 맞는지 재검증 필요 |
@@ -95,7 +96,7 @@
 | 캐릭터 카드 | 유지영용 4장 | 캐릭터 행동과 비공개 계획의 최소 엔진 경로를 테스트할 수 있음 |
 | 플레이어 퍽 | 없음 | 최대 3개 규칙만 있고 실제 콘텐츠 없음 |
 | 환경 | 아이디어 4개 | 알파용 임시 수치이며 데이터화되지 않음 |
-| LLM 묘사 데이터 | 프로토타입 10장에 포함 | 실제 턴 사건 공개 경계와 출력 품질 검증은 남음 |
+| LLM 묘사 데이터 | 프로토타입 10장과 strict 사건 투영 경계 작성 | 카드별 narration과 숨은 정보의 로컬 투영 검증 완료, 실제 프롬프트 조립과 출력 품질 검증은 남음 |
 
 프로토타입 플레이어 카드 6장과 유지영 카드 4장을 Lua DB로 이관했다. 제한 로더, projection 영수증을 포함한 상태/View 경계, 선택 projection, 공용 트리거 파이프라인, `turn_start` initializer, 총효과 기반 캐릭터 선택과 10턴 자동 진행 검사는 통과했다. 실제 RisuAI 통합은 남아 있다. 카드의 최종 수치와 문구는 알파 콘텐츠 단계에서 조정한다.
 
@@ -103,6 +104,7 @@
 
 - `Tests/local-contract-check.ps1`이 정적 로드, pending projection 영수증의 shape·교차 연결, draft/대기 View 재생, 비공개 경계와 CBS wire의 자료형·순서를 로컬 Lua 호스트에서 검사한다.
 - `Tests/deterministic-rng-check.ps1`, `Tests/card-zones-check.ps1`, `Tests/turn-draft-check.ps1`, `Tests/effect-engine-check.ps1`, `Tests/trigger-pipeline-check.ps1`, `Tests/character-selector-check.ps1`, `Tests/turn-initializer-check.ps1`, `Tests/turn-resolver-check.ps1`, `Tests/multi-turn-check.ps1`이 난수 재현, 카드 보존, 승인된 선택·패스 전이, 효과 명령, 트리거 순서, 캐릭터 점수, 턴 시작 영수증, 결정적 단일 턴 해결과 10턴 반복을 검사한다.
+- `Tests/turn-event-projector-check.ps1`이 일반 행동·제거·승패, 숨은 계획 억제·배치·만료와 공개 발동, 트리거 입력·조건·명령 재현, 내부 canary 폐기, malformed 원본의 fail-closed 처리와 10턴·별도 프로세스 결정성을 검사한다.
 - 로컬 검사는 `lua` 명령이 없으면 설치된 Lua Language Server의 내장 호스트를 사용한다. 이는 실제 RisuAI 런타임 검사가 아니다.
 - UI/LLM 없이 `turn_start`와 캐릭터 선택을 포함한 10턴 자동 시뮬레이터가 같은 시드의 전체 추적 재현성과 카드 보존을 검사한다.
 - 파일을 실제 RisuAI 캐릭터·모듈의 로어북과 트리거에 반영하는 패키징 절차가 저장소에 없다.
@@ -209,7 +211,7 @@
 | 미정 사항 | 담당 | 정해야 할 내용 |
 |---|---|---|
 | 빈 입력 전송 경로 | 사용자·공동 | 최신 웹의 [`DefaultChatScreen.svelte`](https://github.com/kwaroran/Risuai/blob/main/src/lib/ChatScreens/DefaultChatScreen.svelte)는 빈 입력에서 `onInput`을 호출하지 않는다. 빈 입력 UX를 유지하며 `onStart`에서 처리하고 재생성·계속·자동 계속·프롬프트 미리보기를 제한할지, 비어 있지 않은 턴 확인 입력으로 `onInput`을 사용할지 결정 |
-| 턴 사건 형식 | 공동 | LLM에 전달할 행동·생각·결과·비공개 정보의 필드와 공개 경계 |
+| 턴 사건 형식 | 완료(로컬 계약) | `TurnEventProjectionContract.md`와 strict 투영기로 행동·생각·결과 필드, 숨은 계획과 캐릭터 카드의 공개 경계를 확정. 실제 프롬프트 문장과 RisuAI 전달은 후속 연결 범위 |
 | 기본 묘사 지침 | 사용자 | 문체, 길이, 시점, 대사 비중, 금지 표현과 한 턴의 목표 분량 |
 | 생성 실패 UX | 공동 | 대기 UI 문구, 재시도 방법과 전투 중단 복구 방식 |
 | 출력 재생성 | 공동 | 어떤 assistant 메시지와 `turnId`를 연결하고 과거 턴 재생성 시 상태를 유지하는 방식 |
@@ -410,17 +412,21 @@ Codex 작업:
 
 ### 5단계: 정상 LLM 요청과 턴 트랜잭션
 
+상태: 부분 진행. 판정 원본을 공개 UI 사건과 LLM 서술 사건으로 분리하는 strict 투영기와 비누출·결정성 검사를 로컬에서 완료했다. pending 조립, 정상 요청과 출력 확정 훅은 아직 연결하지 않았다.
+
 목표는 사용자의 수동 전송으로 판정, 묘사와 결과 반영이 한 번만 이어지게 만드는 것이다.
 
 Codex 작업:
 
 - `beforeState`, `turnResult`, `afterState` 대기 트랜잭션 구현
+- 완료(로컬): `turnResolution.events`를 `publicResult`와 `llmEvent`로 분리하고 숨은 계획·runtime ID·RNG·선택 감사 자료를 제거하는 strict 투영기 구현
 - `editRequest`에 공개 가능한 턴 사건과 묘사 지침만 추가
 - UI 메시지를 모델 요청에서 제외
 - `onOutput`에서 결과를 멱등하게 한 번만 반영
 - 이전 UI 제거와 최신 출력 아래 새 UI 추가
 - 생성 실패, 재시도와 재생성 시 같은 `turnResult` 재사용
-- 비공개 계획이 UI와 LLM 입력에 새지 않는지 검사
+- 완료(로컬): 숨은 계획 억제·배치·만료, 캐릭터 카드 ID와 내부 canary가 공개/LLM 사건에 새지 않는지 검사
+- 실제 RisuAI 요청과 CBS UI에서 같은 비공개 경계를 다시 확인
 
 사용자 작업:
 
@@ -535,8 +541,10 @@ Codex 작업:
 5. 완료: 최신 웹 버전 사용과 `main.lua`/개별 로어북 등록 구조를 확인했다. 첫 메시지 서술은 후속 단계로 보류한다.
 6. 완료(로컬): DB 스키마, 상태/View 경계와 계약 검증기를 만든다. 실제 RisuAI 통합 확인은 4단계 연결 작업과 함께 수행한다.
 7. 완료(로컬): 결정적 난수, 카드 영역 순환, `turnDraft` projection·최소 영수증 검증, pending/View 재생 경계, 공용 트리거, `turn_start` receipt·initializer, 총효과 기반 캐릭터 선택과 비용·효과·간파·무드·승패를 포함한 턴 해결기를 10턴 자동 진행으로 검증했다.
-8. 실제 전투 모듈 구성이 준비되면 정확한 diff의 승인을 받아 `System/main.lua`에 런타임 훅을 연결한다.
-9. 전투 판정을 `battleView`와 정상 수동 전송 흐름에 연결하고 실제 훅 순서를 검증한다.
+8. 완료(로컬): 판정 원본을 post-output 공개 사건과 LLM 서술 사건으로 분리하고 숨은 정보·감사 식별자를 제거하는 strict 투영기를 검증한다.
+9. projection 영수증 재생, resolver, 사건 투영과 `pendingTurn` 조립·재사용·확정을 하나의 `battleRuntime` 트랜잭션으로 묶는다.
+10. 실제 훅이 필요한 시점에 정확한 계획과 diff를 보고하고 승인을 받아 `System/main.lua`를 수정한다.
+11. 전투 판정을 `battleView`와 정상 수동 전송 흐름에 연결하고 실제 훅 순서를 검증한다.
 
 첫 구현 목표는 다음 한 문장으로 고정한다.
 
