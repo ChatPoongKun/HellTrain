@@ -1167,6 +1167,13 @@ local pending = {
     },
     afterState = afterState,
 }
+pending = assertOk(
+    "pendingTurn integrity constructor",
+    runScript("test", "stateSchema", "newPendingTurn", pending, staticData)
+).value
+assert(type(pending.integrity) == "table"
+    and pending.integrity.algorithm == "canonical_poly131_137_pending_v1",
+    "pendingTurn integrity receipt missing")
 
 local pendingShape = assertOk("pendingTurn", runScript("test", "stateSchema", "validatePendingTurn", pending, staticData))
 assert(pendingShape.projectionReplayValidated == false, "stateSchema claimed semantic projection replay")
@@ -1284,6 +1291,10 @@ pendingReceiptRngTamper.projectionReceipt.projectedRng.cursor =
     pendingReceiptRngTamper.projectionReceipt.projectedRng.cursor + 1
 pendingReceiptRngTamper.afterState.rng.cursor =
     pendingReceiptRngTamper.projectionReceipt.projectedRng.cursor
+pendingReceiptRngTamper = assertOk(
+    "reseal pending semantic receipt tamper",
+    runScript("test", "stateSchema", "newPendingTurn", pendingReceiptRngTamper, staticData)
+).value
 assertOk(
     "pending shape permits deferred semantic replay",
     runScript("test", "stateSchema", "validatePendingTurn", pendingReceiptRngTamper, staticData)
@@ -1366,6 +1377,10 @@ local passReceipt = assertOk(
 local passPending = clone(pending)
 passPending.projectionReceipt = passReceipt
 passPending.selectedCards.player = {}
+passPending = assertOk(
+    "seal pass pending",
+    runScript("test", "stateSchema", "newPendingTurn", passPending, staticData)
+).value
 local waitingPassView = assertOk(
     "awaiting pass battleView",
     runScript("test", "viewBuilder", "buildBattleView", pendingBefore, staticData, { pendingTurn = passPending })
@@ -1385,6 +1400,10 @@ local chainReceipt = assertOk(
 local chainPending = clone(pending)
 chainPending.projectionReceipt = chainReceipt
 chainPending.selectedCards.player = { "player-001" }
+chainPending = assertOk(
+    "seal chain pending",
+    runScript("test", "stateSchema", "newPendingTurn", chainPending, staticData)
+).value
 local waitingChainView = assertOk(
     "awaiting chain-pass battleView",
     runScript("test", "viewBuilder", "buildBattleView", pendingBefore, staticData, { pendingTurn = chainPending })

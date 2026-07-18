@@ -3,6 +3,7 @@
     local MAX_SAFE_INTEGER = 9007199254740991
     local FINGERPRINT_ALGORITHM = "canonical_poly131_137_receipt_v2"
     local DRAFT_FINGERPRINT_ALGORITHM = "canonical_poly131_137_v1"
+    local PENDING_INTEGRITY_ALGORITHM = "canonical_poly131_137_pending_v1"
 
     local VALID_STATUS = {
         active = true,
@@ -409,6 +410,40 @@
         end
         return {
             algorithm = DRAFT_FINGERPRINT_ALGORITHM,
+            length = #canonical,
+            hashA = hashA,
+            hashB = hashB,
+        }, nil
+    end
+
+    local function fingerprintPendingTurn(pending)
+        local payload = {}
+        for key, value in pairs(pending) do
+            if key ~= "integrity" then
+                payload[key] = value
+            end
+        end
+        local ok, canonical = pcall(canonicalJson, payload, "$", {})
+        if not ok then
+            if type(canonical) == "table" and canonical.code and canonical.path and canonical.message then
+                return nil, canonical
+            end
+            return nil, {
+                code = "fingerprint_failed",
+                path = "$.integrity",
+                message = "pendingTurn 무결성 fingerprint 생성에 실패했습니다: " .. tostring(canonical),
+            }
+        end
+
+        local hashA = 0
+        local hashB = 0
+        for index = 1, #canonical do
+            local byte = string.byte(canonical, index)
+            hashA = (hashA * 131 + byte) % 2147483647
+            hashB = (hashB * 137 + byte) % 2147483629
+        end
+        return {
+            algorithm = PENDING_INTEGRITY_ALGORITHM,
             length = #canonical,
             hashA = hashA,
             hashB = hashB,
@@ -2357,6 +2392,43 @@
         return valid
     end
 
+    local function validatePendingIntegrity(pending, errors)
+        local path = "$.integrity"
+        local value = pending.integrity
+        if type(value) ~= "table" then
+            addError(errors, "missing_pending_integrity", path, "pendingTurn에는 전체 저장값 무결성 영수증이 필요합니다.")
+            return
+        end
+        checkAllowedKeys(value, {
+            algorithm = true,
+            length = true,
+            hashA = true,
+            hashB = true,
+        }, path, errors)
+
+        local valid = true
+        if value.algorithm ~= PENDING_INTEGRITY_ALGORITHM then
+            addError(errors, "invalid_pending_integrity_algorithm", path .. ".algorithm", "지원하지 않는 pendingTurn 무결성 알고리즘입니다.")
+            valid = false
+        end
+        for _, field in ipairs({ "length", "hashA", "hashB" }) do
+            if not isSafeInteger(value[field], 0) then
+                addError(errors, "invalid_pending_integrity", path .. "." .. field, "pendingTurn 무결성 수치는 0 이상의 안전한 정수여야 합니다.")
+                valid = false
+            end
+        end
+        if not valid then
+            return
+        end
+
+        local expected, fingerprintError = fingerprintPendingTurn(pending)
+        if fingerprintError then
+            addError(errors, fingerprintError.code, fingerprintError.path, fingerprintError.message)
+        elseif not fingerprintsEqual(value, expected) then
+            addError(errors, "pending_integrity_mismatch", path, "pendingTurn 저장값이 생성 뒤 변경되었습니다.")
+        end
+    end
+
     local function validateProjectionReceiptShape(receipt, path, errors)
         if type(receipt) ~= "table" then
             addError(errors, "invalid_projection_receipt", path, "projectionReceipt가 객체가 아닙니다.")
@@ -2462,6 +2534,7 @@
             selectedCards = true,
             turnResult = true,
             afterState = true,
+            integrity = true,
         }, "$", errors)
 
         if pending.schemaVersion ~= SCHEMA_VERSION then
@@ -2644,6 +2717,8 @@
             end
         end
 
+        validatePendingIntegrity(pending, errors)
+
         local report = result(errors, pending)
         report.referencesValidated = referencesValidated
         report.projectionReplayValidated = false
@@ -2715,6 +2790,7 @@
             value.schemaVersion = SCHEMA_VERSION
             value.kind = "pendingTurn"
             value.status = "awaitingOutput"
+            value.integrity = nil
             return value
         end)
 
@@ -2723,6 +2799,14 @@
             addError(errors, "construct_failed", "$", "pendingTurn 생성에 실패했습니다: " .. tostring(pending))
             return result(errors)
         end
+
+        local integrity, integrityError = fingerprintPendingTurn(pending)
+        if integrityError then
+            local errors = {}
+            addError(errors, integrityError.code, integrityError.path, integrityError.message)
+            return result(errors)
+        end
+        pending.integrity = integrity
 
         local validation = validatePendingTurn(pending, staticData)
         if not validation.ok then

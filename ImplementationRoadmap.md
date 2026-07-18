@@ -36,7 +36,7 @@
 | 기존 `toChatVar` / `toState` | 초기 구현 | 전투 View 경로에는 사용하지 않고 상태 역변환 API도 만들지 않음. 기존 호출 정리는 후속 범위 |
 | `loadDB` / `saveDB` | JSON 전용 구현 | 진행 상태용으로 한정하며 정적 정의는 별도 `staticData.lua` 제한 로더를 사용 |
 | `System/staticData.lua` | 제한 로더·검증기 작성 및 로컬 통합 검사 통과 | 실제 RisuAI에서 로어북 검색·컴파일과 통합 검증 필요 |
-| `System/stateSchema.lua` | `battleState`·턴 시작 영수증과 projection 영수증을 가진 `pendingTurn`의 strict shape·교차 연결 검증기 작성 및 로컬 검사 통과 | projection 의미 재생은 소비자 책임이며 실제 채팅 변수 저장 연결은 후속 범위 |
+| `System/stateSchema.lua` | `battleState`·턴 시작 영수증과 projection 영수증·전체 무결성 영수증을 가진 `pendingTurn`의 strict shape·교차 연결 검증기 작성 및 로컬 검사 통과 | projection 의미 재생은 소비자 책임이며 실제 채팅 변수 저장 연결은 후속 범위 |
 | `System/viewBuilder.lua` | 검증된 draft·pendingTurn에서 선택·프리뷰·출력 대기를 재현하는 공개 허용 목록 `battleView` 생성/검증기 작성 및 로컬 검사 통과 | 실제 CBS/HTML 출력 연결은 후속 범위 |
 | `System/dataBridge.lua` | `cbs-json-nodes-v1` 검증·인코딩·게시 경계 작성 | 로컬 wire 재구성은 통과했으나 실제 RisuAI CBS 해석과 저장은 미검증 |
 | `System/deterministicRng.lua` | 고정 시드·커서 기반 범위 난수와 셔플 작성, 별도 프로세스 재현 검사 통과 | 실제 RisuAI Lua 런타임 교차 검증 필요 |
@@ -44,11 +44,13 @@
 | `System/effectEngine.lua` | 선택 효과, `canPlay`·일반·무드·트리거 콜백과 효과 명령 검증·적용 구현 | 로컬 검사 통과, 실제 RisuAI 교차 검증 필요 |
 | `System/turnDraft.lua` | focus·등록·취소, 결정적 프리뷰, projection 전체 검증과 최소 projection 영수증 봉인·재생 검증 구현 | `battleView` 입력 경계는 로컬 연결, 실제 수동 전송은 후속 승인 범위 |
 | `System/turnResolver.lua` | initializer 영수증과 검증된 projection에서 카드·트리거·계획·승패·무드·정리를 해결하고 결정적 사건 로그 생성 | 로컬 다중 턴 연결 완료, 실제 저장·전송 연결은 후속 범위 |
-| `System/turnEventProjector.lua` | 판정 원본의 트리거 입력·조건·명령을 재검증하고 post-output `publicResult`와 모델용 `llmEvent` 허용 목록으로 재구성 | 트리거 누락·중복·수치 위조, 숨은 계획·runtime ID·RNG·선택 감사 자료의 비누출과 별도 프로세스 결정성 통과, `battleRuntime`·요청·출력 훅 연결은 후속 범위 |
+| `System/turnEventProjector.lua` | 판정 원본의 트리거 입력·조건·명령을 재검증하고 post-output `publicResult`와 모델용 `llmEvent` 허용 목록으로 재구성 | 트리거 누락·중복·수치 위조, 숨은 계획·runtime ID·RNG·선택 감사 자료의 비누출과 별도 프로세스 결정성 통과, `battleRuntime` 로컬 연결 완료. 실제 요청·출력 훅은 후속 범위 |
+| `System/battleRuntime.lua` | projection 봉인→resolver→사건 투영→pending 조립, 저장 결과 재사용과 `lastCommittedTurnId` 기반 멱등 확정 구현 | 로컬 트랜잭션 검증 완료, 실제 채팅 변수 저장과 훅 연결은 후속 승인 범위 |
 | `onButtonClick` | 작성됨 | 현재 존재하지 않는 전투 스크립트를 호출하는 버튼이 다수 있음 |
 | `editDisplay` | 빈 콜백 | 값을 반환하지 않아 실제 콜백 체인에서 문제가 될 수 있음 |
-| `onStart` | 임시 차단 코드 | 초기화와 전송 제어 의도가 현재 이벤트 역할과 맞는지 재검증 필요 |
-| `onInput` / `editRequest` / `onOutput` | 없음 | 수동 전송 기반 전투를 위해 새로 필요 |
+| `onStart` | 임시 차단 코드 | 빈 입력 정상 생성에서 prepare/reuse를 분기하는 제한된 역할로 교체할 계획이며 수정 전 별도 승인 필요 |
+| `onInput` | 없음 | 빈 입력 UX에서는 사용하지 않는 안으로 정리했으며 실제 최신 웹 훅 검증에서 재확인 |
+| `editRequest` / `onOutput` | 없음 | 저장된 LLM 사건 주입과 멱등 commit을 위해 새로 필요하며 수정 전 별도 승인 필요 |
 
 `System/main.lua`는 저장소 지침상 명시적 사용자 승인 없이 수정할 수 없다. 런타임 훅을 연결하는 단계에 들어가기 전에 별도 승인을 받는다.
 
@@ -105,6 +107,7 @@
 - `Tests/local-contract-check.ps1`이 정적 로드, pending projection 영수증의 shape·교차 연결, draft/대기 View 재생, 비공개 경계와 CBS wire의 자료형·순서를 로컬 Lua 호스트에서 검사한다.
 - `Tests/deterministic-rng-check.ps1`, `Tests/card-zones-check.ps1`, `Tests/turn-draft-check.ps1`, `Tests/effect-engine-check.ps1`, `Tests/trigger-pipeline-check.ps1`, `Tests/character-selector-check.ps1`, `Tests/turn-initializer-check.ps1`, `Tests/turn-resolver-check.ps1`, `Tests/multi-turn-check.ps1`이 난수 재현, 카드 보존, 승인된 선택·패스 전이, 효과 명령, 트리거 순서, 캐릭터 점수, 턴 시작 영수증, 결정적 단일 턴 해결과 10턴 반복을 검사한다.
 - `Tests/turn-event-projector-check.ps1`이 일반 행동·제거·승패, 숨은 계획 억제·배치·만료와 공개 발동, 트리거 입력·조건·명령 재현, 내부 canary 폐기, malformed 원본의 fail-closed 처리와 10턴·별도 프로세스 결정성을 검사한다.
+- `Tests/battle-runtime-check.ps1`이 projection 봉인부터 pending 조립까지의 단일 실행, 전체 pending 무결성, 저장 결과 재사용, stale·malformed 거부, 반환 alias 차단과 최초·중복·늦은 출력 확정의 멱등성을 별도 프로세스에서 검사한다.
 - 로컬 검사는 `lua` 명령이 없으면 설치된 Lua Language Server의 내장 호스트를 사용한다. 이는 실제 RisuAI 런타임 검사가 아니다.
 - UI/LLM 없이 `turn_start`와 캐릭터 선택을 포함한 10턴 자동 시뮬레이터가 같은 시드의 전체 추적 재현성과 카드 보존을 검사한다.
 - 파일을 실제 RisuAI 캐릭터·모듈의 로어북과 트리거에 반영하는 패키징 절차가 저장소에 없다.
@@ -412,19 +415,19 @@ Codex 작업:
 
 ### 5단계: 정상 LLM 요청과 턴 트랜잭션
 
-상태: 부분 진행. 판정 원본을 공개 UI 사건과 LLM 서술 사건으로 분리하는 strict 투영기와 비누출·결정성 검사를 로컬에서 완료했다. pending 조립, 정상 요청과 출력 확정 훅은 아직 연결하지 않았다.
+상태: 부분 진행. strict 사건 투영기와 projection 봉인·resolver·투영·pending 조립·재사용·멱등 확정을 묶는 순수 `battleRuntime`을 로컬에서 완료했다. 정상 요청, 실제 저장과 출력 훅은 아직 연결하지 않았다.
 
 목표는 사용자의 수동 전송으로 판정, 묘사와 결과 반영이 한 번만 이어지게 만드는 것이다.
 
 Codex 작업:
 
-- `beforeState`, `turnResult`, `afterState` 대기 트랜잭션 구현
+- 완료(로컬): `beforeState`, `turnResult`, `afterState` 대기 트랜잭션 조립과 projection 영수증 재검증 구현
 - 완료(로컬): `turnResolution.events`를 `publicResult`와 `llmEvent`로 분리하고 숨은 계획·runtime ID·RNG·선택 감사 자료를 제거하는 strict 투영기 구현
 - `editRequest`에 공개 가능한 턴 사건과 묘사 지침만 추가
 - UI 메시지를 모델 요청에서 제외
-- `onOutput`에서 결과를 멱등하게 한 번만 반영
+- 완료(로컬): `lastCommittedTurnId`를 사용해 최초 반영과 중복·늦은 재호출을 구분하는 순수 commit 구현. 실제 `onOutput` 저장 연결은 남음
 - 이전 UI 제거와 최신 출력 아래 새 UI 추가
-- 생성 실패, 재시도와 재생성 시 같은 `turnResult` 재사용
+- 완료(로컬): 생성 실패, 재시도와 재생성 시 resolver/projector를 다시 부르지 않고 같은 `turnResult`를 검증·복제하는 경계 구현
 - 완료(로컬): 숨은 계획 억제·배치·만료, 캐릭터 카드 ID와 내부 canary가 공개/LLM 사건에 새지 않는지 검사
 - 실제 RisuAI 요청과 CBS UI에서 같은 비공개 경계를 다시 확인
 
@@ -542,7 +545,7 @@ Codex 작업:
 6. 완료(로컬): DB 스키마, 상태/View 경계와 계약 검증기를 만든다. 실제 RisuAI 통합 확인은 4단계 연결 작업과 함께 수행한다.
 7. 완료(로컬): 결정적 난수, 카드 영역 순환, `turnDraft` projection·최소 영수증 검증, pending/View 재생 경계, 공용 트리거, `turn_start` receipt·initializer, 총효과 기반 캐릭터 선택과 비용·효과·간파·무드·승패를 포함한 턴 해결기를 10턴 자동 진행으로 검증했다.
 8. 완료(로컬): 판정 원본을 post-output 공개 사건과 LLM 서술 사건으로 분리하고 숨은 정보·감사 식별자를 제거하는 strict 투영기를 검증한다.
-9. projection 영수증 재생, resolver, 사건 투영과 `pendingTurn` 조립·재사용·확정을 하나의 `battleRuntime` 트랜잭션으로 묶는다.
+9. 완료(로컬): projection 영수증 재생, resolver, 사건 투영과 `pendingTurn` 조립·재사용·확정을 하나의 `battleRuntime` 트랜잭션으로 묶는다.
 10. 실제 훅이 필요한 시점에 정확한 계획과 diff를 보고하고 승인을 받아 `System/main.lua`를 수정한다.
 11. 전투 판정을 `battleView`와 정상 수동 전송 흐름에 연결하고 실제 훅 순서를 검증한다.
 

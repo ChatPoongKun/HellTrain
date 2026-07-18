@@ -13,6 +13,7 @@
 → turnDraft(JSON 선택 초안) / 전송 projection
 → turnResolution(JSON 판정 원본)
 → turnEventProjector(publicResult / llmEvent 허용 목록)
+→ battleRuntime(봉인·조립·재사용·멱등 확정)
 → pendingTurn(JSON 저장 가능)
 → 명시적 허용 목록 View 생성기
 → battleView(공개 데이터만 포함)
@@ -303,6 +304,12 @@ pending 저장에는 전체 projection 대신 `turnDraft.sealProjection`이 만�
     },
 
     afterState = battleStateSnapshot,
+    integrity = {
+        algorithm = "canonical_poly131_137_pending_v1",
+        length = 12345,
+        hashA = 123456789,
+        hashB = 987654321,
+    },
 }
 ```
 
@@ -310,12 +317,17 @@ pending 저장에는 전체 projection 대신 `turnDraft.sealProjection`이 만�
 - `projectionReceipt.source`의 전투·상태·턴·마지막 확정 턴·RNG·전체 상태 fingerprint는 `beforeState`와 같아야 한다. `pendingTurn.turnId`는 `beforeState.turnStartReceipt.turnId`와 같아야 한다.
 - `selectedCards.player`는 `projectionReceipt.selectedCardInstanceIds`와, `selectedCards.character`는 `beforeState.characterIntent.cardInstanceIds`와 순서까지 같아야 한다.
 - `afterState.lastCommittedTurnId`는 이 트랜잭션의 `turnId`다. 해결이 끝난 상태이므로 `turnStartReceipt`는 없고 플레이어 selection과 캐릭터 intent·공개 행동 태그도 모두 비어 있어야 한다.
-- `afterState.rng.cursor`는 최소한 `projectionReceipt.projectedRng.cursor` 이상이어야 한다. 이 교차 연결은 선택 단계보다 이전 RNG를 결과로 저장하는 실수만 막으며, turnResult와 afterState 전체 의미 대조는 추후 `battleRuntime` 책임이다.
+- `afterState.rng.cursor`는 최소한 `projectionReceipt.projectedRng.cursor` 이상이어야 한다. `battleRuntime.preparePending`이 resolver·projector의 성공 결과를 직접 조립해 `turnResult`와 `afterState` 의미를 연결하고, 생성 뒤에는 전체 무결성 영수증이 그 저장값이 그대로 유지되었는지 확인한다.
 - 재시도와 재생성에서는 저장된 `afterState`와 `llmEvent`를 재사용하고 판정하지 않는다.
-- `turnResult.events`는 검증된 `turnResolution.events`에서 가져오며 개별 판정 사건은 `TurnResolutionContract.md`의 사건 로그 스키마를 따른다. `publicResult`와 `llmEvent`는 `turnEventProjector`가 원본의 source·side·phase·cause와 값 타입을 검사한 뒤 각각의 공개 허용 목록으로 새로 조립한다. 숨은 계획, runtime ID, RNG와 선택 감사 정보는 이 경계에서 제거하며 세부 규칙은 `TurnEventProjectionContract.md`를 따른다. 현재 `stateSchema`의 pending v1 validator는 저장 경계에서 개별 투영 사건의 의미를 재검사하지 않고 JSON 저장 가능한 연속 배열 shape만 검사하므로, 후속 `battleRuntime`은 성공한 투영 결과를 변형 없이 사용해야 한다.
+- `turnResult.events`는 검증된 `turnResolution.events`에서 가져오며 개별 판정 사건은 `TurnResolutionContract.md`의 사건 로그 스키마를 따른다. `publicResult`와 `llmEvent`는 `turnEventProjector`가 원본의 source·side·phase·cause와 값 타입을 검사한 뒤 각각의 공개 허용 목록으로 새로 조립한다. 숨은 계획, runtime ID, RNG와 선택 감사 정보는 이 경계에서 제거하며 세부 규칙은 `TurnEventProjectionContract.md`를 따른다.
+- `integrity`는 `stateSchema.newPendingTurn`이 자신을 제외한 pending 전체를 정규화해 만든 이중 다항 fingerprint다. `validatePendingTurn`은 생성 뒤 `events`, 공개·LLM 투영, `beforeState`나 `afterState` 중 어느 한 값이라도 달라지면 `pending_integrity_mismatch`로 거부한다.
+- `battleRuntime.preparePending`은 full projection을 다시 봉인하고 resolver와 projector를 각각 한 번 성공시킨 뒤 그 결과를 변형 없이 pending으로 조립한다. `reusePending`은 shape·전체 무결성과 projection 영수증을 다시 검증하고 resolver/projector를 재실행하지 않는다. 아직 대기 중인 실패·재시도뿐 아니라 같은 `turnId`가 이미 반영된 출력 재생성에도 같은 pending을 돌려준다.
+- `battleRuntime.commitPending`은 현재 상태가 `beforeState`와 정확히 같을 때만 `afterState`를 반환한다. 현재 상태의 `lastCommittedTurnId`가 같은 `turnId`라면 이미 반영된 호출이므로 현재 상태를 그대로 반환하며, 그 밖의 stale 상태는 거부한다.
 - 같은 해결 시점에 저항과 은폐가 모두 0 이하라면 `afterState.status`는 `victory`다.
 
-`stateSchema.validatePendingTurn`은 strict shape와 위 교차 연결을 검사하지만 카드 DB 의미에 따른 선택·프리뷰·RNG 재생은 하지 않는다. 성공 보고서의 `projectionReplayValidated = false`가 이 경계를 명시한다. 소비자는 별도로 `turnDraft.validateProjectionReceipt(beforeState, staticData, projectionReceipt)`를 성공시켜야 한다. `battleView`는 출력 대기 View를 만들 때 이를 수행하고, 추후 `battleRuntime`도 저장 결과를 재사용하거나 확정하기 직전에 다시 수행해야 한다.
+`stateSchema.validatePendingTurn`은 strict shape, 위 교차 연결과 전체 무결성을 검사하지만 카드 DB 의미에 따른 선택·프리뷰·RNG 재생은 하지 않는다. 성공 보고서의 `projectionReplayValidated = false`가 이 경계를 명시한다. 소비자는 별도로 `turnDraft.validateProjectionReceipt(beforeState, staticData, projectionReceipt)`를 성공시켜야 한다. `battleView`는 출력 대기 View를 만들 때, `battleRuntime`은 저장 결과를 재사용하거나 확정하기 직전에 이를 수행한다.
+
+`integrity`는 우발적 변경과 무단 필드 편집을 탐지하기 위한 결정적 영수증이지 비밀 키를 사용하는 인증이나 암호학적 보안 경계는 아니다. 생성 API를 직접 호출할 권한이 있는 코드까지 신뢰할 수 없다면 별도의 keyed seal이 필요하다. 세부 조정 순서는 `BattleRuntimeContract.md`를 따른다.
 
 ## 5. `battleView` 버전 1
 
