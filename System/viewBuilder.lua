@@ -534,11 +534,36 @@
             return failure(errors)
         end
         context = context or {}
-        checkAllowedKeys(context, { draft = true, pendingTurn = true }, "$.context", errors)
+        checkAllowedKeys(context, {
+            draft = true,
+            pendingTurn = true,
+            lastCommittedPending = true,
+            generationLocked = true,
+        }, "$.context", errors)
         local draftInput = rawget(context, "draft")
         local pendingInput = rawget(context, "pendingTurn")
+        local lastCommittedInput = rawget(context, "lastCommittedPending")
+        local generationLocked = rawget(context, "generationLocked")
+        if generationLocked ~= nil and generationLocked ~= true then
+            addError(
+                errors,
+                "invalid_generation_lock",
+                "$.context.generationLocked",
+                "generationLocked는 생성을 기다리는 동안에만 true로 지정할 수 있습니다."
+            )
+            return failure(errors)
+        end
         if draftInput ~= nil and pendingInput ~= nil then
             addError(errors, "ambiguous_view_context", "$.context", "draft와 pendingTurn을 동시에 표시할 수 없습니다.")
+            return failure(errors)
+        end
+        if generationLocked and pendingInput ~= nil then
+            addError(
+                errors,
+                "ambiguous_generation_lock",
+                "$.context",
+                "pendingTurn 자체가 이미 출력 대기 잠금을 나타내므로 generationLocked를 함께 사용할 수 없습니다."
+            )
             return failure(errors)
         end
 
@@ -604,22 +629,72 @@
                 appendNestedErrors(errors, "$.context.draft", draftValidation)
                 return failure(errors)
             end
-            phase = "selecting"
-            locked = false
+            phase = generationLocked and "awaitingOutput" or "selecting"
+            locked = generationLocked == true
             local startReceipt = type(state.turnStartReceipt) == "table" and state.turnStartReceipt or nil
             turnId = startReceipt and startReceipt.turnId
                 or string.format("%s-turn-%03d", state.battleId, state.turnNumber)
             selectedIds = draftValidation.draft.registeredCardInstanceIds
             previewIds = draftValidation.draft.preview.availableDrawnInstanceIds
-            focusedInstanceId = draftValidation.draft.focusedInstanceId
+            if not generationLocked then
+                focusedInstanceId = draftValidation.draft.focusedInstanceId
+            end
         else
-            if draftInput ~= nil or pendingInput ~= nil then
-                addError(errors, "ended_view_context", "$.context", "종료된 battleView에는 draft나 pendingTurn을 사용할 수 없습니다.")
+            if draftInput ~= nil or pendingInput ~= nil or generationLocked then
+                addError(errors, "ended_view_context", "$.context", "종료된 battleView에는 draft, 현재 pendingTurn, 생성 잠금을 사용할 수 없습니다.")
                 return failure(errors)
             end
             phase = "ended"
             locked = true
             turnId = state.lastCommittedTurnId or string.format("%s-turn-%03d", state.battleId, state.turnNumber)
+        end
+
+        local lastTurn = { available = false }
+        if lastCommittedInput ~= nil then
+            if state.lastCommittedTurnId == nil then
+                addError(
+                    errors,
+                    "unexpected_last_committed_pending",
+                    "$.context.lastCommittedPending",
+                    "확정 턴이 없는 상태에는 직전 pendingTurn을 표시할 수 없습니다."
+                )
+                return failure(errors)
+            end
+            if type(lastCommittedInput) ~= "table"
+                or lastCommittedInput.battleId ~= state.battleId
+                or lastCommittedInput.turnId ~= state.lastCommittedTurnId then
+                addError(
+                    errors,
+                    "last_committed_pending_mismatch",
+                    "$.context.lastCommittedPending",
+                    "직전 pendingTurn이 현재 전투의 마지막 확정 턴과 일치하지 않습니다."
+                )
+                return failure(errors)
+            end
+            local presented, presentationCallError = callRuntime(
+                "turnPresentation",
+                "build",
+                lastCommittedInput,
+                data
+            )
+            if presentationCallError then
+                table.insert(errors, presentationCallError)
+                return failure(errors)
+            end
+            if presented.ok ~= true then
+                appendNestedErrors(errors, "$.context.lastCommittedPending", presented)
+                return failure(errors)
+            end
+            if type(presented.lastTurn) ~= "table" or presented.lastTurn.available ~= true then
+                addError(
+                    errors,
+                    "missing_last_turn_presentation",
+                    "$.context.lastCommittedPending",
+                    "직전 확정 턴에서 공개 표시 자료를 만들지 못했습니다."
+                )
+                return failure(errors)
+            end
+            lastTurn = presented.lastTurn
         end
 
         local characterDefinition = data.characters[displayState.character.characterId]
@@ -810,6 +885,7 @@
             },
             selection = selectionView,
             zones = countZones(displayState.cardInstances),
+            lastTurn = lastTurn,
             outcome = {
                 status = displayState.status,
                 label = outcomeLabels[displayState.status],
@@ -1062,6 +1138,7 @@
             hand = true,
             selection = true,
             zones = true,
+            lastTurn = true,
             outcome = true,
         }, "$", errors)
         if view.schemaVersion ~= SCHEMA_VERSION then
@@ -1354,6 +1431,47 @@
                 if not isInteger(view.zones[field], 0) then
                     addError(errors, "invalid_zone_count", "$.zones." .. field, "카드 영역 개수가 올바르지 않습니다.")
                 end
+            end
+        end
+
+        if type(view.lastTurn) ~= "table" then
+            addError(errors, "invalid_last_turn", "$.lastTurn", "lastTurn이 테이블이 아닙니다.")
+        else
+            if view.lastTurn.available == false then
+                checkAllowedKeys(view.lastTurn, { available = true }, "$.lastTurn", errors)
+            elseif view.lastTurn.available == true then
+                checkAllowedKeys(view.lastTurn, {
+                    available = true,
+                    turnNumber = true,
+                    summaries = true,
+                }, "$.lastTurn", errors)
+                if not isInteger(view.lastTurn.turnNumber, 1) then
+                    addError(errors, "invalid_last_turn_number", "$.lastTurn.turnNumber", "직전 공개 턴 번호가 올바르지 않습니다.")
+                end
+                local summaryCount = getArrayLength(view.lastTurn.summaries, "$.lastTurn.summaries", errors)
+                if summaryCount then
+                    for index = 1, summaryCount do
+                        local item = view.lastTurn.summaries[index]
+                        local itemPath = "$.lastTurn.summaries[" .. index .. "]"
+                        if type(item) ~= "table" then
+                            addError(errors, "invalid_turn_summary", itemPath, "턴 공개 요약이 테이블이 아닙니다.")
+                        else
+                            checkAllowedKeys(item, {
+                                sequence = true,
+                                type = true,
+                                text = true,
+                            }, itemPath, errors)
+                            if item.sequence ~= index
+                                or not isAsciiId(item.type)
+                                or type(item.text) ~= "string"
+                                or item.text == "" then
+                                addError(errors, "invalid_turn_summary", itemPath, "턴 공개 요약 값이 올바르지 않습니다.")
+                            end
+                        end
+                    end
+                end
+            else
+                addError(errors, "invalid_last_turn_availability", "$.lastTurn.available", "lastTurn.available은 불리언이어야 합니다.")
             end
         end
 

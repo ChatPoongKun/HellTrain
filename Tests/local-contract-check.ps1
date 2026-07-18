@@ -964,6 +964,24 @@ assertError(
     "ambiguous_view_context",
     "$.context"
 )
+assertError(
+    "generation lock only accepts true",
+    runScript("test", "viewBuilder", "buildBattleView", viewState, staticData, {
+        draft = emptyViewDraft,
+        generationLocked = false,
+    }),
+    "invalid_generation_lock",
+    "$.context.generationLocked"
+)
+assertError(
+    "generation lock rejects pending context",
+    runScript("test", "viewBuilder", "buildBattleView", viewState, staticData, {
+        pendingTurn = {},
+        generationLocked = true,
+    }),
+    "ambiguous_generation_lock",
+    "$.context"
+)
 local passView = assertOk(
     "empty pass battleView",
     runScript("test", "viewBuilder", "buildBattleView", viewState, staticData, { draft = emptyViewDraft })
@@ -1028,6 +1046,21 @@ assert(view.character.plan.card == nil)
 for _, item in ipairs(view.hand.items) do
     assert(item.finalStealthCost == item.baseStealthCost)
     assert(item.finalResistanceDamage == item.baseResistanceDamage)
+end
+
+local generationLockedView = assertOk(
+    "generation-locked draft battleView",
+    runScript("test", "viewBuilder", "buildBattleView", viewState, staticData, {
+        draft = viewDraft,
+        generationLocked = true,
+    })
+).view
+assert(generationLockedView.phase == "awaitingOutput" and generationLockedView.locked == true)
+assert(generationLockedView.selection.count == 2 and generationLockedView.selection.canSubmit == false)
+assert(generationLockedView.selection.reasonCode == "awaiting_output")
+assert(generationLockedView.selection.focusedInstanceId == nil)
+for _, item in ipairs(generationLockedView.hand.items) do
+    assert(item.playable == false and item.reasonCode == "awaiting_output")
 end
 
 local encoded = assertOk(

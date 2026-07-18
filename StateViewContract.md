@@ -335,17 +335,21 @@ pending 저장에는 전체 projection 대신 `turnDraft.sealProjection`이 만�
 
 ```text
 schemaVersion, kind, battleId, turnId, phase, locked
-turn, environment, player, character, hand, selection, zones, outcome
+turn, environment, player, character, hand, selection, zones, lastTurn, outcome
 ```
 
 `phase`는 `selecting`, `awaitingOutput`, `ended` 중 하나다. `buildBattleView(state, staticData, context)`의 context는 phase에 따라 엄격히 나뉜다.
 
 - active 선택 중에는 `{ draft = turnDraft }`가 필수다. draft를 검증해 focus, 등록 순서와 공개 프리뷰를 만든다.
-- active 출력 대기에는 `{ pendingTurn = pendingTurn }`만 사용한다. 먼저 `stateSchema.validatePendingTurn`, 다음으로 전달된 현재 확정 `state`에 대한 `turnDraft.validateProjectionReceipt`를 순서대로 성공시킨다.
-- 종료 상태에는 draft와 pendingTurn을 모두 전달하지 않는다.
+- active 출력 대기에는 `{ pendingTurn = pendingTurn }`을 사용한다. 먼저 `stateSchema.validatePendingTurn`, 다음으로 전달된 현재 확정 `state`에 대한 `turnDraft.validateProjectionReceipt`를 순서대로 성공시킨다.
+- 직전 턴을 즉시 재생성하면서 이미 초기화된 다음 턴 draft를 화면에 유지해야 할 때는 `{ draft = turnDraft, generationLocked = true }`를 사용한다. View는 `awaitingOutput`, `locked = true`가 되며 선택·프리뷰는 보존하되 focus와 입력 가능성은 제거한다.
+- `generationLocked`는 생성을 기다리는 active draft에서만 생략하거나 정확히 `true`로 지정한다. pendingTurn과 함께 쓰거나 종료 상태에 전달하면 거부한다.
+- 종료 상태에는 draft, 현재 pendingTurn, 생성 잠금을 전달하지 않는다.
 - draft와 pendingTurn을 동시에 전달하면 모호한 context로 거부한다.
 
-출력 대기 중에는 `locked = true`이며 화면 수치와 zone 수는 `pendingTurn.afterState`나 projection workingState가 아니라 첫 번째 인자의 현재 확정 `battleState`를 사용한다. 영수증 재생 결과에서는 선택 ID와 공개 프리뷰 ID만 가져오며 focus는 보존하지 않는다. 따라서 대기 View는 선택된 프리뷰 카드까지 잠긴 상태로 재현하지만 아직 공개하면 안 되는 판정 결과는 표시하지 않는다.
+세 phase 모두 선택적으로 `lastCommittedPending`을 함께 받을 수 있다. 이는 현재 선택 또는 출력 대기 pending과 별개인 직전 확정 턴이다. `battleId`와 `turnId`가 각각 현재 상태의 `battleId`, `lastCommittedTurnId`에 정확히 일치해야 하며, `turnPresentation.build`가 strict 공개 사건 허용 목록으로 만든 `lastTurn`만 View에 넣는다. 원본 `publicResult`나 pendingTurn은 View에 복사하지 않는다. 직전 확정 턴이 없거나 context를 생략하면 `lastTurn = { available = false }`다.
+
+출력 대기 중에는 `locked = true`이며 화면 수치와 zone 수는 항상 첫 번째 인자의 현재 확정 `battleState`를 사용한다. 현재 pendingTurn 대기라면 영수증 재생 결과에서 선택 ID와 공개 프리뷰 ID만 가져오고, 직전 턴 재생성 잠금이라면 현재 draft의 선택과 프리뷰를 그대로 사용한다. 두 경우 모두 focus는 보존하지 않는다. 따라서 대기 View는 필요한 카드 표시를 잠긴 상태로 재현하지만 아직 공개하면 안 되는 판정 결과는 표시하지 않는다.
 
 손패 항목은 다음 공개 필드만 가진다.
 
@@ -391,6 +395,7 @@ playable, reasonCode, selected, selectionOrder
 - 플레이어 자신의 계획은 정체를 표시할 수 있지만 남은 충전은 버전 1 View에서 표시하지 않는다.
 - `privateProfile`, `actorThought`, 원본 사건, `beforeState`, `afterState`와 대기 결과는 View에 들어가지 않는다.
 - 발동하지 않고 만료되거나 교체된 상대 계획은 `empty`로 돌아가며 과거 정체를 남기지 않는다.
+- `lastTurn`은 출력 확정 뒤의 공개 사건만 `{ sequence, type, text }` 요약으로 표시한다. LLM 전용 사건, 캐릭터 일반 카드 ID, 숨은 계획의 카드명과 runtime 식별자는 포함하지 않는다.
 
 ## 6. CBS 전용 브리지
 
