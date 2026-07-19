@@ -409,7 +409,8 @@ RisuAI 채팅 변수는 문자열만 저장한다. 최신 CBS는 JSON 배열·�
 - 각 중첩 테이블을 그 노드의 JSON 문자열로 한 층 감싼다.
 - 배열 순서는 1부터 `n`까지의 인덱스 순서로 보존하고 객체 키는 정렬해 결정적으로 인코딩한다.
 - 숫자와 불리언은 JSON 자료형으로 유지한다.
-- 문자열 안의 `:`, `{`, `}`는 각각 `\u003A`, `\u007B`, `\u007D`로 이스케이프한다.
+- 원본 `battleView` 문자열은 일반 텍스트지만 HTML/CBS용 wire의 문자열 스칼라는 `&`, `<`, `>`, 따옴표, 중괄호, 괄호, `:`를 HTML 숫자·이름 엔티티로 바꾼다. 브라우저에는 원문으로 보이되 허용 HTML 태그나 새 `{{...}}`/`::` 구문으로 다시 해석되지 않는다.
+- 중첩 노드를 감싸는 JSON 문자열 자체의 구조 문자 `:`, `{`, `}`는 각각 `\u003A`, `\u007B`, `\u007D`로 이스케이프한다.
 - 검증과 인코딩이 모두 성공한 뒤에만 `setChatVar`를 호출한다.
 - 디코드하거나 상태로 역변환하는 API는 제공하지 않는다.
 
@@ -422,7 +423,7 @@ runScript(triggerId, "dataBridge", "encode", "battleView", view)
 runScript(triggerId, "dataBridge", "publish", "battleView", view)
 ```
 
-HTML에서는 깊은 `element` 대신 한 단계씩 `dictelement`를 사용한다. `element`는 현재 CBS 구현에서 `0`, `false`와 빈 문자열을 누락값처럼 취급할 수 있기 때문이다.
+HTML에서는 깊은 `element` 대신 한 단계씩 `dictelement`를 사용한다. `element`는 현재 CBS 구현에서 `0`, `false`와 빈 문자열을 누락값처럼 취급할 수 있기 때문이다. wire에서 꺼낸 표시 문자열은 이미 엔티티 처리됐으므로 템플릿은 이를 다시 가공하지 않고 텍스트 위치에 둔다. 동적 속성에는 스키마가 제한한 runtime ID, enum, 숫자와 `interactionToken`만 사용한다.
 
 ```html
 {{#each {{dictelement::{{dictelement::{{getvar::battleView}}::hand}}::items}} as card}}

@@ -309,12 +309,35 @@
         return encoded
     end
 
+    local HTML_TEXT_ENTITIES = {
+        ["&"] = "&amp;",
+        ["<"] = "&lt;",
+        [">"] = "&gt;",
+        ['"'] = "&quot;",
+        ["'"] = "&#39;",
+        ["{"] = "&#123;",
+        ["}"] = "&#125;",
+        ["("] = "&#40;",
+        [")"] = "&#41;",
+        [":"] = "&#58;",
+    }
+
+    local function escapeHtmlText(value)
+        return (string.gsub(value, "[&<>\"'{}():]", function(character)
+            return HTML_TEXT_ENTITIES[character]
+        end))
+    end
+
     local encodeTable
 
     local function encodeScalar(value)
         local valueType = type(value)
         if valueType == "string" then
-            return encodeJsonString(value, true)
+            -- battleView wire is consumed inside an HTML/CBS template.  Encode
+            -- display text as entities before JSON quoting so allowed HTML tags
+            -- cannot change the template structure and a decoded CBS result
+            -- cannot introduce a fresh {{...}} or :: sequence.
+            return encodeJsonString(escapeHtmlText(value), true)
         elseif valueType == "number" then
             return encodeNumber(value)
         elseif valueType == "boolean" then

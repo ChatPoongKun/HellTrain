@@ -1085,7 +1085,7 @@ local reorderedEncoded = assertOk(
 assert(reorderedEncoded.encoded == encoded.encoded, "equivalent insertion order changed encoding")
 
 local canaryView = clone(view)
-local canaryText = "한글 CBS canary ::tag[contact]:: {{literal}} 끝:"
+local canaryText = "한글 CBS canary ::tag[contact]:: {{literal}} <b data-x=\"quoted\">& 'markup'</b> (끝):"
 canaryView.environment.description = canaryText
 local canaryEncoded = assertOk(
     "CBS punctuation canary encode",
@@ -1094,6 +1094,8 @@ local canaryEncoded = assertOk(
 assert(not canaryEncoded.encoded:find("::", 1, true), "wire exposed raw CBS argument delimiter")
 assert(not canaryEncoded.encoded:find("{{", 1, true), "wire exposed raw CBS opening braces")
 assert(not canaryEncoded.encoded:find("}}", 1, true), "wire exposed raw CBS closing braces")
+assert(not canaryEncoded.encoded:find("<b", 1, true), "wire exposed a raw HTML tag from display text")
+assert(canaryEncoded.encoded:find("&lt;b", 1, true), "wire did not entity-escape HTML display text")
 recordWire("WIRE_CANARY", canaryEncoded.encoded)
 
 local emptyStringView = clone(view)
@@ -1753,7 +1755,10 @@ try {
 
     $canaryRoot = ConvertFrom-Json -InputObject $firstMarkers.WIRE_CANARY
     $canaryEnvironment = ConvertFrom-Json -InputObject $canaryRoot.environment
-    Assert-Contract ($canaryEnvironment.description -ceq '한글 CBS canary ::tag[contact]:: {{literal}} 끝:') 'CBS punctuation or Korean canary did not round-trip'
+    $expectedCanary = '한글 CBS canary ::tag[contact]:: {{literal}} <b data-x="quoted">& ''markup''</b> (끝):'
+    Assert-Contract (-not $canaryEnvironment.description.Contains('<b')) 'HTML canary remained active markup after wire decode'
+    Assert-Contract (-not $canaryEnvironment.description.Contains('{{literal}}')) 'CBS canary remained active syntax after wire decode'
+    Assert-Contract ([System.Net.WebUtility]::HtmlDecode($canaryEnvironment.description) -ceq $expectedCanary) 'HTML/CBS entity text did not render back to the original canary'
 
     $emptyRoot = ConvertFrom-Json -InputObject $firstMarkers.WIRE_EMPTY_STRING
     $emptyEnvironment = ConvertFrom-Json -InputObject $emptyRoot.environment
