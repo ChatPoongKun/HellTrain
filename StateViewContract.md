@@ -426,7 +426,7 @@ runScript(triggerId, "dataBridge", "publish", "battleView", view)
 HTML에서는 깊은 `element` 대신 한 단계씩 `dictelement`를 사용한다. `element`는 현재 CBS 구현에서 `0`, `false`와 빈 문자열을 누락값처럼 취급할 수 있기 때문이다. wire에서 꺼낸 표시 문자열은 이미 엔티티 처리됐으므로 템플릿은 이를 다시 가공하지 않고 텍스트 위치에 둔다. 동적 속성에는 스키마가 제한한 runtime ID, enum, 숫자와 `interactionToken`만 사용한다.
 
 ```html
-{{#each {{dictelement::{{dictelement::{{getvar::battleView}}::hand}}::items}} as card}}
+{{#each::keep {{dictelement::{{dictelement::{{getvar::battleView}}::hand}}::items}} as card}}
   {{dictelement::{{slot::card}}::cardId}}
 {{/each}}
 ```

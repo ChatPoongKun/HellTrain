@@ -1,0 +1,2232 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="함락! 무한의 지옥철 전투 화면">
+<title>함락! 무한의 지옥철 - 전투</title>
+<style>
+.battle-shell {
+color-scheme: dark;
+--bg: #070b12;
+--panel: rgba(17, 24, 39, 0.9);
+--panel-strong: rgba(13, 19, 31, 0.97);
+--panel-soft: rgba(25, 35, 53, 0.72);
+--line: rgba(148, 163, 184, 0.16);
+--line-strong: rgba(148, 163, 184, 0.3);
+--text: #f1f5f9;
+--muted: #9aa9bc;
+--dim: #6f8096;
+--cyan: #40d9ff;
+--cyan-soft: rgba(64, 217, 255, 0.14);
+--rose: #fb7185;
+--rose-soft: rgba(251, 113, 133, 0.14);
+--violet: #a78bfa;
+--violet-soft: rgba(167, 139, 250, 0.15);
+--amber: #fbbf24;
+--amber-soft: rgba(251, 191, 36, 0.13);
+--green: #4ade80;
+--radius: 18px;
+--radius-sm: 12px;
+--shadow: 0 18px 52px rgba(0, 0, 0, 0.34);
+}
+
+* {
+box-sizing: border-box;
+}
+
+html {
+min-width: 320px;
+background: #070b12;
+}
+
+body {
+min-height: 100vh;
+margin: 0;
+overflow-x: hidden;
+color: #f1f5f9;
+background:
+radial-gradient(circle at 14% 0%, rgba(30, 178, 214, 0.12), transparent 32rem),
+radial-gradient(circle at 100% 28%, rgba(124, 58, 237, 0.12), transparent 34rem),
+linear-gradient(180deg, #0a0f19 0%, #070b12 100%);
+font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+line-height: 1.45;
+}
+
+body::before {
+position: fixed;
+inset: 0;
+z-index: 0;
+pointer-events: none;
+content: "";
+opacity: 0.28;
+background-image:
+linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+background-size: 36px 36px;
+mask-image: linear-gradient(to bottom, black, transparent 78%);
+}
+
+button,
+input,
+summary {
+font: inherit;
+}
+
+button,
+label,
+summary {
+-webkit-tap-highlight-color: transparent;
+}
+
+button {
+color: inherit;
+}
+
+.battle-shell {
+position: relative;
+z-index: 1;
+width: min(100%, 1480px);
+min-height: 100vh;
+margin: 0 auto;
+padding: clamp(12px, 1.45vw, 22px) max(62px, calc((100vw - 1480px) / 2 + 62px)) clamp(18px, 2vw, 30px) clamp(12px, 1.45vw, 22px);
+}
+
+.battle-layout {
+display: grid;
+grid-template-columns: minmax(0, 1fr);
+gap: clamp(10px, 1vw, 15px);
+}
+
+.command-bar,
+.vitals-grid,
+.stage-grid,
+.hand-panel,
+.scene-panel,
+.intel-panel {
+min-width: 0;
+}
+
+.panel {
+border: 1px solid var(--line);
+border-radius: var(--radius);
+background: linear-gradient(145deg, rgba(25, 35, 53, 0.88), rgba(12, 18, 29, 0.9));
+box-shadow: var(--shadow), inset 0 1px rgba(255, 255, 255, 0.035);
+backdrop-filter: blur(16px);
+-webkit-backdrop-filter: blur(16px);
+}
+
+.eyebrow,
+.section-kicker,
+.zone-label,
+.metric-label,
+.mini-label {
+color: var(--muted);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 11px;
+font-weight: 700;
+letter-spacing: 0.11em;
+line-height: 1.2;
+text-transform: uppercase;
+}
+
+.command-bar {
+display: grid;
+grid-template-columns: minmax(190px, 0.72fr) minmax(360px, 1.55fr) minmax(250px, 0.88fr);
+align-items: center;
+gap: 20px;
+min-height: 82px;
+padding: 14px 18px;
+}
+
+.session-brand {
+min-width: 0;
+}
+
+.session-brand .eyebrow {
+color: var(--cyan);
+}
+
+.session-title {
+margin: 4px 0 0;
+overflow: hidden;
+color: #fff;
+font-size: clamp(17px, 1.55vw, 22px);
+font-weight: 800;
+letter-spacing: -0.035em;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.route-block {
+min-width: 0;
+}
+
+.route-head {
+display: flex;
+align-items: baseline;
+justify-content: space-between;
+gap: 12px;
+margin-bottom: 9px;
+}
+
+.route-name {
+overflow: hidden;
+color: #dbeafe;
+font-size: 13px;
+font-weight: 700;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.route-count {
+flex: 0 0 auto;
+color: var(--muted);
+font-size: 12px;
+}
+
+.route-count strong {
+margin-left: 4px;
+color: #fff;
+font-size: 15px;
+}
+
+.route-line {
+position: relative;
+height: 8px;
+border: 1px solid rgba(148, 163, 184, 0.15);
+border-radius: 999px;
+background: rgba(2, 6, 23, 0.58);
+}
+
+.route-progress {
+height: 100%;
+border-radius: inherit;
+background: linear-gradient(90deg, #7c3aed, var(--cyan));
+box-shadow: 0 0 15px rgba(64, 217, 255, 0.32);
+}
+
+.route-stops {
+display: flex;
+justify-content: space-between;
+margin-top: -7px;
+padding: 0 1px;
+}
+
+.route-stop {
+width: 7px;
+height: 7px;
+border: 1px solid #526176;
+border-radius: 50%;
+background: #172033;
+}
+
+.route-stop.is-passed {
+border-color: var(--violet);
+background: var(--violet);
+}
+
+.route-stop.is-current {
+width: 12px;
+height: 12px;
+margin-top: -2px;
+border: 2px solid #fff;
+background: var(--cyan);
+box-shadow: 0 0 0 4px rgba(64, 217, 255, 0.13), 0 0 14px var(--cyan);
+}
+
+.environment-card {
+display: grid;
+grid-template-columns: auto 1fr;
+gap: 10px;
+min-width: 0;
+padding: 10px 12px;
+border: 1px solid rgba(251, 191, 36, 0.25);
+border-radius: 13px;
+background: var(--amber-soft);
+}
+
+.environment-icon {
+display: grid;
+width: 36px;
+height: 36px;
+place-items: center;
+border: 1px solid rgba(251, 191, 36, 0.34);
+border-radius: 10px;
+color: var(--amber);
+background: rgba(2, 6, 23, 0.35);
+font-size: 16px;
+font-weight: 900;
+}
+
+.environment-name {
+color: #fde68a;
+font-size: 13px;
+font-weight: 800;
+}
+
+.environment-rule {
+margin-top: 2px;
+color: #d8cfae;
+font-size: 11px;
+line-height: 1.35;
+}
+
+.vitals-grid {
+display: grid;
+grid-template-columns: minmax(220px, 0.8fr) minmax(430px, 1.55fr) minmax(220px, 0.8fr);
+gap: clamp(10px, 1vw, 15px);
+}
+
+.metric-card,
+.mood-card {
+min-height: 146px;
+padding: 16px 17px;
+}
+
+.metric-card {
+display: grid;
+align-content: space-between;
+gap: 12px;
+}
+
+.metric-head {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 10px;
+}
+
+.actor-identity {
+display: flex;
+align-items: center;
+min-width: 0;
+gap: 10px;
+}
+
+.actor-mark {
+display: grid;
+flex: 0 0 auto;
+width: 34px;
+height: 34px;
+place-items: center;
+border: 1px solid var(--line-strong);
+border-radius: 10px;
+background: rgba(2, 6, 23, 0.42);
+font-size: 15px;
+font-weight: 900;
+}
+
+.player-metric .actor-mark {
+color: var(--cyan);
+border-color: rgba(64, 217, 255, 0.28);
+background: var(--cyan-soft);
+}
+
+.target-metric .actor-mark {
+color: var(--rose);
+border-color: rgba(251, 113, 133, 0.28);
+background: var(--rose-soft);
+}
+
+.actor-name {
+overflow: hidden;
+color: #fff;
+font-size: 14px;
+font-weight: 800;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.actor-role {
+margin-top: 1px;
+color: var(--dim);
+font-size: 11px;
+}
+
+.metric-main {
+display: flex;
+align-items: flex-end;
+justify-content: space-between;
+gap: 12px;
+}
+
+.metric-value {
+color: #fff;
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: clamp(32px, 3vw, 42px);
+font-weight: 800;
+letter-spacing: -0.08em;
+line-height: 0.9;
+}
+
+.metric-unit {
+margin-left: 7px;
+color: var(--muted);
+font-size: 12px;
+font-weight: 700;
+letter-spacing: 0;
+}
+
+.player-metric .metric-label,
+.player-metric .metric-note strong {
+color: var(--cyan);
+}
+
+.target-metric .metric-label,
+.target-metric .metric-note strong {
+color: var(--rose);
+}
+
+.metric-note {
+color: var(--muted);
+font-size: 11px;
+text-align: right;
+}
+
+.meter {
+height: 8px;
+overflow: hidden;
+border: 1px solid rgba(148, 163, 184, 0.14);
+border-radius: 999px;
+background: rgba(2, 6, 23, 0.65);
+}
+
+.meter-fill {
+height: 100%;
+border-radius: inherit;
+}
+
+.player-metric .meter-fill {
+background: linear-gradient(90deg, #0284c7, var(--cyan));
+box-shadow: 0 0 10px rgba(64, 217, 255, 0.28);
+}
+
+.target-metric .meter-fill {
+background: linear-gradient(90deg, #e11d48, var(--rose));
+box-shadow: 0 0 10px rgba(251, 113, 133, 0.25);
+}
+
+.mood-card {
+position: relative;
+overflow: hidden;
+}
+
+.mood-card::after {
+position: absolute;
+top: -54px;
+right: 24%;
+width: 150px;
+height: 100px;
+border-radius: 50%;
+pointer-events: none;
+content: "";
+background: rgba(167, 139, 250, 0.16);
+filter: blur(45px);
+}
+
+.mood-head {
+position: relative;
+z-index: 1;
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 12px;
+}
+
+.mood-current {
+color: #fff;
+font-size: 14px;
+font-weight: 800;
+}
+
+.mood-current strong {
+margin-left: 6px;
+color: var(--violet);
+font-size: 18px;
+}
+
+.mood-thresholds {
+display: flex;
+gap: 7px;
+color: var(--muted);
+font-size: 11px;
+}
+
+.threshold-up,
+.threshold-down {
+padding: 4px 7px;
+border-radius: 999px;
+background: rgba(2, 6, 23, 0.42);
+}
+
+.threshold-up strong {
+color: var(--violet);
+}
+
+.threshold-down strong {
+color: #cbd5e1;
+}
+
+.mood-track {
+position: relative;
+z-index: 1;
+display: grid;
+grid-template-columns: repeat(5, minmax(0, 1fr));
+gap: 5px;
+margin-top: 13px;
+}
+
+.mood-step {
+position: relative;
+min-width: 0;
+padding: 8px 3px 7px;
+border: 1px solid rgba(148, 163, 184, 0.12);
+border-radius: 9px;
+color: var(--dim);
+background: rgba(2, 6, 23, 0.33);
+font-size: 11px;
+font-weight: 700;
+text-align: center;
+}
+
+.mood-step.is-current {
+border-color: rgba(167, 139, 250, 0.55);
+color: #fff;
+background: linear-gradient(145deg, rgba(124, 58, 237, 0.4), rgba(109, 40, 217, 0.18));
+box-shadow: 0 0 18px rgba(124, 58, 237, 0.15);
+}
+
+.mood-step.is-current::before {
+position: absolute;
+top: -6px;
+left: 50%;
+width: 8px;
+height: 8px;
+border: 2px solid #ddd6fe;
+border-radius: 50%;
+content: "";
+background: var(--violet);
+transform: translateX(-50%);
+}
+
+.mood-boundaries {
+position: relative;
+z-index: 1;
+display: grid;
+grid-template-columns: repeat(4, 1fr);
+margin: 5px 10% 0;
+color: #58677b;
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 9px;
+text-align: center;
+}
+
+.mood-result {
+position: relative;
+z-index: 1;
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 12px;
+margin-top: 7px;
+color: var(--muted);
+font-size: 11px;
+}
+
+.mood-formula {
+color: #cbd5e1;
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.mood-formula strong {
+color: var(--violet);
+}
+
+.stage-grid {
+display: grid;
+grid-template-columns: minmax(0, 1.22fr) minmax(330px, 0.78fr);
+gap: clamp(10px, 1vw, 15px);
+}
+
+.scene-panel,
+.intel-panel {
+min-height: 238px;
+padding: 16px 17px;
+}
+
+.section-head {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 14px;
+margin-bottom: 12px;
+}
+
+.section-title {
+margin: 2px 0 0;
+color: #fff;
+font-size: 15px;
+font-weight: 800;
+letter-spacing: -0.02em;
+}
+
+.turn-chip {
+padding: 5px 9px;
+border: 1px solid rgba(64, 217, 255, 0.2);
+border-radius: 999px;
+color: var(--cyan);
+background: var(--cyan-soft);
+font-size: 11px;
+font-weight: 700;
+white-space: nowrap;
+}
+
+.scene-copy {
+margin: 0;
+color: #d7e0eb;
+font-size: clamp(13px, 1.1vw, 15px);
+line-height: 1.68;
+}
+
+.scene-copy::first-letter {
+color: var(--cyan);
+font-size: 1.25em;
+font-weight: 800;
+}
+
+.event-strip {
+display: grid;
+grid-template-columns: repeat(4, minmax(0, 1fr));
+gap: 7px;
+margin-top: 14px;
+}
+
+.event-item {
+min-width: 0;
+padding: 8px 9px;
+border: 1px solid rgba(148, 163, 184, 0.12);
+border-radius: 10px;
+background: rgba(2, 6, 23, 0.33);
+}
+
+.event-item span {
+display: block;
+overflow: hidden;
+color: var(--muted);
+font-size: 10px;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.event-item strong {
+display: block;
+margin-top: 2px;
+color: #fff;
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 13px;
+}
+
+.event-item.is-cyan strong { color: var(--cyan); }
+.event-item.is-rose strong { color: var(--rose); }
+.event-item.is-violet strong { color: var(--violet); }
+
+.history-details,
+.effect-details {
+margin-top: 10px;
+border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.history-details summary,
+.effect-details summary {
+padding: 9px 2px 0;
+color: var(--muted);
+cursor: pointer;
+font-size: 11px;
+font-weight: 700;
+list-style-position: inside;
+}
+
+.history-details summary:hover,
+.history-details summary:focus-visible,
+.effect-details summary:hover,
+.effect-details summary:focus-visible {
+color: #fff;
+}
+
+.history-list,
+.effect-list {
+display: grid;
+gap: 6px;
+margin-top: 8px;
+}
+
+.history-entry,
+.effect-entry {
+padding: 8px 10px;
+border-radius: 9px;
+color: #b9c4d3;
+background: rgba(2, 6, 23, 0.35);
+font-size: 11px;
+}
+
+.intent-box {
+display: grid;
+grid-template-columns: auto minmax(0, 1fr) auto;
+align-items: center;
+gap: 10px;
+padding: 10px 11px;
+border: 1px solid rgba(251, 191, 36, 0.26);
+border-radius: 12px;
+background: linear-gradient(90deg, rgba(251, 191, 36, 0.12), rgba(251, 113, 133, 0.07));
+}
+
+.intent-icon {
+display: grid;
+width: 36px;
+height: 36px;
+place-items: center;
+border: 1px solid rgba(251, 191, 36, 0.28);
+border-radius: 10px;
+color: var(--amber);
+background: rgba(2, 6, 23, 0.38);
+font-size: 17px;
+}
+
+.intent-name {
+color: #fff;
+font-size: 16px;
+font-weight: 900;
+}
+
+.intent-desc {
+margin-top: 1px;
+color: #c8bf9e;
+font-size: 11px;
+}
+
+.intent-privacy {
+padding: 4px 7px;
+border-radius: 999px;
+color: #d6c98f;
+background: rgba(2, 6, 23, 0.34);
+font-size: 9px;
+font-weight: 700;
+white-space: nowrap;
+}
+
+.plan-grid {
+display: grid;
+grid-template-columns: repeat(2, minmax(0, 1fr));
+gap: 8px;
+margin-top: 9px;
+}
+
+.plan-card {
+min-width: 0;
+min-height: 82px;
+padding: 10px;
+border: 1px solid rgba(148, 163, 184, 0.14);
+border-radius: 11px;
+background: rgba(2, 6, 23, 0.34);
+}
+
+button.plan-card {
+width: 100%;
+cursor: pointer;
+text-align: left;
+}
+
+button.plan-card:hover,
+button.plan-card:focus-visible {
+border-color: rgba(64, 217, 255, 0.36);
+outline: none;
+background: rgba(64, 217, 255, 0.07);
+}
+
+.plan-owner {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 7px;
+color: var(--dim);
+font-size: 9px;
+font-weight: 800;
+letter-spacing: 0.08em;
+text-transform: uppercase;
+}
+
+.plan-owner span:last-child {
+color: var(--muted);
+letter-spacing: 0;
+text-transform: none;
+}
+
+.plan-name {
+margin-top: 6px;
+overflow: hidden;
+color: #fff;
+font-size: 12px;
+font-weight: 800;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.plan-rule {
+display: -webkit-box;
+margin-top: 3px;
+overflow: hidden;
+color: var(--muted);
+font-size: 10px;
+line-height: 1.35;
+-webkit-box-orient: vertical;
+-webkit-line-clamp: 2;
+}
+
+.secret-plan {
+border-style: dashed;
+border-color: rgba(251, 113, 133, 0.26);
+background:
+repeating-linear-gradient(135deg, rgba(251,113,133,0.035) 0 7px, transparent 7px 14px),
+rgba(2, 6, 23, 0.38);
+}
+
+.secret-plan .plan-name {
+color: #fecdd3;
+}
+
+.effect-entry strong {
+color: #fff;
+}
+
+.hand-panel {
+padding: 15px 16px 16px;
+}
+
+.hand-head {
+display: grid;
+grid-template-columns: minmax(230px, 1fr) auto;
+align-items: center;
+gap: 16px;
+}
+
+.hand-title-row {
+display: flex;
+align-items: baseline;
+gap: 9px;
+}
+
+.hand-title {
+margin: 0;
+color: #fff;
+font-size: 16px;
+font-weight: 900;
+}
+
+.hand-count {
+color: var(--cyan);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 12px;
+font-weight: 800;
+}
+
+.hand-instruction {
+margin-top: 2px;
+color: var(--muted);
+font-size: 11px;
+}
+
+.zones {
+display: flex;
+justify-content: flex-end;
+gap: 6px;
+}
+
+.zone-button,
+.zone-state {
+min-width: 62px;
+padding: 7px 9px;
+border: 1px solid rgba(148, 163, 184, 0.14);
+border-radius: 10px;
+color: var(--muted);
+background: rgba(2, 6, 23, 0.38);
+text-align: center;
+}
+
+.zone-button {
+cursor: pointer;
+}
+
+.zone-button:hover,
+.zone-button:focus-visible {
+border-color: rgba(64, 217, 255, 0.34);
+color: #fff;
+outline: none;
+}
+
+.zone-label {
+display: block;
+font-size: 8px;
+}
+
+.zone-count {
+display: block;
+margin-top: 2px;
+color: #fff;
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 12px;
+font-weight: 800;
+}
+
+.selection-area {
+min-height: 64px;
+margin-top: 11px;
+}
+
+.selection-empty,
+.selection-choice {
+min-height: 64px;
+padding: 10px 11px;
+border: 1px solid rgba(148, 163, 184, 0.14);
+border-radius: 12px;
+background: rgba(2, 6, 23, 0.38);
+}
+
+.selection-empty {
+display: flex;
+align-items: center;
+justify-content: center;
+gap: 10px;
+color: var(--muted);
+font-size: 12px;
+text-align: center;
+}
+
+.step-dot {
+display: grid;
+flex: 0 0 auto;
+width: 25px;
+height: 25px;
+place-items: center;
+border: 1px solid rgba(64, 217, 255, 0.32);
+border-radius: 50%;
+color: var(--cyan);
+background: var(--cyan-soft);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 11px;
+font-weight: 900;
+}
+
+.selection-choice {
+display: none;
+grid-template-columns: minmax(180px, 0.95fr) minmax(370px, 1.7fr) auto;
+align-items: center;
+gap: 12px;
+border-color: rgba(167, 139, 250, 0.28);
+background: linear-gradient(90deg, rgba(124, 58, 237, 0.13), rgba(2, 6, 23, 0.4));
+}
+
+.choice-name {
+min-width: 0;
+}
+
+.choice-name strong {
+display: block;
+overflow: hidden;
+color: #fff;
+font-size: 13px;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.choice-name span {
+display: block;
+margin-top: 2px;
+color: var(--muted);
+font-size: 10px;
+}
+
+.forecast {
+display: grid;
+grid-template-columns: repeat(3, minmax(0, 1fr));
+gap: 6px;
+}
+
+.forecast-item {
+min-width: 0;
+padding: 6px 8px;
+border: 1px solid rgba(148, 163, 184, 0.12);
+border-radius: 9px;
+background: rgba(2, 6, 23, 0.36);
+}
+
+.forecast-item span {
+display: block;
+overflow: hidden;
+color: var(--dim);
+font-size: 9px;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.forecast-item strong {
+display: block;
+margin-top: 1px;
+color: #fff;
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 12px;
+}
+
+.forecast-item.is-cyan strong { color: var(--cyan); }
+.forecast-item.is-rose strong { color: var(--rose); }
+.forecast-item.is-violet strong { color: var(--violet); }
+
+.choice-actions {
+display: flex;
+align-items: center;
+gap: 7px;
+}
+
+.cancel-choice,
+.play-choice {
+min-height: 40px;
+border-radius: 10px;
+cursor: pointer;
+font-size: 11px;
+font-weight: 800;
+}
+
+.cancel-choice {
+display: grid;
+padding: 0 11px;
+place-items: center;
+border: 1px solid rgba(148, 163, 184, 0.2);
+color: var(--muted);
+background: rgba(2, 6, 23, 0.36);
+}
+
+.cancel-choice:hover,
+.cancel-choice:focus-visible {
+color: #fff;
+outline: 2px solid rgba(148, 163, 184, 0.3);
+outline-offset: 2px;
+}
+
+.play-choice {
+min-width: 142px;
+padding: 0 15px;
+border: 1px solid rgba(64, 217, 255, 0.5);
+color: #03131a;
+background: linear-gradient(135deg, #8eeaff, var(--cyan));
+box-shadow: 0 8px 22px rgba(64, 217, 255, 0.16);
+}
+
+.play-choice:hover,
+.play-choice:focus-visible {
+outline: none;
+filter: brightness(1.08);
+transform: translateY(-1px);
+}
+
+.play-choice:active {
+transform: translateY(0);
+}
+
+.hand-grid {
+display: grid;
+grid-template-columns: repeat(3, minmax(0, 1fr));
+gap: 9px;
+margin-top: 10px;
+}
+
+.hand-card {
+position: relative;
+display: grid;
+grid-template-rows: auto auto auto 1fr auto;
+min-width: 0;
+min-height: 174px;
+padding: 12px 13px 11px;
+overflow: hidden;
+border: 1px solid rgba(148, 163, 184, 0.18);
+border-radius: 14px;
+color: var(--text);
+background:
+linear-gradient(145deg, rgba(28, 40, 61, 0.96), rgba(11, 17, 28, 0.98));
+cursor: pointer;
+isolation: isolate;
+transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.hand-card::before {
+position: absolute;
+inset: 0 auto 0 0;
+z-index: -1;
+width: 4px;
+content: "";
+background: var(--card-accent, var(--cyan));
+box-shadow: 0 0 18px var(--card-glow, rgba(64,217,255,0.32));
+}
+
+.hand-card::after {
+position: absolute;
+right: -42px;
+bottom: -62px;
+z-index: -1;
+width: 150px;
+height: 110px;
+border-radius: 50%;
+content: "";
+background: var(--card-glow, rgba(64,217,255,0.1));
+filter: blur(32px);
+}
+
+.hand-card:hover {
+border-color: rgba(255, 255, 255, 0.32);
+transform: translateY(-3px);
+}
+
+.hand-card[data-action-id="observation"] {
+--card-accent: var(--cyan);
+--card-glow: rgba(64, 217, 255, 0.23);
+}
+
+.hand-card[data-action-id="approach"],
+.hand-card[data-action-id="deception"] {
+--card-accent: var(--violet);
+--card-glow: rgba(167, 139, 250, 0.24);
+}
+
+.hand-card[data-action-id="contact"],
+.hand-card[data-action-id="threat"],
+.hand-card[data-action-id="violation"] {
+--card-accent: var(--rose);
+--card-glow: rgba(251, 113, 133, 0.22);
+}
+
+.card-top {
+display: flex;
+align-items: flex-start;
+justify-content: space-between;
+gap: 10px;
+}
+
+.card-cost {
+display: inline-flex;
+align-items: center;
+gap: 5px;
+min-width: 45px;
+padding: 5px 8px;
+border: 1px solid rgba(64, 217, 255, 0.34);
+border-radius: 10px;
+color: var(--cyan);
+background: rgba(2, 6, 23, 0.54);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 14px;
+font-weight: 900;
+}
+
+.card-cost::before {
+content: "◐";
+font-size: 11px;
+}
+
+.cost-adjusted {
+color: #a5f3fc;
+}
+
+.card-kind {
+color: var(--dim);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 9px;
+font-weight: 700;
+letter-spacing: 0.09em;
+text-transform: uppercase;
+}
+
+.card-title {
+margin-top: 11px;
+color: #fff;
+font-size: 15px;
+font-weight: 900;
+letter-spacing: -0.03em;
+}
+
+.card-tags {
+display: flex;
+flex-wrap: wrap;
+gap: 5px;
+margin-top: 5px;
+}
+
+.card-tag {
+padding: 3px 6px;
+border: 1px solid rgba(148, 163, 184, 0.15);
+border-radius: 999px;
+color: #cbd5e1;
+background: rgba(2, 6, 23, 0.35);
+font-size: 9px;
+font-weight: 700;
+}
+
+.card-tag.is-active {
+border-color: rgba(167, 139, 250, 0.26);
+color: #ddd6fe;
+background: var(--violet-soft);
+}
+
+.card-rule {
+margin: 9px 0 0;
+color: #bdc8d6;
+font-size: 11px;
+line-height: 1.52;
+}
+
+.card-modifier {
+align-self: end;
+margin-top: 8px;
+padding-top: 7px;
+border-top: 1px solid rgba(148, 163, 184, 0.1);
+color: var(--muted);
+font-size: 9px;
+}
+
+.card-modifier strong {
+color: #e2e8f0;
+}
+
+.card-bottom {
+display: flex;
+align-items: flex-end;
+justify-content: space-between;
+gap: 10px;
+margin-top: 7px;
+}
+
+.card-select-hint {
+color: var(--dim);
+font-size: 9px;
+font-weight: 700;
+}
+
+.card-damage {
+display: inline-flex;
+align-items: baseline;
+gap: 5px;
+color: var(--rose);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 17px;
+font-weight: 900;
+}
+
+.card-damage small {
+color: var(--muted);
+font-family: inherit;
+font-size: 8px;
+letter-spacing: 0.06em;
+text-transform: uppercase;
+}
+
+@media (max-width: 1120px) {
+.command-bar {
+grid-template-columns: minmax(180px, 0.65fr) minmax(350px, 1.35fr);
+}
+
+.environment-card {
+grid-column: 1 / -1;
+grid-template-columns: auto auto 1fr;
+align-items: center;
+}
+
+.environment-name,
+.environment-rule {
+margin: 0;
+}
+
+.vitals-grid {
+grid-template-columns: minmax(200px, 0.7fr) minmax(360px, 1.3fr) minmax(200px, 0.7fr);
+}
+
+.selection-choice {
+grid-template-columns: minmax(160px, 0.75fr) minmax(300px, 1.45fr);
+}
+
+.choice-actions {
+grid-column: 1 / -1;
+justify-content: flex-end;
+}
+}
+
+@media (max-width: 900px) {
+.battle-shell {
+padding-right: 58px;
+}
+
+.command-bar {
+grid-template-columns: minmax(0, 1fr);
+gap: 12px;
+}
+
+.environment-card {
+grid-column: auto;
+}
+
+.vitals-grid {
+grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mood-card {
+grid-column: 1 / -1;
+grid-row: 2;
+}
+
+.stage-grid {
+display: contents;
+}
+
+.command-bar { order: 1; }
+.vitals-grid { order: 2; }
+.intel-panel { order: 3; }
+.hand-panel { order: 4; }
+.scene-panel { order: 5; }
+
+.scene-panel,
+.intel-panel {
+min-height: 0;
+}
+
+.hand-head {
+grid-template-columns: 1fr;
+}
+
+.zones {
+justify-content: flex-start;
+overflow-x: auto;
+padding-bottom: 2px;
+}
+
+.selection-choice {
+grid-template-columns: 1fr;
+}
+
+.choice-actions {
+grid-column: auto;
+}
+}
+
+@media (max-width: 680px) {
+.battle-shell {
+padding: 9px 9px 82px;
+}
+
+.panel {
+border-radius: 15px;
+}
+
+.command-bar,
+.metric-card,
+.mood-card,
+.scene-panel,
+.intel-panel,
+.hand-panel {
+padding: 13px;
+}
+
+.environment-card {
+grid-template-columns: auto 1fr;
+}
+
+.environment-rule {
+grid-column: 1 / -1;
+}
+
+.metric-card,
+.mood-card {
+min-height: 0;
+}
+
+.metric-main {
+align-items: center;
+}
+
+.metric-value {
+font-size: 32px;
+}
+
+.actor-role,
+.metric-note {
+display: none;
+}
+
+.mood-head,
+.mood-result {
+align-items: flex-start;
+flex-direction: column;
+gap: 6px;
+}
+
+.mood-track {
+gap: 3px;
+}
+
+.mood-step {
+padding-inline: 1px;
+font-size: 10px;
+}
+
+.event-strip {
+grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.intent-box {
+grid-template-columns: auto 1fr;
+}
+
+.intent-privacy {
+grid-column: 2;
+justify-self: start;
+}
+
+.hand-instruction {
+line-height: 1.45;
+}
+
+.selection-area {
+min-height: 0;
+}
+
+.forecast {
+grid-template-columns: 1fr;
+}
+
+.choice-actions {
+display: grid;
+grid-template-columns: auto 1fr;
+}
+
+.play-choice {
+width: 100%;
+min-width: 0;
+}
+
+.hand-grid {
+grid-auto-columns: minmax(238px, 80vw);
+grid-template-columns: none;
+grid-auto-flow: column;
+overflow-x: auto;
+padding: 4px 3px 12px;
+scroll-snap-type: x mandatory;
+scrollbar-color: rgba(64, 217, 255, 0.45) rgba(2, 6, 23, 0.4);
+}
+
+.hand-card {
+min-height: 190px;
+scroll-snap-align: start;
+}
+}
+
+@media (max-width: 430px) {
+.vitals-grid {
+grid-template-columns: 1fr;
+}
+
+.mood-card {
+grid-column: auto;
+grid-row: auto;
+}
+
+.plan-grid {
+grid-template-columns: 1fr;
+}
+
+.zones {
+display: grid;
+grid-template-columns: repeat(4, minmax(62px, 1fr));
+}
+
+.zone-button,
+.zone-state {
+min-width: 0;
+}
+}
+
+@media (max-height: 760px) and (min-width: 901px) {
+.battle-shell {
+padding-top: 9px;
+padding-bottom: 12px;
+}
+
+.battle-layout {
+gap: 8px;
+}
+
+.command-bar {
+min-height: 66px;
+padding-block: 8px;
+}
+
+.environment-card {
+padding-block: 7px;
+}
+
+.environment-icon {
+width: 32px;
+height: 32px;
+}
+
+.metric-card,
+.mood-card {
+min-height: 112px;
+padding: 11px 14px;
+}
+
+.metric-card {
+gap: 7px;
+}
+
+.actor-role,
+.metric-note {
+display: none;
+}
+
+.metric-value {
+font-size: 31px;
+}
+
+.mood-track {
+margin-top: 9px;
+}
+
+.mood-step {
+padding-block: 6px;
+}
+
+.mood-result {
+margin-top: 4px;
+}
+
+.scene-panel,
+.intel-panel {
+height: 182px;
+min-height: 182px;
+overflow: hidden;
+padding: 11px 14px;
+}
+
+.section-head {
+margin-bottom: 8px;
+}
+
+.scene-copy {
+display: -webkit-box;
+overflow: hidden;
+font-size: 13px;
+line-height: 1.55;
+-webkit-box-orient: vertical;
+-webkit-line-clamp: 2;
+}
+
+.event-strip {
+margin-top: 9px;
+}
+
+.event-item {
+padding-block: 6px;
+}
+
+.history-details,
+.effect-details {
+display: none;
+}
+
+.intent-box {
+padding-block: 7px;
+}
+
+.plan-card {
+min-height: 58px;
+padding-block: 7px;
+}
+
+.plan-rule {
+-webkit-line-clamp: 1;
+}
+
+.hand-panel {
+padding: 10px 13px 12px;
+}
+
+.hand-instruction {
+margin-top: 0;
+}
+
+.zone-button,
+.zone-state {
+padding-block: 5px;
+}
+
+.selection-area,
+.selection-empty,
+.selection-choice {
+min-height: 52px;
+}
+
+.selection-area {
+margin-top: 7px;
+}
+
+.selection-empty,
+.selection-choice {
+padding-block: 6px;
+}
+
+.hand-grid {
+margin-top: 7px;
+}
+
+.hand-card {
+min-height: 148px;
+padding-block: 9px;
+}
+
+.card-title {
+margin-top: 7px;
+}
+
+.card-rule {
+display: -webkit-box;
+margin-top: 6px;
+overflow: hidden;
+-webkit-box-orient: vertical;
+-webkit-line-clamp: 2;
+}
+
+.card-modifier {
+margin-top: 5px;
+padding-top: 5px;
+}
+}
+
+/* battleView/CBS state bindings */
+button.hand-card {
+width: 100%;
+appearance: none;
+-webkit-appearance: none;
+font: inherit;
+text-align: left;
+}
+
+.hand-card[data-selected="true"] {
+border-color: var(--card-accent);
+box-shadow: 0 0 0 1px var(--card-accent), 0 13px 30px rgba(0, 0, 0, 0.32), 0 0 24px var(--card-glow);
+transform: translateY(-4px);
+}
+
+.hand-card[data-focused="1"] {
+outline: 2px solid rgba(255, 255, 255, 0.82);
+outline-offset: 3px;
+}
+
+.hand-card[data-origin="preview"] {
+border-style: dashed;
+}
+
+.hand-card:disabled {
+cursor: not-allowed;
+filter: saturate(0.55);
+opacity: 0.62;
+transform: none;
+}
+
+.battle-shell[data-locked="true"] .hand-grid {
+opacity: 0.82;
+}
+
+.selection-choice[data-visible="1"] {
+display: grid;
+}
+
+.selection-empty[data-hidden="1"] {
+display: none;
+}
+
+.selection-status {
+display: flex;
+flex-wrap: wrap;
+gap: 6px;
+margin-top: 8px;
+color: var(--muted);
+font-size: 10px;
+}
+
+.selection-status span,
+.state-chip {
+padding: 4px 7px;
+border: 1px solid rgba(148, 163, 184, 0.14);
+border-radius: 999px;
+background: rgba(2, 6, 23, 0.38);
+}
+
+.selection-status .is-ready {
+border-color: rgba(74, 222, 128, 0.28);
+color: var(--green);
+}
+
+.selection-status .is-locked {
+border-color: rgba(251, 191, 36, 0.28);
+color: var(--amber);
+}
+
+.card-rule-lines,
+.dynamic-rule-lines {
+display: grid;
+gap: 4px;
+margin-top: 7px;
+}
+
+.rule-line {
+color: var(--muted);
+font-size: 10px;
+line-height: 1.45;
+}
+
+.inline-tag {
+display: inline-flex;
+align-items: baseline;
+gap: 4px;
+margin-inline: 2px;
+padding: 1px 5px;
+border: 1px solid rgba(64, 217, 255, 0.25);
+border-radius: 999px;
+color: #dff8ff;
+background: rgba(64, 217, 255, 0.08);
+font-size: 0.88em;
+font-weight: 800;
+}
+
+.tag-tooltip {
+color: var(--dim);
+font-size: 0.88em;
+font-weight: 500;
+}
+
+.plan-card .card-tags {
+margin-top: 7px;
+}
+
+.plan-empty,
+.plan-hidden-note,
+.loading-copy {
+color: var(--muted);
+font-size: 11px;
+line-height: 1.5;
+}
+
+.mood-track.mood-track-single {
+grid-template-columns: minmax(0, 1fr);
+}
+
+.mood-track.mood-track-single .mood-step {
+border-color: rgba(167, 139, 250, 0.55);
+color: #fff;
+background: linear-gradient(145deg, rgba(124, 58, 237, 0.4), rgba(109, 40, 217, 0.18));
+}
+
+.event-strip.dynamic-events {
+grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.outcome-banner {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 12px;
+padding: 10px 12px;
+border: 1px solid rgba(167, 139, 250, 0.24);
+border-radius: 12px;
+background: var(--violet-soft);
+}
+
+.outcome-banner strong {
+color: #fff;
+}
+
+.loading-shell {
+display: grid;
+min-height: 50vh;
+place-items: center;
+}
+
+.loading-panel {
+width: min(100%, 540px);
+padding: 22px;
+text-align: center;
+}
+
+.route-native,
+.meter-native {
+display: block;
+width: 100%;
+height: 8px;
+overflow: hidden;
+border: 1px solid rgba(148, 163, 184, 0.15);
+border-radius: 999px;
+appearance: none;
+-webkit-appearance: none;
+background: rgba(2, 6, 23, 0.58);
+}
+
+.route-native::-webkit-progress-bar,
+.meter-native::-webkit-progress-bar {
+background: rgba(2, 6, 23, 0.58);
+}
+
+.route-native::-webkit-progress-value {
+background: linear-gradient(90deg, #7c3aed, var(--cyan));
+box-shadow: 0 0 15px rgba(64, 217, 255, 0.32);
+}
+
+.route-native::-moz-progress-bar {
+background: linear-gradient(90deg, #7c3aed, var(--cyan));
+}
+
+.meter-native::-webkit-progress-value {
+background: linear-gradient(90deg, #e11d48, var(--rose));
+box-shadow: 0 0 10px rgba(251, 113, 133, 0.25);
+}
+
+.meter-native::-moz-progress-bar {
+background: linear-gradient(90deg, #e11d48, var(--rose));
+}
+
+.metric-state {
+padding: 5px 8px;
+border: 1px solid rgba(64, 217, 255, 0.18);
+border-radius: 999px;
+color: var(--cyan);
+background: rgba(64, 217, 255, 0.06);
+font-size: 10px;
+text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+*,
+*::before,
+*::after {
+scroll-behavior: auto !important;
+transition-duration: 0.01ms !important;
+animation-duration: 0.01ms !important;
+animation-iteration-count: 1 !important;
+}
+}
+</style>
+</head>
+<body>
+{{settempvar::bv::{{getvar::battleView}}}}
+{{settempvar::bv_turn::{{dictelement::{{tempvar::bv}}::turn}}}}
+{{settempvar::bv_environment::{{dictelement::{{tempvar::bv}}::environment}}}}
+{{settempvar::bv_player::{{dictelement::{{tempvar::bv}}::player}}}}
+{{settempvar::bv_character::{{dictelement::{{tempvar::bv}}::character}}}}
+{{settempvar::bv_mood::{{dictelement::{{tempvar::bv_character}}::mood}}}}
+{{settempvar::bv_public_action::{{dictelement::{{tempvar::bv_character}}::publicAction}}}}
+{{settempvar::bv_player_plan::{{dictelement::{{tempvar::bv_player}}::plan}}}}
+{{settempvar::bv_character_plan::{{dictelement::{{tempvar::bv_character}}::plan}}}}
+{{settempvar::bv_hand::{{dictelement::{{tempvar::bv}}::hand}}}}
+{{settempvar::bv_selection::{{dictelement::{{tempvar::bv}}::selection}}}}
+{{settempvar::bv_zones::{{dictelement::{{tempvar::bv}}::zones}}}}
+{{settempvar::bv_last_turn::{{dictelement::{{tempvar::bv}}::lastTurn}}}}
+{{settempvar::bv_outcome::{{dictelement::{{tempvar::bv}}::outcome}}}}
+
+{{#when::keep::{{dictelement::{{tempvar::bv}}::kind}}::is::battleView}}
+<main class="battle-shell"
+data-battle-id="{{dictelement::{{tempvar::bv}}::battleId}}"
+data-turn-id="{{dictelement::{{tempvar::bv}}::turnId}}"
+data-phase="{{dictelement::{{tempvar::bv}}::phase}}"
+data-locked="{{dictelement::{{tempvar::bv}}::locked}}"
+data-outcome="{{dictelement::{{tempvar::bv_outcome}}::status}}">
+<div class="battle-layout">
+<header class="command-bar panel" aria-label="전투 진행 정보">
+<div class="session-brand">
+<div class="eyebrow">BATTLE · TURN {{dictelement::{{tempvar::bv_turn}}::number}}</div>
+<h1 class="session-title">{{dictelement::{{tempvar::bv_character}}::name}}</h1>
+</div>
+
+<div class="route-block">
+<div class="route-head">
+<span class="route-name">{{dictelement::{{tempvar::bv}}::battleId}} · {{dictelement::{{tempvar::bv}}::turnId}}</span>
+<span class="route-count">남은 턴 <strong>{{dictelement::{{tempvar::bv_turn}}::remaining}}</strong></span>
+</div>
+<progress class="route-native" min="1" max="{{dictelement::{{tempvar::bv_turn}}::limit}}" value="{{dictelement::{{tempvar::bv_turn}}::number}}"></progress>
+<div class="selection-status">
+<span>단계 {{dictelement::{{tempvar::bv}}::phase}}</span>
+<span>전체 {{dictelement::{{tempvar::bv_turn}}::limit}}턴</span>
+<span>결과 {{dictelement::{{tempvar::bv_outcome}}::label}}</span>
+</div>
+</div>
+
+<div class="environment-card" data-environment-id="{{dictelement::{{tempvar::bv_environment}}::id}}">
+<div class="environment-icon" aria-hidden="true">ENV</div>
+<div>
+<div class="environment-name">{{dictelement::{{tempvar::bv_environment}}::name}}</div>
+<div class="environment-rule">{{dictelement::{{tempvar::bv_environment}}::description}}</div>
+<div class="dynamic-rule-lines">
+{{#each::keep {{dictelement::{{tempvar::bv_environment}}::ruleLines}} as environment_line}}
+<div class="rule-line">
+{{#each::keep {{dictelement::{{slot::environment_line}}::segments}} as environment_segment}}
+{{#when::keep::{{dictelement::{{slot::environment_segment}}::kind}}::is::text}}
+{{dictelement::{{slot::environment_segment}}::value}}
+{{/when}}
+{{#when::keep::{{dictelement::{{slot::environment_segment}}::kind}}::isnot::text}}
+<span class="inline-tag">{{dictelement::{{slot::environment_segment}}::label}} <span class="tag-tooltip">{{dictelement::{{slot::environment_segment}}::tooltip}}</span></span>
+{{/when}}
+{{/each}}
+</div>
+{{/each}}
+</div>
+</div>
+</div>
+</header>
+
+<section class="vitals-grid" aria-label="핵심 전투 상태">
+<article class="metric-card player-metric panel">
+<div class="metric-head">
+<div class="actor-identity">
+<div class="actor-mark" aria-hidden="true">P</div>
+<div>
+<div class="actor-name">플레이어</div>
+<div class="actor-role">은폐를 지키며 행동합니다</div>
+</div>
+</div>
+<span class="metric-label">CONCEALMENT</span>
+</div>
+<div class="metric-main">
+<div class="metric-value">{{dictelement::{{tempvar::bv_player}}::stealth}}<span class="metric-unit">은폐</span></div>
+<div class="metric-note">현재 확정 상태<br><strong>{{dictelement::{{tempvar::bv}}::phase}}</strong></div>
+</div>
+<div class="metric-state">비율 기준이 없는 현재 은폐 수치</div>
+</article>
+
+<article class="mood-card panel" data-mood-id="{{dictelement::{{tempvar::bv_mood}}::id}}">
+<div class="mood-head">
+<div class="mood-current">현재 무드 <strong>{{dictelement::{{tempvar::bv_mood}}::label}}</strong></div>
+<div class="mood-thresholds">
+{{#when::keep::{{dictelement::{{tempvar::bv_mood}}::hasThresholdToRejection}}::is::true}}
+<span class="threshold-down"><strong>{{dictelement::{{tempvar::bv_mood}}::thresholdToRejection}}</strong> 거절 방향</span>
+{{/when}}
+{{#when::keep::{{dictelement::{{tempvar::bv_mood}}::hasThresholdToCompliance}}::is::true}}
+<span class="threshold-up"><strong>{{dictelement::{{tempvar::bv_mood}}::thresholdToCompliance}}</strong> 순응 방향</span>
+{{/when}}
+</div>
+</div>
+<div class="mood-track mood-track-single">
+<div class="mood-step is-current" aria-current="step">{{dictelement::{{tempvar::bv_mood}}::label}}</div>
+</div>
+<div class="mood-result">
+<span>양방향 순 성과가 무드 경계를 넘으면 이동합니다.</span>
+<span class="mood-formula">{{dictelement::{{tempvar::bv_mood}}::id}}</span>
+</div>
+</article>
+
+<article class="metric-card target-metric panel" data-character-id="{{dictelement::{{tempvar::bv_character}}::id}}">
+<div class="metric-head">
+<div class="actor-identity">
+<div class="actor-mark" aria-hidden="true">T</div>
+<div>
+<div class="actor-name">{{dictelement::{{tempvar::bv_character}}::name}}</div>
+<div class="actor-role">대상 캐릭터</div>
+</div>
+</div>
+<span class="metric-label">RESISTANCE</span>
+</div>
+<div class="metric-main">
+<div class="metric-value">{{dictelement::{{tempvar::bv_character}}::resistance}}<span class="metric-unit">/ {{dictelement::{{tempvar::bv_character}}::startingResistance}}</span></div>
+<div class="metric-note">승리까지<br><strong>{{dictelement::{{tempvar::bv_character}}::resistance}} 남음</strong></div>
+</div>
+<progress class="meter-native" max="{{dictelement::{{tempvar::bv_character}}::startingResistance}}" value="{{dictelement::{{tempvar::bv_character}}::resistance}}"></progress>
+</article>
+</section>
+
+<section class="stage-grid" aria-label="직전 공개 결과와 전술 정보">
+<article class="scene-panel panel">
+<div class="section-head">
+<div>
+<div class="section-kicker">LATEST PUBLIC RESULT</div>
+<h2 class="section-title">직전 턴 공개 요약</h2>
+</div>
+<span class="turn-chip">현재 {{dictelement::{{tempvar::bv_turn}}::number}}턴</span>
+</div>
+<p class="scene-copy">장면 서술은 이 전투 패널 위의 최신 대화에 표시됩니다. 이곳에는 공개 가능한 판정 요약만 표시됩니다.</p>
+{{#when::keep::{{dictelement::{{tempvar::bv_last_turn}}::available}}::is::true}}
+<div class="event-strip dynamic-events">
+{{#each::keep {{dictelement::{{tempvar::bv_last_turn}}::summaries}} as public_summary}}
+<div class="event-item" data-event-type="{{dictelement::{{slot::public_summary}}::type}}">
+<span>{{dictelement::{{slot::public_summary}}::sequence}} · {{dictelement::{{slot::public_summary}}::type}}</span>
+<strong>{{dictelement::{{slot::public_summary}}::text}}</strong>
+</div>
+{{/each}}
+</div>
+<div class="selection-status"><span>{{dictelement::{{tempvar::bv_last_turn}}::turnNumber}}턴 확정 기록</span></div>
+{{/when}}
+{{#when::keep::{{dictelement::{{tempvar::bv_last_turn}}::available}}::isnot::true}}
+<div class="history-entry">아직 표시할 확정 턴 기록이 없습니다.</div>
+{{/when}}
+</article>
+
+<aside class="intel-panel panel" aria-label="이번 턴 공개 정보">
+<div class="section-head">
+<div>
+<div class="section-kicker">TACTICAL READ</div>
+<h2 class="section-title">이번 턴 공개 정보</h2>
+</div>
+</div>
+
+<div class="intent-box">
+<div class="intent-icon" aria-hidden="true">!</div>
+<div>
+{{#when::keep::{{dictelement::{{tempvar::bv_public_action}}::status}}::is::tagRevealed}}
+{{settempvar::bv_public_tag::{{dictelement::{{tempvar::bv_public_action}}::tag}}}}
+<div class="intent-name">{{dictelement::{{tempvar::bv_public_tag}}::label}}</div>
+<div class="intent-desc">{{dictelement::{{tempvar::bv_public_tag}}::tooltip}}</div>
+{{/when}}
+{{#when::keep::{{dictelement::{{tempvar::bv_public_action}}::status}}::isnot::tagRevealed}}
+<div class="intent-name">공개된 행동 없음</div>
+<div class="intent-desc">상대 행동이 공개되면 행동 태그만 표시됩니다.</div>
+{{/when}}
+</div>
+<span class="intent-privacy">행동 태그만 공개</span>
+</div>
+
+<div class="plan-grid" aria-label="양측 계획 슬롯">
+<div class="plan-card">
+<span class="plan-owner"><span>내 계획</span><span>{{dictelement::{{tempvar::bv_player_plan}}::status}}</span></span>
+{{#when::keep::{{dictelement::{{tempvar::bv_player_plan}}::status}}::is::revealed}}
+{{settempvar::bv_player_plan_card::{{dictelement::{{tempvar::bv_player_plan}}::card}}}}
+<div class="plan-name">{{dictelement::{{tempvar::bv_player_plan_card}}::name}}</div>
+{{#when::keep::{{dictelement::{{tempvar::bv_player_plan}}::hasDuration}}::is::true}}
+<div class="plan-rule">남은 지속 {{dictelement::{{tempvar::bv_player_plan}}::remainingTurns}}턴</div>
+{{/when}}
+<div class="card-tags">
+{{settempvar::bv_player_plan_action::{{dictelement::{{tempvar::bv_player_plan_card}}::actionTag}}}}
+<span class="card-tag">{{dictelement::{{tempvar::bv_player_plan_action}}::label}}</span>
+{{#each::keep {{dictelement::{{tempvar::bv_player_plan_card}}::mechanisms}} as player_plan_mechanism}}
+<span class="card-tag is-active">{{dictelement::{{slot::player_plan_mechanism}}::label}}</span>
+{{/each}}
+</div>
+<div class="dynamic-rule-lines">
+{{#each::keep {{dictelement::{{tempvar::bv_player_plan_card}}::ruleLines}} as player_plan_line}}
+<div class="rule-line">
+{{#each::keep {{dictelement::{{slot::player_plan_line}}::segments}} as player_plan_segment}}
+{{#when::keep::{{dictelement::{{slot::player_plan_segment}}::kind}}::is::text}}{{dictelement::{{slot::player_plan_segment}}::value}}{{/when}}
+{{#when::keep::{{dictelement::{{slot::player_plan_segment}}::kind}}::isnot::text}}<span class="inline-tag">{{dictelement::{{slot::player_plan_segment}}::label}} <span class="tag-tooltip">{{dictelement::{{slot::player_plan_segment}}::tooltip}}</span></span>{{/when}}
+{{/each}}
+</div>
+{{/each}}
+</div>
+{{/when}}
+{{#when::keep::{{dictelement::{{tempvar::bv_player_plan}}::status}}::isnot::revealed}}
+<div class="plan-empty">현재 공개된 플레이어 계획이 없습니다.</div>
+{{/when}}
+</div>
+
+<div class="plan-card secret-plan">
+<span class="plan-owner"><span>상대 계획</span><span>{{dictelement::{{tempvar::bv_character_plan}}::status}}</span></span>
+{{#when::keep::{{dictelement::{{tempvar::bv_character_plan}}::status}}::is::revealed}}
+{{settempvar::bv_character_plan_card::{{dictelement::{{tempvar::bv_character_plan}}::card}}}}
+<div class="plan-name">{{dictelement::{{tempvar::bv_character_plan_card}}::name}}</div>
+{{#when::keep::{{dictelement::{{tempvar::bv_character_plan}}::hasDuration}}::is::true}}
+<div class="plan-rule">남은 지속 {{dictelement::{{tempvar::bv_character_plan}}::remainingTurns}}턴</div>
+{{/when}}
+<div class="card-tags">
+{{settempvar::bv_character_plan_action::{{dictelement::{{tempvar::bv_character_plan_card}}::actionTag}}}}
+<span class="card-tag">{{dictelement::{{tempvar::bv_character_plan_action}}::label}}</span>
+{{#each::keep {{dictelement::{{tempvar::bv_character_plan_card}}::mechanisms}} as character_plan_mechanism}}
+<span class="card-tag is-active">{{dictelement::{{slot::character_plan_mechanism}}::label}}</span>
+{{/each}}
+</div>
+<div class="dynamic-rule-lines">
+{{#each::keep {{dictelement::{{tempvar::bv_character_plan_card}}::ruleLines}} as character_plan_line}}
+<div class="rule-line">
+{{#each::keep {{dictelement::{{slot::character_plan_line}}::segments}} as character_plan_segment}}
+{{#when::keep::{{dictelement::{{slot::character_plan_segment}}::kind}}::is::text}}{{dictelement::{{slot::character_plan_segment}}::value}}{{/when}}
+{{#when::keep::{{dictelement::{{slot::character_plan_segment}}::kind}}::isnot::text}}<span class="inline-tag">{{dictelement::{{slot::character_plan_segment}}::label}} <span class="tag-tooltip">{{dictelement::{{slot::character_plan_segment}}::tooltip}}</span></span>{{/when}}
+{{/each}}
+</div>
+{{/each}}
+</div>
+{{/when}}
+{{#when::keep::{{dictelement::{{tempvar::bv_character_plan}}::status}}::is::hidden}}
+<div class="plan-name">비공개 계획</div>
+<div class="plan-hidden-note">카드 정보와 발동 조건은 공개되지 않습니다.</div>
+{{#when::keep::{{dictelement::{{tempvar::bv_character_plan}}::hasDuration}}::is::true}}
+<div class="plan-rule">남은 지속 {{dictelement::{{tempvar::bv_character_plan}}::remainingTurns}}턴</div>
+{{/when}}
+{{/when}}
+{{#when::keep::{{dictelement::{{tempvar::bv_character_plan}}::status}}::is::empty}}
+<div class="plan-empty">현재 상대 계획이 없습니다.</div>
+{{/when}}
+</div>
+</div>
+
+<details class="effect-details">
+<summary>공개 특성</summary>
+<div class="effect-list">
+{{#each::keep {{dictelement::{{tempvar::bv_character}}::traits}} as public_trait}}
+<div class="effect-entry" data-trait-id="{{dictelement::{{slot::public_trait}}::id}}">
+<strong>{{dictelement::{{slot::public_trait}}::name}}</strong> · {{dictelement::{{slot::public_trait}}::description}}
+<div class="dynamic-rule-lines">
+{{#each::keep {{dictelement::{{slot::public_trait}}::ruleLines}} as trait_line}}
+<div class="rule-line">
+{{#each::keep {{dictelement::{{slot::trait_line}}::segments}} as trait_segment}}
+{{#when::keep::{{dictelement::{{slot::trait_segment}}::kind}}::is::text}}{{dictelement::{{slot::trait_segment}}::value}}{{/when}}
+{{#when::keep::{{dictelement::{{slot::trait_segment}}::kind}}::isnot::text}}<span class="inline-tag">{{dictelement::{{slot::trait_segment}}::label}} <span class="tag-tooltip">{{dictelement::{{slot::trait_segment}}::tooltip}}</span></span>{{/when}}
+{{/each}}
+</div>
+{{/each}}
+</div>
+</div>
+{{/each}}
+</div>
+</details>
+</aside>
+</section>
+
+<section class="hand-panel panel" aria-label="플레이어 손패">
+<div class="hand-head">
+<div>
+<div class="hand-title-row">
+<h2 class="hand-title">내 손패</h2>
+<span class="hand-count">{{dictelement::{{tempvar::bv_hand}}::count}}장</span>
+</div>
+<div class="hand-instruction">카드를 한 번 클릭하면 상세를 보고, 다시 클릭하면 등록합니다. 등록된 카드를 다시 클릭하면 취소합니다.</div>
+</div>
+<div class="zones" aria-label="카드 영역 요약">
+<div class="zone-state"><span class="zone-label">DECK</span><span class="zone-count">{{dictelement::{{tempvar::bv_zones}}::deckCount}}</span></div>
+<div class="zone-state"><span class="zone-label">USED</span><span class="zone-count">{{dictelement::{{tempvar::bv_zones}}::usedCount}}</span></div>
+<div class="zone-state"><span class="zone-label">DISCARD</span><span class="zone-count">{{dictelement::{{tempvar::bv_zones}}::discardCount}}</span></div>
+<div class="zone-state"><span class="zone-label">REMOVED</span><span class="zone-count">{{dictelement::{{tempvar::bv_zones}}::removedCount}}</span></div>
+</div>
+</div>
+
+<div class="selection-status" aria-live="polite">
+<span>등록 {{dictelement::{{tempvar::bv_selection}}::count}}장</span>
+<span>모드 {{dictelement::{{tempvar::bv_selection}}::mode}}</span>
+{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::canSubmit}}::is::true}}
+<span class="is-ready">전송 가능 · Risu 전송 버튼으로 제출 또는 패스</span>
+{{/when}}
+{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::canSubmit}}::isnot::true}}
+<span class="is-locked">전송 불가 · {{dictelement::{{tempvar::bv_selection}}::reasonCode}}</span>
+{{/when}}
+</div>
+
+<div class="selection-area" aria-live="polite">
+{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}::is::null}}
+<div class="selection-empty">
+<span class="step-dot">1</span>
+<span><strong>상세를 볼 카드를 클릭하세요.</strong> 카드를 쓰지 않을 때도 별도 턴 종료 버튼 없이 Risu 전송 버튼을 누릅니다.</span>
+</div>
+{{/when}}
+{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}::isnot::null}}
+<div class="selection-empty" data-hidden="1"></div>
+{{#each::keep {{dictelement::{{tempvar::bv_hand}}::items}} as focused_card}}
+{{#when::keep::{{dictelement::{{slot::focused_card}}::instanceId}}::is::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}}}
+<div class="selection-choice" data-visible="1">
+<div class="choice-name">
+<strong>{{dictelement::{{slot::focused_card}}::name}}</strong>
+{{#when::keep::{{dictelement::{{slot::focused_card}}::selected}}::is::true}}
+<span>등록 {{dictelement::{{slot::focused_card}}::selectionOrder}}번째 · 카드를 다시 클릭하면 등록을 취소합니다.</span>
+{{/when}}
+{{#when::keep::{{dictelement::{{slot::focused_card}}::selected}}::isnot::true}}
+<span>상세 확인 중 · 카드를 다시 클릭하면 사용할 카드로 등록합니다.</span>
+{{/when}}
+</div>
+<div class="forecast" aria-label="공개 카드 수치">
+<div class="forecast-item is-cyan"><span>은폐 비용</span><strong>{{dictelement::{{slot::focused_card}}::finalStealthCost}}</strong></div>
+<div class="forecast-item is-rose"><span>저항 감소</span><strong>{{dictelement::{{slot::focused_card}}::finalResistanceDamage}}</strong></div>
+<div class="forecast-item is-violet"><span>상태</span><strong>{{dictelement::{{slot::focused_card}}::reasonCode}}</strong></div>
+</div>
+</div>
+{{/when}}
+{{/each}}
+{{/when}}
+</div>
+
+<div class="hand-grid">
+{{#each::keep {{dictelement::{{tempvar::bv_hand}}::items}} as hand_card}}
+{{settempvar::hand_card_action::{{dictelement::{{slot::hand_card}}::actionTag}}}}
+<button class="hand-card"
+type="button"
+data-instance-id="{{dictelement::{{slot::hand_card}}::instanceId}}"
+data-card-id="{{dictelement::{{slot::hand_card}}::cardId}}"
+data-origin="{{dictelement::{{slot::hand_card}}::origin}}"
+data-selected="{{dictelement::{{slot::hand_card}}::selected}}"
+data-action-id="{{dictelement::{{tempvar::hand_card_action}}::id}}"
+{{#when::keep::{{dictelement::{{slot::hand_card}}::instanceId}}::is::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}}}data-focused="1"{{/when}}
+{{#when::keep::{{dictelement::{{slot::hand_card}}::instanceId}}::isnot::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}}}data-focused="0"{{/when}}
+{{#when::keep::{{dictelement::{{slot::hand_card}}::playable}}::is::true}}risu-btn="battleController|clickCard|{{dictelement::{{slot::hand_card}}::instanceId}}|{{dictelement::{{tempvar::bv}}::interactionToken}}"{{/when}}
+{{#when::keep::{{dictelement::{{slot::hand_card}}::playable}}::isnot::true}}disabled{{/when}}
+aria-label="카드 상세 및 등록 상태 전환">
+<span class="card-top">
+<span class="card-cost">{{dictelement::{{slot::hand_card}}::finalStealthCost}}</span>
+<span class="card-kind">{{dictelement::{{tempvar::hand_card_action}}::label}}</span>
+</span>
+<span class="card-title">{{dictelement::{{slot::hand_card}}::name}}</span>
+<span class="card-tags">
+<span class="card-tag">{{dictelement::{{tempvar::hand_card_action}}::label}}</span>
+{{#each::keep {{dictelement::{{slot::hand_card}}::mechanisms}} as card_mechanism}}
+<span class="card-tag is-active">{{dictelement::{{slot::card_mechanism}}::label}} <span class="tag-tooltip">{{dictelement::{{slot::card_mechanism}}::tooltip}}</span></span>
+{{/each}}
+</span>
+<span class="card-rule">
+{{#each::keep {{dictelement::{{slot::hand_card}}::descriptionSegments}} as card_description_segment}}
+{{#when::keep::{{dictelement::{{slot::card_description_segment}}::kind}}::is::text}}{{dictelement::{{slot::card_description_segment}}::value}}{{/when}}
+{{#when::keep::{{dictelement::{{slot::card_description_segment}}::kind}}::isnot::text}}<span class="inline-tag">{{dictelement::{{slot::card_description_segment}}::label}} <span class="tag-tooltip">{{dictelement::{{slot::card_description_segment}}::tooltip}}</span></span>{{/when}}
+{{/each}}
+</span>
+<span class="card-rule-lines">
+{{#each::keep {{dictelement::{{slot::hand_card}}::ruleLines}} as card_rule_line}}
+<span class="rule-line">
+{{#each::keep {{dictelement::{{slot::card_rule_line}}::segments}} as card_rule_segment}}
+{{#when::keep::{{dictelement::{{slot::card_rule_segment}}::kind}}::is::text}}{{dictelement::{{slot::card_rule_segment}}::value}}{{/when}}
+{{#when::keep::{{dictelement::{{slot::card_rule_segment}}::kind}}::isnot::text}}<span class="inline-tag">{{dictelement::{{slot::card_rule_segment}}::label}} <span class="tag-tooltip">{{dictelement::{{slot::card_rule_segment}}::tooltip}}</span></span>{{/when}}
+{{/each}}
+</span>
+{{/each}}
+</span>
+<span class="card-modifier"><strong>비용</strong> 기본 {{dictelement::{{slot::hand_card}}::baseStealthCost}} / 최종 {{dictelement::{{slot::hand_card}}::finalStealthCost}} · <strong>저항</strong> 기본 {{dictelement::{{slot::hand_card}}::baseResistanceDamage}} / 최종 {{dictelement::{{slot::hand_card}}::finalResistanceDamage}}</span>
+<span class="card-bottom">
+<span class="card-select-hint">
+{{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::is::true}}등록 {{dictelement::{{slot::hand_card}}::selectionOrder}} · 클릭해 취소{{/when}}
+{{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::isnot::true}}
+{{#when::keep::{{dictelement::{{slot::hand_card}}::instanceId}}::is::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}}}상세 확인 중 · 다시 클릭해 등록{{/when}}
+{{#when::keep::{{dictelement::{{slot::hand_card}}::instanceId}}::isnot::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}}}클릭해 상세 보기{{/when}}
+{{/when}}
+</span>
+<span class="card-damage"><small>저항</small> {{dictelement::{{slot::hand_card}}::finalResistanceDamage}}</span>
+</span>
+</button>
+{{/each}}
+{{#when::keep::{{dictelement::{{tempvar::bv_hand}}::count}}::is::0}}
+<div class="history-entry">현재 표시할 손패가 없습니다.</div>
+{{/when}}
+</div>
+
+{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::ended}}
+<div class="outcome-banner">
+<span>전투가 종료되었습니다.</span>
+<strong>{{dictelement::{{tempvar::bv_outcome}}::label}}</strong>
+</div>
+{{/when}}
+</section>
+</div>
+</main>
+{{/when}}
+{{#when::keep::{{dictelement::{{tempvar::bv}}::kind}}::isnot::battleView}}
+<main class="battle-shell loading-shell">
+<section class="panel loading-panel" aria-live="polite">
+<div class="section-kicker">BATTLE VIEW</div>
+<h1 class="session-title">전투 데이터를 기다리는 중</h1>
+<p class="loading-copy">유효한 battleView가 게시되면 현재 상태와 손패가 이곳에 표시됩니다.</p>
+</section>
+</main>
+{{/when}}
+</body>
+</html>
