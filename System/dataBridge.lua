@@ -323,9 +323,20 @@
     }
 
     local function escapeHtmlText(value)
-        return (string.gsub(value, "[&<>\"'{}():]", function(character)
+        local escaped = string.gsub(value, "[&<>\"'{}():]", function(character)
             return HTML_TEXT_ENTITIES[character]
-        end))
+        end)
+
+        -- RisuAI는 Markdown 렌더링 뒤 U+E9B8..U+E9BF를 자체 escape
+        -- 문자로 복원한다. 원본 표시 문자열의 같은 private-use 문자가
+        -- 그 경계에 소비되지 않도록 브라우저 단계까지 숫자 엔티티로 둔다.
+        for offset = 0, 7 do
+            local character = string.char(238, 166, 184 + offset)
+            local entity = "&#" .. tostring(59832 + offset) .. ";"
+            escaped = string.gsub(escaped, character, entity)
+        end
+
+        return escaped
     end
 
     local encodeTable

@@ -1085,7 +1085,11 @@ local reorderedEncoded = assertOk(
 assert(reorderedEncoded.encoded == encoded.encoded, "equivalent insertion order changed encoding")
 
 local canaryView = clone(view)
-local canaryText = "한글 CBS canary ::tag[contact]:: {{literal}} <b data-x=\"quoted\">& 'markup'</b> (끝):"
+local risuPrivateUseCanary = ""
+for offset = 0, 7 do
+    risuPrivateUseCanary = risuPrivateUseCanary .. string.char(238, 166, 184 + offset)
+end
+local canaryText = "한글 CBS canary ::tag[contact]:: {{literal}} <b data-x=\"quoted\">& 'markup'</b> (끝):" .. risuPrivateUseCanary
 canaryView.environment.description = canaryText
 local canaryEncoded = assertOk(
     "CBS punctuation canary encode",
@@ -1096,6 +1100,13 @@ assert(not canaryEncoded.encoded:find("{{", 1, true), "wire exposed raw CBS open
 assert(not canaryEncoded.encoded:find("}}", 1, true), "wire exposed raw CBS closing braces")
 assert(not canaryEncoded.encoded:find("<b", 1, true), "wire exposed a raw HTML tag from display text")
 assert(canaryEncoded.encoded:find("&lt;b", 1, true), "wire did not entity-escape HTML display text")
+for offset = 0, 7 do
+    local privateUseCharacter = string.char(238, 166, 184 + offset)
+    assert(not canaryEncoded.encoded:find(privateUseCharacter, 1, true),
+        "wire exposed a raw Risu private-use escape character")
+end
+assert(canaryEncoded.encoded:find("&#59832;", 1, true),
+    "wire did not entity-escape the first Risu private-use character")
 recordWire("WIRE_CANARY", canaryEncoded.encoded)
 
 local emptyStringView = clone(view)
@@ -1755,7 +1766,8 @@ try {
 
     $canaryRoot = ConvertFrom-Json -InputObject $firstMarkers.WIRE_CANARY
     $canaryEnvironment = ConvertFrom-Json -InputObject $canaryRoot.environment
-    $expectedCanary = '한글 CBS canary ::tag[contact]:: {{literal}} <b data-x="quoted">& ''markup''</b> (끝):'
+    $risuPrivateUseCanary = [string]::Concat(@(0xE9B8..0xE9BF | ForEach-Object { [char]$_ }))
+    $expectedCanary = '한글 CBS canary ::tag[contact]:: {{literal}} <b data-x="quoted">& ''markup''</b> (끝):' + $risuPrivateUseCanary
     Assert-Contract (-not $canaryEnvironment.description.Contains('<b')) 'HTML canary remained active markup after wire decode'
     Assert-Contract (-not $canaryEnvironment.description.Contains('{{literal}}')) 'CBS canary remained active syntax after wire decode'
     Assert-Contract ([System.Net.WebUtility]::HtmlDecode($canaryEnvironment.description) -ceq $expectedCanary) 'HTML/CBS entity text did not render back to the original canary'
