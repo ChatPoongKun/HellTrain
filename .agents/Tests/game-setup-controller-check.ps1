@@ -55,15 +55,27 @@ local lorePaths = {
     ["CharTraits.db"] = "DB/CharTraits.db",
     ["Environments.db"] = "DB/Environments.db",
     ["YooJiyoung.db"] = "Char/YooJiyoung.db",
+    ["sideBar.html"] = "html/sideBar.html",
+    ["cardDraft.html"] = "html/cardDraft.html",
 }
+local loreContentTransform
+local loreLoadCounts = {}
 function getLoreBooks(triggerId, name)
+    loreLoadCounts[name] = (loreLoadCounts[name] or 0) + 1
     local path = lorePaths[name]
-    return path and { { content = readFile(path) } } or {}
+    if not path then return {} end
+    local content = readFile(path)
+    if type(loreContentTransform) == "function" then
+        content = loreContentTransform(name, content)
+    end
+    return { { content = content } }
 end
 function loadLores(triggerId, name)
-    if name == "sideBar.html" then return readFile("html/sideBar.html") end
-    if name == "cardDraft.html" then return readFile("html/cardDraft.html") end
-    return nil
+    local content = ""
+    for _, lore in ipairs(getLoreBooks(triggerId, name)) do
+        content = content .. lore.content
+    end
+    return content ~= "" and content or nil
 end
 
 local function clone(value, active)
@@ -204,6 +216,8 @@ local function reset(seed)
     dropStateWrite = false
     dropChatKey = nil
     dropReadyValue = nil
+    loreContentTransform = nil
+    loreLoadCounts = {}
     setState = originalHosts.setState
     getState = originalHosts.getState
     setChatVar = originalHosts.setChatVar
@@ -253,6 +267,66 @@ local publishOnlyOrder = {
     "chat:" .. READY .. ":ready",
     "reload",
 }
+
+-- RisuAI getLoreBooks parses lore CBS before returning its content. The draft
+-- lore must therefore be loaded after the new View is published, both on the
+-- initial start and after every choice.
+reset("12001")
+local parsedDraftPrefix = "[host-parsed-card-draft:"
+loreContentTransform = function(name, content)
+    if name ~= "cardDraft.html" then return content end
+    record("lore:" .. name)
+    return parsedDraftPrefix .. tostring(chatVars[VIEW]) .. "]"
+end
+local hostParsedStart = assertOk("host-parsed fresh start", controller("start"))
+assert(hostParsedStart.view.phase == "deckDraft", "host-parsed start did not build a deckDraft View")
+assert(chatVars[UI] == readFile("html/sideBar.html") .. parsedDraftPrefix .. chatVars[VIEW] .. "]",
+    "card draft lore was parsed before the fresh gameSetupView was published")
+local function assertDraftLoreOrder(label)
+    local viewWriteIndex
+    local loreLoadIndex
+    local uiWriteIndex
+    local viewWrites = 0
+    local loreLoads = 0
+    local uiWrites = 0
+    for index, event in ipairs(events) do
+        if event == "chat:" .. VIEW .. ":value" then
+            viewWrites = viewWrites + 1
+            viewWriteIndex = viewWriteIndex or index
+        end
+        if event == "lore:cardDraft.html" then
+            loreLoads = loreLoads + 1
+            loreLoadIndex = loreLoadIndex or index
+        end
+        if event == "chat:" .. UI .. ":value" then
+            uiWrites = uiWrites + 1
+            uiWriteIndex = uiWriteIndex or index
+        end
+    end
+    assert(viewWrites == 1 and loreLoads == 1 and uiWrites == 1,
+        label .. " duplicated or omitted a View/lore/UI boundary")
+    assert(type(viewWriteIndex) == "number" and type(loreLoadIndex) == "number" and type(uiWriteIndex) == "number",
+        label .. " did not record the View/lore/UI boundaries")
+    assert(viewWriteIndex < loreLoadIndex and loreLoadIndex < uiWriteIndex,
+        label .. " must publish View, parse draft lore, then write UI")
+end
+assertDraftLoreOrder("host-parsed fresh start")
+
+local hostParsedState = clone(states[AUTHORITY])
+local hostParsedBeforeChoiceWire = chatVars[VIEW]
+events = {}
+local hostParsedChoice = assertOk("host-parsed choose", controller(
+    "choose",
+    hostParsedState.offer.cardIds[1],
+    hostParsedState.offer.interactionToken
+))
+assert(hostParsedChoice.applied == true and #states[AUTHORITY].selectedCardIds == 1,
+    "host-parsed choose did not advance authority")
+assert(hostParsedChoice.view.progress.selectedCount == 1 and chatVars[VIEW] ~= hostParsedBeforeChoiceWire,
+    "host-parsed choose did not publish the advanced View")
+assert(chatVars[UI] == readFile("html/sideBar.html") .. parsedDraftPrefix .. chatVars[VIEW] .. "]",
+    "card draft lore used the previous gameSetupView after a choice")
+assertDraftLoreOrder("host-parsed choose")
 
 -- Fresh start consumes exactly one CBS randint and publishes only verified data.
 reset("12345")
@@ -338,6 +412,8 @@ dropChatKey = VIEW
 local failedView = assertFailed("dropped View publication", controller("start"), "view_write_not_persisted")
 assert(type(states[AUTHORITY]) == "table" and states[AUTHORITY].rng.seed == 24680,
     "publication failure lost its verified authority")
+assert((loreLoadCounts["cardDraft.html"] or 0) == 0,
+    "failed View verification must not parse card draft lore")
 assert(cbsCalls == 1 and reloads == 0 and chatVars[READY] ~= "ready",
     "failed publication reloaded/marked ready or consumed the wrong seed count")
 local failedAuthority = canonical(states[AUTHORITY])

@@ -392,12 +392,9 @@
         local viewCopy, viewCopyError = cloneJson(viewReport.view, "$.target.view")
         if viewCopyError then return nil, { viewCopyError } end
 
-        local ui, uiErrors = loadSetupUi()
-        if uiErrors then return nil, uiErrors end
         return {
             state = stateCopy,
             view = viewCopy,
-            ui = ui,
         }, nil
     end
 
@@ -515,7 +512,12 @@
             })
         end
 
-        local uiErrors = writeChatVarVerified(UI_NAME, target.ui, "$.chatVar.ui")
+        -- getLoreBooks는 로어 내용을 반환하기 전에 CBS를 평가한다. 따라서
+        -- cardDraft.html은 방금 게시한 gameSetupView를 재읽을 수 있게 View
+        -- write-read 검증이 끝난 뒤에만 로드해야 한다.
+        local ui, loadUiErrors = loadSetupUi()
+        if loadUiErrors then return failure(loadUiErrors) end
+        local uiErrors = writeChatVarVerified(UI_NAME, ui, "$.chatVar.ui")
         if uiErrors then return failure(uiErrors) end
         local readyErrors = writeChatVarVerified(READY_NAME, "ready", "$.chatVar.gameSetupReady")
         if readyErrors then return failure(readyErrors) end

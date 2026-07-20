@@ -193,6 +193,8 @@ gameSetupReady = "updating" 쓰기/재읽기
 
 각 호스트 쓰기는 즉시 해당 getter로 다시 읽고 방금 쓴 값과 정확히 같은지 확인한다. 읽기 결과가 다르면 `*_write_not_persisted` 계열의 구조화 오류로 실패한다. `reloadDisplay`는 권위 상태, 공개 View, UI anchor와 최종 `ready` 마커가 모두 재읽기 검증을 통과한 뒤에만 한 번 호출한다.
 
+RisuAI의 `getLoreBooks`는 로어북 내용을 반환하기 전에 CBS를 평가한다. 따라서 `cardDraft.html`은 `gameSetupView` wire의 쓰기와 재읽기 검증이 모두 끝난 뒤에만 로드해야 한다. View보다 먼저 로드하면 템플릿이 빈 값이나 이전 라운드의 View로 선평가된 정적 HTML이 되어, 이후 View를 게시해도 UI가 대기 화면에 머물거나 한 라운드 뒤처진다.
+
 `updating`은 성공 표시가 아니다. 게시 과정이 중단되면 `ready`를 기록하거나 reload하지 않는다. 다음 `start` 호출은 저장된 권위 상태가 유효할 때 새 상태를 덮어쓰지 않고 동일 상태에서 게시를 재개한다. 따라서 권위 저장 뒤 View/UI 게시가 실패해도 재시작이 선택 이력과 RNG를 초기화하지 않는다.
 
 ### 8.2 카드 선택
