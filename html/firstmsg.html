@@ -1,0 +1,190 @@
+## 마지막 열차는 돌아오지 않는다
+
+> 성인용 다크 픽션입니다. 작품에 등장하는 인물은 모두 만 19세 이상의 성인이며, 비동의적 성적 괴롭힘과 범죄적 선택을 소재로 다룹니다.
+
+{{user}}의 마지막 기억은 자정이 가까운 시각, 텅 빈 승강장으로 미끄러져 들어오던 막차였다. 행선지는 분명 익숙한 역이었고, 문이 닫힐 때까지만 해도 오늘은 그저 지독하게 긴 하루의 끝처럼 보였다.
+
+하지만 열차는 내려야 할 역을 세 번이나 지나쳤다. 창밖에는 같은 터널과 같은 비상등만 되풀이됐고, 객실 전광판에는 존재하지 않는 역명이 붉게 번졌다. 휴대전화는 시간을 잃었고, 비상 통화기는 웃음 같은 잡음만 토해 냈다. 다른 성인 승객들은 이 이상을 알아차리지 못한 듯 서로에게 무심한 얼굴로 흔들리고 있었다.
+
+출구를 찾을수록 객실은 더 길어졌다. 칸을 옮길 때마다 불쾌한 충동이 마음 깊은 곳에서 자신의 목소리를 흉내 냈고, 천장의 안내 방송은 욕망을 증명한 자만 다음 칸으로 갈 수 있다고 속삭였다. 이곳이 사람의 경계와 죄책감을 갉아먹는 감옥이라는 사실을 {{user}}는 너무 늦게 깨달았다.
+
+그것이 범죄이며 누구도 동의하지 않았다는 사실을 알면서도, {{user}}는 끝내 타인의 경계를 짓밟는 치한행위를 저지르기로 결심했다. 바로 그 순간, 닫혀 있던 다음 객차의 문 위로 처음 보는 붉은 불이 켜졌다.
+
+{{#when::keep::{{isfirstmsg}}::is::1}}
+<style>
+.helltrain-entry {
+  --ht-bg: #0d0c12;
+  --ht-panel: rgba(22, 19, 28, 0.94);
+  --ht-line: rgba(220, 204, 176, 0.2);
+  --ht-text: #ece6dc;
+  --ht-muted: #afa69d;
+  --ht-accent: #bd4f55;
+  --ht-accent-bright: #e06a70;
+  position: relative;
+  box-sizing: border-box;
+  width: min(100%, 760px);
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--ht-line);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 28%),
+    var(--ht-bg);
+  color: var(--ht-text);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.38);
+  font-family: "Pretendard", "Noto Sans KR", sans-serif;
+}
+
+.helltrain-entry * {
+  box-sizing: border-box;
+}
+
+.helltrain-setup {
+  position: relative;
+  padding: 24px clamp(22px, 5vw, 48px) 30px;
+  border-top: 1px solid var(--ht-line);
+  background: var(--ht-panel);
+  text-align: center;
+}
+
+.helltrain-setup::before {
+  position: absolute;
+  top: -1px;
+  left: 12%;
+  width: 76%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--ht-accent), transparent);
+  content: "";
+}
+
+.helltrain-setup-label {
+  margin: 0 0 6px;
+  color: var(--ht-accent-bright);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.helltrain-setup-title {
+  margin: 0;
+  color: #fffaf1;
+  font-size: 1.15rem;
+  font-weight: 750;
+}
+
+.helltrain-setup-copy {
+  margin: 10px auto 20px;
+  max-width: 35rem;
+  color: var(--ht-muted);
+  font-size: 0.86rem;
+  line-height: 1.65;
+  word-break: keep-all;
+}
+
+.helltrain-start {
+  display: inline-flex;
+  min-width: min(100%, 260px);
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 226, 210, 0.2);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #7f2f37, #b84a51);
+  color: #fffaf4;
+  box-shadow: 0 10px 25px rgba(98, 27, 34, 0.35);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  transition: filter 160ms ease, transform 160ms ease;
+}
+
+.helltrain-start:hover,
+.helltrain-start:focus-visible {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+}
+
+.helltrain-start:active {
+  transform: translateY(1px);
+}
+
+.helltrain-progress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--ht-muted);
+  font-size: 0.82rem;
+}
+
+.helltrain-progress-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--ht-accent-bright);
+  box-shadow: 0 0 10px rgba(224, 106, 112, 0.72);
+}
+
+.helltrain-dynamic-ui:empty {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .helltrain-entry {
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .helltrain-start {
+    transition: none;
+  }
+}
+</style>
+
+<article class="helltrain-entry" aria-label="게임 시작">
+  {{#when::keep::{{getvar::gameSetupReady}}::isnot::ready}}
+  <section class="helltrain-setup" aria-labelledby="helltrain-start-title">
+    <p class="helltrain-setup-label">BOARDING PROTOCOL</p>
+    <h2 class="helltrain-setup-title" id="helltrain-start-title">지옥철에 탑승하시겠습니까?</h2>
+    <p class="helltrain-setup-copy" id="helltrain-start-copy">
+      게임을 시작하면 초기 상태를 만들고, 덱을 구성하기 위한 카드 드래프트를 엽니다.
+    </p>
+    <button
+      class="helltrain-start"
+      type="button"
+      risu-btn="init|start"
+      aria-describedby="helltrain-start-copy"
+    >게임 시작</button>
+  </section>
+  {{/when}}
+  {{#when::keep::{{getvar::gameSetupReady}}::is::ready}}
+  {{settempvar::setup_raw::{{getvar::gameSetupView}}}}
+  {{settempvar::setup_phase::{{dictelement::{{tempvar::setup_raw}}::phase}}}}
+  {{#when::keep::{{tempvar::setup_phase}}::isnot::complete}}
+  <section class="helltrain-setup" aria-live="polite">
+    {{#when::keep::{{tempvar::setup_phase}}::is::deckDraft}}
+    <p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>초기 덱 구성 진행 중 · 현재 단계에서 이어집니다</p>
+    {{/when}}
+    {{#when::keep::{{tempvar::setup_phase}}::is::deckComplete}}
+    <p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>초기 덱 구성 완료 · 캐릭터 후보가 추가되면 선택 단계가 열립니다</p>
+    {{/when}}
+    {{#when::keep::{{tempvar::setup_phase}}::is::characterSelect}}
+    <p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>탑승객 선택 진행 중 · 현재 단계에서 이어집니다</p>
+    {{/when}}
+    {{#when::keep::{{tempvar::setup_phase}}::is::battleReady}}
+    <p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>전투 준비 완료 · 게임 화면을 불러옵니다</p>
+    {{/when}}
+  </section>
+  {{/when}}
+  <div class="helltrain-dynamic-ui" aria-label="게임 화면">{{getvar::🔯🔯🔯}}</div>
+  {{/when}}
+</article>
+{{/when}}

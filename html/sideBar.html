@@ -20,6 +20,7 @@ z-index: 9999;
 
 /* 개별 버튼 스타일 */
 .risu-side-btn {
+position: relative;
 background: transparent;
 border: none;
 outline: none;
@@ -36,6 +37,35 @@ justify-content: center;
 padding: 0;
 }
 
+/* 버튼에 마우스를 올렸을 때 왼쪽에 표시되는 이름 */
+.risu-side-tooltip {
+position: absolute;
+right: calc(100% + 10px);
+top: 50%;
+transform: translateY(-50%) translateX(4px);
+padding: 6px 10px;
+background-color: rgba(20, 20, 24, 0.95);
+border: 1px solid rgba(255, 255, 255, 0.12);
+border-radius: 8px;
+box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+color: #ffffff;
+font-size: 13px;
+font-weight: 500;
+line-height: 1;
+white-space: nowrap;
+opacity: 0;
+visibility: hidden;
+pointer-events: none;
+transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s ease;
+}
+
+.risu-side-btn:hover .risu-side-tooltip,
+.risu-side-btn:focus-visible .risu-side-tooltip {
+opacity: 1;
+visibility: visible;
+transform: translateY(-50%) translateX(0);
+}
+
 /* 호버 및 액티브 효과 */
 .risu-side-btn:hover {
 background-color: rgba(255, 255, 255, 0.12);
@@ -47,17 +77,19 @@ box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 transform: scale(0.95);
 background-color: rgba(255, 255, 255, 0.05);
 }
-</style>
 
-<body>
+@media (max-width: 600px) {
+.risu-side-panel {
+z-index: 20;
+}
+}
+</style>
 
 <!-- 우측 중단 사이드 버튼 패널 -->
 <div class="risu-side-panel">
-<button class="risu-side-btn" risu-btn="popupManage|root|uiRender|append|캐릭터 리스트" data-tooltip="캐릭터 리스트">💕</button>
-<button class="risu-side-btn" risu-btn="popupManage|root|uiRender|append|도감" data-tooltip="도감">📖</button>
-<button class="risu-side-btn" risu-btn="popupManage|root|uiRender|append|덱 확인" data-tooltip="덱확인">🗂️</button>
-<button class="risu-side-btn" risu-btn="popupManage|root|uiRender|append|플레이 가이드" data-tooltip="플레이가이드">❓</button>
-<button class="risu-side-btn" risu-btn="popupManage|root|uiRender|append|설정" data-tooltip="설정">⚙️</button>
+<button class="risu-side-btn" risu-btn="popupManage|root|uiRender|append|캐릭터 리스트" aria-label="캐릭터 리스트">💕<span class="risu-side-tooltip" aria-hidden="true">캐릭터 리스트</span></button>
+<button class="risu-side-btn" risu-btn="popupManage|root|uiRender|append|도감" aria-label="도감">📖<span class="risu-side-tooltip" aria-hidden="true">도감</span></button>
+<button class="risu-side-btn" risu-btn="popupManage|root|uiRender|append|덱 확인" aria-label="덱 확인">🗂️<span class="risu-side-tooltip" aria-hidden="true">덱 확인</span></button>
+<button class="risu-side-btn" risu-btn="popupManage|root|uiRender|append|플레이 가이드" aria-label="플레이 가이드">❓<span class="risu-side-tooltip" aria-hidden="true">플레이 가이드</span></button>
+<button class="risu-side-btn" risu-btn="popupManage|root|uiRender|append|설정" aria-label="설정">⚙️<span class="risu-side-tooltip" aria-hidden="true">설정</span></button>
 </div>
-
-</body>

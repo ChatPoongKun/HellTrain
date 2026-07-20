@@ -705,9 +705,11 @@
             return failure(stateErrors)
         end
         if current.phase ~= "deckDraft" then
-            return failure({
-                makeError("draft_already_complete", "$.state.phase", "카드 10장 선택이 이미 완료되었습니다."),
-            })
+            local stateCopy, cloneError = cloneChecked(state, "$.state")
+            if cloneError then
+                return failure({ cloneError })
+            end
+            return success(stateCopy, false, true)
         end
 
         if command.interactionToken ~= current.offer.interactionToken then

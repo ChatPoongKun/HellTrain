@@ -230,6 +230,8 @@ assertFailed("missing static card", runScript("game-setup-check", "gameSetup", "
 local trace = {}
 local counts = {}
 local state = firstApplied.state
+local finalCard
+local finalToken
 counts[state.selectedCardIds[1]] = 1
 trace[#trace + 1] = table.concat(started.state.offer.cardIds, ",") .. ">" .. state.selectedCardIds[1]
 
@@ -238,6 +240,8 @@ while state.phase == "deckDraft" do
     trace[#trace + 1] = table.concat(state.offer.cardIds, ",") .. ">" .. state.offer.cardIds[1]
     local before = canonical(state)
     local chosen = state.offer.cardIds[1]
+    finalCard = chosen
+    finalToken = state.offer.interactionToken
     local report = assertOk("choose round " .. state.offer.round, runScript("game-setup-check", "gameSetup", "choose", state, {
         cardId = chosen,
         interactionToken = state.offer.interactionToken,
@@ -254,9 +258,16 @@ assert(#state.selectedCardIds == 10, "completed deck is not ten cards")
 assert(state.offer == nil, "completed state retained an offer")
 assertOk("validate complete", runScript("game-setup-check", "gameSetup", "validate", state, staticData))
 for _, amount in pairs(counts) do assert(amount <= 2, "completed deck exceeded copy limit") end
-assertFailed("choose after complete", runScript("game-setup-check", "gameSetup", "choose", state, {
-    cardId = state.selectedCardIds[1], interactionToken = started.state.offer.interactionToken,
+local completeSnapshot = canonical(state)
+local completeStale = assertOk("tenth choice double click", runScript("game-setup-check", "gameSetup", "choose", state, {
+    cardId = finalCard, interactionToken = finalToken,
 }, staticData))
+assert(completeStale.applied == false and completeStale.stale == true,
+    "tenth choice double click was not a successful stale no-op")
+assert(canonical(completeStale.state) == completeSnapshot and canonical(state) == completeSnapshot,
+    "tenth choice double click changed the completed state")
+assert(completeStale.state ~= state and completeStale.state.selectedCardIds ~= state.selectedCardIds,
+    "tenth choice stale result aliases the completed input")
 
 local function runTraceAgain()
     local current = assertOk("trace restart", runScript("game-setup-check", "gameSetup", "start", spec, staticData)).state
