@@ -1,599 +1,599 @@
 <style>
 .setup-draft {
-  --draft-bg: #070a0f;
-  --draft-panel: rgba(14, 20, 29, 0.96);
-  --draft-panel-soft: rgba(22, 30, 42, 0.82);
-  --draft-line: rgba(148, 163, 184, 0.18);
-  --draft-line-strong: rgba(148, 163, 184, 0.34);
-  --draft-text: #edf4fb;
-  --draft-muted: #9baaba;
-  --draft-dim: #6e7d8d;
-  --draft-cyan: #46d9ef;
-  --draft-cyan-soft: rgba(70, 217, 239, 0.13);
-  --draft-rose: #fb7185;
-  --draft-rose-soft: rgba(251, 113, 133, 0.12);
-  --draft-amber: #f5c451;
-  position: relative;
-  width: min(100%, 760px);
-  margin: 14px auto 0;
-  overflow: hidden;
-  color: var(--draft-text);
-  border: 1px solid var(--draft-line);
-  border-radius: 20px;
-  background:
-    linear-gradient(90deg, transparent 0 8%, rgba(70, 217, 239, 0.045) 8% 8.35%, transparent 8.35% 91.65%, rgba(70, 217, 239, 0.045) 91.65% 92%, transparent 92%),
-    radial-gradient(circle at 50% -12%, rgba(70, 217, 239, 0.15), transparent 45%),
-    linear-gradient(180deg, #111823 0%, var(--draft-bg) 100%);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.38), inset 0 1px rgba(255, 255, 255, 0.035);
-  font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
-  line-height: 1.5;
-  isolation: isolate;
+--draft-bg: #070a0f;
+--draft-panel: rgba(14, 20, 29, 0.96);
+--draft-panel-soft: rgba(22, 30, 42, 0.82);
+--draft-line: rgba(148, 163, 184, 0.18);
+--draft-line-strong: rgba(148, 163, 184, 0.34);
+--draft-text: #edf4fb;
+--draft-muted: #9baaba;
+--draft-dim: #6e7d8d;
+--draft-cyan: #46d9ef;
+--draft-cyan-soft: rgba(70, 217, 239, 0.13);
+--draft-rose: #fb7185;
+--draft-rose-soft: rgba(251, 113, 133, 0.12);
+--draft-amber: #f5c451;
+position: relative;
+width: min(100%, 760px);
+margin: 14px auto 0;
+overflow: hidden;
+color: var(--draft-text);
+border: 1px solid var(--draft-line);
+border-radius: 20px;
+background:
+linear-gradient(90deg, transparent 0 8%, rgba(70, 217, 239, 0.045) 8% 8.35%, transparent 8.35% 91.65%, rgba(70, 217, 239, 0.045) 91.65% 92%, transparent 92%),
+radial-gradient(circle at 50% -12%, rgba(70, 217, 239, 0.15), transparent 45%),
+linear-gradient(180deg, #111823 0%, var(--draft-bg) 100%);
+box-shadow: 0 24px 60px rgba(0, 0, 0, 0.38), inset 0 1px rgba(255, 255, 255, 0.035);
+font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+line-height: 1.5;
+isolation: isolate;
 }
 
 .setup-draft,
 .setup-draft * {
-  box-sizing: border-box;
+box-sizing: border-box;
 }
 
 .setup-draft::before {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  content: "";
-  opacity: 0.26;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.024) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-  background-size: 30px 30px;
-  mask-image: linear-gradient(to bottom, black, transparent 86%);
+position: absolute;
+inset: 0;
+z-index: -1;
+pointer-events: none;
+content: "";
+opacity: 0.26;
+background-image:
+linear-gradient(rgba(255, 255, 255, 0.024) 1px, transparent 1px),
+linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+background-size: 30px 30px;
+mask-image: linear-gradient(to bottom, black, transparent 86%);
 }
 
 .setup-draft .draft-shell {
-  padding: clamp(14px, 3.5vw, 25px);
+padding: clamp(14px, 3.5vw, 25px);
 }
 
 .setup-draft .draft-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 18px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid var(--draft-line);
+display: grid;
+grid-template-columns: minmax(0, 1fr) auto;
+align-items: end;
+gap: 18px;
+padding-bottom: 15px;
+border-bottom: 1px solid var(--draft-line);
 }
 
 .setup-draft .draft-kicker,
 .setup-draft .draft-metric-label,
 .setup-draft .draft-section-label,
 .setup-draft .draft-stat-label {
-  color: var(--draft-muted);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.11em;
-  line-height: 1.25;
-  text-transform: uppercase;
+color: var(--draft-muted);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 10px;
+font-weight: 800;
+letter-spacing: 0.11em;
+line-height: 1.25;
+text-transform: uppercase;
 }
 
 .setup-draft .draft-kicker {
-  color: var(--draft-cyan);
+color: var(--draft-cyan);
 }
 
 .setup-draft .draft-title {
-  margin: 4px 0 0;
-  color: #fff;
-  font-size: clamp(20px, 4.4vw, 30px);
-  font-weight: 900;
-  letter-spacing: -0.045em;
-  line-height: 1.15;
+margin: 4px 0 0;
+color: #fff;
+font-size: clamp(20px, 4.4vw, 30px);
+font-weight: 900;
+letter-spacing: -0.045em;
+line-height: 1.15;
 }
 
 .setup-draft .draft-subtitle {
-  margin: 7px 0 0;
-  color: var(--draft-muted);
-  font-size: 12px;
+margin: 7px 0 0;
+color: var(--draft-muted);
+font-size: 12px;
 }
 
 .setup-draft .draft-round {
-  min-width: 92px;
-  padding: 10px 12px;
-  border: 1px solid rgba(70, 217, 239, 0.26);
-  border-radius: 12px;
-  background: var(--draft-cyan-soft);
-  text-align: right;
+min-width: 92px;
+padding: 10px 12px;
+border: 1px solid rgba(70, 217, 239, 0.26);
+border-radius: 12px;
+background: var(--draft-cyan-soft);
+text-align: right;
 }
 
 .setup-draft .draft-round strong {
-  display: block;
-  margin-top: 2px;
-  color: #fff;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 20px;
-  line-height: 1;
+display: block;
+margin-top: 2px;
+color: #fff;
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 20px;
+line-height: 1;
 }
 
 .setup-draft .draft-progress {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 12px 0 0;
+display: grid;
+grid-template-columns: repeat(2, minmax(0, 1fr));
+gap: 8px;
+margin: 12px 0 0;
 }
 
 .setup-draft .draft-metric {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 9px 11px;
-  border: 1px solid var(--draft-line);
-  border-radius: 11px;
-  background: rgba(2, 6, 12, 0.45);
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 10px;
+padding: 9px 11px;
+border: 1px solid var(--draft-line);
+border-radius: 11px;
+background: rgba(2, 6, 12, 0.45);
 }
 
 .setup-draft .draft-metric strong {
-  color: #fff;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 14px;
+color: #fff;
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 14px;
 }
 
 .setup-draft .draft-section-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 18px 0 9px;
+display: flex;
+align-items: baseline;
+justify-content: space-between;
+gap: 12px;
+margin: 18px 0 9px;
 }
 
 .setup-draft .draft-section-title {
-  margin: 0;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 850;
+margin: 0;
+color: #fff;
+font-size: 14px;
+font-weight: 850;
 }
 
 .setup-draft .draft-instruction {
-  color: var(--draft-muted);
-  font-size: 10px;
-  text-align: right;
+color: var(--draft-muted);
+font-size: 10px;
+text-align: right;
 }
 
 .setup-draft .draft-none,
 .setup-draft .draft-choice-state {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  clip-path: inset(50%);
-  white-space: nowrap;
+position: absolute;
+width: 1px;
+height: 1px;
+margin: -1px;
+overflow: hidden;
+clip: rect(0 0 0 0);
+clip-path: inset(50%);
+white-space: nowrap;
 }
 
 .setup-draft .draft-offers {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 9px;
+display: grid;
+grid-template-columns: repeat(3, minmax(0, 1fr));
+gap: 9px;
 }
 
 .setup-draft .draft-slot {
-  position: relative;
-  min-width: 0;
+position: relative;
+min-width: 0;
 }
 
 .setup-draft .draft-card {
-  position: relative;
-  display: grid;
-  grid-template-rows: auto auto auto 1fr auto;
-  min-height: 252px;
-  padding: 13px 13px 12px;
-  overflow: hidden;
-  border: 1px solid var(--draft-line);
-  border-radius: 15px;
-  color: var(--draft-text);
-  background: linear-gradient(150deg, rgba(29, 39, 53, 0.97), rgba(10, 15, 23, 0.99));
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
-  cursor: pointer;
-  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+position: relative;
+display: grid;
+grid-template-rows: auto auto auto 1fr auto;
+min-height: 252px;
+padding: 13px 13px 12px;
+overflow: hidden;
+border: 1px solid var(--draft-line);
+border-radius: 15px;
+color: var(--draft-text);
+background: linear-gradient(150deg, rgba(29, 39, 53, 0.97), rgba(10, 15, 23, 0.99));
+box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
+cursor: pointer;
+transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .setup-draft .draft-card::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  content: "";
-  background: linear-gradient(180deg, var(--draft-cyan), rgba(70, 217, 239, 0.12));
-  box-shadow: 0 0 18px rgba(70, 217, 239, 0.32);
+position: absolute;
+inset: 0 auto 0 0;
+width: 3px;
+content: "";
+background: linear-gradient(180deg, var(--draft-cyan), rgba(70, 217, 239, 0.12));
+box-shadow: 0 0 18px rgba(70, 217, 239, 0.32);
 }
 
 .setup-draft .draft-card:hover {
-  border-color: var(--draft-line-strong);
-  transform: translateY(-2px);
+border-color: var(--draft-line-strong);
+transform: translateY(-2px);
 }
 
 .setup-draft .draft-choice-state:focus-visible + .draft-card {
-  outline: 2px solid var(--draft-cyan);
-  outline-offset: 3px;
+outline: 2px solid var(--draft-cyan);
+outline-offset: 3px;
 }
 
 .setup-draft .draft-choice-state:checked + .draft-card {
-  border-color: rgba(70, 217, 239, 0.56);
-  box-shadow: 0 13px 34px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(70, 217, 239, 0.12);
-  transform: translateY(-3px);
+border-color: rgba(70, 217, 239, 0.56);
+box-shadow: 0 13px 34px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(70, 217, 239, 0.12);
+transform: translateY(-3px);
 }
 
 .setup-draft .draft-card-top,
 .setup-draft .draft-card-bottom {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+display: flex;
+align-items: flex-start;
+justify-content: space-between;
+gap: 8px;
 }
 
 .setup-draft .draft-cost,
 .setup-draft .draft-damage {
-  display: inline-grid;
-  min-width: 42px;
-  min-height: 38px;
-  place-items: center;
-  border-radius: 10px;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 16px;
-  font-weight: 900;
+display: inline-grid;
+min-width: 42px;
+min-height: 38px;
+place-items: center;
+border-radius: 10px;
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 16px;
+font-weight: 900;
 }
 
 .setup-draft .draft-cost {
-  border: 1px solid rgba(70, 217, 239, 0.32);
-  color: var(--draft-cyan);
-  background: rgba(2, 8, 14, 0.62);
+border: 1px solid rgba(70, 217, 239, 0.32);
+color: var(--draft-cyan);
+background: rgba(2, 8, 14, 0.62);
 }
 
 .setup-draft .draft-cost::before {
-  margin-right: 4px;
-  content: "◐";
-  font-size: 10px;
+margin-right: 4px;
+content: "◐";
+font-size: 10px;
 }
 
 .setup-draft .draft-copy-count {
-  padding: 5px 7px;
-  border: 1px solid var(--draft-line);
-  border-radius: 999px;
-  color: var(--draft-muted);
-  background: rgba(2, 6, 12, 0.5);
-  font-size: 9px;
-  font-weight: 800;
-  white-space: nowrap;
+padding: 5px 7px;
+border: 1px solid var(--draft-line);
+border-radius: 999px;
+color: var(--draft-muted);
+background: rgba(2, 6, 12, 0.5);
+font-size: 9px;
+font-weight: 800;
+white-space: nowrap;
 }
 
 .setup-draft .draft-card-title {
-  margin: 13px 0 0;
-  color: #fff;
-  font-size: 15px;
-  font-weight: 900;
-  letter-spacing: -0.025em;
-  line-height: 1.25;
+margin: 13px 0 0;
+color: #fff;
+font-size: 15px;
+font-weight: 900;
+letter-spacing: -0.025em;
+line-height: 1.25;
 }
 
 .setup-draft .draft-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 8px;
+display: flex;
+flex-wrap: wrap;
+gap: 5px;
+margin-top: 8px;
 }
 
 .setup-draft .draft-tag,
 .setup-draft .draft-inline-tag {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid rgba(70, 217, 239, 0.24);
-  border-radius: 999px;
-  color: #bff6ff;
-  background: var(--draft-cyan-soft);
-  font-size: 9px;
-  font-weight: 800;
-  white-space: nowrap;
+position: relative;
+display: inline-flex;
+align-items: center;
+border: 1px solid rgba(70, 217, 239, 0.24);
+border-radius: 999px;
+color: #bff6ff;
+background: var(--draft-cyan-soft);
+font-size: 9px;
+font-weight: 800;
+white-space: nowrap;
 }
 
 .setup-draft .draft-tag {
-  padding: 4px 7px;
+padding: 4px 7px;
 }
 
 .setup-draft .draft-tag.is-mechanism,
 .setup-draft .draft-inline-tag.is-mechanism {
-  border-color: rgba(245, 196, 81, 0.25);
-  color: #fde7a5;
-  background: rgba(245, 196, 81, 0.1);
+border-color: rgba(245, 196, 81, 0.25);
+color: #fde7a5;
+background: rgba(245, 196, 81, 0.1);
 }
 
 .setup-draft .draft-inline-tag {
-  margin: 0 2px;
-  padding: 1px 5px;
-  vertical-align: baseline;
+margin: 0 2px;
+padding: 1px 5px;
+vertical-align: baseline;
 }
 
 .setup-draft .draft-tag-tooltip {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 7px);
-  z-index: 20;
-  width: max-content;
-  max-width: 190px;
-  padding: 7px 8px;
-  pointer-events: none;
-  border: 1px solid var(--draft-line-strong);
-  border-radius: 8px;
-  color: #dce6ef;
-  background: #080d14;
-  box-shadow: 0 9px 24px rgba(0, 0, 0, 0.42);
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 1.4;
-  opacity: 0;
-  transform: translateY(3px);
-  transition: opacity 120ms ease, transform 120ms ease;
-  white-space: normal;
+position: absolute;
+right: 0;
+bottom: calc(100% + 7px);
+z-index: 20;
+width: max-content;
+max-width: 190px;
+padding: 7px 8px;
+pointer-events: none;
+border: 1px solid var(--draft-line-strong);
+border-radius: 8px;
+color: #dce6ef;
+background: #080d14;
+box-shadow: 0 9px 24px rgba(0, 0, 0, 0.42);
+font-size: 9px;
+font-weight: 600;
+line-height: 1.4;
+opacity: 0;
+transform: translateY(3px);
+transition: opacity 120ms ease, transform 120ms ease;
+white-space: normal;
 }
 
 .setup-draft .draft-tag:hover .draft-tag-tooltip,
 .setup-draft .draft-tag:focus .draft-tag-tooltip,
 .setup-draft .draft-inline-tag:hover .draft-tag-tooltip,
 .setup-draft .draft-inline-tag:focus .draft-tag-tooltip {
-  opacity: 1;
-  transform: translateY(0);
+opacity: 1;
+transform: translateY(0);
 }
 
 .setup-draft .draft-details {
-  display: grid;
-  grid-template-rows: 0fr;
-  margin-top: 9px;
-  transition: grid-template-rows 180ms ease;
+display: grid;
+grid-template-rows: 0fr;
+margin-top: 9px;
+transition: grid-template-rows 180ms ease;
 }
 
 .setup-draft .draft-details-inner {
-  overflow: hidden;
+overflow: hidden;
 }
 
 .setup-draft .draft-details-content {
-  padding-top: 0;
-  color: #b9c5d1;
-  font-size: 10px;
-  line-height: 1.55;
-  opacity: 0;
-  transform: translateY(-5px);
-  transition: opacity 140ms ease, transform 140ms ease, padding-top 140ms ease;
+padding-top: 0;
+color: #b9c5d1;
+font-size: 10px;
+line-height: 1.55;
+opacity: 0;
+transform: translateY(-5px);
+transition: opacity 140ms ease, transform 140ms ease, padding-top 140ms ease;
 }
 
 .setup-draft .draft-choice-state:checked + .draft-card .draft-details {
-  grid-template-rows: 1fr;
+grid-template-rows: 1fr;
 }
 
 .setup-draft .draft-choice-state:checked + .draft-card .draft-details-content {
-  padding-top: 8px;
-  opacity: 1;
-  transform: translateY(0);
+padding-top: 8px;
+opacity: 1;
+transform: translateY(0);
 }
 
 .setup-draft .draft-rule-lines {
-  display: grid;
-  gap: 4px;
-  margin-top: 7px;
+display: grid;
+gap: 4px;
+margin-top: 7px;
 }
 
 .setup-draft .draft-rule-line {
-  padding: 5px 6px;
-  border-left: 2px solid rgba(245, 196, 81, 0.42);
-  color: #c9d3dd;
-  background: rgba(245, 196, 81, 0.055);
+padding: 5px 6px;
+border-left: 2px solid rgba(245, 196, 81, 0.42);
+color: #c9d3dd;
+background: rgba(245, 196, 81, 0.055);
 }
 
 .setup-draft .draft-card-bottom {
-  align-items: flex-end;
-  margin-top: 12px;
+align-items: flex-end;
+margin-top: 12px;
 }
 
 .setup-draft .draft-first-hint {
-  color: var(--draft-dim);
-  font-size: 9px;
-  line-height: 1.35;
+color: var(--draft-dim);
+font-size: 9px;
+line-height: 1.35;
 }
 
 .setup-draft .draft-choice-state:checked + .draft-card .draft-first-hint {
-  color: var(--draft-cyan);
+color: var(--draft-cyan);
 }
 
 .setup-draft .draft-damage {
-  border: 1px solid rgba(251, 113, 133, 0.3);
-  color: var(--draft-rose);
-  background: var(--draft-rose-soft);
+border: 1px solid rgba(251, 113, 133, 0.3);
+color: var(--draft-rose);
+background: var(--draft-rose-soft);
 }
 
 .setup-draft .draft-damage small {
-  display: block;
-  margin-right: 4px;
-  color: #fecdd3;
-  font-family: inherit;
-  font-size: 8px;
-  font-weight: 800;
+display: block;
+margin-right: 4px;
+color: #fecdd3;
+font-family: inherit;
+font-size: 8px;
+font-weight: 800;
 }
 
 .setup-draft .draft-confirm {
-  display: none;
-  width: calc(100% - 16px);
-  min-height: 39px;
-  margin: 8px 8px 0;
-  padding: 8px 10px;
-  border: 1px solid rgba(70, 217, 239, 0.5);
-  border-radius: 11px;
-  color: #021116;
-  background: linear-gradient(135deg, #a3f2fb, var(--draft-cyan));
-  box-shadow: 0 8px 22px rgba(70, 217, 239, 0.17);
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 900;
-  text-align: center;
+display: none;
+width: calc(100% - 16px);
+min-height: 39px;
+margin: 8px 8px 0;
+padding: 8px 10px;
+border: 1px solid rgba(70, 217, 239, 0.5);
+border-radius: 11px;
+color: #021116;
+background: linear-gradient(135deg, #a3f2fb, var(--draft-cyan));
+box-shadow: 0 8px 22px rgba(70, 217, 239, 0.17);
+cursor: pointer;
+font: inherit;
+font-size: 11px;
+font-weight: 900;
+text-align: center;
 }
 
 .setup-draft .draft-choice-state:checked ~ .draft-confirm {
-  display: block;
+display: block;
 }
 
 .setup-draft .draft-confirm:hover,
 .setup-draft .draft-confirm:focus-visible {
-  outline: 2px solid #d9fbff;
-  outline-offset: 2px;
-  filter: brightness(1.06);
+outline: 2px solid #d9fbff;
+outline-offset: 2px;
+filter: brightness(1.06);
 }
 
 .setup-draft .draft-deck {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-height: 42px;
-  padding: 9px;
-  border: 1px solid var(--draft-line);
-  border-radius: 12px;
-  background: rgba(2, 6, 12, 0.4);
+display: flex;
+flex-wrap: wrap;
+gap: 6px;
+min-height: 42px;
+padding: 9px;
+border: 1px solid var(--draft-line);
+border-radius: 12px;
+background: rgba(2, 6, 12, 0.4);
 }
 
 .setup-draft .draft-deck-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 6px 8px;
-  border: 1px solid rgba(148, 163, 184, 0.15);
-  border-radius: 9px;
-  color: #dce6ef;
-  background: var(--draft-panel-soft);
-  font-size: 10px;
+display: inline-flex;
+align-items: center;
+gap: 6px;
+min-width: 0;
+padding: 6px 8px;
+border: 1px solid rgba(148, 163, 184, 0.15);
+border-radius: 9px;
+color: #dce6ef;
+background: var(--draft-panel-soft);
+font-size: 10px;
 }
 
 .setup-draft .draft-deck-item strong {
-  display: grid;
-  min-width: 20px;
-  height: 20px;
-  place-items: center;
-  border-radius: 6px;
-  color: var(--draft-cyan);
-  background: var(--draft-cyan-soft);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 10px;
+display: grid;
+min-width: 20px;
+height: 20px;
+place-items: center;
+border-radius: 6px;
+color: var(--draft-cyan);
+background: var(--draft-cyan-soft);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 10px;
 }
 
 .setup-draft .draft-deck-empty {
-  align-self: center;
-  color: var(--draft-dim);
-  font-size: 10px;
+align-self: center;
+color: var(--draft-dim);
+font-size: 10px;
 }
 
 .setup-draft .draft-complete {
-  display: grid;
-  justify-items: center;
-  padding: clamp(28px, 8vw, 52px) 18px;
-  text-align: center;
+display: grid;
+justify-items: center;
+padding: clamp(28px, 8vw, 52px) 18px;
+text-align: center;
 }
 
 .setup-draft .draft-complete-mark {
-  display: grid;
-  width: 58px;
-  height: 58px;
-  place-items: center;
-  border: 1px solid rgba(70, 217, 239, 0.42);
-  border-radius: 18px;
-  color: var(--draft-cyan);
-  background: var(--draft-cyan-soft);
-  box-shadow: 0 0 30px rgba(70, 217, 239, 0.12);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 25px;
-  font-weight: 900;
+display: grid;
+width: 58px;
+height: 58px;
+place-items: center;
+border: 1px solid rgba(70, 217, 239, 0.42);
+border-radius: 18px;
+color: var(--draft-cyan);
+background: var(--draft-cyan-soft);
+box-shadow: 0 0 30px rgba(70, 217, 239, 0.12);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 25px;
+font-weight: 900;
 }
 
 .setup-draft .draft-complete-title,
 .setup-draft .draft-fallback-title {
-  margin: 15px 0 0;
-  color: #fff;
-  font-size: 20px;
-  font-weight: 900;
-  letter-spacing: -0.035em;
+margin: 15px 0 0;
+color: #fff;
+font-size: 20px;
+font-weight: 900;
+letter-spacing: -0.035em;
 }
 
 .setup-draft .draft-complete-copy,
 .setup-draft .draft-fallback-copy {
-  max-width: 460px;
-  margin: 8px 0 0;
-  color: var(--draft-muted);
-  font-size: 12px;
-  line-height: 1.65;
+max-width: 460px;
+margin: 8px 0 0;
+color: var(--draft-muted);
+font-size: 12px;
+line-height: 1.65;
 }
 
 .setup-draft .draft-wait-chip {
-  margin-top: 15px;
-  padding: 7px 10px;
-  border: 1px solid var(--draft-line);
-  border-radius: 999px;
-  color: #cbd6e1;
-  background: rgba(2, 6, 12, 0.48);
-  font-size: 10px;
-  font-weight: 800;
+margin-top: 15px;
+padding: 7px 10px;
+border: 1px solid var(--draft-line);
+border-radius: 999px;
+color: #cbd6e1;
+background: rgba(2, 6, 12, 0.48);
+font-size: 10px;
+font-weight: 800;
 }
 
 .setup-draft .draft-fallback {
-  padding: 28px 20px;
-  text-align: center;
+padding: 28px 20px;
+text-align: center;
 }
 
 @media (max-width: 640px) {
-  .setup-draft .draft-header {
-    grid-template-columns: 1fr;
-    align-items: start;
-  }
+.setup-draft .draft-header {
+grid-template-columns: 1fr;
+align-items: start;
+}
 
-  .setup-draft .draft-round {
-    width: 100%;
-    text-align: left;
-  }
+.setup-draft .draft-round {
+width: 100%;
+text-align: left;
+}
 
-  .setup-draft .draft-offers {
-    grid-template-columns: 1fr;
-  }
+.setup-draft .draft-offers {
+grid-template-columns: 1fr;
+}
 
-  .setup-draft .draft-card {
-    min-height: 212px;
-  }
+.setup-draft .draft-card {
+min-height: 212px;
+}
 
-  .setup-draft .draft-section-head {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 3px;
-  }
+.setup-draft .draft-section-head {
+align-items: flex-start;
+flex-direction: column;
+gap: 3px;
+}
 
-  .setup-draft .draft-instruction {
-    text-align: left;
-  }
+.setup-draft .draft-instruction {
+text-align: left;
+}
 }
 
 @media (max-width: 400px) {
-  .setup-draft {
-    border-right: 0;
-    border-left: 0;
-    border-radius: 0;
-  }
+.setup-draft {
+border-right: 0;
+border-left: 0;
+border-radius: 0;
+}
 
-  .setup-draft .draft-progress {
-    grid-template-columns: 1fr;
-  }
+.setup-draft .draft-progress {
+grid-template-columns: 1fr;
+}
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .setup-draft *,
-  .setup-draft *::before,
-  .setup-draft *::after {
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-  }
+.setup-draft *,
+.setup-draft *::before,
+.setup-draft *::after {
+scroll-behavior: auto !important;
+transition-duration: 0.01ms !important;
+animation-duration: 0.01ms !important;
+animation-iteration-count: 1 !important;
+}
 }
 </style>
 
@@ -603,166 +603,166 @@
 
 {{#when::keep::{{dictelement::{{tempvar::setup_draft_view}}::kind}}::is::gameSetupView}}
 <section class="setup-draft" aria-label="초기 덱 카드 드래프트">
-  {{#when::keep::{{dictelement::{{tempvar::setup_draft_view}}::phase}}::is::deckDraft}}
-  {{settempvar::setup_draft_offer::{{dictelement::{{tempvar::setup_draft_view}}::offer}}}}
-  <div class="draft-shell">
-    <header class="draft-header">
-      <div>
-        <div class="draft-kicker">INFINITE HELLTRAIN · DECK DRAFT</div>
-        <h2 class="draft-title">이번 칸에서 가져갈 카드</h2>
-        <p class="draft-subtitle">세 장을 살펴보고 한 장을 골라 초기 덱에 추가하세요.</p>
-      </div>
-      <div class="draft-round" aria-label="현재 드래프트 회차">
-        <span class="draft-metric-label">ROUND</span>
-        <strong>{{dictelement::{{tempvar::setup_draft_progress}}::currentRound}} / {{dictelement::{{tempvar::setup_draft_progress}}::totalRounds}}</strong>
-      </div>
-    </header>
+{{#when::keep::{{dictelement::{{tempvar::setup_draft_view}}::phase}}::is::deckDraft}}
+{{settempvar::setup_draft_offer::{{dictelement::{{tempvar::setup_draft_view}}::offer}}}}
+<div class="draft-shell">
+<header class="draft-header">
+<div>
+<div class="draft-kicker">INFINITE HELLTRAIN · DECK DRAFT</div>
+<h2 class="draft-title">이번 칸에서 가져갈 카드</h2>
+<p class="draft-subtitle">세 장을 살펴보고 한 장을 골라 초기 덱에 추가하세요.</p>
+</div>
+<div class="draft-round" aria-label="현재 드래프트 회차">
+<span class="draft-metric-label">ROUND</span>
+<strong>{{dictelement::{{tempvar::setup_draft_progress}}::currentRound}} / {{dictelement::{{tempvar::setup_draft_progress}}::totalRounds}}</strong>
+</div>
+</header>
 
-    <div class="draft-progress" aria-label="드래프트 진행 상황">
-      <div class="draft-metric">
-        <span class="draft-metric-label">선택</span>
-        <strong>{{dictelement::{{tempvar::setup_draft_progress}}::selectedCount}}장</strong>
-      </div>
-      <div class="draft-metric">
-        <span class="draft-metric-label">남음</span>
-        <strong>{{dictelement::{{tempvar::setup_draft_progress}}::remainingRounds}}장</strong>
-      </div>
-    </div>
+<div class="draft-progress" aria-label="드래프트 진행 상황">
+<div class="draft-metric">
+<span class="draft-metric-label">선택</span>
+<strong>{{dictelement::{{tempvar::setup_draft_progress}}::selectedCount}}장</strong>
+</div>
+<div class="draft-metric">
+<span class="draft-metric-label">남음</span>
+<strong>{{dictelement::{{tempvar::setup_draft_progress}}::remainingRounds}}장</strong>
+</div>
+</div>
 
-    <div class="draft-section-head">
-      <h3 class="draft-section-title">제안 카드</h3>
-      <span class="draft-instruction">첫 클릭: 상세 확인 · 두 번째 클릭: 선택 확정</span>
-    </div>
+<div class="draft-section-head">
+<h3 class="draft-section-title">제안 카드</h3>
+<span class="draft-instruction">첫 클릭: 상세 확인 · 두 번째 클릭: 선택 확정</span>
+</div>
 
-    <input class="draft-none" type="radio" name="setup-draft-choice" id="setup-draft-none" checked aria-hidden="true">
-    <div class="draft-offers" role="list" aria-label="제안된 카드 세 장">
-      {{#each::keep {{dictelement::{{tempvar::setup_draft_offer}}::cards}} as setup_offer_card}}
-      {{settempvar::setup_offer_action::{{dictelement::{{slot::setup_offer_card}}::actionTag}}}}
-      <article class="draft-slot" role="listitem">
-        <input
-          class="draft-choice-state"
-          type="radio"
-          name="setup-draft-choice"
-          id="setup-draft-card-{{dictelement::{{slot::setup_offer_card}}::slot}}"
-          aria-label="카드 상세 보기"
-        >
-        <label class="draft-card" for="setup-draft-card-{{dictelement::{{slot::setup_offer_card}}::slot}}">
-          <span class="draft-card-top">
-            <span class="draft-cost" aria-label="기본 은폐 비용 {{dictelement::{{slot::setup_offer_card}}::baseStealthCost}}">{{dictelement::{{slot::setup_offer_card}}::baseStealthCost}}</span>
-            <span class="draft-copy-count">보유 {{dictelement::{{slot::setup_offer_card}}::ownedCopies}} / 2</span>
-          </span>
+<input class="draft-none" type="radio" name="setup-draft-choice" id="setup-draft-none" checked aria-hidden="true">
+<div class="draft-offers" role="list" aria-label="제안된 카드 세 장">
+{{#each::keep {{dictelement::{{tempvar::setup_draft_offer}}::cards}} as setup_offer_card}}
+{{settempvar::setup_offer_action::{{dictelement::{{slot::setup_offer_card}}::actionTag}}}}
+<article class="draft-slot" role="listitem">
+<input
+class="draft-choice-state"
+type="radio"
+name="setup-draft-choice"
+id="setup-draft-card-{{dictelement::{{slot::setup_offer_card}}::slot}}"
+aria-label="카드 상세 보기"
+>
+<label class="draft-card" for="setup-draft-card-{{dictelement::{{slot::setup_offer_card}}::slot}}">
+<span class="draft-card-top">
+<span class="draft-cost" aria-label="기본 은폐 비용 {{dictelement::{{slot::setup_offer_card}}::baseStealthCost}}">{{dictelement::{{slot::setup_offer_card}}::baseStealthCost}}</span>
+<span class="draft-copy-count">보유 {{dictelement::{{slot::setup_offer_card}}::ownedCopies}} / 2</span>
+</span>
 
-          <span class="draft-card-title">{{dictelement::{{slot::setup_offer_card}}::name}}</span>
+<span class="draft-card-title">{{dictelement::{{slot::setup_offer_card}}::name}}</span>
 
-          <span class="draft-tags" aria-label="카드 태그">
-            <span class="draft-tag" tabindex="0">
-              {{dictelement::{{tempvar::setup_offer_action}}::label}}
-              <span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{tempvar::setup_offer_action}}::tooltip}}</span>
-            </span>
-            {{#each::keep {{dictelement::{{slot::setup_offer_card}}::mechanisms}} as setup_offer_mechanism}}
-            <span class="draft-tag is-mechanism" tabindex="0">
-              {{dictelement::{{slot::setup_offer_mechanism}}::label}}
-              <span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_offer_mechanism}}::tooltip}}</span>
-            </span>
-            {{/each}}
-          </span>
+<span class="draft-tags" aria-label="카드 태그">
+<span class="draft-tag" tabindex="0">
+{{dictelement::{{tempvar::setup_offer_action}}::label}}
+<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{tempvar::setup_offer_action}}::tooltip}}</span>
+</span>
+{{#each::keep {{dictelement::{{slot::setup_offer_card}}::mechanisms}} as setup_offer_mechanism}}
+<span class="draft-tag is-mechanism" tabindex="0">
+{{dictelement::{{slot::setup_offer_mechanism}}::label}}
+<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_offer_mechanism}}::tooltip}}</span>
+</span>
+{{/each}}
+</span>
 
-          <span class="draft-details">
-            <span class="draft-details-inner">
-              <span class="draft-details-content">
-                <span class="draft-description">
-                  {{#each::keep {{dictelement::{{slot::setup_offer_card}}::descriptionSegments}} as setup_description_segment}}
-                  {{#when::keep::{{dictelement::{{slot::setup_description_segment}}::kind}}::is::text}}{{dictelement::{{slot::setup_description_segment}}::value}}{{/when}}
-                  {{#when::keep::{{dictelement::{{slot::setup_description_segment}}::kind}}::isnot::text}}
-                  {{#when::keep::{{dictelement::{{slot::setup_description_segment}}::tagKind}}::is::mechanism}}<span class="draft-inline-tag is-mechanism" tabindex="0">{{dictelement::{{slot::setup_description_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_description_segment}}::tooltip}}</span></span>{{/when}}
-                  {{#when::keep::{{dictelement::{{slot::setup_description_segment}}::tagKind}}::isnot::mechanism}}<span class="draft-inline-tag" tabindex="0">{{dictelement::{{slot::setup_description_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_description_segment}}::tooltip}}</span></span>{{/when}}
-                  {{/when}}
-                  {{/each}}
-                </span>
-                <span class="draft-rule-lines">
-                  {{#each::keep {{dictelement::{{slot::setup_offer_card}}::ruleLines}} as setup_rule_line}}
-                  <span class="draft-rule-line">
-                    {{#each::keep {{dictelement::{{slot::setup_rule_line}}::segments}} as setup_rule_segment}}
-                    {{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::kind}}::is::text}}{{dictelement::{{slot::setup_rule_segment}}::value}}{{/when}}
-                    {{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::kind}}::isnot::text}}
-                    {{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::tagKind}}::is::mechanism}}<span class="draft-inline-tag is-mechanism" tabindex="0">{{dictelement::{{slot::setup_rule_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_rule_segment}}::tooltip}}</span></span>{{/when}}
-                    {{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::tagKind}}::isnot::mechanism}}<span class="draft-inline-tag" tabindex="0">{{dictelement::{{slot::setup_rule_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_rule_segment}}::tooltip}}</span></span>{{/when}}
-                    {{/when}}
-                    {{/each}}
-                  </span>
-                  {{/each}}
-                </span>
-              </span>
-            </span>
-          </span>
+<span class="draft-details">
+<span class="draft-details-inner">
+<span class="draft-details-content">
+<span class="draft-description">
+{{#each::keep {{dictelement::{{slot::setup_offer_card}}::descriptionSegments}} as setup_description_segment}}
+{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::kind}}::is::text}}{{dictelement::{{slot::setup_description_segment}}::value}}{{/when}}
+{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::kind}}::isnot::text}}
+{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::tagKind}}::is::mechanism}}<span class="draft-inline-tag is-mechanism" tabindex="0">{{dictelement::{{slot::setup_description_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_description_segment}}::tooltip}}</span></span>{{/when}}
+{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::tagKind}}::isnot::mechanism}}<span class="draft-inline-tag" tabindex="0">{{dictelement::{{slot::setup_description_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_description_segment}}::tooltip}}</span></span>{{/when}}
+{{/when}}
+{{/each}}
+</span>
+<span class="draft-rule-lines">
+{{#each::keep {{dictelement::{{slot::setup_offer_card}}::ruleLines}} as setup_rule_line}}
+<span class="draft-rule-line">
+{{#each::keep {{dictelement::{{slot::setup_rule_line}}::segments}} as setup_rule_segment}}
+{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::kind}}::is::text}}{{dictelement::{{slot::setup_rule_segment}}::value}}{{/when}}
+{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::kind}}::isnot::text}}
+{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::tagKind}}::is::mechanism}}<span class="draft-inline-tag is-mechanism" tabindex="0">{{dictelement::{{slot::setup_rule_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_rule_segment}}::tooltip}}</span></span>{{/when}}
+{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::tagKind}}::isnot::mechanism}}<span class="draft-inline-tag" tabindex="0">{{dictelement::{{slot::setup_rule_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_rule_segment}}::tooltip}}</span></span>{{/when}}
+{{/when}}
+{{/each}}
+</span>
+{{/each}}
+</span>
+</span>
+</span>
+</span>
 
-          <span class="draft-card-bottom">
-            <span class="draft-first-hint">클릭해 상세 보기<br>선택 후 아래에서 확정</span>
-            <span class="draft-damage" aria-label="기본 저항 피해 {{dictelement::{{slot::setup_offer_card}}::baseResistanceDamage}}"><small>저항</small>{{dictelement::{{slot::setup_offer_card}}::baseResistanceDamage}}</span>
-          </span>
-        </label>
-        <button
-          class="draft-confirm"
-          type="button"
-          risu-btn="init|choose|{{dictelement::{{slot::setup_offer_card}}::cardId}}|{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}"
-          aria-label="현재 카드를 초기 덱에 추가"
-        >이 카드를 선택 · 다시 클릭해 확정</button>
-      </article>
-      {{/each}}
-    </div>
+<span class="draft-card-bottom">
+<span class="draft-first-hint">클릭해 상세 보기<br>선택 후 아래에서 확정</span>
+<span class="draft-damage" aria-label="기본 저항 피해 {{dictelement::{{slot::setup_offer_card}}::baseResistanceDamage}}"><small>저항</small>{{dictelement::{{slot::setup_offer_card}}::baseResistanceDamage}}</span>
+</span>
+</label>
+<button
+class="draft-confirm"
+type="button"
+risu-btn="init|choose|{{dictelement::{{slot::setup_offer_card}}::cardId}}|{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}"
+aria-label="현재 카드를 초기 덱에 추가"
+>이 카드를 선택 · 다시 클릭해 확정</button>
+</article>
+{{/each}}
+</div>
 
-    <div class="draft-section-head">
-      <h3 class="draft-section-title">선택된 덱</h3>
-      <span class="draft-instruction">{{dictelement::{{tempvar::setup_draft_deck}}::count}} / {{dictelement::{{tempvar::setup_draft_deck}}::limit}}장</span>
-    </div>
-    <div class="draft-deck" aria-label="선택된 카드 종류별 장수">
-      {{#each::keep {{dictelement::{{tempvar::setup_draft_deck}}::items}} as setup_deck_item}}
-      <span class="draft-deck-item"><span>{{dictelement::{{slot::setup_deck_item}}::name}}</span><strong>×{{dictelement::{{slot::setup_deck_item}}::copies}}</strong></span>
-      {{/each}}
-      {{#when::keep::{{dictelement::{{tempvar::setup_draft_deck}}::count}}::is::0}}
-      <span class="draft-deck-empty">아직 선택한 카드가 없습니다.</span>
-      {{/when}}
-    </div>
-  </div>
-  {{/when}}
+<div class="draft-section-head">
+<h3 class="draft-section-title">선택된 덱</h3>
+<span class="draft-instruction">{{dictelement::{{tempvar::setup_draft_deck}}::count}} / {{dictelement::{{tempvar::setup_draft_deck}}::limit}}장</span>
+</div>
+<div class="draft-deck" aria-label="선택된 카드 종류별 장수">
+{{#each::keep {{dictelement::{{tempvar::setup_draft_deck}}::items}} as setup_deck_item}}
+<span class="draft-deck-item"><span>{{dictelement::{{slot::setup_deck_item}}::name}}</span><strong>×{{dictelement::{{slot::setup_deck_item}}::copies}}</strong></span>
+{{/each}}
+{{#when::keep::{{dictelement::{{tempvar::setup_draft_deck}}::count}}::is::0}}
+<span class="draft-deck-empty">아직 선택한 카드가 없습니다.</span>
+{{/when}}
+</div>
+</div>
+{{/when}}
 
-  {{#when::keep::{{dictelement::{{tempvar::setup_draft_view}}::phase}}::is::deckComplete}}
-  <div class="draft-shell">
-    <div class="draft-complete" aria-live="polite">
-      <div class="draft-complete-mark" aria-hidden="true">10</div>
-      <h2 class="draft-complete-title">초기 덱 10장 완성</h2>
-      <p class="draft-complete-copy">카드 선택이 끝났습니다. 현재 캐릭터 데이터가 한 명뿐이므로 가짜 후보나 임시 선택 버튼은 표시하지 않습니다.</p>
-      <span class="draft-wait-chip">캐릭터 선택 단계 준비 중</span>
-    </div>
-    <div class="draft-section-head">
-      <h3 class="draft-section-title">완성된 덱</h3>
-      <span class="draft-instruction">{{dictelement::{{tempvar::setup_draft_deck}}::count}} / {{dictelement::{{tempvar::setup_draft_deck}}::limit}}장</span>
-    </div>
-    <div class="draft-deck" aria-label="완성된 카드 종류별 장수">
-      {{#each::keep {{dictelement::{{tempvar::setup_draft_deck}}::items}} as completed_deck_item}}
-      <span class="draft-deck-item"><span>{{dictelement::{{slot::completed_deck_item}}::name}}</span><strong>×{{dictelement::{{slot::completed_deck_item}}::copies}}</strong></span>
-      {{/each}}
-    </div>
-  </div>
-  {{/when}}
+{{#when::keep::{{dictelement::{{tempvar::setup_draft_view}}::phase}}::is::deckComplete}}
+<div class="draft-shell">
+<div class="draft-complete" aria-live="polite">
+<div class="draft-complete-mark" aria-hidden="true">10</div>
+<h2 class="draft-complete-title">초기 덱 10장 완성</h2>
+<p class="draft-complete-copy">카드 선택이 끝났습니다. 현재 캐릭터 데이터가 한 명뿐이므로 가짜 후보나 임시 선택 버튼은 표시하지 않습니다.</p>
+<span class="draft-wait-chip">캐릭터 선택 단계 준비 중</span>
+</div>
+<div class="draft-section-head">
+<h3 class="draft-section-title">완성된 덱</h3>
+<span class="draft-instruction">{{dictelement::{{tempvar::setup_draft_deck}}::count}} / {{dictelement::{{tempvar::setup_draft_deck}}::limit}}장</span>
+</div>
+<div class="draft-deck" aria-label="완성된 카드 종류별 장수">
+{{#each::keep {{dictelement::{{tempvar::setup_draft_deck}}::items}} as completed_deck_item}}
+<span class="draft-deck-item"><span>{{dictelement::{{slot::completed_deck_item}}::name}}</span><strong>×{{dictelement::{{slot::completed_deck_item}}::copies}}</strong></span>
+{{/each}}
+</div>
+</div>
+{{/when}}
 
-  {{#when::keep::{{dictelement::{{tempvar::setup_draft_view}}::phase}}::isnot::deckDraft}}
-  {{#when::keep::{{dictelement::{{tempvar::setup_draft_view}}::phase}}::isnot::deckComplete}}
-  <div class="draft-fallback" aria-live="polite">
-    <h2 class="draft-fallback-title">지원하지 않는 준비 단계</h2>
-    <p class="draft-fallback-copy">현재 gameSetupView 단계는 이 카드 드래프트 화면에서 표시할 수 없습니다.</p>
-  </div>
-  {{/when}}
-  {{/when}}
+{{#when::keep::{{dictelement::{{tempvar::setup_draft_view}}::phase}}::isnot::deckDraft}}
+{{#when::keep::{{dictelement::{{tempvar::setup_draft_view}}::phase}}::isnot::deckComplete}}
+<div class="draft-fallback" aria-live="polite">
+<h2 class="draft-fallback-title">지원하지 않는 준비 단계</h2>
+<p class="draft-fallback-copy">현재 gameSetupView 단계는 이 카드 드래프트 화면에서 표시할 수 없습니다.</p>
+</div>
+{{/when}}
+{{/when}}
 </section>
 {{/when}}
 
 {{#when::keep::{{dictelement::{{tempvar::setup_draft_view}}::kind}}::isnot::gameSetupView}}
 <section class="setup-draft" aria-label="카드 드래프트 데이터 대기">
-  <div class="draft-fallback" aria-live="polite">
-    <div class="draft-kicker">DECK DRAFT</div>
-    <h2 class="draft-fallback-title">드래프트 데이터를 기다리는 중</h2>
-    <p class="draft-fallback-copy">유효한 gameSetupView가 게시되면 세 장의 카드 제안이 이곳에 표시됩니다.</p>
-  </div>
+<div class="draft-fallback" aria-live="polite">
+<div class="draft-kicker">DECK DRAFT</div>
+<h2 class="draft-fallback-title">드래프트 데이터를 기다리는 중</h2>
+<p class="draft-fallback-copy">유효한 gameSetupView가 게시되면 세 장의 카드 제안이 이곳에 표시됩니다.</p>
+</div>
 </section>
 {{/when}}

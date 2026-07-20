@@ -13,178 +13,178 @@
 {{#when::keep::{{isfirstmsg}}::is::1}}
 <style>
 .helltrain-entry {
-  --ht-bg: #0d0c12;
-  --ht-panel: rgba(22, 19, 28, 0.94);
-  --ht-line: rgba(220, 204, 176, 0.2);
-  --ht-text: #ece6dc;
-  --ht-muted: #afa69d;
-  --ht-accent: #bd4f55;
-  --ht-accent-bright: #e06a70;
-  position: relative;
-  box-sizing: border-box;
-  width: min(100%, 760px);
-  margin: 0 auto;
-  overflow: hidden;
-  border: 1px solid var(--ht-line);
-  border-radius: 18px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 28%),
-    var(--ht-bg);
-  color: var(--ht-text);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.38);
-  font-family: "Pretendard", "Noto Sans KR", sans-serif;
+--ht-bg: #0d0c12;
+--ht-panel: rgba(22, 19, 28, 0.94);
+--ht-line: rgba(220, 204, 176, 0.2);
+--ht-text: #ece6dc;
+--ht-muted: #afa69d;
+--ht-accent: #bd4f55;
+--ht-accent-bright: #e06a70;
+position: relative;
+box-sizing: border-box;
+width: min(100%, 760px);
+margin: 0 auto;
+overflow: hidden;
+border: 1px solid var(--ht-line);
+border-radius: 18px;
+background:
+linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 28%),
+var(--ht-bg);
+color: var(--ht-text);
+box-shadow: 0 20px 50px rgba(0, 0, 0, 0.38);
+font-family: "Pretendard", "Noto Sans KR", sans-serif;
 }
 
 .helltrain-entry * {
-  box-sizing: border-box;
+box-sizing: border-box;
 }
 
 .helltrain-setup {
-  position: relative;
-  padding: 24px clamp(22px, 5vw, 48px) 30px;
-  border-top: 1px solid var(--ht-line);
-  background: var(--ht-panel);
-  text-align: center;
+position: relative;
+padding: 24px clamp(22px, 5vw, 48px) 30px;
+border-top: 1px solid var(--ht-line);
+background: var(--ht-panel);
+text-align: center;
 }
 
 .helltrain-setup::before {
-  position: absolute;
-  top: -1px;
-  left: 12%;
-  width: 76%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--ht-accent), transparent);
-  content: "";
+position: absolute;
+top: -1px;
+left: 12%;
+width: 76%;
+height: 1px;
+background: linear-gradient(90deg, transparent, var(--ht-accent), transparent);
+content: "";
 }
 
 .helltrain-setup-label {
-  margin: 0 0 6px;
-  color: var(--ht-accent-bright);
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.13em;
+margin: 0 0 6px;
+color: var(--ht-accent-bright);
+font-size: 0.72rem;
+font-weight: 800;
+letter-spacing: 0.13em;
 }
 
 .helltrain-setup-title {
-  margin: 0;
-  color: #fffaf1;
-  font-size: 1.15rem;
-  font-weight: 750;
+margin: 0;
+color: #fffaf1;
+font-size: 1.15rem;
+font-weight: 750;
 }
 
 .helltrain-setup-copy {
-  margin: 10px auto 20px;
-  max-width: 35rem;
-  color: var(--ht-muted);
-  font-size: 0.86rem;
-  line-height: 1.65;
-  word-break: keep-all;
+margin: 10px auto 20px;
+max-width: 35rem;
+color: var(--ht-muted);
+font-size: 0.86rem;
+line-height: 1.65;
+word-break: keep-all;
 }
 
 .helltrain-start {
-  display: inline-flex;
-  min-width: min(100%, 260px);
-  min-height: 48px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(255, 226, 210, 0.2);
-  border-radius: 12px;
-  background: linear-gradient(135deg, #7f2f37, #b84a51);
-  color: #fffaf4;
-  box-shadow: 0 10px 25px rgba(98, 27, 34, 0.35);
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.95rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  transition: filter 160ms ease, transform 160ms ease;
+display: inline-flex;
+min-width: min(100%, 260px);
+min-height: 48px;
+align-items: center;
+justify-content: center;
+border: 1px solid rgba(255, 226, 210, 0.2);
+border-radius: 12px;
+background: linear-gradient(135deg, #7f2f37, #b84a51);
+color: #fffaf4;
+box-shadow: 0 10px 25px rgba(98, 27, 34, 0.35);
+cursor: pointer;
+font: inherit;
+font-size: 0.95rem;
+font-weight: 800;
+letter-spacing: 0.05em;
+transition: filter 160ms ease, transform 160ms ease;
 }
 
 .helltrain-start:hover,
 .helltrain-start:focus-visible {
-  filter: brightness(1.12);
-  transform: translateY(-1px);
+filter: brightness(1.12);
+transform: translateY(-1px);
 }
 
 .helltrain-start:active {
-  transform: translateY(1px);
+transform: translateY(1px);
 }
 
 .helltrain-progress {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  margin: 0;
-  color: var(--ht-muted);
-  font-size: 0.82rem;
+display: flex;
+align-items: center;
+justify-content: center;
+gap: 10px;
+margin: 0;
+color: var(--ht-muted);
+font-size: 0.82rem;
 }
 
 .helltrain-progress-dot {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--ht-accent-bright);
-  box-shadow: 0 0 10px rgba(224, 106, 112, 0.72);
+width: 8px;
+height: 8px;
+flex: 0 0 auto;
+border-radius: 50%;
+background: var(--ht-accent-bright);
+box-shadow: 0 0 10px rgba(224, 106, 112, 0.72);
 }
 
 .helltrain-dynamic-ui:empty {
-  display: none;
+display: none;
 }
 
 @media (max-width: 520px) {
-  .helltrain-entry {
-    border-right: 0;
-    border-left: 0;
-    border-radius: 0;
-  }
+.helltrain-entry {
+border-right: 0;
+border-left: 0;
+border-radius: 0;
+}
 
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .helltrain-start {
-    transition: none;
-  }
+.helltrain-start {
+transition: none;
+}
 }
 </style>
 
 <article class="helltrain-entry" aria-label="게임 시작">
-  {{#when::keep::{{getvar::gameSetupReady}}::isnot::ready}}
-  <section class="helltrain-setup" aria-labelledby="helltrain-start-title">
-    <p class="helltrain-setup-label">BOARDING PROTOCOL</p>
-    <h2 class="helltrain-setup-title" id="helltrain-start-title">지옥철에 탑승하시겠습니까?</h2>
-    <p class="helltrain-setup-copy" id="helltrain-start-copy">
-      게임을 시작하면 초기 상태를 만들고, 덱을 구성하기 위한 카드 드래프트를 엽니다.
-    </p>
-    <button
-      class="helltrain-start"
-      type="button"
-      risu-btn="init|start"
-      aria-describedby="helltrain-start-copy"
-    >게임 시작</button>
-  </section>
-  {{/when}}
-  {{#when::keep::{{getvar::gameSetupReady}}::is::ready}}
-  {{settempvar::setup_raw::{{getvar::gameSetupView}}}}
-  {{settempvar::setup_phase::{{dictelement::{{tempvar::setup_raw}}::phase}}}}
-  {{#when::keep::{{tempvar::setup_phase}}::isnot::complete}}
-  <section class="helltrain-setup" aria-live="polite">
-    {{#when::keep::{{tempvar::setup_phase}}::is::deckDraft}}
-    <p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>초기 덱 구성 진행 중 · 현재 단계에서 이어집니다</p>
-    {{/when}}
-    {{#when::keep::{{tempvar::setup_phase}}::is::deckComplete}}
-    <p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>초기 덱 구성 완료 · 캐릭터 후보가 추가되면 선택 단계가 열립니다</p>
-    {{/when}}
-    {{#when::keep::{{tempvar::setup_phase}}::is::characterSelect}}
-    <p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>탑승객 선택 진행 중 · 현재 단계에서 이어집니다</p>
-    {{/when}}
-    {{#when::keep::{{tempvar::setup_phase}}::is::battleReady}}
-    <p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>전투 준비 완료 · 게임 화면을 불러옵니다</p>
-    {{/when}}
-  </section>
-  {{/when}}
-  <div class="helltrain-dynamic-ui" aria-label="게임 화면">{{getvar::🔯🔯🔯}}</div>
-  {{/when}}
+{{#when::keep::{{getvar::gameSetupReady}}::isnot::ready}}
+<section class="helltrain-setup" aria-labelledby="helltrain-start-title">
+<p class="helltrain-setup-label">BOARDING PROTOCOL</p>
+<h2 class="helltrain-setup-title" id="helltrain-start-title">지옥철에 탑승하시겠습니까?</h2>
+<p class="helltrain-setup-copy" id="helltrain-start-copy">
+게임을 시작하면 초기 상태를 만들고, 덱을 구성하기 위한 카드 드래프트를 엽니다.
+</p>
+<button
+class="helltrain-start"
+type="button"
+risu-btn="init|start"
+aria-describedby="helltrain-start-copy"
+>게임 시작</button>
+</section>
+{{/when}}
+{{#when::keep::{{getvar::gameSetupReady}}::is::ready}}
+{{settempvar::setup_raw::{{getvar::gameSetupView}}}}
+{{settempvar::setup_phase::{{dictelement::{{tempvar::setup_raw}}::phase}}}}
+{{#when::keep::{{tempvar::setup_phase}}::isnot::complete}}
+<section class="helltrain-setup" aria-live="polite">
+{{#when::keep::{{tempvar::setup_phase}}::is::deckDraft}}
+<p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>초기 덱 구성 진행 중 · 현재 단계에서 이어집니다</p>
+{{/when}}
+{{#when::keep::{{tempvar::setup_phase}}::is::deckComplete}}
+<p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>초기 덱 구성 완료 · 캐릭터 후보가 추가되면 선택 단계가 열립니다</p>
+{{/when}}
+{{#when::keep::{{tempvar::setup_phase}}::is::characterSelect}}
+<p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>탑승객 선택 진행 중 · 현재 단계에서 이어집니다</p>
+{{/when}}
+{{#when::keep::{{tempvar::setup_phase}}::is::battleReady}}
+<p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>전투 준비 완료 · 게임 화면을 불러옵니다</p>
+{{/when}}
+</section>
+{{/when}}
+<div class="helltrain-dynamic-ui" aria-label="게임 화면">{{getvar::🔯🔯🔯}}</div>
+{{/when}}
 </article>
 {{/when}}

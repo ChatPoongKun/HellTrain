@@ -117,6 +117,14 @@ function toState(triggerId, name)
     return decoded
 end
 
+local function stripHtmlLineIndent(source)
+    source = source:gsub("^[ \t]+", "")
+    source = source:gsub("\r\n[ \t]+", "\r\n")
+    source = source:gsub("\n[ \t]+", "\n")
+    source = source:gsub("\r[ \t]+", "\r")
+    return source
+end
+
 --로어북에서 내용을 불러와 return
 function loadLores(triggerId, lore)
     local targetLores = getLoreBooks(triggerId, lore)
@@ -128,6 +136,10 @@ function loadLores(triggerId, lore)
     --주석 제거
     returnContents = returnContents
         :gsub("%-%-%-[^\r\n]*", "")
+
+    if type(lore) == "string" and string.match(lore, "%.html$") then
+        returnContents = stripHtmlLineIndent(returnContents)
+    end
 
     if returnContents == "" then
         return nil

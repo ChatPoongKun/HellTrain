@@ -34,6 +34,19 @@ end
 
 assert(load(readFile("System/main.lua"), "@System/main.lua", "t", _G))()
 
+local loreFixture = ""
+function getLoreBooks(triggerId, lore)
+    return { { content = loreFixture } }
+end
+
+loreFixture = "  <section>\n\t<span>LF</span>\r\n    <span>CRLF</span>\r  <span>CR</span>"
+assert(loadLores("main-hook-check", "fixture.html")
+        == "<section>\n<span>LF</span>\r\n<span>CRLF</span>\r<span>CR</span>",
+    "HTML lore retained line-leading indentation")
+loreFixture = "  return function()\n    return true\n  end"
+assert(loadLores("main-hook-check", "fixture.lua") == loreFixture,
+    "non-HTML lore was changed by HTML indentation normalization")
+
 assert(type(onStart) == "function", "onStart was not registered")
 assert(type(onOutput) == "function", "onOutput was not registered")
 assert(type(onButtonClick) == "function", "onButtonClick was not registered")
