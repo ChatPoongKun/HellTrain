@@ -8,11 +8,18 @@ inset: 0;
 display: flex;
 align-items: center;
 justify-content: center;
-z-index: 10;
+z-index: 40;
 padding: 1rem;
 }
 
+.popup-backdrop {
+position: absolute;
+inset: 0;
+}
+
 .profile-container {
+position: relative;
+z-index: 1;
 width: 100%;
 max-width: 680px;
 background: rgba(30, 41, 59, 0.74);
@@ -466,6 +473,7 @@ grid-template-columns: 70px minmax(0, 1fr);
 </style>
 
 <div class="profile-overlay">
+<div class="popup-backdrop" aria-hidden="true" risu-btn="popupManage|close"></div>
 <div class="profile-container">
 <div class="profile-header">
 <div class="profile-title">캐릭터 프로필</div>

@@ -1,10 +1,3 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="함락! 무한의 지옥철 전투 화면">
-<title>함락! 무한의 지옥철 - 전투</title>
 <style>
 .battle-shell {
 color-scheme: dark;
@@ -1819,7 +1812,7 @@ animation-iteration-count: 1 !important;
 }
 }
 </style>
-</head>
+
 <body>
 {{settempvar::bv::{{getvar::battleView}}}}
 {{settempvar::bv_turn::{{dictelement::{{tempvar::bv}}::turn}}}}
@@ -2196,7 +2189,7 @@ aria-label="카드 상세 및 등록 상태 전환">
 <span class="card-select-hint">
 {{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::is::true}}등록 {{dictelement::{{slot::hand_card}}::selectionOrder}} · 클릭해 취소{{/when}}
 {{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::isnot::true}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::instanceId}}::is::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}}}상세 확인 중 · 다시 클릭해 등록{{/when}}
+{{#when::keep::{{dictelement::{{slot::hand_card}}::instanceId}}::is::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}}}상세 확인 중 · 클릭해 등록{{/when}}
 {{#when::keep::{{dictelement::{{slot::hand_card}}::instanceId}}::isnot::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}}}클릭해 상세 보기{{/when}}
 {{/when}}
 </span>
@@ -2229,4 +2222,3 @@ aria-label="카드 상세 및 등록 상태 전환">
 </main>
 {{/when}}
 </body>
-</html>

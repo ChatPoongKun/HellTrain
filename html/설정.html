@@ -29,11 +29,18 @@ inset: 0;
 display: flex;
 align-items: center;
 justify-content: center;
-z-index: 10;
+z-index: 30;
 padding: 1rem;
 }
 
+.popup-backdrop {
+position: absolute;
+inset: 0;
+}
+
 .popup-container {
+position: relative;
+z-index: 1;
 width: 100%;
 max-width: 520px;
 background: rgba(30, 41, 59, 0.7);
@@ -219,6 +226,7 @@ flex: 1;
 <div class="bg-orb orb-2"></div>
 
 <div class="popup-overlay">
+<div class="popup-backdrop" aria-hidden="true" risu-btn="popupManage|close"></div>
 <div class="popup-container">
 <div class="popup-header">
 <div class="popup-title">설정</div>
