@@ -209,8 +209,16 @@ local chat = {
 function getFullChat(triggerId)
     return clone(chat)
 end
+local failRemoveChatOnOccurrence
 function removeChat(triggerId, zeroBasedIndex)
     assert(type(zeroBasedIndex) == "number" and zeroBasedIndex % 1 == 0, "removeChat index must be integer")
+    if type(failRemoveChatOnOccurrence) == "number" then
+        failRemoveChatOnOccurrence = failRemoveChatOnOccurrence - 1
+        if failRemoveChatOnOccurrence == 0 then
+            failRemoveChatOnOccurrence = nil
+            error("injected removeChat failure")
+        end
+    end
     table.remove(chat, zeroBasedIndex + 1)
 end
 local failNextAddChat = false
@@ -397,6 +405,119 @@ assert(stateWriteCount == writesBeforeInjectedOnStart
     and states[ACTIVE].phase == "requestInjected" and states[PENDING].turnId == states[ACTIVE].turnId,
     "repeated onStart regressed or replaced an injected request")
 
+local writesBeforeMissingOutputCommit = stateWriteCount
+assertFails("commit without character output", controller("commitOutput"),
+    "observed_output_missing")
+assert(stateWriteCount == writesBeforeMissingOutputCommit
+    and states[ACTIVE].phase == "requestInjected"
+    and states[ACTIVE].outputObserved == nil,
+    "missing output created an observation receipt or changed request state")
+
+local firstPendingBeforeRecovery = canonical(states[PENDING])
+local firstAttempt = states[ACTIVE].attemptNumber
+local partialScene = "discarded partial scene"
+appendChat("char", partialScene)
+local partialSceneIndex = #chat
+appendChat("user", "*says nothing*")
+local activeBeforeAnchorTamper = canonical(states[ACTIVE])
+local writesBeforeAnchorTamper = stateWriteCount
+chat[1].data = "tampered intro"
+assertFails("reject tampered recovery anchor", controller("prepareGeneration"),
+    "chat_anchor_prefix_mismatch")
+assert(stateWriteCount == writesBeforeAnchorTamper
+    and canonical(states[ACTIVE]) == activeBeforeAnchorTamper
+    and #chat == partialSceneIndex + 1
+    and chat[#chat].role == "user" and chat[#chat].data == "*says nothing*",
+    "anchor tamper rejection wrote state or deleted a message")
+chat[1].data = "intro"
+
+failRemoveChatOnOccurrence = 2
+assertFails("interrupted unobserved output cleanup", controller("prepareGeneration"),
+    "recovery_response_remove_failed")
+assert(failRemoveChatOnOccurrence == nil,
+    "removeChat failure injection was not consumed")
+assert(chat[#chat].role == "char" and chat[#chat].data == partialScene
+    and #chat == partialSceneIndex,
+    "interrupted cleanup did not remove only the trailing filler")
+assert(states[ACTIVE].phase == "requestInjected"
+    and states[ACTIVE].attemptNumber == firstAttempt
+    and states[ACTIVE].outputObserved == nil
+    and type(states[ACTIVE].recoveringCleanup) == "table"
+    and states[ACTIVE].recoveringCleanup.mode == "retry"
+    and states[ACTIVE].recoveringCleanup.responsePresent == true
+    and states[ACTIVE].recoveringCleanup.responseIndex == partialSceneIndex - 1,
+    "interrupted cleanup did not retain its retry receipt")
+assert(canonical(states[PENDING]) == firstPendingBeforeRecovery,
+    "interrupted cleanup changed the pending turn")
+
+local cleanupReceiptSnapshot = canonical(states[ACTIVE])
+chat[partialSceneIndex].data = "tampered partial scene"
+assertFails("reject tampered cleanup response", controller("prepareGeneration"),
+    "cleanup_response_mismatch")
+assert(canonical(states[ACTIVE]) == cleanupReceiptSnapshot
+    and #chat == partialSceneIndex
+    and chat[partialSceneIndex].data == "tampered partial scene",
+    "tamper rejection changed the cleanup receipt or deleted a message")
+chat[partialSceneIndex].data = partialScene
+
+local resumedRetry = assertOk("resume interrupted output cleanup",
+    controller("prepareGeneration"))
+assert(resumedRetry.generationReady == true
+    and resumedRetry.recoveredAbandonedRequest == true
+    and resumedRetry.removedUncommittedOutput == true
+    and resumedRetry.removedSayNothingCount == 0
+    and resumedRetry.attemptNumber == firstAttempt + 1,
+    "interrupted cleanup did not resume as the same-turn retry")
+assert(chat[#chat].role == "user" and chat[#chat].data == firstMarker
+    and canonical(states[PENDING]) == firstPendingBeforeRecovery
+    and states[ACTIVE].phase == "inFlight"
+    and states[ACTIVE].recoveringCleanup == nil,
+    "resumed cleanup did not leave one marker and the original pending turn")
+
+local recoveredInjected = assertOk("inject recovered request",
+    controller("injectRequest", basePrompt))
+assert(recoveredInjected.requestPhase == "requestInjected"
+    and canonical(recoveredInjected.promptArray[#recoveredInjected.promptArray])
+        == canonical(states[ACTIVE].message)
+    and states[ACTIVE].attemptNumber == firstAttempt + 1,
+    "recovered attempt did not reuse the same private event")
+
+appendChat("char", "second discarded partial scene")
+appendChat("user", "*says nothing*")
+local automaticRetry = assertOk("delete unobserved output and retry",
+    controller("prepareGeneration"))
+assert(automaticRetry.generationReady == true
+    and automaticRetry.recoveredAbandonedRequest == true
+    and automaticRetry.removedUncommittedOutput == true
+    and automaticRetry.removedSayNothing == true
+    and automaticRetry.removedSayNothingCount == 1
+    and automaticRetry.attemptNumber == firstAttempt + 2,
+    "unobserved response was not atomically cleaned for retry")
+assert(chat[#chat].role == "user" and chat[#chat].data == firstMarker
+    and markerCount(firstMarker) == 1
+    and canonical(states[PENDING]) == firstPendingBeforeRecovery
+    and states[ACTIVE].phase == "inFlight",
+    "automatic retry changed the marker or pending turn")
+
+local finalFirstInjected = assertOk("inject final first-turn retry",
+    controller("injectRequest", basePrompt))
+assert(finalFirstInjected.requestPhase == "requestInjected"
+    and states[ACTIVE].attemptNumber == firstAttempt + 2,
+    "final retry was not bound to the incremented attempt")
+appendChat("char", "first scene")
+
+local authorityBeforeObservedReceipt = canonical(states[AUTHORITY])
+local pendingBeforeObservedReceipt = canonical(states[PENDING])
+failNextStateWrite = ACTIVE
+assertFails("dropped output observation receipt", controller("commitOutput"),
+    "state_write_not_persisted")
+assert(canonical(states[AUTHORITY]) == authorityBeforeObservedReceipt
+    and canonical(states[PENDING]) == pendingBeforeObservedReceipt
+    and states[ACTIVE].phase == "requestInjected"
+    and states[ACTIVE].outputObserved == nil
+    and chat[#chat].role == "char" and chat[#chat].data == "first scene",
+    "failed output observation receipt changed battle state or the completed response")
+
 local beforeCommitInitializerCalls = moduleCalls.turnInitializer or 0
 local committed = assertOk("commit output", controller("commitOutput"))
 assert(committed.applied == true and committed.initializedNextTurn == true)
@@ -438,7 +559,8 @@ assert(canonical(afterDuplicate.authorityState) == turnTwoStateSnapshot, "duplic
 assert(canonical(afterDuplicate.draft) == turnTwoDraftSnapshot, "duplicate commit reset the active draft")
 assertFails("inject committed request", controller("injectRequest", basePrompt), "request_not_in_flight")
 
-appendChat("char", "first scene")
+assert(chat[#chat].role == "char" and chat[#chat].data == "first scene",
+    "first committed response was not preserved")
 table.remove(chat, #chat)
 assert(chat[#chat].data == prepared.publicMarker, "reroll fixture did not expose the immediate marker")
 failStateWriteOnOccurrence = { key = ACTIVE, remaining = 2 }
@@ -489,6 +611,7 @@ assertFails("repeated reroll onStart after injection", controller("prepareGenera
 assert(stateWriteCount == writesBeforeInjectedRerollOnStart
     and states[ACTIVE].phase == "requestInjected" and states[PENDING] == nil,
     "repeated reroll onStart regressed the injected request")
+appendChat("char", "rerolled scene")
 local rerollCommit = assertOk("commit reroll output", controller("commitOutput"))
 assert(rerollCommit.applied == false and rerollCommit.initializedNextTurn == false)
 assert(rerollCommit.view.phase == "selecting" and rerollCommit.view.locked == false
@@ -498,7 +621,6 @@ local afterReroll = assertOk("snapshot after reroll", controller("getSnapshot"))
 assert(canonical(afterReroll.authorityState) == turnTwoStateSnapshot, "reroll changed next-turn authority")
 assert(canonical(afterReroll.draft) == turnTwoDraftSnapshot, "reroll changed next-turn draft")
 
-appendChat("char", "rerolled scene")
 appendChat("user", "*says nothing*")
 appendChat("user", "*says nothing*")
 failNextAddChat = true
@@ -540,9 +662,10 @@ local secondInjected = assertOk("inject second-turn request", controller("inject
 assert(secondInjected.requestPhase == "requestInjected"
     and canonical(secondInjected.promptArray[#secondInjected.promptArray]) == canonical(states[ACTIVE].message),
     "second-turn request did not persist and return its private event")
+appendChat("char", "second scene")
 
 local initializerCallsBeforeCommitRecovery = moduleCalls.turnInitializer or 0
-failNextStateWrite = ACTIVE
+failStateWriteOnOccurrence = { key = ACTIVE, remaining = 2 }
 assertFails("dropped committed binding write", controller("commitOutput"), "state_write_not_persisted")
 assert(states[AUTHORITY].lastCommittedTurnId == "controller-battle-turn-002"
     and states[AUTHORITY].turnNumber == 3,
@@ -551,13 +674,34 @@ assert(type(states[PENDING]) == "table" and states[PENDING].turnId == "controlle
     "binding failure cleared the only retry source")
 assert(states[ACTIVE].source == "pending" and states[ACTIVE].phase == "requestInjected",
     "dropped binding write unexpectedly changed its source or phase")
+assert(type(states[ACTIVE].outputObserved) == "table"
+    and states[ACTIVE].outputObserved.attemptNumber == states[ACTIVE].attemptNumber
+    and states[ACTIVE].recoveringCleanup == nil,
+    "partial commit did not retain its output observation receipt")
+assert(chat[#chat].role == "char" and chat[#chat].data == "second scene",
+    "partial commit changed the observed response")
 assert((moduleCalls.turnInitializer or 0) == initializerCallsBeforeCommitRecovery + 1,
     "partial commit did not initialize the next turn exactly once")
 
-local recoveredCommit = assertOk("recover committed binding", controller("commitOutput"))
-assert(recoveredCommit.applied == false and recoveredCommit.initializedNextTurn == false)
+local fillersBeforeObservedRecovery = sayNothingCount()
+appendChat("user", "*says nothing*")
+local recoveredCommit = assertOk("recover observed output commit",
+    controller("prepareGeneration"))
+assert(recoveredCommit.applied == false
+    and recoveredCommit.initializedNextTurn == false
+    and recoveredCommit.generationReady == false
+    and recoveredCommit.commitRecovered == true
+    and recoveredCommit.removedSayNothing == true
+    and recoveredCommit.removedSayNothingCount == 1
+    and recoveredCommit.removedUncommittedOutput == false,
+    "observed output recovery retried generation instead of resuming commit")
+assert(chat[#chat].role == "char" and chat[#chat].data == "second scene"
+    and sayNothingCount() == fillersBeforeObservedRecovery,
+    "observed output recovery deleted or changed the completed response")
 assert(states[PENDING] == nil and states[ACTIVE].source == "lastCommittedPending"
-    and states[ACTIVE].phase == "committed",
+    and states[ACTIVE].phase == "committed"
+    and states[ACTIVE].outputObserved == nil
+    and states[ACTIVE].recoveringCleanup == nil,
     "commit recovery did not finish the pending-to-last migration")
 assert(states[AUTHORITY].turnNumber == 3
     and (moduleCalls.turnInitializer or 0) == initializerCallsBeforeCommitRecovery + 1,
@@ -596,7 +740,7 @@ local signature = canonical({
     prompt = secondPrepared.publicMarker,
     markerCount = markerCount(firstMarker) + markerCount(secondPrepared.publicMarker),
 })
-print("BATTLE_CONTROLLER|hash=" .. stableHash(signature) .. "|scenarios=35")
+print("BATTLE_CONTROLLER|hash=" .. stableHash(signature) .. "|scenarios=44")
 '@
 
 Push-Location $projectRoot
@@ -618,7 +762,7 @@ try {
     if (-not ($firstText -ceq $secondText)) {
         throw "Separate Lua processes produced different battle controller results.`nFIRST:`n$firstText`nSECOND:`n$secondText"
     }
-    if ($firstText -notmatch '^BATTLE_CONTROLLER\|hash=\d{10}\|scenarios=35$') {
+    if ($firstText -notmatch '^BATTLE_CONTROLLER\|hash=\d{10}\|scenarios=44$') {
         throw "Unexpected battle controller determinism vector: $firstText"
     }
 

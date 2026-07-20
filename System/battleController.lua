@@ -1,7 +1,9 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
+    local ACTIVE_REQUEST_SCHEMA_VERSION = 2
     local VIEW_NAME = "battleView"
     local SAY_NOTHING = "*says nothing*"
+    local CHAT_FINGERPRINT_ALGORITHM = "canonical_poly131_137_chat_v1"
 
     local KEYS = {
         authority = "battleRuntimeV1.authority",
@@ -175,6 +177,152 @@
         end
         active[left] = nil
         return true
+    end
+
+    local function canonicalFailure(code, path, message)
+        error(makeError(code, path, message), 0)
+    end
+
+    local function inspectCanonicalTable(value, path)
+        if type(value) ~= "table" or getmetatable(value) ~= nil then
+            canonicalFailure("invalid_fingerprint_table", path, "fingerprint 대상은 일반 테이블이어야 합니다.")
+        end
+        local numericCount = 0
+        local maximum = 0
+        local hasNumeric = false
+        local hasString = false
+        local stringKeys = {}
+        for key in pairs(value) do
+            if type(key) == "number" then
+                hasNumeric = true
+                numericCount = numericCount + 1
+                if not isInteger(key, 1) then
+                    canonicalFailure("invalid_fingerprint_array_index", path, "fingerprint 배열 인덱스는 1 이상의 정수여야 합니다.")
+                end
+                maximum = math.max(maximum, key)
+            elseif type(key) == "string" then
+                hasString = true
+                stringKeys[#stringKeys + 1] = key
+            else
+                canonicalFailure("invalid_fingerprint_object_key", path, "fingerprint 객체 키는 문자열이어야 합니다.")
+            end
+        end
+        if hasNumeric and hasString then
+            canonicalFailure("mixed_fingerprint_table", path, "fingerprint에는 숫자 인덱스와 문자열 키를 함께 사용할 수 없습니다.")
+        end
+        if hasNumeric and numericCount ~= maximum then
+            canonicalFailure("sparse_fingerprint_array", path, "fingerprint 배열 인덱스는 1부터 빈틈없이 이어져야 합니다.")
+        end
+        table.sort(stringKeys)
+        return hasNumeric, maximum, stringKeys
+    end
+
+    local function canonicalJson(value, path, active)
+        local valueType = type(value)
+        if valueType == "nil" then return "n" end
+        if valueType == "boolean" then return value and "t" or "f" end
+        if valueType == "number" then
+            if not isFinite(value) then
+                canonicalFailure("non_finite_fingerprint_number", path, "유한하지 않은 숫자는 fingerprint에 사용할 수 없습니다.")
+            end
+            return "d" .. string.format("%.17g", value) .. ";"
+        end
+        if valueType == "string" then
+            return "s" .. tostring(#value) .. ":" .. value
+        end
+        if valueType ~= "table" then
+            canonicalFailure("unsupported_fingerprint_type", path, "fingerprint에 사용할 수 없는 자료형입니다: " .. valueType)
+        end
+        active = active or {}
+        if active[value] then
+            canonicalFailure("circular_fingerprint_value", path, "순환 참조는 fingerprint에 사용할 수 없습니다.")
+        end
+        active[value] = true
+        local isArray, length, stringKeys = inspectCanonicalTable(value, path)
+        local parts = {}
+        if isArray then
+            parts[1] = "["
+            for index = 1, length do
+                parts[#parts + 1] = canonicalJson(value[index], path .. "[" .. index .. "]", active)
+            end
+            parts[#parts + 1] = "]"
+        else
+            parts[1] = "{"
+            for _, key in ipairs(stringKeys) do
+                parts[#parts + 1] = "k" .. tostring(#key) .. ":" .. key
+                parts[#parts + 1] = canonicalJson(value[key], objectPath(path, key), active)
+            end
+            parts[#parts + 1] = "}"
+        end
+        active[value] = nil
+        return table.concat(parts)
+    end
+
+    local function fingerprintChatRange(chat, firstIndex, count, path)
+        if type(chat) ~= "table" or not isInteger(firstIndex, 1) or not isInteger(count, 0) then
+            return nil, makeError("invalid_chat_fingerprint_range", path, "채팅 fingerprint 범위가 올바르지 않습니다.")
+        end
+        if count > 0 and firstIndex + count - 1 > #chat then
+            return nil, makeError("chat_fingerprint_range_out_of_bounds", path, "채팅 fingerprint 범위가 대화 길이를 벗어났습니다.")
+        end
+        local ok, canonical = pcall(function()
+            local parts = { "[" }
+            for offset = 0, count - 1 do
+                parts[#parts + 1] = canonicalJson(chat[firstIndex + offset], path .. "[" .. offset .. "]", {})
+            end
+            parts[#parts + 1] = "]"
+            return table.concat(parts)
+        end)
+        if not ok then
+            if type(canonical) == "table" and canonical.code and canonical.path and canonical.message then
+                return nil, canonical
+            end
+            return nil, makeError("chat_fingerprint_failed", path, "채팅 fingerprint 생성에 실패했습니다: " .. tostring(canonical))
+        end
+        local hashA = 0
+        local hashB = 0
+        for index = 1, #canonical do
+            local byte = string.byte(canonical, index)
+            hashA = (hashA * 131 + byte) % 2147483647
+            hashB = (hashB * 137 + byte) % 2147483629
+        end
+        return {
+            algorithm = CHAT_FINGERPRINT_ALGORITHM,
+            length = #canonical,
+            hashA = hashA,
+            hashB = hashB,
+        }, nil
+    end
+
+    local function fingerprintsEqual(left, right)
+        return type(left) == "table"
+            and type(right) == "table"
+            and left.algorithm == right.algorithm
+            and left.length == right.length
+            and left.hashA == right.hashA
+            and left.hashB == right.hashB
+    end
+
+    local function validateFingerprint(value, path, errors)
+        if type(value) ~= "table" or getmetatable(value) ~= nil then
+            errors[#errors + 1] = makeError("invalid_chat_fingerprint", path, "채팅 fingerprint가 일반 객체가 아닙니다.")
+            return false
+        end
+        local allowed = { algorithm = true, length = true, hashA = true, hashB = true }
+        for key in pairs(value) do
+            if type(key) ~= "string" or not allowed[key] then
+                errors[#errors + 1] = makeError("unknown_chat_fingerprint_field", path .. "." .. tostring(key), "채팅 fingerprint에 알 수 없는 필드가 있습니다.")
+            end
+        end
+        if value.algorithm ~= CHAT_FINGERPRINT_ALGORITHM then
+            errors[#errors + 1] = makeError("invalid_chat_fingerprint_algorithm", path .. ".algorithm", "지원하지 않는 채팅 fingerprint 알고리즘입니다.")
+        end
+        for _, field in ipairs({ "length", "hashA", "hashB" }) do
+            if not isInteger(value[field], 0) then
+                errors[#errors + 1] = makeError("invalid_chat_fingerprint", path .. "." .. field, "채팅 fingerprint 수치는 0 이상의 정수여야 합니다.")
+            end
+        end
+        return #errors == 0
     end
 
     local function appendNestedErrors(target, moduleName, report)
@@ -402,7 +550,122 @@
         }, nil
     end
 
-    local function buildBinding(pendingTurn, formatted, sourceName, phase)
+    local function validateChatAnchor(anchor, path, errors)
+        if type(anchor) ~= "table" or getmetatable(anchor) ~= nil then
+            errors[#errors + 1] = makeError("invalid_chat_anchor", path, "채팅 anchor가 일반 객체가 아닙니다.")
+            return
+        end
+        local allowed = {
+            schemaVersion = true,
+            kind = true,
+            prefixMessageCount = true,
+            markerIndex = true,
+            prefixFingerprint = true,
+        }
+        for key in pairs(anchor) do
+            if type(key) ~= "string" or not allowed[key] then
+                errors[#errors + 1] = makeError("unknown_chat_anchor_field", path .. "." .. tostring(key), "채팅 anchor에 알 수 없는 필드가 있습니다.")
+            end
+        end
+        if anchor.schemaVersion ~= 1 or anchor.kind ~= "battleChatAnchor" then
+            errors[#errors + 1] = makeError("invalid_chat_anchor_schema", path, "채팅 anchor 스키마가 올바르지 않습니다.")
+        end
+        if not isInteger(anchor.prefixMessageCount, 0) then
+            errors[#errors + 1] = makeError("invalid_chat_anchor_count", path .. ".prefixMessageCount", "anchor prefix 메시지 수가 올바르지 않습니다.")
+        end
+        if not isInteger(anchor.markerIndex, 0) or anchor.markerIndex ~= anchor.prefixMessageCount then
+            errors[#errors + 1] = makeError("invalid_chat_anchor_index", path .. ".markerIndex", "0-based 마커 위치가 prefix 메시지 수와 일치하지 않습니다.")
+        end
+        validateFingerprint(anchor.prefixFingerprint, path .. ".prefixFingerprint", errors)
+    end
+
+    local function validateOutputObserved(receipt, binding, path, errors)
+        if type(receipt) ~= "table" or getmetatable(receipt) ~= nil then
+            errors[#errors + 1] = makeError("invalid_output_observed", path, "출력 관측 영수증이 일반 객체가 아닙니다.")
+            return
+        end
+        local allowed = {
+            schemaVersion = true,
+            kind = true,
+            attemptNumber = true,
+            responseIndex = true,
+            responseFingerprint = true,
+        }
+        for key in pairs(receipt) do
+            if type(key) ~= "string" or not allowed[key] then
+                errors[#errors + 1] = makeError("unknown_output_observed_field", path .. "." .. tostring(key), "출력 관측 영수증에 알 수 없는 필드가 있습니다.")
+            end
+        end
+        if receipt.schemaVersion ~= 1 or receipt.kind ~= "battleOutputObserved" then
+            errors[#errors + 1] = makeError("invalid_output_observed_schema", path, "출력 관측 영수증 스키마가 올바르지 않습니다.")
+        end
+        if receipt.attemptNumber ~= binding.attemptNumber then
+            errors[#errors + 1] = makeError("output_observed_attempt_mismatch", path .. ".attemptNumber", "출력 관측 영수증의 시도 번호가 요청과 다릅니다.")
+        end
+        local expectedIndex = type(binding.chatAnchor) == "table" and binding.chatAnchor.markerIndex + 1 or nil
+        if not isInteger(receipt.responseIndex, 0) or receipt.responseIndex ~= expectedIndex then
+            errors[#errors + 1] = makeError("output_observed_index_mismatch", path .. ".responseIndex", "출력 관측 위치가 채팅 anchor 다음 위치와 다릅니다.")
+        end
+        validateFingerprint(receipt.responseFingerprint, path .. ".responseFingerprint", errors)
+    end
+
+    local function validateCleanupReceipt(receipt, binding, path, errors)
+        if type(receipt) ~= "table" or getmetatable(receipt) ~= nil then
+            errors[#errors + 1] = makeError("invalid_cleanup_receipt", path, "복구 정리 영수증이 일반 객체가 아닙니다.")
+            return
+        end
+        local allowed = {
+            schemaVersion = true,
+            kind = true,
+            mode = true,
+            originalPhase = true,
+            attemptNumber = true,
+            responseIndex = true,
+            responsePresent = true,
+            responseFingerprint = true,
+            initialFillerCount = true,
+        }
+        for key in pairs(receipt) do
+            if type(key) ~= "string" or not allowed[key] then
+                errors[#errors + 1] = makeError("unknown_cleanup_receipt_field", path .. "." .. tostring(key), "복구 정리 영수증에 알 수 없는 필드가 있습니다.")
+            end
+        end
+        if receipt.schemaVersion ~= 1 or receipt.kind ~= "battleRecoveringCleanup" then
+            errors[#errors + 1] = makeError("invalid_cleanup_receipt_schema", path, "복구 정리 영수증 스키마가 올바르지 않습니다.")
+        end
+        if receipt.mode ~= "retry" and receipt.mode ~= "resumeCommit" then
+            errors[#errors + 1] = makeError("invalid_cleanup_mode", path .. ".mode", "복구 정리 mode가 올바르지 않습니다.")
+        end
+        if receipt.originalPhase ~= "inFlight" and receipt.originalPhase ~= "requestInjected" then
+            errors[#errors + 1] = makeError("invalid_cleanup_phase", path .. ".originalPhase", "복구 정리 원본 phase가 올바르지 않습니다.")
+        elseif receipt.originalPhase ~= binding.phase then
+            errors[#errors + 1] = makeError("cleanup_phase_mismatch", path .. ".originalPhase", "복구 정리 원본 phase가 현재 요청 phase와 다릅니다.")
+        end
+        if receipt.attemptNumber ~= binding.attemptNumber then
+            errors[#errors + 1] = makeError("cleanup_attempt_mismatch", path .. ".attemptNumber", "복구 정리 시도 번호가 요청과 다릅니다.")
+        end
+        local expectedIndex = type(binding.chatAnchor) == "table" and binding.chatAnchor.markerIndex + 1 or nil
+        if not isInteger(receipt.responseIndex, 0) or receipt.responseIndex ~= expectedIndex then
+            errors[#errors + 1] = makeError("cleanup_response_index_mismatch", path .. ".responseIndex", "복구 정리 응답 위치가 채팅 anchor 다음 위치와 다릅니다.")
+        end
+        if type(receipt.responsePresent) ~= "boolean" then
+            errors[#errors + 1] = makeError("invalid_cleanup_response_flag", path .. ".responsePresent", "복구 정리 응답 존재 표식이 불리언이 아닙니다.")
+        elseif receipt.responsePresent then
+            validateFingerprint(receipt.responseFingerprint, path .. ".responseFingerprint", errors)
+        elseif receipt.responseFingerprint ~= nil then
+            errors[#errors + 1] = makeError("unexpected_cleanup_response_fingerprint", path .. ".responseFingerprint", "응답이 없는 복구 정리에 응답 fingerprint가 있습니다.")
+        end
+        if not isInteger(receipt.initialFillerCount, 1) then
+            errors[#errors + 1] = makeError("invalid_cleanup_filler_count", path .. ".initialFillerCount", "복구 정리에는 최초 filler가 하나 이상 필요합니다.")
+        end
+        if receipt.mode == "retry" and binding.outputObserved ~= nil then
+            errors[#errors + 1] = makeError("retry_cleanup_has_observed_output", path .. ".mode", "출력이 관측된 요청을 삭제 재시도로 정리할 수 없습니다.")
+        elseif receipt.mode == "resumeCommit" and binding.outputObserved == nil then
+            errors[#errors + 1] = makeError("commit_cleanup_missing_observed_output", path .. ".mode", "commit 재개 정리에는 출력 관측 영수증이 필요합니다.")
+        end
+    end
+
+    local function buildBinding(pendingTurn, formatted, sourceName, phase, chatAnchor, attemptNumber)
         if sourceName ~= "pending" and sourceName ~= "lastCommittedPending" then
             return nil, {
                 makeError("invalid_request_source", "$.activeRequest.source", "알 수 없는 요청 source입니다."),
@@ -429,15 +692,17 @@
             }
         end
         return {
-            schemaVersion = SCHEMA_VERSION,
+            schemaVersion = ACTIVE_REQUEST_SCHEMA_VERSION,
             kind = "battleActiveRequest",
             battleId = pendingTurn.battleId,
             turnId = pendingTurn.turnId,
             turnNumber = formatted.turnNumber,
             source = sourceName,
             phase = phase,
+            attemptNumber = attemptNumber or 1,
             publicMarker = formatted.publicMarker,
             message = formatted.message,
+            chatAnchor = chatAnchor,
         }, nil
     end
 
@@ -456,6 +721,10 @@
             phase = true,
             publicMarker = true,
             message = true,
+            attemptNumber = true,
+            chatAnchor = true,
+            outputObserved = true,
+            recoveringCleanup = true,
         }
         local errors = {}
         for key in pairs(binding) do
@@ -463,7 +732,7 @@
                 errors[#errors + 1] = makeError("unknown_active_request_field", path .. "." .. tostring(key), "활성 요청 binding에 알 수 없는 필드가 있습니다.")
             end
         end
-        if binding.schemaVersion ~= SCHEMA_VERSION or binding.kind ~= "battleActiveRequest" then
+        if binding.schemaVersion ~= ACTIVE_REQUEST_SCHEMA_VERSION or binding.kind ~= "battleActiveRequest" then
             errors[#errors + 1] = makeError("invalid_active_request_schema", path, "활성 요청 binding 스키마가 올바르지 않습니다.")
         end
         if not isRuntimeId(binding.battleId) or not isRuntimeId(binding.turnId) then
@@ -471,6 +740,9 @@
         end
         if not isInteger(binding.turnNumber, 1) then
             errors[#errors + 1] = makeError("invalid_active_request_turn", path .. ".turnNumber", "활성 요청 턴 번호가 올바르지 않습니다.")
+        end
+        if not isInteger(binding.attemptNumber, 1) then
+            errors[#errors + 1] = makeError("invalid_request_attempt", path .. ".attemptNumber", "활성 요청 시도 번호가 올바르지 않습니다.")
         end
         if binding.source ~= "pending" and binding.source ~= "lastCommittedPending" then
             errors[#errors + 1] = makeError("invalid_request_source", path .. ".source", "활성 요청 source가 올바르지 않습니다.")
@@ -489,6 +761,22 @@
         local messageError = validatePromptMessage(binding.message, path .. ".message")
         if messageError then
             errors[#errors + 1] = messageError
+        end
+        validateChatAnchor(binding.chatAnchor, path .. ".chatAnchor", errors)
+        if binding.outputObserved ~= nil then
+            if binding.phase ~= "requestInjected" then
+                errors[#errors + 1] = makeError("output_observed_phase_mismatch", path .. ".outputObserved", "출력 관측 영수증은 requestInjected phase에만 존재할 수 있습니다.")
+            end
+            validateOutputObserved(binding.outputObserved, binding, path .. ".outputObserved", errors)
+        end
+        if binding.recoveringCleanup ~= nil then
+            if binding.phase ~= "inFlight" and binding.phase ~= "requestInjected" then
+                errors[#errors + 1] = makeError("cleanup_receipt_phase_mismatch", path .. ".recoveringCleanup", "복구 정리 영수증은 잠긴 요청 phase에만 존재할 수 있습니다.")
+            end
+            validateCleanupReceipt(binding.recoveringCleanup, binding, path .. ".recoveringCleanup", errors)
+        end
+        if binding.phase == "committed" and (binding.outputObserved ~= nil or binding.recoveringCleanup ~= nil) then
+            errors[#errors + 1] = makeError("committed_request_has_transient_receipt", path, "확정 요청에 임시 출력·정리 영수증이 남아 있습니다.")
         end
         if type(pendingTurn) == "table" then
             local pendingTurnNumber = type(pendingTurn.beforeState) == "table" and pendingTurn.beforeState.turnNumber or nil
@@ -534,6 +822,167 @@
         return copy, nil
     end
 
+    local function isExactFiller(message)
+        return type(message) == "table"
+            and message.role == "user"
+            and message.data == SAY_NOTHING
+    end
+
+    local function isExactMarker(message, marker)
+        return type(message) == "table"
+            and message.role == "user"
+            and message.data == marker
+    end
+
+    local function createPlannedChatAnchor(chat, marker)
+        local logicalLength = #chat
+        while logicalLength > 0 and isExactFiller(chat[logicalLength]) do
+            logicalLength = logicalLength - 1
+        end
+        local prefixMessageCount = logicalLength
+        if logicalLength > 0 and isExactMarker(chat[logicalLength], marker) then
+            prefixMessageCount = logicalLength - 1
+        end
+        local fingerprint, fingerprintError = fingerprintChatRange(
+            chat,
+            1,
+            prefixMessageCount,
+            "$.chatAnchor.prefix"
+        )
+        if fingerprintError then return nil, { fingerprintError } end
+        return {
+            schemaVersion = 1,
+            kind = "battleChatAnchor",
+            prefixMessageCount = prefixMessageCount,
+            markerIndex = prefixMessageCount,
+            prefixFingerprint = fingerprint,
+        }, nil
+    end
+
+    local function validateAnchorPrefix(binding, chat)
+        local anchor = binding.chatAnchor
+        local prefixCount = anchor.prefixMessageCount
+        if #chat < prefixCount then
+            return {
+                makeError("chat_anchor_prefix_missing", "$.chat", "현재 대화가 저장된 채팅 anchor prefix보다 짧습니다."),
+            }
+        end
+        local fingerprint, fingerprintError = fingerprintChatRange(
+            chat,
+            1,
+            prefixCount,
+            "$.chatAnchor.currentPrefix"
+        )
+        if fingerprintError then return { fingerprintError } end
+        if not fingerprintsEqual(fingerprint, anchor.prefixFingerprint) then
+            return {
+                makeError("chat_anchor_prefix_mismatch", "$.chat", "마커 이전 대화가 요청 준비 시점의 채팅 anchor와 다릅니다."),
+            }
+        end
+        return nil
+    end
+
+    local function inspectPreparingTopology(binding, chat)
+        local prefixErrors = validateAnchorPrefix(binding, chat)
+        if prefixErrors then return nil, prefixErrors end
+        local markerLuaIndex = binding.chatAnchor.markerIndex + 1
+        local cursor = markerLuaIndex
+        local markerPresent = isExactMarker(chat[cursor], binding.publicMarker)
+        if markerPresent then cursor = cursor + 1 end
+        local fillerCount = 0
+        for index = cursor, #chat do
+            if not isExactFiller(chat[index]) then
+                return nil, {
+                    makeError("preparing_chat_topology_mismatch", "$.chat[" .. index .. "]", "준비 중인 요청의 anchor 뒤에는 고정 공개 마커와 trailing filler만 올 수 있습니다."),
+                }
+            end
+            fillerCount = fillerCount + 1
+        end
+        return {
+            markerPresent = markerPresent,
+            fillerCount = fillerCount,
+        }, nil
+    end
+
+    local function inspectAnchoredTopology(binding, chat, requireFiller)
+        local prefixErrors = validateAnchorPrefix(binding, chat)
+        if prefixErrors then return nil, prefixErrors end
+        local markerLuaIndex = binding.chatAnchor.markerIndex + 1
+        if not isExactMarker(chat[markerLuaIndex], binding.publicMarker) then
+            return nil, {
+                makeError("chat_anchor_marker_mismatch", "$.chat[" .. markerLuaIndex .. "]", "저장된 위치에 이 요청의 공개 턴 마커가 없습니다."),
+            }
+        end
+        local fillerCount = 0
+        local cursor = #chat
+        while cursor > markerLuaIndex and isExactFiller(chat[cursor]) do
+            fillerCount = fillerCount + 1
+            cursor = cursor - 1
+        end
+        if requireFiller and fillerCount == 0 then
+            return nil, {
+                makeError("recovery_filler_missing", "$.chat", "잠긴 요청을 복구하려면 새 정확한 빈 입력이 필요합니다."),
+            }
+        end
+        local responsePresent = false
+        local responseFingerprint
+        local responseLuaIndex = markerLuaIndex + 1
+        if cursor == responseLuaIndex then
+            local response = chat[responseLuaIndex]
+            if type(response) ~= "table" or response.role ~= "char" then
+                return nil, {
+                    makeError("recovery_response_role_mismatch", "$.chat[" .. responseLuaIndex .. "]", "공개 마커 뒤의 미확정 응답이 캐릭터 메시지가 아닙니다."),
+                }
+            end
+            responsePresent = true
+            local fingerprintError
+            responseFingerprint, fingerprintError = fingerprintChatRange(
+                chat,
+                responseLuaIndex,
+                1,
+                "$.recovery.response"
+            )
+            if fingerprintError then return nil, { fingerprintError } end
+        elseif cursor ~= markerLuaIndex then
+            return nil, {
+                makeError("recovery_chat_topology_mismatch", "$.chat", "채팅 anchor 뒤에 자동 복구가 소유한다고 증명할 수 없는 메시지가 있습니다."),
+            }
+        end
+        return {
+            markerLuaIndex = markerLuaIndex,
+            responseLuaIndex = responseLuaIndex,
+            responseIndex = responseLuaIndex - 1,
+            responsePresent = responsePresent,
+            responseFingerprint = responseFingerprint,
+            fillerCount = fillerCount,
+        }, nil
+    end
+
+    local function inspectObservedOutput(binding, chat, allowTrailingFillers)
+        local topology, topologyErrors = inspectAnchoredTopology(binding, chat, false)
+        if topologyErrors then return nil, topologyErrors end
+        if not topology.responsePresent then
+            return nil, {
+                makeError("observed_output_missing", "$.chat", "출력 관측 영수증에 연결할 캐릭터 응답이 없습니다."),
+            }
+        end
+        if not allowTrailingFillers and topology.fillerCount ~= 0 then
+            return nil, {
+                makeError("unexpected_output_suffix", "$.chat", "정상 onOutput 관측 시점에 응답 뒤 추가 메시지가 있습니다."),
+            }
+        end
+        local observed = binding.outputObserved
+        if observed ~= nil then
+            if topology.responseIndex ~= observed.responseIndex
+                or not fingerprintsEqual(topology.responseFingerprint, observed.responseFingerprint) then
+                return nil, {
+                    makeError("observed_output_mismatch", "$.chat", "현재 캐릭터 응답이 저장된 출력 관측 영수증과 다릅니다."),
+                }
+            end
+        end
+        return topology, nil
+    end
+
     local function removeTrailingSayNothing(chat)
         local current = chat
         local removedCount = 0
@@ -572,6 +1021,57 @@
             current = after
             removedCount = removedCount + 1
         end
+    end
+
+    local function removeRecoveryResponse(chat, luaIndex, expectedFingerprint)
+        if luaIndex ~= #chat then
+            return nil, {
+                makeError("recovery_response_not_last", "$.chat", "filler 정리 뒤 삭제할 미확정 응답이 마지막 메시지가 아닙니다."),
+            }
+        end
+        local currentFingerprint, fingerprintError = fingerprintChatRange(
+            chat,
+            luaIndex,
+            1,
+            "$.recovery.response"
+        )
+        if fingerprintError then return nil, { fingerprintError } end
+        if not fingerprintsEqual(currentFingerprint, expectedFingerprint) then
+            return nil, {
+                makeError("recovery_response_fingerprint_mismatch", "$.chat[" .. luaIndex .. "]", "삭제 대상 응답이 복구 영수증과 다릅니다."),
+            }
+        end
+        if type(chat[luaIndex]) ~= "table" or chat[luaIndex].role ~= "char" then
+            return nil, {
+                makeError("recovery_response_role_mismatch", "$.chat[" .. luaIndex .. "]", "삭제 대상이 캐릭터 응답이 아닙니다."),
+            }
+        end
+        if type(removeChat) ~= "function" then
+            return nil, {
+                makeError("chat_write_unavailable", "$.host.removeChat", "removeChat 호스트 함수를 찾을 수 없습니다."),
+            }
+        end
+        local ok, removeError = pcall(removeChat, triggerId, luaIndex - 1)
+        if not ok then
+            return nil, {
+                makeError("recovery_response_remove_failed", "$.chat[" .. luaIndex .. "]", "미확정 응답을 삭제하지 못했습니다: " .. tostring(removeError)),
+            }
+        end
+        local after, readErrors = readChat()
+        if readErrors then return nil, readErrors end
+        if #after ~= #chat - 1 then
+            return nil, {
+                makeError("recovery_response_remove_not_persisted", "$.chat", "미확정 응답 삭제 뒤 대화 길이가 바뀌지 않았습니다."),
+            }
+        end
+        for index = 1, #after do
+            if not deepEqual(after[index], chat[index]) then
+                return nil, {
+                    makeError("recovery_response_remove_mismatch", "$.chat[" .. index .. "]", "미확정 응답 삭제가 앞선 대화를 변경했습니다."),
+                }
+            end
+        end
+        return after, nil
     end
 
     local function ensurePublicMarker(chat, marker)
@@ -919,40 +1419,232 @@
     end
 
     local loadBoundPending
+    local commitOutput
+
+    local function loadAndValidateBoundRequest(binding, staticData)
+        local pending, pendingErrors = loadBoundPending(binding)
+        if pendingErrors then return nil, nil, pendingErrors end
+        local formatted, formatErrors = formatPending(pending, staticData)
+        if formatErrors then return nil, nil, formatErrors end
+        if binding.publicMarker ~= formatted.publicMarker
+            or not deepEqual(binding.message, formatted.message) then
+            return nil, nil, {
+                makeError("active_request_prompt_mismatch", "$.activeRequest", "복구할 요청 binding이 pendingTurn에서 다시 만든 프롬프트와 다릅니다."),
+            }
+        end
+        return pending, formatted, nil
+    end
+
+    local function beginRecoveringCleanup(binding, chat, staticData, authority)
+        local pending, _, boundErrors = loadAndValidateBoundRequest(binding, staticData)
+        if boundErrors then return nil, nil, nil, boundErrors end
+        local topology, topologyErrors = inspectAnchoredTopology(binding, chat, true)
+        if topologyErrors then return nil, nil, nil, topologyErrors end
+
+        local mode = binding.outputObserved ~= nil and "resumeCommit" or "retry"
+        if mode == "resumeCommit" then
+            if not topology.responsePresent
+                or topology.responseIndex ~= binding.outputObserved.responseIndex
+                or not fingerprintsEqual(topology.responseFingerprint, binding.outputObserved.responseFingerprint) then
+                return nil, nil, nil, {
+                    makeError("observed_output_mismatch", "$.chat", "완성 출력 복구 대상이 출력 관측 영수증과 다릅니다."),
+                }
+            end
+        elseif binding.source == "pending" then
+            local lastCommitted, lastErrors = readStored(KEYS.lastCommittedPending, false)
+            if lastErrors then return nil, nil, nil, lastErrors end
+            if authority.lastCommittedTurnId == binding.turnId
+                or (type(lastCommitted) == "table" and lastCommitted.turnId == binding.turnId) then
+                return nil, nil, nil, {
+                    makeError("commit_trace_without_output_receipt", "$.activeRequest", "현재 턴의 commit 흔적이 있어 출력 관측 영수증 없이 응답을 삭제할 수 없습니다."),
+                }
+            end
+        end
+
+        local nextBinding, cloneError = cloneJson(binding, "$.activeRequest")
+        if cloneError then return nil, nil, nil, { cloneError } end
+        nextBinding.recoveringCleanup = {
+            schemaVersion = 1,
+            kind = "battleRecoveringCleanup",
+            mode = mode,
+            originalPhase = binding.phase,
+            attemptNumber = binding.attemptNumber,
+            responseIndex = topology.responseIndex,
+            responsePresent = topology.responsePresent,
+            responseFingerprint = topology.responseFingerprint,
+            initialFillerCount = topology.fillerCount,
+        }
+        local validationErrors = validateBinding(nextBinding, pending)
+        if #validationErrors > 0 then return nil, nil, nil, validationErrors end
+        local writeErrors = writeStored(KEYS.activeRequest, nextBinding)
+        if writeErrors then return nil, nil, nil, writeErrors end
+        return nextBinding, pending, topology, nil
+    end
+
+    local function resumeRecoveringCleanup(binding, chat)
+        local receipt = binding.recoveringCleanup
+        local topology, topologyErrors = inspectAnchoredTopology(binding, chat, false)
+        if topologyErrors then return nil, nil, nil, topologyErrors end
+
+        if receipt.responsePresent then
+            if topology.responsePresent
+                and (topology.responseIndex ~= receipt.responseIndex
+                    or not fingerprintsEqual(topology.responseFingerprint, receipt.responseFingerprint)) then
+                return nil, nil, nil, {
+                    makeError("cleanup_response_mismatch", "$.chat", "현재 미확정 응답이 복구 정리 영수증과 다릅니다."),
+                }
+            end
+        elseif topology.responsePresent then
+            return nil, nil, nil, {
+                makeError("unexpected_cleanup_response", "$.chat", "응답이 없었던 복구 정리에 새 캐릭터 메시지가 나타났습니다."),
+            }
+        end
+
+        local nextChat, removedFillers, fillerErrors = removeTrailingSayNothing(chat)
+        if fillerErrors then return nil, nil, nil, fillerErrors end
+        local removedResponse = false
+        if receipt.mode == "retry" and receipt.responsePresent then
+            local afterFillerTopology, afterFillerErrors = inspectAnchoredTopology(binding, nextChat, false)
+            if afterFillerErrors then return nil, nil, nil, afterFillerErrors end
+            if afterFillerTopology.responsePresent then
+                local afterRemoval, removeErrors = removeRecoveryResponse(
+                    nextChat,
+                    afterFillerTopology.responseLuaIndex,
+                    receipt.responseFingerprint
+                )
+                if removeErrors then return nil, nil, nil, removeErrors end
+                nextChat = afterRemoval
+                removedResponse = true
+            end
+        end
+
+        local finalTopology, finalErrors = inspectAnchoredTopology(binding, nextChat, false)
+        if finalErrors then return nil, nil, nil, finalErrors end
+        if receipt.mode == "retry" and finalTopology.responsePresent then
+            return nil, nil, nil, {
+                makeError("cleanup_response_remains", "$.chat", "삭제 재시도 정리 뒤 미확정 응답이 남아 있습니다."),
+            }
+        end
+        if receipt.mode == "resumeCommit" then
+            if not finalTopology.responsePresent
+                or finalTopology.responseIndex ~= binding.outputObserved.responseIndex
+                or not fingerprintsEqual(finalTopology.responseFingerprint, binding.outputObserved.responseFingerprint) then
+                return nil, nil, nil, {
+                    makeError("observed_output_mismatch", "$.chat", "commit 재개 전에 완성 응답이 출력 관측 영수증과 달라졌습니다."),
+                }
+            end
+        end
+        return nextChat, removedFillers, removedResponse, nil
+    end
+
+    local function recoverLockedRequest(binding, chat, staticData, authority)
+        local workingBinding = binding
+        local pending
+        if workingBinding.recoveringCleanup == nil then
+            local topology
+            local beginErrors
+            workingBinding, pending, topology, beginErrors = beginRecoveringCleanup(
+                workingBinding,
+                chat,
+                staticData,
+                authority
+            )
+            if beginErrors then return failure(beginErrors) end
+        else
+            local boundErrors
+            pending, _, boundErrors = loadAndValidateBoundRequest(workingBinding, staticData)
+            if boundErrors then return failure(boundErrors) end
+        end
+
+        local cleanedChat, removedFillers, removedResponse, cleanupErrors = resumeRecoveringCleanup(
+            workingBinding,
+            chat
+        )
+        if cleanupErrors then return failure(cleanupErrors) end
+
+        if workingBinding.recoveringCleanup.mode == "resumeCommit" then
+            local committed = commitOutput()
+            if type(committed) ~= "table" or committed.ok ~= true then return committed end
+            committed.generationReady = false
+            committed.commitRecovered = true
+            committed.removedSayNothing = removedFillers > 0
+            committed.removedSayNothingCount = removedFillers
+            committed.removedUncommittedOutput = false
+            return committed
+        end
+
+        workingBinding.phase = "inFlight"
+        workingBinding.attemptNumber = workingBinding.attemptNumber + 1
+        workingBinding.outputObserved = nil
+        workingBinding.recoveringCleanup = nil
+        local validationErrors = validateBinding(workingBinding, pending)
+        if #validationErrors > 0 then return failure(validationErrors) end
+        local writeErrors = writeStored(KEYS.activeRequest, workingBinding)
+        if writeErrors then return failure(writeErrors) end
+        local published, publishErrors = publishCurrentViewInternal(staticData)
+        if publishErrors then return failure(publishErrors) end
+        return success({
+            generationReady = true,
+            recoveredAbandonedRequest = true,
+            commitRecovered = false,
+            turnId = workingBinding.turnId,
+            turnNumber = workingBinding.turnNumber,
+            source = workingBinding.source,
+            publicMarker = workingBinding.publicMarker,
+            attemptNumber = workingBinding.attemptNumber,
+            reused = true,
+            removedSayNothing = removedFillers > 0,
+            removedSayNothingCount = removedFillers,
+            removedUncommittedOutput = removedResponse,
+            markerAdded = false,
+            view = published.view,
+        })
+    end
 
     local function prepareGeneration()
         local staticData, staticErrors = loadStaticData()
-        if staticErrors then
-            return failure(staticErrors)
-        end
+        if staticErrors then return failure(staticErrors) end
         local authority, authorityErrors = readStored(KEYS.authority, true)
-        if authorityErrors then
-            return failure(authorityErrors)
-        end
+        if authorityErrors then return failure(authorityErrors) end
         local chat, chatErrors = readChat()
-        if chatErrors then
-            return failure(chatErrors)
-        end
+        if chatErrors then return failure(chatErrors) end
         local last = chat[#chat]
-        local freshSend = type(last) == "table" and last.role == "user" and last.data == SAY_NOTHING
+        local freshSend = isExactFiller(last)
 
         local storedBinding, storedBindingErrors = readStored(KEYS.activeRequest, false)
-        if storedBindingErrors then
-            return failure(storedBindingErrors)
-        end
+        if storedBindingErrors then return failure(storedBindingErrors) end
         if storedBinding ~= nil then
             local storedBindingValidationErrors = validateBinding(storedBinding, nil)
-            if #storedBindingValidationErrors > 0 then
-                return failure(storedBindingValidationErrors)
+            if #storedBindingValidationErrors > 0 then return failure(storedBindingValidationErrors) end
+
+            if storedBinding.phase == "committed" then
+                local stalePending, stalePendingErrors = readStored(KEYS.pending, false)
+                if stalePendingErrors then return failure(stalePendingErrors) end
+                if type(stalePending) == "table" and stalePending.turnId == storedBinding.turnId then
+                    local cleanupCommit = commitOutput()
+                    if type(cleanupCommit) ~= "table" or cleanupCommit.ok ~= true then return cleanupCommit end
+                    authority, authorityErrors = readStored(KEYS.authority, true)
+                    if authorityErrors then return failure(authorityErrors) end
+                    chat, chatErrors = readChat()
+                    if chatErrors then return failure(chatErrors) end
+                    last = chat[#chat]
+                    freshSend = isExactFiller(last)
+                    storedBinding, storedBindingErrors = readStored(KEYS.activeRequest, true)
+                    if storedBindingErrors then return failure(storedBindingErrors) end
+                end
             end
+
             if storedBinding.phase == "inFlight" or storedBinding.phase == "requestInjected" then
-                return failure({
-                    makeError(
-                        "request_already_in_flight",
-                        "$.activeRequest.phase",
-                        "이미 생성 중이거나 프롬프트 주입을 마친 요청이 있어 새 onStart를 준비할 수 없습니다."
-                    ),
-                })
+                if storedBinding.recoveringCleanup == nil and not freshSend then
+                    return failure({
+                        makeError(
+                            "request_already_in_flight",
+                            "$.activeRequest.phase",
+                            "이미 생성 중이거나 프롬프트 주입을 마친 요청이 있습니다. 새 정확한 빈 입력만 실패 복구를 시작할 수 있습니다."
+                        ),
+                    })
+                end
+                return recoverLockedRequest(storedBinding, chat, staticData, authority)
             end
         end
 
@@ -1069,12 +1761,25 @@
                 })
             end
             binding = recoveryBinding
+            local topology, topologyErrors = inspectPreparingTopology(binding, chat)
+            if topologyErrors then return failure(topologyErrors) end
         else
+            local chatAnchor, anchorErrors = createPlannedChatAnchor(chat, formatted.publicMarker)
+            if anchorErrors then return failure(anchorErrors) end
             local bindingErrors
-            binding, bindingErrors = buildBinding(selectedPending, formatted, sourceName, "preparing")
+            binding, bindingErrors = buildBinding(
+                selectedPending,
+                formatted,
+                sourceName,
+                "preparing",
+                chatAnchor,
+                1
+            )
             if bindingErrors then
                 return failure(bindingErrors)
             end
+            local topology, topologyErrors = inspectPreparingTopology(binding, chat)
+            if topologyErrors then return failure(topologyErrors) end
         end
 
         if sourceName == "pending" then
@@ -1117,12 +1822,24 @@
         if type(finalChat) ~= "table" then
             return failure({ makeError("invalid_chat_result", "$.chat", "공개 턴 마커 처리 결과가 올바르지 않습니다.") })
         end
+        local finalTopology, finalTopologyErrors = inspectAnchoredTopology(binding, finalChat, false)
+        if finalTopologyErrors then return failure(finalTopologyErrors) end
+        if finalTopology.responsePresent or finalTopology.fillerCount ~= 0 then
+            return failure({
+                makeError("prepared_chat_topology_mismatch", "$.chat", "요청 준비 뒤 공개 마커 다음에 예상하지 않은 메시지가 남아 있습니다."),
+            })
+        end
         binding.phase = "inFlight"
+        binding.outputObserved = nil
+        binding.recoveringCleanup = nil
+        local finalBindingErrors = validateBinding(binding, selectedPending)
+        if #finalBindingErrors > 0 then return failure(finalBindingErrors) end
         local readyWriteErrors = writeStored(KEYS.activeRequest, binding)
         if readyWriteErrors then
             return failure(readyWriteErrors)
         end
         return success({
+            generationReady = true,
             turnId = binding.turnId,
             turnNumber = binding.turnNumber,
             source = binding.source,
@@ -1131,6 +1848,10 @@
             removedSayNothing = removedCount > 0,
             removedSayNothingCount = removedCount,
             markerAdded = markerAdded,
+            attemptNumber = binding.attemptNumber,
+            recoveredAbandonedRequest = false,
+            commitRecovered = false,
+            removedUncommittedOutput = false,
             view = published.view,
         })
     end
@@ -1188,6 +1909,16 @@
         if binding.phase ~= "inFlight" and binding.phase ~= "requestInjected" then
             return failure({
                 makeError("request_not_in_flight", "$.activeRequest.phase", "editRequest에는 inFlight 또는 같은 requestInjected 요청 binding이 필요합니다."),
+            })
+        end
+        if binding.recoveringCleanup ~= nil then
+            return failure({
+                makeError("request_cleanup_in_progress", "$.activeRequest.recoveringCleanup", "복구 정리 중에는 프롬프트를 주입할 수 없습니다."),
+            })
+        end
+        if binding.outputObserved ~= nil then
+            return failure({
+                makeError("request_output_already_observed", "$.activeRequest.outputObserved", "이미 완성 출력이 관측된 요청에는 프롬프트를 다시 주입할 수 없습니다."),
             })
         end
         local staticData, staticErrors = loadStaticData()
@@ -1292,7 +2023,7 @@
         return initialized.state, initialized.draft, initialized.reused ~= true, nil
     end
 
-    local function commitOutput()
+    commitOutput = function()
         local staticData, staticErrors = loadStaticData()
         if staticErrors then
             return failure(staticErrors)
@@ -1305,14 +2036,24 @@
         if bindingErrors then
             return failure(bindingErrors)
         end
-        local selectedPending, pendingErrors = loadBoundPending(binding)
-        if pendingErrors then
-            return failure(pendingErrors)
+        local bindingValidationErrors = validateBinding(binding, nil)
+        if #bindingValidationErrors > 0 then
+            return failure(bindingValidationErrors)
         end
         if binding.phase ~= "requestInjected" and binding.phase ~= "committed" then
             return failure({
                 makeError("request_not_committable", "$.activeRequest.phase", "출력 확정에는 requestInjected 또는 이미 committed인 요청 binding이 필요합니다."),
             })
+        end
+        if binding.recoveringCleanup ~= nil
+            and binding.recoveringCleanup.mode ~= "resumeCommit" then
+            return failure({
+                makeError("request_cleanup_in_progress", "$.activeRequest.recoveringCleanup", "미확정 출력 삭제 복구 중에는 출력을 확정할 수 없습니다."),
+            })
+        end
+        local selectedPending, pendingErrors = loadBoundPending(binding)
+        if pendingErrors then
+            return failure(pendingErrors)
         end
         local formatted, formatErrors = formatPending(selectedPending, staticData)
         if formatErrors then
@@ -1322,6 +2063,29 @@
             return failure({
                 makeError("active_request_prompt_mismatch", "$.activeRequest", "출력과 연결된 prompt binding이 pendingTurn과 다릅니다."),
             })
+        end
+
+        if binding.phase == "requestInjected" then
+            local chat, chatErrors = readChat()
+            if chatErrors then return failure(chatErrors) end
+            local topology, topologyErrors = inspectObservedOutput(binding, chat, false)
+            if topologyErrors then return failure(topologyErrors) end
+            if binding.outputObserved == nil then
+                local observedBinding, cloneError = cloneJson(binding, "$.activeRequest")
+                if cloneError then return failure({ cloneError }) end
+                observedBinding.outputObserved = {
+                    schemaVersion = 1,
+                    kind = "battleOutputObserved",
+                    attemptNumber = binding.attemptNumber,
+                    responseIndex = topology.responseIndex,
+                    responseFingerprint = topology.responseFingerprint,
+                }
+                local observedErrors = validateBinding(observedBinding, selectedPending)
+                if #observedErrors > 0 then return failure(observedErrors) end
+                local observedWriteErrors = writeStored(KEYS.activeRequest, observedBinding)
+                if observedWriteErrors then return failure(observedWriteErrors) end
+                binding = observedBinding
+            end
         end
 
         local committed, commitErrors = callModule(
@@ -1357,10 +2121,16 @@
             selectedPending,
             formatted,
             "lastCommittedPending",
-            "committed"
+            "committed",
+            binding.chatAnchor,
+            binding.attemptNumber
         )
         if committedBindingErrors then
             return failure(committedBindingErrors)
+        end
+        local committedBindingValidationErrors = validateBinding(committedBinding, selectedPending)
+        if #committedBindingValidationErrors > 0 then
+            return failure(committedBindingValidationErrors)
         end
 
         local lastWriteErrors = writeStored(KEYS.lastCommittedPending, selectedPending)
@@ -1397,6 +2167,8 @@
             return failure(publishErrors)
         end
         return success({
+            generationReady = false,
+            outputCommitted = true,
             turnId = committed.turnId,
             applied = committed.applied == true,
             initializedNextTurn = initialized,

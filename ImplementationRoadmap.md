@@ -46,11 +46,12 @@
 | `System/turnResolver.lua` | initializer 영수증과 검증된 projection에서 카드·트리거·계획·승패·무드·정리를 해결하고 결정적 사건 로그 생성 | 로컬 다중 턴 연결 완료, 실제 저장·전송 연결은 후속 범위 |
 | `System/turnEventProjector.lua` | 판정 원본의 트리거 입력·조건·명령을 재검증하고 post-output `publicResult`와 모델용 `llmEvent` 허용 목록으로 재구성 | 트리거 누락·중복·수치 위조, 숨은 계획·runtime ID·RNG·선택 감사 자료의 비누출과 별도 프로세스 결정성 통과, `battleRuntime` 로컬 연결 완료. 실제 요청·출력 훅은 후속 범위 |
 | `System/battleRuntime.lua` | projection 봉인→resolver→사건 투영→pending 조립, 저장 결과 재사용과 `lastCommittedTurnId` 기반 멱등 확정 구현 | 로컬 트랜잭션 검증 완료, 실제 채팅 변수 저장과 훅 연결은 후속 승인 범위 |
+| `System/battleController.lua` | 저장·View·채팅 anchor, 요청 주입/출력 관측 영수증, 미관측 부분 응답 자동 삭제와 관측 출력 commit 재개 구현 | 44개 로컬 호스트 경계 검사 통과. 실제 최신 RisuAI의 hook 직렬성·채팅 metadata 안정성·삭제 권한 검증 필요 |
 | `onButtonClick` | 작성됨 | 현재 존재하지 않는 전투 스크립트를 호출하는 버튼이 다수 있음 |
 | `editDisplay` | 빈 콜백 | 값을 반환하지 않아 실제 콜백 체인에서 문제가 될 수 있음 |
-| `onStart` | 임시 차단 코드 | 빈 입력 정상 생성에서 prepare/reuse를 분기하는 제한된 역할로 교체할 계획이며 수정 전 별도 승인 필요 |
-| `onInput` | 없음 | 빈 입력 UX에서는 사용하지 않는 안으로 정리했으며 실제 최신 웹 훅 검증에서 재확인 |
-| `editRequest` / `onOutput` | 없음 | 저장된 LLM 사건 주입과 멱등 commit을 위해 새로 필요하며 수정 전 별도 승인 필요 |
+| `onStart` | 임시 차단 코드 | `prepareGeneration`의 정상 준비·자동 retry·commit-only 복구 결과를 분기하는 제한된 역할로 교체할 계획이며 수정 전 별도 승인 필요 |
+| `onInput` | 없음 | 전투 중 사용자가 넣은 문자열을 제거해 빈 입력 UX를 강제하는 연결이 사용자 승인됐으며 정확한 diff 승인 뒤 추가 필요 |
+| `editRequest` / `onOutput` | 없음 | 컨트롤러의 사건 주입과 출력 관측·멱등 commit action은 준비됐고 `main.lua` 연결만 별도 승인 범위 |
 
 `System/main.lua`는 저장소 지침상 명시적 사용자 승인 없이 수정할 수 없다. 런타임 훅을 연결하는 단계에 들어가기 전에 별도 승인을 받는다.
 
@@ -108,6 +109,7 @@
 - `Tests/deterministic-rng-check.ps1`, `Tests/card-zones-check.ps1`, `Tests/turn-draft-check.ps1`, `Tests/effect-engine-check.ps1`, `Tests/trigger-pipeline-check.ps1`, `Tests/character-selector-check.ps1`, `Tests/turn-initializer-check.ps1`, `Tests/turn-resolver-check.ps1`, `Tests/multi-turn-check.ps1`이 난수 재현, 카드 보존, 승인된 선택·패스 전이, 효과 명령, 트리거 순서, 캐릭터 점수, 턴 시작 영수증, 결정적 단일 턴 해결과 10턴 반복을 검사한다.
 - `Tests/turn-event-projector-check.ps1`이 일반 행동·제거·승패, 숨은 계획 억제·배치·만료와 공개 발동, 트리거 입력·조건·명령 재현, 내부 canary 폐기, malformed 원본의 fail-closed 처리와 10턴·별도 프로세스 결정성을 검사한다.
 - `Tests/battle-runtime-check.ps1`이 projection 봉인부터 pending 조립까지의 단일 실행, 전체 pending 무결성, 저장 결과 재사용, stale·malformed 거부, 반환 alias 차단과 최초·중복·늦은 출력 확정의 멱등성을 별도 프로세스에서 검사한다.
+- `Tests/battle-controller-check.ps1`이 44개 호스트 경계 시나리오로 저장·View write-read 검증, 요청 주입, 채팅 anchor, 미관측 출력 자동 삭제와 중단 재개, 관측 출력 보존·commit 복구를 검사한다.
 - 로컬 검사는 `lua` 명령이 없으면 설치된 Lua Language Server의 내장 호스트를 사용한다. 이는 실제 RisuAI 런타임 검사가 아니다.
 - UI/LLM 없이 `turn_start`와 캐릭터 선택을 포함한 10턴 자동 시뮬레이터가 같은 시드의 전체 추적 재현성과 카드 보존을 검사한다.
 - 파일을 실제 RisuAI 캐릭터·모듈의 로어북과 트리거에 반영하는 패키징 절차가 저장소에 없다.
@@ -154,9 +156,9 @@
 - 카드 첫 클릭은 상세 표시, 같은 카드 두 번째 클릭은 등록, 등록 카드 재클릭은 취소다.
 - 눈치보기는 권위 상태와 RNG를 바꾸지 않는 결정적 프리뷰로 현재 턴 1장을 보여주며 그 카드도 같은 턴 등록할 수 있다.
 - 눈치보기와 원래 손패 카드는 함께 사용한다. 프리뷰 카드까지 등록한 뒤 다른 원래 손패 카드를 등록하면 speculative 가지를 취소하고 마지막 카드만 사용한다.
-- 목표 UX에서는 입력창을 CSS로 입력할 수 없게 하고 내용을 항상 비워 둔다. 최신 웹의 빈 입력 훅 제약 때문에 최종 연결 방식은 4단계 진입 전에 확정한다.
+- 목표 UX에서는 입력창을 CSS로 입력할 수 없게 하고, `onInput`에서도 입력 문자열을 제거한다. 빈 전송 설정이 추가한 정확한 `*says nothing*`은 제한된 `onStart` 준비·복구 경계에서 제거한다.
 - Lua는 저수준 LLM 호출이나 자동 전송을 하지 않는다.
-- 비어 있지 않은 턴 확인 입력을 쓰면 `onInput`, 빈 입력 UX를 유지하면 제한된 `onStart`에서 결과를 대기 트랜잭션으로 결정하고 `editRequest`에는 저장된 턴 사건만 추가한다.
+- 제한된 `onStart`에서 결과를 대기 트랜잭션으로 결정하고 `editRequest`에는 저장된 턴 사건만 추가한다. 자동 복구가 이미 관측된 출력의 commit만 마친 경우에는 새 LLM 요청을 취소한다.
 - 프리셋, 캐릭터 설정과 로어북을 포함한 정상 요청을 유지한다.
 - 정상 출력이 도착하면 `onOutput`에서 결과를 한 번만 반영하고 공개한다.
 - 실패·재시도·재생성은 같은 `turnResult`를 사용한다.
@@ -213,10 +215,10 @@
 
 | 미정 사항 | 담당 | 정해야 할 내용 |
 |---|---|---|
-| 빈 입력 전송 경로 | 완료(사용자 승인) | 빈 입력 UX와 제한된 `onStart`를 유지한다. `useSayNothing`이 자동 삽입한 정확한 `*says nothing*`은 `onInput`을 우회하므로 `onStart` 준비 경계에서 제거한다. 전투 중 자동 계속은 끄고 수동 계속·프롬프트 미리보기는 사용하지 않으며, 실제 재생성은 저장된 직전 pending을 재사용한다. |
+| 빈 입력 전송 경로 | 완료(사용자 승인) | `onInput`은 전투 입력 문자열을 제거하고, 빈 입력 UX와 제한된 `onStart`를 유지한다. `useSayNothing`이 자동 삽입한 정확한 `*says nothing*`은 `onStart` 준비·복구 경계에서 제거한다. 전투 중 자동 계속은 끄고 수동 Continue·프롬프트 미리보기는 사용하지 않으며, 실제 재생성은 저장된 직전 pending을 재사용한다. |
 | 턴 사건 형식 | 완료(로컬 계약) | `TurnEventProjectionContract.md`와 strict 투영기로 행동·생각·결과 필드, 숨은 계획과 캐릭터 카드의 공개 경계를 확정. 실제 프롬프트 문장과 RisuAI 전달은 후속 연결 범위 |
 | 기본 묘사 지침 | 완료(수직 슬라이스) | 기존 프리셋의 문체·길이·시점을 유지하고, formatter는 판정 준수·한 장면 구성·게임 시스템 용어 비노출에 필요한 최소 지침만 추가한다. |
-| 생성 실패 UX | 부분 확정 | pending은 확정하지 않고 잠긴 상태로 보존하며 같은 수동 전송에서 재사용한다. 실제 경고 문구와 화면 표현은 UI 연결 검사에서 조정한다. |
+| 생성 실패 UX | 완료(로컬 계약) | pending·RNG·공개 마커를 잠근 채 다음 빈 전송에서 재사용한다. chat anchor와 정리 영수증이 정확히 맞을 때만 미관측 부분 응답을 자동 삭제하고, `onOutput`이 관측한 응답은 보존한 채 commit만 재개한다. 위변조·불명확한 suffix는 삭제하지 않는다. 실제 경고 문구와 host 직렬성은 통합 검사에서 확인한다. |
 | 출력 재생성 | 완료(직전 턴 범위) | 공개 턴 번호의 사용자 메시지와 저장된 직전 pending을 연결한다. 직전 출력의 실제 재생성은 같은 판정과 LLM 사건을 재사용하고 권위 상태는 중복 반영하지 않는다. 과거 여러 턴의 임의 재생성은 수직 슬라이스 범위에서 지원하지 않는다. |
 
 ### 6.4 전체 게임 루프 전에 필요한 결정
@@ -415,7 +417,7 @@ Codex 작업:
 
 ### 5단계: 정상 LLM 요청과 턴 트랜잭션
 
-상태: 부분 진행. strict 사건 투영기와 projection 봉인·resolver·투영·pending 조립·재사용·멱등 확정을 묶는 순수 `battleRuntime`을 로컬에서 완료했다. 정상 요청, 실제 저장과 출력 훅은 아직 연결하지 않았다.
+상태: 부분 진행. strict 사건 투영기, projection 봉인·resolver·투영·pending 조립·재사용·멱등 확정과 이를 저장·채팅·View에 연결하는 `battleController`까지 로컬에서 완료했다. `System/main.lua`의 실제 훅 연결과 최신 RisuAI 통합 검증은 아직 남아 있다.
 
 목표는 사용자의 수동 전송으로 판정, 묘사와 결과 반영이 한 번만 이어지게 만드는 것이다.
 
@@ -423,11 +425,12 @@ Codex 작업:
 
 - 완료(로컬): `beforeState`, `turnResult`, `afterState` 대기 트랜잭션 조립과 projection 영수증 재검증 구현
 - 완료(로컬): `turnResolution.events`를 `publicResult`와 `llmEvent`로 분리하고 숨은 계획·runtime ID·RNG·선택 감사 자료를 제거하는 strict 투영기 구현
-- `editRequest`에 공개 가능한 턴 사건과 묘사 지침만 추가
+- 완료(로컬): `editRequest` 원본 배열을 보존하며 검증된 턴 사건·묘사 지침 system message를 정확히 한 번 추가하는 controller action 구현
 - UI 메시지를 모델 요청에서 제외
-- 완료(로컬): `lastCommittedTurnId`를 사용해 최초 반영과 중복·늦은 재호출을 구분하는 순수 commit 구현. 실제 `onOutput` 저장 연결은 남음
+- 완료(로컬): `lastCommittedTurnId`를 사용해 최초 반영과 중복·늦은 재호출을 구분하고 출력 관측 영수증 뒤에만 저장하는 controller commit 구현. 실제 `onOutput` 훅 연결은 남음
 - 이전 UI 제거와 최신 출력 아래 새 UI 추가
 - 완료(로컬): 생성 실패, 재시도와 재생성 시 resolver/projector를 다시 부르지 않고 같은 `turnResult`를 검증·복제하는 경계 구현
+- 완료(로컬): chat anchor와 crash-resumable cleanup 영수증으로 미관측 부분 응답만 자동 삭제하고, 관측 출력은 보존한 채 commit을 재개하는 경계 구현
 - 완료(로컬): 숨은 계획 억제·배치·만료, 캐릭터 카드 ID와 내부 canary가 공개/LLM 사건에 새지 않는지 검사
 - 실제 RisuAI 요청과 CBS UI에서 같은 비공개 경계를 다시 확인
 
