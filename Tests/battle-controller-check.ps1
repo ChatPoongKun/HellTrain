@@ -398,12 +398,42 @@ assert(deduplicated.injected == false and deduplicated.deduplicated == true
 assert(states[ACTIVE].phase == "requestInjected" and stateWriteCount == writesBeforeReinject,
     "duplicate prompt normalization rewrote the injection receipt")
 
-local writesBeforeInjectedOnStart = stateWriteCount
-assertFails("repeated onStart after request injection", controller("prepareGeneration"),
-    "request_already_in_flight")
-assert(stateWriteCount == writesBeforeInjectedOnStart
-    and states[ACTIVE].phase == "requestInjected" and states[PENDING].turnId == states[ACTIVE].turnId,
-    "repeated onStart regressed or replaced an injected request")
+local firstZeroRetryAttempt = states[ACTIVE].attemptNumber
+local firstZeroRetryBinding = canonical(states[ACTIVE])
+local firstZeroRetryPending = canonical(states[PENDING])
+local firstZeroRetryChat = canonical(chat)
+failNextStateWrite = ACTIVE
+assertFails("dropped zero-output retry receipt", controller("prepareGeneration"),
+    "state_write_not_persisted")
+assert(canonical(states[ACTIVE]) == firstZeroRetryBinding
+    and canonical(states[PENDING]) == firstZeroRetryPending
+    and canonical(chat) == firstZeroRetryChat,
+    "failed zero-output retry consumed an attempt or changed chat/pending state")
+
+local firstZeroRetry = assertOk("retry zero-output request after injection",
+    controller("prepareGeneration"))
+assert(firstZeroRetry.generationReady == true
+    and firstZeroRetry.recoveredAbandonedRequest == true
+    and firstZeroRetry.zeroOutputRetry == true
+    and firstZeroRetry.attemptNumber == firstZeroRetryAttempt + 1
+    and firstZeroRetry.removedSayNothing == false
+    and firstZeroRetry.removedSayNothingCount == 0
+    and firstZeroRetry.removedUncommittedOutput == false
+    and firstZeroRetry.markerAdded == false,
+    "marker-only request was not resumed as a zero-output retry")
+assert(states[ACTIVE].phase == "inFlight"
+    and canonical(states[PENDING]) == firstZeroRetryPending
+    and canonical(chat) == firstZeroRetryChat
+    and chat[#chat].data == firstMarker and markerCount(firstMarker) == 1,
+    "zero-output retry changed its pending turn, chat anchor, or public marker")
+
+local reinjectedAfterZeroRetry = assertOk("inject zero-output retry",
+    controller("injectRequest", basePrompt))
+assert(reinjectedAfterZeroRetry.requestPhase == "requestInjected"
+    and states[ACTIVE].attemptNumber == firstZeroRetryAttempt + 1
+    and canonical(reinjectedAfterZeroRetry.promptArray[#reinjectedAfterZeroRetry.promptArray])
+        == canonical(states[ACTIVE].message),
+    "zero-output retry did not reuse and reinject the original private event")
 
 local writesBeforeMissingOutputCommit = stateWriteCount
 assertFails("commit without character output", controller("commitOutput"),
@@ -586,12 +616,23 @@ assert(states[PENDING] == nil and states[ACTIVE].source == "lastCommittedPending
     "reroll did not bind an in-flight request without creating a current pending")
 assert(rerollPrepared.view.phase == "awaitingOutput" and rerollPrepared.view.locked == true,
     "immediate reroll did not publish a generation-locked View")
-local writesBeforeRepeatedOnStart = stateWriteCount
-assertFails("repeated onStart while in flight", controller("prepareGeneration"),
-    "request_already_in_flight")
-assert(stateWriteCount == writesBeforeRepeatedOnStart
-    and states[ACTIVE].phase == "inFlight" and states[PENDING] == nil,
-    "repeated onStart regressed the request phase or created a pending turn")
+local rerollAttemptBeforeZeroRetry = states[ACTIVE].attemptNumber
+local rerollChatBeforeZeroRetry = canonical(chat)
+local repeatedReroll = assertOk("retry zero-output reroll while in flight",
+    controller("prepareGeneration"))
+assert(repeatedReroll.generationReady == true
+    and repeatedReroll.recoveredAbandonedRequest == true
+    and repeatedReroll.zeroOutputRetry == true
+    and repeatedReroll.source == "lastCommittedPending"
+    and repeatedReroll.attemptNumber == rerollAttemptBeforeZeroRetry + 1
+    and repeatedReroll.removedSayNothingCount == 0
+    and repeatedReroll.removedUncommittedOutput == false
+    and repeatedReroll.markerAdded == false,
+    "marker-only reroll was not resumed without chat cleanup")
+assert(canonical(chat) == rerollChatBeforeZeroRetry
+    and states[ACTIVE].phase == "inFlight" and states[PENDING] == nil
+    and markerCount(firstMarker) == 1,
+    "zero-output reroll changed chat, request phase, or pending state")
 assertFails("click during reroll", controller("clickCard", instanceId), "battle_view_locked")
 local rerollInjected = assertOk("inject reroll request", controller("injectRequest", basePrompt))
 assert(canonical(rerollInjected.promptArray[3]) == canonical(injected.promptArray[3]),
@@ -605,13 +646,14 @@ assert(rerollInjectedView.view.phase == "awaitingOutput"
     "requestInjected reroll did not remain generation-locked")
 assertFails("click after reroll injection", controller("clickCard", instanceId),
     "battle_view_locked")
+appendChat("char", "rerolled scene")
 local writesBeforeInjectedRerollOnStart = stateWriteCount
 assertFails("repeated reroll onStart after injection", controller("prepareGeneration"),
     "request_already_in_flight")
 assert(stateWriteCount == writesBeforeInjectedRerollOnStart
-    and states[ACTIVE].phase == "requestInjected" and states[PENDING] == nil,
-    "repeated reroll onStart regressed the injected request")
-appendChat("char", "rerolled scene")
+    and states[ACTIVE].phase == "requestInjected" and states[PENDING] == nil
+    and chat[#chat].role == "char" and chat[#chat].data == "rerolled scene",
+    "character output without a filler was retried or changed")
 local rerollCommit = assertOk("commit reroll output", controller("commitOutput"))
 assert(rerollCommit.applied == false and rerollCommit.initializedNextTurn == false)
 assert(rerollCommit.view.phase == "selecting" and rerollCommit.view.locked == false
@@ -655,8 +697,25 @@ assert(secondPrepared.publicMarker == states[ACTIVE].publicMarker
     "second marker was not the persisted turn-two marker")
 assert(markerCount(firstMarker) == 1 and markerCount(secondPrepared.publicMarker) == 1,
     "second turn did not add exactly one public marker")
-assertFails("repeated second-turn onStart", controller("prepareGeneration"),
-    "request_already_in_flight")
+local secondAttemptBeforeZeroRetry = states[ACTIVE].attemptNumber
+local secondPendingBeforeZeroRetry = canonical(states[PENDING])
+local secondChatBeforeZeroRetry = canonical(chat)
+local repeatedSecondTurn = assertOk("retry zero-output second turn",
+    controller("prepareGeneration"))
+assert(repeatedSecondTurn.generationReady == true
+    and repeatedSecondTurn.recoveredAbandonedRequest == true
+    and repeatedSecondTurn.zeroOutputRetry == true
+    and repeatedSecondTurn.source == "pending"
+    and repeatedSecondTurn.attemptNumber == secondAttemptBeforeZeroRetry + 1
+    and repeatedSecondTurn.removedSayNothingCount == 0
+    and repeatedSecondTurn.removedUncommittedOutput == false
+    and repeatedSecondTurn.markerAdded == false,
+    "second marker-only request was not resumed as a zero-output retry")
+assert(canonical(states[PENDING]) == secondPendingBeforeZeroRetry
+    and canonical(chat) == secondChatBeforeZeroRetry
+    and states[ACTIVE].phase == "inFlight"
+    and markerCount(secondPrepared.publicMarker) == 1,
+    "second zero-output retry changed its pending turn or chat")
 
 local secondInjected = assertOk("inject second-turn request", controller("injectRequest", basePrompt))
 assert(secondInjected.requestPhase == "requestInjected"
@@ -740,7 +799,7 @@ local signature = canonical({
     prompt = secondPrepared.publicMarker,
     markerCount = markerCount(firstMarker) + markerCount(secondPrepared.publicMarker),
 })
-print("BATTLE_CONTROLLER|hash=" .. stableHash(signature) .. "|scenarios=44")
+print("BATTLE_CONTROLLER|hash=" .. stableHash(signature) .. "|scenarios=46")
 '@
 
 Push-Location $projectRoot
@@ -762,7 +821,7 @@ try {
     if (-not ($firstText -ceq $secondText)) {
         throw "Separate Lua processes produced different battle controller results.`nFIRST:`n$firstText`nSECOND:`n$secondText"
     }
-    if ($firstText -notmatch '^BATTLE_CONTROLLER\|hash=\d{10}\|scenarios=44$') {
+    if ($firstText -notmatch '^BATTLE_CONTROLLER\|hash=\d{10}\|scenarios=46$') {
         throw "Unexpected battle controller determinism vector: $firstText"
     }
 

@@ -247,9 +247,54 @@ function splitByDelimiter(text, delimiter)
     return result
 end
 
+local function controllerSucceeded(label, report)
+    if type(report) ~= "table" then
+        debug(1, label .. ": battleController가 결과를 반환하지 않았습니다.")
+        return false
+    end
+    if report.ok == true then
+        return true
+    end
+
+    local errors = type(report.errors) == "table" and report.errors or {}
+    if #errors == 0 then
+        debug(1, label .. ": battleController가 상세 오류 없이 실패했습니다.")
+        return false
+    end
+    for _, item in ipairs(errors) do
+        if type(item) == "table" then
+            debug(
+                1,
+                label
+                    .. ": " .. tostring(item.code)
+                    .. " at " .. tostring(item.path)
+                    .. ": " .. tostring(item.message)
+            )
+        else
+            debug(1, label .. ": " .. tostring(item))
+        end
+    end
+    return false
+end
+
 --플레이 시작시 한번만 작동
 listenEdit("editDisplay", function(triggerId, data)
     --최초 한번만 작동해서 init.lua를 통해 기초 변수들을 설정하도록 할것.
+end)
+
+--전투 중 비어 있지 않은 입력도 빈 전송 filler로 정규화
+listenEdit("editInput", function(triggerId, data)
+    local readOk, authority = pcall(
+        getState,
+        triggerId,
+        "battleRuntimeV1.authority"
+    )
+    if readOk
+        and type(authority) == "table"
+        and authority.kind == "battleState" then
+        return "*says nothing*"
+    end
+    return data
 end)
 
 --버튼 클릭시 동작
@@ -268,9 +313,47 @@ onButtonClick = async(function(triggerId, data)
     runScript(triggerId, script, table.unpack(parts))
 end)
 
---리퀘 전송시 동작
+--정상 요청에 저장된 비공개 턴 사건을 추가
+listenEdit("editRequest", function(triggerId, data)
+    local report = runScript(
+        triggerId,
+        "battleController",
+        "injectRequest",
+        data
+    )
+    if not controllerSucceeded("editRequest", report) then
+        return data
+    end
+    if type(report.promptArray) ~= "table" then
+        debug(1, "editRequest: 주입된 promptArray가 없습니다.")
+        return data
+    end
+    return report.promptArray
+end)
+
+--수동 전송의 턴 준비·실패 복구·commit-only 복구
 onStart = async(function(triggerId)
-    return false
+    local report = runScript(
+        triggerId,
+        "battleController",
+        "prepareGeneration"
+    )
+    if not controllerSucceeded("onStart", report) then
+        return false
+    end
+
+    -- 관측된 출력을 보존하고 commit만 복구한 경우 새 HTTP 요청은 취소한다.
+    return report.generationReady == true
+end)
+
+--완성 응답을 관측한 뒤 턴을 한 번만 확정
+onOutput = async(function(triggerId)
+    local report = runScript(
+        triggerId,
+        "battleController",
+        "commitOutput"
+    )
+    controllerSucceeded("onOutput", report)
 end)
 
 --[[

@@ -15,7 +15,7 @@
 
 LLM을 직접 호출하거나 전송을 자동화하지 않는다. Continue, 프롬프트 미리보기와 과거 여러 턴의 임의 재생성은 v1에서 지원하지 않는다. 지원하는 재생성은 공개 마커로 식별할 수 있는 직전 확정 턴 하나뿐이다.
 
-이 파일은 훅에 연결할 실제 동작을 정의하지만 `System/main.lua`를 변경하지 않는다. 실제 훅 등록은 별도 승인 범위다.
+이 파일 자체는 훅에 연결할 동작만 정의한다. 별도 승인된 `System/main.lua`가 controller action을 실제 Lua 훅에 연결한다.
 
 ## 2. 공통 결과 envelope
 
@@ -122,7 +122,7 @@ LLM을 직접 호출하거나 전송을 자동화하지 않는다. Continue, 프
 
 `outputObserved`와 `recoveringCleanup`은 선택 필드이며 해당 영수증이 없을 때는 키 자체를 저장하지 않는다. `responsePresent = false`인 cleanup 영수증에도 `responseFingerprint`가 없어야 한다.
 
-binding의 식별자·턴 번호는 선택한 pending과 같아야 한다. `message`와 `publicMarker`는 `turnPromptFormatter.formatPending`을 다시 호출한 결과와 정확히 같아야 한다. `committed` phase는 반드시 `lastCommittedPending` source를 사용한다. `attemptNumber`는 같은 pending의 생성 재시도 횟수이며 최초는 1, 미관측 출력을 정리해 다시 생성할 때만 1씩 증가한다. 판정·pending·RNG 결과는 다시 만들지 않는다.
+binding의 식별자·턴 번호는 선택한 pending과 같아야 한다. `message`와 `publicMarker`는 `turnPromptFormatter.formatPending`을 다시 호출한 결과와 정확히 같아야 한다. `committed` phase는 반드시 `lastCommittedPending` source를 사용한다. `attemptNumber`는 같은 pending의 생성 재시도 횟수이며 최초는 1이다. 공개 마커 뒤에 아무 메시지도 생기지 않은 무출력 재시도 또는 미관측 출력을 정리한 재시도에서만 1씩 증가한다. 판정·pending·RNG 결과는 다시 만들지 않는다.
 
 `chatAnchor.prefixMessageCount`는 공개 마커 앞 메시지 수이고 `markerIndex`는 그 마커가 들어갈 RisuAI 0-based index이므로 두 값은 같다. prefix fingerprint는 자료형·길이·정렬된 객체 키를 포함하는 canonical 직렬화를 서로 다른 두 다항 해시와 길이로 요약한다. 이는 저장 손상과 우발적 오인 삭제를 막는 비암호학적 무결성 식별자이지 보안용 해시는 아니다. 삭제 권한은 fingerprint 하나가 아니라 고정 prefix, 정확한 위치의 공개 마커, 허용된 suffix 구조와 삭제 뒤 전체 prefix 재검증을 모두 통과해야 생긴다. `responseIndex`도 RisuAI 0-based index다.
 
@@ -165,7 +165,8 @@ formatter와 컨트롤러가 허용하는 공개 메시지는 정확히 다음 �
 `prepareGeneration`은 저장 요청 phase를 먼저 확인하고, 그 다음 마지막 대화 메시지로 생성 경로를 fail-closed 분류한다.
 
 - 저장 `activeRequest.phase == "preparing"`이면 새 trailing filler 유무보다 앞선 실패 복구를 우선한다. binding이 가리키는 동일 pending과 formatter 결과만 다시 검증·사용한다. 특히 직전 턴 재생성 복구를 새 현재 턴 전송으로 바꾸지 않는다.
-- 저장 `activeRequest.phase == "inFlight"` 또는 `"requestInjected"`이고 새 exact filler도 cleanup 영수증도 없으면 추가 onStart를 `request_already_in_flight`로 거부한다.
+- 저장 `activeRequest.phase == "inFlight"` 또는 `"requestInjected"`이고 cleanup·출력 관측 영수증이 없으며 채팅이 저장된 공개 마커에서 정확히 끝나면, 앞선 요청이 캐릭터 메시지를 하나도 만들지 못한 것으로 보고 같은 요청을 무출력 재시도한다.
+- 잠긴 요청 뒤에 exact filler도 없고 마지막 메시지도 저장 마커가 아니면 추가 onStart를 `request_already_in_flight`로 거부한다. 캐릭터 메시지나 다른 suffix가 있는 요청은 이 경로에서 삭제하거나 재시도하지 않는다.
 - 잠긴 요청 뒤에 새 exact filler가 있으면 실패한 생성의 수동 재시도로 분류한다. cleanup 영수증이 이미 있으면 앞선 삭제가 중단된 것으로 보고 새 filler가 없어도 정리를 재개한다.
 - 저장 `activeRequest.phase == "committed"`인데 같은 `turnId`의 낡은 pending이 남아 있으면 새 전송을 분류하기 전에 멱등 commit으로 그 pending 이동·삭제를 먼저 끝낸다.
 - 마지막 메시지가 role `user`, data `*says nothing*`과 정확히 같으면 새 수동 빈 전송이다. 부분 문자열, 공백이 붙은 문자열과 다른 role은 제거하지 않는다.
@@ -174,7 +175,17 @@ formatter와 컨트롤러가 허용하는 공개 메시지는 정확히 다음 �
 
 새 전송에 이미 `pending`이 있으면 생성 실패 뒤 재시도로 보고 `battleRuntime.reusePending`을 사용한다. pending이 없을 때만 저장 draft를 projection으로 만들고 `battleRuntime.preparePending`을 호출한다. 즉시 재생성은 `lastCommittedPending`만 재사용한다.
 
-잠긴 요청의 자동 복구가 허용하는 채팅 구조는 정확히 다음뿐이다.
+잠긴 요청의 무출력 재시도가 허용하는 채팅 구조는 정확히 다음뿐이다.
+
+```text
+저장 chatAnchor와 fingerprint가 같은 전체 prefix
+→ 저장된 0-based 위치의 정확한 publicMarker
+→ 그 뒤 메시지 없음
+```
+
+`outputObserved`와 `recoveringCleanup`이 모두 없어야 하며, source가 `pending`이면 같은 턴의 authority commit 또는 `lastCommittedPending` 흔적도 없어야 한다. 이 경로는 채팅을 삭제하거나 추가하지 않고 같은 binding을 `inFlight`로 되돌려 `attemptNumber`만 증가시킨 뒤 `generationReady = true`, `zeroOutputRetry = true`를 반환한다. pending, formatter message, 공개 마커와 RNG 결과는 그대로 재사용한다. 상태 쓰기가 확인되지 않으면 attempt도 소비하지 않는다.
+
+잠긴 요청의 삭제 복구가 허용하는 채팅 구조는 정확히 다음뿐이다.
 
 ```text
 저장 chatAnchor와 fingerprint가 같은 전체 prefix
@@ -183,10 +194,12 @@ formatter와 컨트롤러가 허용하는 공개 메시지는 정확히 다음 �
 → trailing exact filler 1개 이상
 ```
 
-prefix가 달라졌거나 마커 위치·문구가 다르거나, 캐릭터 응답이 둘 이상이거나, 다른 role·메시지가 섞였으면 삭제하지 않고 실패한다. source가 `pending`인데 같은 turn의 authority commit 또는 `lastCommittedPending` 흔적이 있는 예외 상태도 `outputObserved` 없이 삭제하지 않는다.
+prefix가 달라졌거나 마커 위치·문구가 다르거나, 캐릭터 응답이 둘 이상이거나, 다른 role·메시지가 섞였으면 삭제하지 않고 실패한다. source가 `pending`인데 같은 turn의 authority commit 또는 `lastCommittedPending` 흔적이 있는 예외 상태도 `outputObserved` 없이 삭제하거나 재시도하지 않는다.
 
 - `outputObserved`가 없으면 cleanup mode는 `retry`다. 영수증을 먼저 저장하고 trailing filler와 있을 수 있는 캐릭터 부분 응답 하나를 검증하며 삭제한다. 같은 binding을 `inFlight`로 되돌리고 `attemptNumber`만 증가시킨다. 같은 pending, formatter message, 공개 마커와 RNG 결과를 재사용하며 `generationReady = true`를 반환한다.
 - `outputObserved`가 있으면 cleanup mode는 `resumeCommit`이다. trailing filler만 삭제하고 fingerprint가 같은 완성 캐릭터 응답은 보존한 채 `commitOutput`을 멱등 재개한다. 새 LLM 요청을 보내면 안 되므로 `generationReady = false`, `commitRecovered = true`를 반환한다.
+
+RisuAI는 공개 마커만 남은 상태에서 앞선 HTTP 요청이 실패했는지 아직 실행 중인지 구별할 request ID를 Lua에 제공하지 않는다. 또한 이 구조는 사용자가 마커에서 Continue를 누른 경우와도 구별할 수 없다. 따라서 전투 중 Continue·자동 계속을 사용하지 않고, 생성 중에는 새 전송이 직렬화된다는 전제를 실제 웹 통합 검사에서 확인해야 한다.
 
 ## 6. Action 계약
 
@@ -230,7 +243,7 @@ draft 저장 성공 뒤 View 게시만 실패한 경우 카드 전이는 이미 
 
 채팅을 마지막에 바꾸는 이유는 복구성이다. 상태 또는 View 쓰기가 중간에 실패하면 filler가 그대로 남아 다음 수동 시도에 다시 보일 수 있다. 이때 저장 `preparing` binding을 새 전송 분류보다 먼저 복구하므로 source와 pending은 바뀌지 않는다. 사용자가 다시 빈 전송하면 trailing filler가 둘 이상 쌓일 수 있으므로 성공 경계에서 연속된 마지막 filler를 모두 제거한다. 중간 또는 과거에 있는 같은 텍스트는 건드리지 않는다. 일부 단계에서 pending만 저장됐어도 다음 시도는 이를 다시 판정하지 않고 `reusePending`으로 복구한다. filler 제거 뒤 마커 추가나 최종 phase 쓰기가 실패하면 durable `preparing` binding으로 채팅 전환을 재개한다. 이미 추가된 마커는 다시 추가하지 않는다.
 
-성공 결과는 선택한 `turnId`, `turnNumber`, `source`, `publicMarker`, `attemptNumber`, `reused`, `generationReady`, `recoveredAbandonedRequest`, `commitRecovered`, `removedSayNothing`, `removedSayNothingCount`, `removedUncommittedOutput`, 마커 추가 여부와 게시 View를 반환한다. 정상 준비와 미관측 출력 재시도는 `generationReady = true`이고, 관측 출력의 commit만 복구한 호출은 `generationReady = false`다.
+성공 결과는 선택한 `turnId`, `turnNumber`, `source`, `publicMarker`, `attemptNumber`, `reused`, `generationReady`, `recoveredAbandonedRequest`, `zeroOutputRetry`, `commitRecovered`, `removedSayNothing`, `removedSayNothingCount`, `removedUncommittedOutput`, 마커 추가 여부와 게시 View를 반환한다. 정상 준비, 마커만 남은 무출력 재시도와 미관측 출력 정리 재시도는 `generationReady = true`이고, 관측 출력의 commit만 복구한 호출은 `generationReady = false`다. `zeroOutputRetry`는 채팅을 전혀 바꾸지 않은 첫 경우에만 `true`다.
 
 ### `injectRequest(promptArray)`
 
@@ -296,17 +309,18 @@ authority가 active이고 pending이 있으면 pending context, 없으면 draft 
 
 `battleActiveRequest` schema v2는 아직 실제 훅 배포 전인 로컬 경계다. 기존 schema v1 진행 상태가 있는 환경에서는 자동 마이그레이션하지 않고 fail-closed하므로 전투를 새로 초기화해야 한다.
 
-## 9. 실제 훅 연결의 후속 범위
+## 9. 로컬 훅 연결과 실제 검증 범위
 
-승인 뒤 `System/main.lua`에서 필요한 최소 연결은 다음 의미를 가진다.
+승인된 `System/main.lua`의 로컬 연결은 다음 의미를 가진다.
 
+- 비어 있지 않은 전투 입력 → `editInput`에서 정확한 `*says nothing*`으로 정규화
 - 빈 수동 전송 준비 경계 → `battleController.prepareGeneration`
 - `prepareGeneration` 성공이어도 `generationReady = false`이면 복구된 commit만 마치고 현재 전송은 취소
 - `editRequest` → `battleController.injectRequest`, 성공 시 `report.promptArray` 반환
 - 정상 `onOutput` → `battleController.commitOutput`
 - 전투 카드 버튼 → `battleController.clickCard(instanceId, battleView.interactionToken)`
 
-정확한 hook 실행 순서와 mode별 쓰기 권한은 실제 RisuAI에서 다시 확인해야 한다. 현재 UI 템플릿 변수 `🔯🔯🔯`에 전투 표시 anchor를 설정하는 일과 HTML/CBS가 `battleView`를 렌더링하도록 연결하는 일도 별도 UI 통합 범위다. 컨트롤러는 `battleView` wire 게시와 `reloadDisplay`까지만 책임진다.
+정확한 hook 실행 순서, mode별 쓰기 권한과 생성 중 중복 전송 차단은 실제 RisuAI에서 다시 확인해야 한다. 현재 UI 템플릿 변수 `🔯🔯🔯`에 전투 표시 anchor를 설정하는 일과 HTML/CBS가 `battleView`를 렌더링하도록 연결하는 일도 별도 UI 통합 범위다. 컨트롤러는 `battleView` wire 게시와 `reloadDisplay`까지만 책임진다.
 
 ## 10. 로컬 검증
 
@@ -318,7 +332,9 @@ authority가 active이고 pending이 있으면 pending context, 없으면 draft 
 - 무시된 `activeRequest` 쓰기의 write-read 실패, filler 보존과 저장 pending 재사용 복구
 - 연속된 trailing exact filler 전체 제거, 과거 filler 보존, 공개 마커 추가와 중복 억제
 - 마커 쓰기 실패 및 마커 확인 뒤 최종 `inFlight` phase 쓰기 유실에서 `preparing` binding 기반 재개
-- 직전 턴 재생성의 `preparing` 복구 중 새 filler가 와도 source 유지, 새 filler 없는 잠긴 요청의 추가 onStart 거부
+- 직전 턴 재생성의 `preparing` 복구 중 새 filler가 와도 source 유지
+- 정확한 마커만 남은 `inFlight`·`requestInjected` 요청의 무삭제 재시도, attempt 영속 쓰기 유실 시 채팅·pending·attempt 보존
+- 캐릭터 출력처럼 마커 뒤에 filler 없는 suffix가 있는 잠긴 요청의 추가 onStart 무변경 거부
 - 정상 프롬프트 보존, 입력 불변, 멱등 system message 주입과 동일 사건 중복 정규화
 - 영수증 쓰기 유실 시 `inFlight` 보존, 주입 전 commit 거부와 authority/pending 불변, 성공 시 `requestInjected` 영수증 영속화
 - char 출력 없는 commit 거부와 권위 상태 불변

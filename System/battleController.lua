@@ -1435,6 +1435,19 @@
         return pending, formatted, nil
     end
 
+    local function validateNoPendingCommitTrace(binding, authority)
+        if binding.source ~= "pending" then return nil end
+        local lastCommitted, lastErrors = readStored(KEYS.lastCommittedPending, false)
+        if lastErrors then return lastErrors end
+        if authority.lastCommittedTurnId == binding.turnId
+            or (type(lastCommitted) == "table" and lastCommitted.turnId == binding.turnId) then
+            return {
+                makeError("commit_trace_without_output_receipt", "$.activeRequest", "현재 턴의 commit 흔적이 있어 출력 관측 영수증 없이 요청을 재시도할 수 없습니다."),
+            }
+        end
+        return nil
+    end
+
     local function beginRecoveringCleanup(binding, chat, staticData, authority)
         local pending, _, boundErrors = loadAndValidateBoundRequest(binding, staticData)
         if boundErrors then return nil, nil, nil, boundErrors end
@@ -1450,15 +1463,9 @@
                     makeError("observed_output_mismatch", "$.chat", "완성 출력 복구 대상이 출력 관측 영수증과 다릅니다."),
                 }
             end
-        elseif binding.source == "pending" then
-            local lastCommitted, lastErrors = readStored(KEYS.lastCommittedPending, false)
-            if lastErrors then return nil, nil, nil, lastErrors end
-            if authority.lastCommittedTurnId == binding.turnId
-                or (type(lastCommitted) == "table" and lastCommitted.turnId == binding.turnId) then
-                return nil, nil, nil, {
-                    makeError("commit_trace_without_output_receipt", "$.activeRequest", "현재 턴의 commit 흔적이 있어 출력 관측 영수증 없이 응답을 삭제할 수 없습니다."),
-                }
-            end
+        else
+            local traceErrors = validateNoPendingCommitTrace(binding, authority)
+            if traceErrors then return nil, nil, nil, traceErrors end
         end
 
         local nextBinding, cloneError = cloneJson(binding, "$.activeRequest")
@@ -1537,6 +1544,57 @@
         return nextChat, removedFillers, removedResponse, nil
     end
 
+    local function retryWithoutOutput(binding, chat, staticData, authority)
+        if binding.outputObserved ~= nil or binding.recoveringCleanup ~= nil then
+            return failure({
+                makeError("zero_output_retry_has_receipt", "$.activeRequest", "출력 또는 정리 영수증이 있는 요청을 무출력 재시도로 되돌릴 수 없습니다."),
+            })
+        end
+        local pending, _, boundErrors = loadAndValidateBoundRequest(binding, staticData)
+        if boundErrors then return failure(boundErrors) end
+        local topology, topologyErrors = inspectAnchoredTopology(binding, chat, false)
+        if topologyErrors then return failure(topologyErrors) end
+        if topology.responsePresent or topology.fillerCount ~= 0 then
+            return failure({
+                makeError("zero_output_retry_topology_mismatch", "$.chat", "무출력 재시도에는 공개 마커 뒤가 완전히 비어 있어야 합니다."),
+            })
+        end
+        local traceErrors = validateNoPendingCommitTrace(binding, authority)
+        if traceErrors then return failure(traceErrors) end
+
+        local nextBinding, cloneError = cloneJson(binding, "$.activeRequest")
+        if cloneError then return failure({ cloneError }) end
+        nextBinding.phase = "inFlight"
+        nextBinding.attemptNumber = nextBinding.attemptNumber + 1
+        local validationErrors = validateBinding(nextBinding, pending)
+        if #validationErrors > 0 then return failure(validationErrors) end
+
+        -- The visible View is already locked and does not expose attemptNumber.
+        -- Publish it before the sole state mutation so a publication failure
+        -- cannot consume a retry attempt.
+        local published, publishErrors = publishCurrentViewInternal(staticData)
+        if publishErrors then return failure(publishErrors) end
+        local writeErrors = writeStored(KEYS.activeRequest, nextBinding)
+        if writeErrors then return failure(writeErrors) end
+        return success({
+            generationReady = true,
+            recoveredAbandonedRequest = true,
+            zeroOutputRetry = true,
+            commitRecovered = false,
+            turnId = nextBinding.turnId,
+            turnNumber = nextBinding.turnNumber,
+            source = nextBinding.source,
+            publicMarker = nextBinding.publicMarker,
+            attemptNumber = nextBinding.attemptNumber,
+            reused = true,
+            removedSayNothing = false,
+            removedSayNothingCount = 0,
+            removedUncommittedOutput = false,
+            markerAdded = false,
+            view = published.view,
+        })
+    end
+
     local function recoverLockedRequest(binding, chat, staticData, authority)
         local workingBinding = binding
         local pending
@@ -1567,6 +1625,7 @@
             if type(committed) ~= "table" or committed.ok ~= true then return committed end
             committed.generationReady = false
             committed.commitRecovered = true
+            committed.zeroOutputRetry = false
             committed.removedSayNothing = removedFillers > 0
             committed.removedSayNothingCount = removedFillers
             committed.removedUncommittedOutput = false
@@ -1586,6 +1645,7 @@
         return success({
             generationReady = true,
             recoveredAbandonedRequest = true,
+            zeroOutputRetry = false,
             commitRecovered = false,
             turnId = workingBinding.turnId,
             turnNumber = workingBinding.turnNumber,
@@ -1636,6 +1696,10 @@
 
             if storedBinding.phase == "inFlight" or storedBinding.phase == "requestInjected" then
                 if storedBinding.recoveringCleanup == nil and not freshSend then
+                    if storedBinding.outputObserved == nil
+                        and isExactMarker(last, storedBinding.publicMarker) then
+                        return retryWithoutOutput(storedBinding, chat, staticData, authority)
+                    end
                     return failure({
                         makeError(
                             "request_already_in_flight",
@@ -1850,6 +1914,7 @@
             markerAdded = markerAdded,
             attemptNumber = binding.attemptNumber,
             recoveredAbandonedRequest = false,
+            zeroOutputRetry = false,
             commitRecovered = false,
             removedUncommittedOutput = false,
             view = published.view,
