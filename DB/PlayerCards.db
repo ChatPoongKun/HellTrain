@@ -214,5 +214,170 @@ return {
             },
             prototype = true,
         },
+
+        persistent_press = {
+            id = "persistent_press",
+            owner = "player",
+            name = "대담한 밀착",
+            description = "::tag[contact]:: 행동으로 거리를 단숨에 좁혀 상대를 강하게 압박하고 저항을 낮춥니다.",
+            actionTag = "contact",
+            mechanisms = {},
+            base = {
+                stealthCost = 2,
+                resistanceDamage = 5,
+            },
+            rules = {
+                "별도의 추가 효과가 없습니다.",
+            },
+            narration = {
+                play = {
+                    actorAction = "망설임 없이 거리를 좁혀 상대를 강하게 압박한다.",
+                },
+            },
+            prototype = true,
+        },
+
+        dangerous_whisper = {
+            id = "dangerous_whisper",
+            owner = "player",
+            name = "위험한 속삭임",
+            description = "::tag[threat]:: 행동으로 낮은 목소리로 위협하며, 혼란한 상대를 더욱 강하게 압박합니다.",
+            actionTag = "threat",
+            mechanisms = {},
+            base = {
+                stealthCost = 1,
+                resistanceDamage = 4,
+            },
+            rules = {
+                "혼란 무드라면 저항을 추가로 4 낮춥니다.",
+            },
+            moodEffects = {
+                confusion = function(context)
+                    return {
+                        {
+                            op = "damage_resistance",
+                            target = "character",
+                            amount = 4,
+                            cause = "moodEffect",
+                        },
+                    }
+                end,
+            },
+            narration = {
+                play = {
+                    actorAction = "다른 승객에게 들리지 않도록 낮은 목소리로 위협적인 말을 건넨다.",
+                },
+            },
+            prototype = true,
+        },
+
+        cut_off_escape = {
+            id = "cut_off_escape",
+            owner = "player",
+            name = "퇴로 봉쇄",
+            description = "::tag[approach]:: 행동으로 상대의 이동 경로를 선점하고, 상대 행동 뒤 발동하는 ::tag[plan]::을 배치합니다.",
+            actionTag = "approach",
+            mechanisms = { "plan" },
+            base = {
+                stealthCost = 1,
+                resistanceDamage = 0,
+            },
+            rules = {
+                "다음 캐릭터 행동이 해결된 뒤 저항을 5 낮춥니다.",
+            },
+            mechanismData = {
+                plan = {
+                    event = "card_resolved",
+                    side = "character",
+                    durationTurns = 1,
+                    durationIncludesPlacementTurn = true,
+                    charges = 1,
+                    trigger = function(context, event)
+                        return event.type == "card_resolved"
+                            and event.side == "character"
+                    end,
+                    resolve = function(context, event)
+                        return {
+                            {
+                                op = "damage_resistance",
+                                target = "character",
+                                amount = 5,
+                                cause = "plan",
+                            },
+                        }
+                    end,
+                },
+            },
+            narration = {
+                planPlaced = {
+                    actorAction = "상대가 움직일 방향을 읽고 먼저 자리를 잡아 퇴로를 막는다.",
+                },
+                planTriggered = {
+                    actorAction = "상대가 움직인 직후 막아 둔 방향으로 다시 압박한다.",
+                },
+            },
+            prototype = true,
+        },
+
+        cross_the_line = {
+            id = "cross_the_line",
+            owner = "player",
+            name = "선을 넘다",
+            description = "::tag[violation]:: 행동으로 돌이킬 수 없는 수준까지 압박하며, 사용 후 ::tag[remove]::되어 이번 세션에서 제외됩니다.",
+            actionTag = "violation",
+            mechanisms = { "remove" },
+            base = {
+                stealthCost = 8,
+                resistanceDamage = 10,
+            },
+            rules = {
+                "순응 무드라면 저항을 추가로 5 낮춥니다.",
+                "순응 무드가 아니라면 무드를 거절로 직접 설정하고 턴 종료까지 고정합니다.",
+                "사용 후 이번 세션에서 ::tag[remove]::됩니다.",
+            },
+            resolve = function(context)
+                if context.mood == "compliance" then
+                    return {}
+                end
+
+                return {
+                    {
+                        op = "set_mood",
+                        target = "character",
+                        mood = "rejection",
+                        cause = "cardEffect",
+                    },
+                }
+            end,
+            moodEffects = {
+                compliance = function(context)
+                    return {
+                        {
+                            op = "damage_resistance",
+                            target = "character",
+                            amount = 5,
+                            cause = "moodEffect",
+                        },
+                    }
+                end,
+                rejection = function(context)
+                    return {
+                        {
+                            op = "lock_mood",
+                            target = "character",
+                            mood = "rejection",
+                            ["until"] = "turn_end",
+                            cause = "moodEffect",
+                        },
+                    }
+                end,
+            },
+            narration = {
+                play = {
+                    actorAction = "돌이킬 수 없을 만큼 강하게 상대의 경계를 밀어붙인다.",
+                },
+            },
+            prototype = true,
+        },
     },
 }

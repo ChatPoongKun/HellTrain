@@ -700,6 +700,9 @@
                 if planData.durationTurns ~= nil then
                     planSpec.durationTurns = planData.durationTurns
                 end
+                if planData.durationIncludesPlacementTurn ~= nil then
+                    planSpec.durationIncludesPlacementTurn = planData.durationIncludesPlacementTurn
+                end
                 if planData.charges ~= nil then
                     planSpec.charges = planData.charges
                 end

@@ -461,6 +461,23 @@
                             if plan.durationTurns ~= nil and not isPositiveInteger(plan.durationTurns) then
                                 addError(errors, "invalid_plan_duration", path .. ".mechanismData.plan.durationTurns", "계획 지속 턴은 1 이상의 정수여야 합니다.")
                             end
+                            if plan.durationIncludesPlacementTurn ~= nil
+                                and type(plan.durationIncludesPlacementTurn) ~= "boolean" then
+                                addError(
+                                    errors,
+                                    "invalid_plan_duration_policy",
+                                    path .. ".mechanismData.plan.durationIncludesPlacementTurn",
+                                    "배치 턴 포함 여부는 불리언이어야 합니다."
+                                )
+                            elseif plan.durationIncludesPlacementTurn == true
+                                and not isPositiveInteger(plan.durationTurns) then
+                                addError(
+                                    errors,
+                                    "plan_duration_policy_requires_duration",
+                                    path .. ".mechanismData.plan.durationIncludesPlacementTurn",
+                                    "배치 턴을 포함하려면 양의 durationTurns가 필요합니다."
+                                )
+                            end
                             if plan.charges ~= nil and not isPositiveInteger(plan.charges) then
                                 addError(errors, "invalid_plan_charges", path .. ".mechanismData.plan.charges", "계획 충전은 1 이상의 정수여야 합니다.")
                             end

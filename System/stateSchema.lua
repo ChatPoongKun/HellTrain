@@ -509,6 +509,7 @@
             cardInstanceId = true,
             cardId = true,
             placedTurn = true,
+            durationIncludesPlacementTurn = true,
             remainingTurns = true,
             remainingCharges = true,
             revealed = true,
@@ -531,6 +532,22 @@
         end
         if slot.revealed ~= true and slot.revealed ~= false then
             addError(errors, "invalid_revealed", path .. ".revealed", "revealed는 불리언이어야 합니다.")
+        end
+        if slot.durationIncludesPlacementTurn ~= nil
+            and type(slot.durationIncludesPlacementTurn) ~= "boolean" then
+            addError(
+                errors,
+                "invalid_plan_duration_policy",
+                path .. ".durationIncludesPlacementTurn",
+                "배치 턴 포함 여부는 불리언이어야 합니다."
+            )
+        elseif slot.durationIncludesPlacementTurn == true and slot.remainingTurns == nil then
+            addError(
+                errors,
+                "plan_duration_policy_requires_duration",
+                path .. ".durationIncludesPlacementTurn",
+                "배치 턴을 포함하는 계획에는 남은 지속시간이 필요합니다."
+            )
         end
 
         local hasLifetime = false
@@ -569,6 +586,18 @@
         local card = type(cards) == "table" and cards[slot.cardId] or nil
         if card and not cardHasMechanism(card, "plan") then
             addError(errors, "plan_mechanism_missing", path .. ".cardId", "계획 슬롯의 카드에 plan 메커니즘이 없습니다.")
+        elseif card then
+            local planData = type(card.mechanismData) == "table" and card.mechanismData.plan or nil
+            local expectedIncludesPlacementTurn = type(planData) == "table"
+                and planData.durationIncludesPlacementTurn == true
+            if (slot.durationIncludesPlacementTurn == true) ~= expectedIncludesPlacementTurn then
+                addError(
+                    errors,
+                    "plan_duration_policy_mismatch",
+                    path .. ".durationIncludesPlacementTurn",
+                    "계획 슬롯의 배치 턴 포함 정책이 정적 카드 정의와 다릅니다."
+                )
+            end
         end
     end
 

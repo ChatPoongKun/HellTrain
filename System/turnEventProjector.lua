@@ -337,7 +337,8 @@
             local slot = expected[side].planSlot
             if slot.occupied == true
                 and slot.remainingTurns ~= nil
-                and slot.placedTurn < resolvedTurnNumber then
+                and (slot.placedTurn < resolvedTurnNumber
+                    or slot.durationIncludesPlacementTurn == true) then
                 slot.remainingTurns = slot.remainingTurns - 1
                 if slot.remainingTurns == 0 then
                     local instanceId = slot.cardInstanceId
@@ -452,6 +453,7 @@
             cardInstanceId = true,
             cardId = true,
             placedTurn = true,
+            durationIncludesPlacementTurn = true,
             remainingTurns = true,
             remainingCharges = true,
             revealed = true,
@@ -477,6 +479,21 @@
         if slot.remainingTurns == nil and slot.remainingCharges == nil then
             return nil, makeError("missing_plan_lifetime", path, "점유된 계획에는 지속시간 또는 충전이 필요합니다.")
         end
+        if slot.durationIncludesPlacementTurn ~= nil
+            and type(slot.durationIncludesPlacementTurn) ~= "boolean" then
+            return nil, makeError(
+                "invalid_plan_duration_policy",
+                path .. ".durationIncludesPlacementTurn",
+                "배치 턴 포함 여부가 불리언이 아닙니다."
+            )
+        end
+        if slot.durationIncludesPlacementTurn == true and slot.remainingTurns == nil then
+            return nil, makeError(
+                "plan_duration_policy_requires_duration",
+                path .. ".durationIncludesPlacementTurn",
+                "배치 턴을 포함하는 계획에는 남은 지속시간이 필요합니다."
+            )
+        end
         if slot.remainingTurns ~= nil and not isInteger(slot.remainingTurns, 1) then
             return nil, makeError("invalid_plan_duration", path .. ".remainingTurns", "계획 남은 지속시간이 올바르지 않습니다.")
         end
@@ -491,7 +508,12 @@
             return nil, makeError("invalid_plan_spec", path, "계획 배치 명세가 일반 객체가 아닙니다.")
         end
         local errors = {}
-        checkAllowedKeys(spec, { durationTurns = true, charges = true, revealed = true }, path, errors)
+        checkAllowedKeys(spec, {
+            durationTurns = true,
+            durationIncludesPlacementTurn = true,
+            charges = true,
+            revealed = true,
+        }, path, errors)
         if #errors > 0 then
             return nil, errors[1]
         end
@@ -500,6 +522,21 @@
         end
         if spec.durationTurns ~= nil and not isInteger(spec.durationTurns, 1) then
             return nil, makeError("invalid_plan_duration", path .. ".durationTurns", "계획 배치 지속시간이 올바르지 않습니다.")
+        end
+        if spec.durationIncludesPlacementTurn ~= nil
+            and type(spec.durationIncludesPlacementTurn) ~= "boolean" then
+            return nil, makeError(
+                "invalid_plan_duration_policy",
+                path .. ".durationIncludesPlacementTurn",
+                "계획 배치의 배치 턴 포함 여부가 불리언이 아닙니다."
+            )
+        end
+        if spec.durationIncludesPlacementTurn == true and spec.durationTurns == nil then
+            return nil, makeError(
+                "plan_duration_policy_requires_duration",
+                path .. ".durationIncludesPlacementTurn",
+                "배치 턴을 포함하는 계획 배치에는 지속시간이 필요합니다."
+            )
         end
         if spec.charges ~= nil and not isInteger(spec.charges, 1) then
             return nil, makeError("invalid_plan_charges", path .. ".charges", "계획 배치 충전이 올바르지 않습니다.")
@@ -2144,6 +2181,12 @@
                 elseif payload.action == "placed" then
                     local lookupErrors = {}
                     local placedCard = findCard(staticData, cardId, side, path .. ".source.id", lookupErrors)
+                    local placedPlanData = type(placedCard) == "table"
+                        and type(placedCard.mechanismData) == "table"
+                        and placedCard.mechanismData.plan
+                        or nil
+                    local expectedIncludesPlacementTurn = type(placedPlanData) == "table"
+                        and placedPlanData.durationIncludesPlacementTurn == true
                     local _, planSpecError = validatePlanSpecSnapshot(payload.planSpec, path .. ".payload.planSpec")
                     local expectedMovedIds = { payload.instanceId }
                     if beforeSlot.occupied == true then
@@ -2164,6 +2207,10 @@
                         or afterSlot.cardInstanceId ~= payload.instanceId
                         or afterSlot.placedTurn ~= resolution.turnNumber
                         or afterSlot.remainingTurns ~= payload.planSpec.durationTurns
+                        or (afterSlot.durationIncludesPlacementTurn == true)
+                            ~= (payload.planSpec.durationIncludesPlacementTurn == true)
+                        or (payload.planSpec.durationIncludesPlacementTurn == true)
+                            ~= expectedIncludesPlacementTurn
                         or afterSlot.remainingCharges ~= payload.planSpec.charges
                         or (side == "character" and payload.planSpec.revealed ~= false)
                         or afterSlot.revealed ~= payload.planSpec.revealed

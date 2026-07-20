@@ -13,8 +13,14 @@
 
 
 ## 📖 문서
-- [CBS.md] - RisuAI CBS 문법 완전 가이드 (v166)
-- [Lua.md] - RisuAI Lua 트리거 가이드 (v166)
+- [References/CBS.md] - RisuAI CBS 문법 완전 가이드 (v166)
+- [References/Lua.md] - RisuAI Lua 트리거 가이드 (v166)
+
+## 🗂️ 개발 자료 구조
+- `Docs/` - 데이터·상태·턴 처리 계약과 개발 계획
+- `Tests/` - 로컬 계약 및 회귀 검사
+- `References/` - RisuAI 문법 문서와 로컬 참조 소스
+- 실제 게임에 등록하는 파일은 프로젝트 루트의 `System/`, `DB/`, `Char/`, `html/`, `imgs/`, `Prompt/`에 둔다.
 
 ## 기타 주요사항.
 - 명시적 지시 없이 main.lua파일을 수정해서는 안됨

@@ -475,6 +475,20 @@
                         if slot.revealed ~= true and slot.revealed ~= false then
                             table.insert(errors, makeError("invalid_revealed", slotPath .. ".revealed", "revealed는 불리언이어야 합니다."))
                         end
+                        if slot.durationIncludesPlacementTurn ~= nil
+                            and type(slot.durationIncludesPlacementTurn) ~= "boolean" then
+                            table.insert(errors, makeError(
+                                "invalid_plan_duration_policy",
+                                slotPath .. ".durationIncludesPlacementTurn",
+                                "배치 턴 포함 여부는 불리언이어야 합니다."
+                            ))
+                        elseif slot.durationIncludesPlacementTurn == true and slot.remainingTurns == nil then
+                            table.insert(errors, makeError(
+                                "plan_duration_policy_requires_duration",
+                                slotPath .. ".durationIncludesPlacementTurn",
+                                "배치 턴을 포함하는 계획에는 남은 지속시간이 필요합니다."
+                            ))
+                        end
 
                         local hasLifetime = false
                         if slot.remainingTurns ~= nil then
@@ -799,6 +813,7 @@
 
         local allowed = {
             durationTurns = true,
+            durationIncludesPlacementTurn = true,
             charges = true,
             revealed = true,
         }
@@ -817,6 +832,21 @@
                 "invalid_plan_duration",
                 "$.planSpec.durationTurns",
                 "계획 지속시간은 양의 정수여야 합니다."
+            ))
+        end
+        if planSpec.durationIncludesPlacementTurn ~= nil
+            and type(planSpec.durationIncludesPlacementTurn) ~= "boolean" then
+            table.insert(errors, makeError(
+                "invalid_plan_duration_policy",
+                "$.planSpec.durationIncludesPlacementTurn",
+                "배치 턴 포함 여부는 불리언이어야 합니다."
+            ))
+        elseif planSpec.durationIncludesPlacementTurn == true
+            and not isInteger(planSpec.durationTurns, 1) then
+            table.insert(errors, makeError(
+                "plan_duration_policy_requires_duration",
+                "$.planSpec.durationIncludesPlacementTurn",
+                "배치 턴을 포함하려면 양의 durationTurns가 필요합니다."
             ))
         end
         if planSpec.charges ~= nil and not isInteger(planSpec.charges, 1) then
@@ -846,6 +876,7 @@
         end
         return {
             durationTurns = planSpec.durationTurns,
+            durationIncludesPlacementTurn = planSpec.durationIncludesPlacementTurn == true,
             charges = planSpec.charges,
             revealed = planSpec.revealed == true,
         }, nil
@@ -904,6 +935,7 @@
             cardInstanceId = instance.instanceId,
             cardId = instance.cardId,
             placedTurn = nextState.turnNumber,
+            durationIncludesPlacementTurn = normalizedSpec.durationIncludesPlacementTurn,
             revealed = normalizedSpec.revealed,
         }
         if normalizedSpec.durationTurns ~= nil then
@@ -1000,7 +1032,8 @@
             local slot = nextState[side].planSlot
             if slot.occupied == true
                 and slot.remainingTurns ~= nil
-                and slot.placedTurn < nextState.turnNumber then
+                and (slot.placedTurn < nextState.turnNumber
+                    or slot.durationIncludesPlacementTurn == true) then
                 slot.remainingTurns = slot.remainingTurns - 1
                 if slot.remainingTurns == 0 then
                     table.insert(movedInstanceIds, discardOccupiedPlan(nextState, side))
