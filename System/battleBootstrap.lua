@@ -47,6 +47,17 @@
         }
     end
 
+    local function setupSuccess(state)
+        return {
+            ok = true,
+            schemaVersion = SCHEMA_VERSION,
+            errors = {},
+            referencesValidated = true,
+            initialDecksShuffled = true,
+            state = state,
+        }
+    end
+
     local function isFinite(value)
         return type(value) == "number"
             and value == value
@@ -64,6 +75,11 @@
     local function isRuntimeId(value)
         return type(value) == "string"
             and string.match(value, "^[A-Za-z0-9][A-Za-z0-9_-]*$") ~= nil
+    end
+
+    local function isAsciiId(value)
+        return type(value) == "string"
+            and string.match(value, "^[a-z][a-z0-9_]*$") ~= nil
     end
 
     local function getArrayLength(value)
@@ -157,6 +173,111 @@
         }, nil
     end
 
+    local function validateSetupSpec(spec)
+        local errors = {}
+        if type(spec) ~= "table" or getmetatable(spec) ~= nil then
+            return nil, {
+                makeError("invalid_spec", "$", "fromSetup 생성 사양은 메타테이블 없는 객체여야 합니다."),
+            }
+        end
+
+        local allowed = {
+            battleId = true,
+            seed = true,
+            playerCardIds = true,
+            characterId = true,
+            environmentId = true,
+            turnLimit = true,
+        }
+        for key in pairs(spec) do
+            if type(key) ~= "string" or not allowed[key] then
+                errors[#errors + 1] = makeError(
+                    "unknown_spec_field",
+                    "$." .. tostring(key),
+                    "fromSetup 생성 사양에 알 수 없는 필드가 있습니다."
+                )
+            end
+        end
+
+        if not isRuntimeId(spec.battleId) then
+            errors[#errors + 1] = makeError(
+                "invalid_battle_id",
+                "$.battleId",
+                "명시적인 runtime battleId가 필요합니다."
+            )
+        end
+        if not isSafeInteger(spec.seed, 0) then
+            errors[#errors + 1] = makeError(
+                "invalid_rng_seed",
+                "$.seed",
+                "전투 전용 비음수 안전 정수 RNG 시드가 필요합니다."
+            )
+        end
+
+        local playerDeckLength = getArrayLength(spec.playerCardIds)
+        if playerDeckLength ~= 10 then
+            errors[#errors + 1] = makeError(
+                "invalid_player_deck",
+                "$.playerCardIds",
+                "초기 플레이어 덱은 정확히 10장의 연속 배열이어야 합니다."
+            )
+        else
+            local counts = {}
+            for index, cardId in ipairs(spec.playerCardIds) do
+                if not isAsciiId(cardId) then
+                    errors[#errors + 1] = makeError(
+                        "invalid_player_card_id",
+                        "$.playerCardIds[" .. index .. "]",
+                        "플레이어 카드 ID는 lower_snake_case ASCII ID여야 합니다."
+                    )
+                else
+                    counts[cardId] = (counts[cardId] or 0) + 1
+                    if counts[cardId] > 2 then
+                        errors[#errors + 1] = makeError(
+                            "player_card_copy_limit_exceeded",
+                            "$.playerCardIds[" .. index .. "]",
+                            "초기 덱에는 같은 카드를 2장까지만 넣을 수 있습니다."
+                        )
+                    end
+                end
+            end
+        end
+
+        if not isAsciiId(spec.characterId) then
+            errors[#errors + 1] = makeError(
+                "invalid_character_id",
+                "$.characterId",
+                "캐릭터 ID는 lower_snake_case ASCII ID여야 합니다."
+            )
+        end
+        if not isAsciiId(spec.environmentId) then
+            errors[#errors + 1] = makeError(
+                "invalid_environment_id",
+                "$.environmentId",
+                "환경 ID는 lower_snake_case ASCII ID여야 합니다."
+            )
+        end
+        if not isSafeInteger(spec.turnLimit, 1) then
+            errors[#errors + 1] = makeError(
+                "invalid_turn_limit",
+                "$.turnLimit",
+                "제한 턴은 양의 안전 정수여야 합니다."
+            )
+        end
+
+        if #errors > 0 then
+            return nil, errors
+        end
+        return {
+            battleId = spec.battleId,
+            seed = spec.seed,
+            playerCardIds = copyArray(spec.playerCardIds),
+            characterId = spec.characterId,
+            environmentId = spec.environmentId,
+            turnLimit = spec.turnLimit,
+        }, nil
+    end
+
     local function getCharacterDefinition(staticData)
         if type(staticData) ~= "table" or getmetatable(staticData) ~= nil then
             return nil, makeError(
@@ -217,6 +338,108 @@
             }
         end
         return instances
+    end
+
+    local function getSetupDefinitions(spec, staticData)
+        local errors = {}
+        if type(staticData) ~= "table" or getmetatable(staticData) ~= nil then
+            return nil, nil, errors, makeError(
+                "invalid_static_data",
+                "$.staticData",
+                "전체 정적 데이터 객체가 필요합니다."
+            )
+        end
+
+        local cards = staticData.cards
+        if type(cards) ~= "table" or getmetatable(cards) ~= nil then
+            return nil, nil, errors, makeError(
+                "invalid_static_cards",
+                "$.staticData.cards",
+                "정적 카드 컬렉션이 필요합니다."
+            )
+        end
+        for index, cardId in ipairs(spec.playerCardIds) do
+            local card = cards[cardId]
+            if type(card) ~= "table" then
+                errors[#errors + 1] = makeError(
+                    "unknown_player_card",
+                    "$.playerCardIds[" .. index .. "]",
+                    "정적 DB에서 플레이어 카드를 찾을 수 없습니다."
+                )
+            elseif card.owner ~= "player" then
+                errors[#errors + 1] = makeError(
+                    "player_card_owner_mismatch",
+                    "$.playerCardIds[" .. index .. "]",
+                    "선택한 카드의 정적 소유자가 player가 아닙니다."
+                )
+            end
+        end
+
+        local characters = staticData.characters
+        local character = type(characters) == "table" and characters[spec.characterId] or nil
+        local battle = type(character) == "table" and character.battle or nil
+        if type(battle) ~= "table" or getmetatable(battle) ~= nil then
+            return nil, nil, errors, makeError(
+                "missing_character_definition",
+                "$.staticData.characters." .. spec.characterId,
+                "선택한 캐릭터의 전투 정의를 찾을 수 없습니다."
+            )
+        end
+
+        local characterDeckLength = getArrayLength(battle.deck)
+        if characterDeckLength == nil then
+            errors[#errors + 1] = makeError(
+                "invalid_character_deck",
+                "$.staticData.characters." .. spec.characterId .. ".battle.deck",
+                "캐릭터 덱은 연속 배열이어야 합니다."
+            )
+        else
+            for index, cardId in ipairs(battle.deck) do
+                local path = "$.staticData.characters." .. spec.characterId .. ".battle.deck[" .. index .. "]"
+                if not isAsciiId(cardId) then
+                    errors[#errors + 1] = makeError(
+                        "invalid_character_card_id",
+                        path,
+                        "캐릭터 카드 ID는 lower_snake_case ASCII ID여야 합니다."
+                    )
+                else
+                    local card = cards[cardId]
+                    if type(card) ~= "table" then
+                        errors[#errors + 1] = makeError(
+                            "unknown_character_card",
+                            path,
+                            "정적 DB에서 캐릭터 카드를 찾을 수 없습니다."
+                        )
+                    elseif card.owner ~= "character" then
+                        errors[#errors + 1] = makeError(
+                            "character_card_owner_mismatch",
+                            path,
+                            "캐릭터 덱 카드의 정적 소유자가 character가 아닙니다."
+                        )
+                    end
+                end
+            end
+        end
+
+        if getArrayLength(battle.traitIds) == nil then
+            errors[#errors + 1] = makeError(
+                "invalid_character_traits",
+                "$.staticData.characters." .. spec.characterId .. ".battle.traitIds",
+                "캐릭터 특징 ID 목록이 연속 배열이 아닙니다."
+            )
+        end
+
+        local environments = staticData.environments
+        local environment = type(environments) == "table" and environments[spec.environmentId] or nil
+        if type(environment) ~= "table" then
+            errors[#errors + 1] = makeError(
+                "unknown_environment",
+                "$.environmentId",
+                "정적 DB에서 환경을 찾을 수 없습니다."
+            )
+        end
+
+        return character, battle, errors, nil
     end
 
     local function verticalSlice(spec, staticData)
@@ -341,9 +564,277 @@
         return success(report.value)
     end
 
+    local function fromSetup(spec, staticData)
+        local normalized, specErrors = validateSetupSpec(spec)
+        if specErrors then
+            return failure(specErrors)
+        end
+
+        local characterDefinition, characterBattle, definitionErrors, definitionFatal =
+            getSetupDefinitions(normalized, staticData)
+        if definitionFatal then
+            definitionErrors[#definitionErrors + 1] = definitionFatal
+        end
+        if #definitionErrors > 0 then
+            return failure(definitionErrors)
+        end
+
+        local cardInstances = makeInstances(normalized.playerCardIds, "player")
+        local characterInstances = makeInstances(characterBattle.deck, "character")
+        for _, instance in ipairs(characterInstances) do
+            cardInstances[#cardInstances + 1] = instance
+        end
+
+        local stateSpec = {
+            battleId = normalized.battleId,
+            status = "active",
+            turnNumber = 1,
+            turnLimit = normalized.turnLimit,
+            environmentId = normalized.environmentId,
+            rng = {
+                seed = normalized.seed,
+                cursor = 0,
+            },
+            player = {
+                stealth = 30,
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                perkIds = {},
+                planSlot = { occupied = false },
+            },
+            character = {
+                characterId = normalized.characterId,
+                resistance = characterBattle.startingResistance,
+                mood = characterBattle.startingMood,
+                traitIds = copyArray(characterBattle.traitIds),
+                baseDrawCount = characterBattle.baseDrawCount,
+                maxHandSize = characterBattle.maxHandSize,
+                planSlot = { occupied = false },
+            },
+            cardInstances = cardInstances,
+            selection = {
+                playerCardInstanceIds = {},
+            },
+            characterIntent = {
+                cardInstanceIds = {},
+            },
+        }
+
+        if type(runScript) ~= "function" then
+            return failure({
+                makeError(
+                    "runtime_unavailable",
+                    "$.runtime.stateSchema",
+                    "전투 초기 상태 생성에 필요한 실행기를 찾을 수 없습니다."
+                ),
+            })
+        end
+
+        local constructOk, constructReport = pcall(
+            runScript,
+            triggerId,
+            "stateSchema",
+            "newBattleState",
+            stateSpec,
+            staticData
+        )
+        if not constructOk then
+            return failure({
+                makeError(
+                    "state_schema_call_error",
+                    "$.runtime.stateSchema",
+                    "stateSchema.newBattleState 호출 중 오류가 발생했습니다."
+                ),
+            })
+        end
+        if type(constructReport) ~= "table" then
+            return failure({
+                makeError(
+                    "invalid_state_schema_result",
+                    "$.runtime.stateSchema",
+                    "stateSchema.newBattleState가 테이블 결과를 반환하지 않았습니다."
+                ),
+            })
+        end
+        if constructReport.ok ~= true then
+            local nestedErrors = copyErrors(constructReport)
+            if #nestedErrors == 0 then
+                nestedErrors[1] = makeError(
+                    "state_construction_failed",
+                    "$",
+                    "stateSchema.newBattleState가 오류 상세 없이 실패했습니다."
+                )
+            end
+            return failure(nestedErrors)
+        end
+        if constructReport.referencesValidated ~= true then
+            return failure({
+                makeError(
+                    "static_references_not_validated",
+                    "$.staticData",
+                    "fromSetup battleState는 전체 정적 참조 검증이 필요합니다."
+                ),
+            })
+        end
+        if type(constructReport.value) ~= "table" then
+            return failure({
+                makeError(
+                    "missing_battle_state",
+                    "$.state",
+                    "stateSchema.newBattleState 성공 결과에 battleState가 없습니다."
+                ),
+            })
+        end
+
+        local playerShuffleOk, playerShuffleReport = pcall(
+            runScript,
+            triggerId,
+            "cardZones",
+            "shuffleDeck",
+            constructReport.value,
+            "player"
+        )
+        if not playerShuffleOk then
+            return failure({
+                makeError(
+                    "player_shuffle_call_error",
+                    "$.runtime.cardZones",
+                    "플레이어 초기 덱 셔플 호출 중 오류가 발생했습니다."
+                ),
+            })
+        end
+        if type(playerShuffleReport) ~= "table" then
+            return failure({
+                makeError(
+                    "invalid_player_shuffle_result",
+                    "$.runtime.cardZones",
+                    "플레이어 초기 덱 셔플이 테이블 결과를 반환하지 않았습니다."
+                ),
+            })
+        end
+        if playerShuffleReport.ok ~= true then
+            local nestedErrors = copyErrors(playerShuffleReport)
+            if #nestedErrors == 0 then
+                nestedErrors[1] = makeError(
+                    "player_shuffle_failed",
+                    "$.state.player",
+                    "플레이어 초기 덱 셔플이 오류 상세 없이 실패했습니다."
+                )
+            end
+            return failure(nestedErrors)
+        end
+        if type(playerShuffleReport.state) ~= "table" then
+            return failure({
+                makeError(
+                    "missing_player_shuffle_state",
+                    "$.state",
+                    "플레이어 초기 덱 셔플 성공 결과에 battleState가 없습니다."
+                ),
+            })
+        end
+
+        local characterShuffleOk, characterShuffleReport = pcall(
+            runScript,
+            triggerId,
+            "cardZones",
+            "shuffleDeck",
+            playerShuffleReport.state,
+            "character"
+        )
+        if not characterShuffleOk then
+            return failure({
+                makeError(
+                    "character_shuffle_call_error",
+                    "$.runtime.cardZones",
+                    "캐릭터 초기 덱 셔플 호출 중 오류가 발생했습니다."
+                ),
+            })
+        end
+        if type(characterShuffleReport) ~= "table" then
+            return failure({
+                makeError(
+                    "invalid_character_shuffle_result",
+                    "$.runtime.cardZones",
+                    "캐릭터 초기 덱 셔플이 테이블 결과를 반환하지 않았습니다."
+                ),
+            })
+        end
+        if characterShuffleReport.ok ~= true then
+            local nestedErrors = copyErrors(characterShuffleReport)
+            if #nestedErrors == 0 then
+                nestedErrors[1] = makeError(
+                    "character_shuffle_failed",
+                    "$.state.character",
+                    "캐릭터 초기 덱 셔플이 오류 상세 없이 실패했습니다."
+                )
+            end
+            return failure(nestedErrors)
+        end
+        if type(characterShuffleReport.state) ~= "table" then
+            return failure({
+                makeError(
+                    "missing_character_shuffle_state",
+                    "$.state",
+                    "캐릭터 초기 덱 셔플 성공 결과에 battleState가 없습니다."
+                ),
+            })
+        end
+
+        local validateOk, validateReport = pcall(
+            runScript,
+            triggerId,
+            "stateSchema",
+            "validateBattleState",
+            characterShuffleReport.state,
+            staticData
+        )
+        if not validateOk then
+            return failure({
+                makeError(
+                    "state_validation_call_error",
+                    "$.runtime.stateSchema",
+                    "셔플된 battleState 최종 검증 호출 중 오류가 발생했습니다."
+                ),
+            })
+        end
+        if type(validateReport) ~= "table" then
+            return failure({
+                makeError(
+                    "invalid_state_validation_result",
+                    "$.runtime.stateSchema",
+                    "stateSchema.validateBattleState가 테이블 결과를 반환하지 않았습니다."
+                ),
+            })
+        end
+        if validateReport.ok ~= true then
+            local nestedErrors = copyErrors(validateReport)
+            if #nestedErrors == 0 then
+                nestedErrors[1] = makeError(
+                    "state_validation_failed",
+                    "$.state",
+                    "셔플된 battleState 최종 검증이 오류 상세 없이 실패했습니다."
+                )
+            end
+            return failure(nestedErrors)
+        end
+        if validateReport.referencesValidated ~= true then
+            return failure({
+                makeError(
+                    "static_references_not_validated",
+                    "$.staticData",
+                    "셔플된 fromSetup battleState는 전체 정적 참조 검증이 필요합니다."
+                ),
+            })
+        end
+
+        return setupSuccess(characterShuffleReport.state)
+    end
+
     local arguments = { ... }
     if action == "verticalSlice" then
         return verticalSlice(arguments[1], arguments[2])
+    elseif action == "fromSetup" then
+        return fromSetup(arguments[1], arguments[2])
     end
 
     return failure({

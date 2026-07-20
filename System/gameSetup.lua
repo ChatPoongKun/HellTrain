@@ -1,0 +1,748 @@
+(function(triggerId, action, ...)
+    local SCHEMA_VERSION = 1
+    local KIND = "gameSetupV1"
+    local TOTAL_DRAFTS = 10
+    local OFFER_SIZE = 3
+    local MAX_COPIES = 2
+    local MINIMUM_POOL_SIZE = 7
+    local MAX_SAFE_INTEGER = 9007199254740991
+
+    local function makeError(code, path, message)
+        return {
+            code = code,
+            path = path,
+            message = message,
+        }
+    end
+
+    local function failure(errors)
+        return {
+            ok = false,
+            schemaVersion = SCHEMA_VERSION,
+            errors = errors,
+        }
+    end
+
+    local function success(state, applied, stale)
+        local report = {
+            ok = true,
+            schemaVersion = SCHEMA_VERSION,
+            errors = {},
+            state = state,
+        }
+        if applied ~= nil then
+            report.applied = applied
+        end
+        if stale ~= nil then
+            report.stale = stale
+        end
+        return report
+    end
+
+    local function isFinite(value)
+        return type(value) == "number"
+            and value == value
+            and value ~= math.huge
+            and value ~= -math.huge
+    end
+
+    local function isSafeInteger(value, minimum)
+        return isFinite(value)
+            and value % 1 == 0
+            and math.abs(value) <= MAX_SAFE_INTEGER
+            and (minimum == nil or value >= minimum)
+    end
+
+    local function isAsciiId(value)
+        return type(value) == "string"
+            and string.match(value, "^[a-z][a-z0-9_]*$") ~= nil
+    end
+
+    local function isRuntimeId(value)
+        return type(value) == "string"
+            and string.match(value, "^[A-Za-z0-9][A-Za-z0-9_-]*$") ~= nil
+    end
+
+    local function isInteractionToken(value)
+        return type(value) == "string"
+            and string.match(value, "^game%-setup%-draft%-v1:%d+:%d+:%d+$") ~= nil
+    end
+
+    local function appendError(errors, code, path, message)
+        errors[#errors + 1] = makeError(code, path, message)
+    end
+
+    local function appendNestedErrors(errors, nested, fallbackPath)
+        if type(nested) ~= "table" then
+            appendError(errors, "invalid_nested_errors", fallbackPath, "하위 모듈의 오류 목록이 올바르지 않습니다.")
+            return
+        end
+        for _, item in ipairs(nested) do
+            errors[#errors + 1] = {
+                code = tostring(type(item) == "table" and item.code or "nested_error"),
+                path = tostring(type(item) == "table" and item.path or fallbackPath),
+                message = tostring(type(item) == "table" and item.message or "하위 모듈 작업이 실패했습니다."),
+            }
+        end
+    end
+
+    local function pathForKey(path, key)
+        if type(key) == "string" and string.match(key, "^[A-Za-z_][A-Za-z0-9_]*$") then
+            return path .. "." .. key
+        end
+        if type(key) == "string" or type(key) == "number" or type(key) == "boolean" then
+            return path .. "[" .. string.format("%q", tostring(key)) .. "]"
+        end
+        return path .. "[<" .. type(key) .. ">]"
+    end
+
+    local function inspectJsonTable(value, path, errors)
+        if type(value) ~= "table" then
+            appendError(errors, "expected_table", path, "테이블이어야 합니다.")
+            return nil, nil
+        end
+        if getmetatable(value) ~= nil then
+            appendError(errors, "metatable_not_allowed", path, "JSON 값에는 메타테이블을 사용할 수 없습니다.")
+            return nil, nil
+        end
+
+        local numericCount = 0
+        local maximum = 0
+        local hasNumeric = false
+        local hasString = false
+        local stringKeys = {}
+        for key in pairs(value) do
+            if type(key) == "number" then
+                hasNumeric = true
+                numericCount = numericCount + 1
+                if not isSafeInteger(key, 1) then
+                    appendError(errors, "invalid_array_index", path, "배열 인덱스는 1 이상의 연속된 정수여야 합니다.")
+                    return nil, nil
+                end
+                if key > maximum then
+                    maximum = key
+                end
+            elseif type(key) == "string" then
+                hasString = true
+                stringKeys[#stringKeys + 1] = key
+            else
+                appendError(errors, "invalid_object_key", path, "JSON 객체 키는 문자열이어야 합니다.")
+                return nil, nil
+            end
+        end
+        if hasNumeric and hasString then
+            appendError(errors, "mixed_table", path, "배열 인덱스와 객체 키를 함께 사용할 수 없습니다.")
+            return nil, nil
+        end
+        if hasNumeric then
+            if numericCount ~= maximum then
+                appendError(errors, "sparse_array", path, "배열 인덱스는 1부터 빈틈없이 이어져야 합니다.")
+                return nil, nil
+            end
+            return "array", maximum
+        end
+        table.sort(stringKeys)
+        return "object", stringKeys
+    end
+
+    local function validateJson(value, path, errors, active)
+        local valueType = type(value)
+        if valueType == "string" or valueType == "boolean" then
+            return
+        end
+        if valueType == "number" then
+            if not isFinite(value) then
+                appendError(errors, "non_finite_number", path, "NaN과 무한대는 JSON 상태에 저장할 수 없습니다.")
+            end
+            return
+        end
+        if valueType ~= "table" then
+            appendError(errors, "unsupported_type", path, "JSON 상태에 저장할 수 없는 자료형입니다: " .. valueType)
+            return
+        end
+        if getmetatable(value) ~= nil then
+            appendError(errors, "metatable_not_allowed", path, "JSON 값에는 메타테이블을 사용할 수 없습니다.")
+            return
+        end
+
+        active = active or {}
+        if active[value] then
+            appendError(errors, "circular_reference", path, "순환 참조가 있는 JSON 값은 사용할 수 없습니다.")
+            return
+        end
+        active[value] = true
+        local kind, shape = inspectJsonTable(value, path, errors)
+        if kind == "array" then
+            for index = 1, shape do
+                validateJson(value[index], path .. "[" .. index .. "]", errors, active)
+            end
+        elseif kind == "object" then
+            for _, key in ipairs(shape) do
+                validateJson(value[key], pathForKey(path, key), errors, active)
+            end
+        end
+        active[value] = nil
+    end
+
+    local function checkAllowedKeys(value, allowed, path, errors)
+        if type(value) ~= "table" or getmetatable(value) ~= nil then
+            return
+        end
+        for key in pairs(value) do
+            if type(key) ~= "string" or not allowed[key] then
+                appendError(errors, "unknown_field", pathForKey(path, key), "허용되지 않은 필드입니다.")
+            end
+        end
+    end
+
+    local function denseArrayLength(value, path, errors)
+        local kind, length = inspectJsonTable(value, path, errors)
+        -- Lua의 빈 테이블은 빈 객체와 빈 배열을 구분할 수 없으므로,
+        -- 배열을 요구하는 이 문맥에서는 빈 테이블을 길이 0으로 해석한다.
+        if kind == "object" and type(length) == "table" and #length == 0 then
+            return 0
+        end
+        if kind ~= "array" then
+            if kind ~= nil then
+                appendError(errors, "expected_array", path, "1부터 시작하는 연속 배열이어야 합니다.")
+            end
+            return nil
+        end
+        return length
+    end
+
+    local function cloneJson(value, path, active)
+        local valueType = type(value)
+        if valueType ~= "table" then
+            return value
+        end
+        active = active or {}
+        if active[value] then
+            error(makeError("circular_reference", path, "순환 참조가 있는 값을 복제할 수 없습니다."), 0)
+        end
+        active[value] = true
+        local copy = {}
+        for key, item in pairs(value) do
+            copy[key] = cloneJson(item, pathForKey(path, key), active)
+        end
+        active[value] = nil
+        return copy
+    end
+
+    local function cloneChecked(value, path)
+        local ok, copy = pcall(cloneJson, value, path or "$", {})
+        if not ok then
+            if type(copy) == "table" and copy.code then
+                return nil, copy
+            end
+            return nil, makeError("clone_failed", path or "$", "JSON 값 복제에 실패했습니다: " .. tostring(copy))
+        end
+        return copy, nil
+    end
+
+    local function deepEqual(left, right, seen)
+        if type(left) ~= type(right) then
+            return false
+        end
+        if type(left) ~= "table" then
+            return left == right
+        end
+        seen = seen or {}
+        seen[left] = seen[left] or {}
+        if seen[left][right] then
+            return true
+        end
+        seen[left][right] = true
+        for key, item in pairs(left) do
+            if not deepEqual(item, right[key], seen) then
+                return false
+            end
+        end
+        for key in pairs(right) do
+            if left[key] == nil then
+                return false
+            end
+        end
+        return true
+    end
+
+    local function normalizeStaticData(staticData)
+        if type(staticData) == "table"
+            and getmetatable(staticData) == nil
+            and type(rawget(staticData, "data")) == "table" then
+            return rawget(staticData, "data")
+        end
+        return staticData
+    end
+
+    local function buildPlayerPool(staticInput)
+        local errors = {}
+        local staticData = normalizeStaticData(staticInput)
+        if type(staticData) ~= "table" or getmetatable(staticData) ~= nil then
+            appendError(errors, "invalid_static_data", "$.staticData", "정적 데이터는 메타테이블이 없는 테이블이어야 합니다.")
+            return nil, errors
+        end
+        local cards = rawget(staticData, "cards")
+        if type(cards) ~= "table" or getmetatable(cards) ~= nil then
+            appendError(errors, "invalid_card_database", "$.staticData.cards", "cards는 메타테이블이 없는 카드 맵이어야 합니다.")
+            return nil, errors
+        end
+
+        local pool = {}
+        for cardId, card in pairs(cards) do
+            local cardPath = pathForKey("$.staticData.cards", cardId)
+            if type(cardId) ~= "string" then
+                appendError(errors, "invalid_card_key", "$.staticData.cards", "카드 맵 키는 ASCII ID 문자열이어야 합니다.")
+            elseif type(card) ~= "table" or getmetatable(card) ~= nil then
+                appendError(errors, "invalid_card_record", cardPath, "카드 레코드는 메타테이블이 없는 테이블이어야 합니다.")
+            elseif rawget(card, "owner") == "player" then
+                if not isAsciiId(cardId) then
+                    appendError(errors, "invalid_player_card_id", cardPath, "플레이어 카드 키는 ASCII cardId여야 합니다.")
+                else
+                    pool[#pool + 1] = cardId
+                end
+            end
+        end
+        table.sort(pool)
+        if #pool < MINIMUM_POOL_SIZE then
+            appendError(
+                errors,
+                "insufficient_player_card_pool",
+                "$.staticData.cards",
+                "10회 드래프트에서 항상 3장을 제시하려면 플레이어 카드가 최소 7종 필요합니다."
+            )
+        end
+        if #errors > 0 then
+            return nil, errors
+        end
+        return pool, nil
+    end
+
+    local function callNextInteger(rng, minimum, maximum)
+        if type(runScript) ~= "function" then
+            return nil, nil, {
+                makeError("runtime_unavailable", "$.runtime.deterministicRng", "deterministicRng를 호출할 runScript가 없습니다."),
+            }
+        end
+        local ok, report = pcall(
+            runScript,
+            triggerId,
+            "deterministicRng",
+            "nextInteger",
+            rng,
+            minimum,
+            maximum
+        )
+        if not ok then
+            return nil, nil, {
+                makeError("module_call_failed", "$.runtime.deterministicRng", "deterministicRng.nextInteger 호출에 실패했습니다: " .. tostring(report)),
+            }
+        end
+        if type(report) ~= "table" then
+            return nil, nil, {
+                makeError("invalid_module_result", "$.runtime.deterministicRng", "deterministicRng가 테이블 결과를 반환하지 않았습니다."),
+            }
+        end
+        if report.ok ~= true then
+            local errors = {}
+            appendNestedErrors(errors, report.errors, "$.runtime.deterministicRng")
+            return nil, nil, errors
+        end
+        if not isSafeInteger(report.value, minimum)
+            or report.value > maximum
+            or type(report.rng) ~= "table"
+            or not isSafeInteger(report.rng.seed, 0)
+            or not isSafeInteger(report.rng.cursor, 0)
+            or report.rng.seed ~= rng.seed
+            or report.rng.cursor <= rng.cursor then
+            return nil, nil, {
+                makeError("invalid_rng_result", "$.runtime.deterministicRng", "deterministicRng의 결과 계약이 올바르지 않습니다."),
+            }
+        end
+        return report.value, {
+            seed = report.rng.seed,
+            cursor = report.rng.cursor,
+        }, nil
+    end
+
+    local function buildToken(setupId, round, rng, selectedCardIds, offerCardIds)
+        local parts = {
+            "setupId=", tostring(#setupId), ":", setupId,
+            "|round=", tostring(round),
+            "|cursor=", tostring(rng.cursor),
+            "|selected=", tostring(#selectedCardIds), ":",
+        }
+        for _, cardId in ipairs(selectedCardIds) do
+            parts[#parts + 1] = tostring(#cardId)
+            parts[#parts + 1] = ":"
+            parts[#parts + 1] = cardId
+            parts[#parts + 1] = ";"
+        end
+        parts[#parts + 1] = "|offer="
+        for _, cardId in ipairs(offerCardIds) do
+            parts[#parts + 1] = tostring(#cardId)
+            parts[#parts + 1] = ":"
+            parts[#parts + 1] = cardId
+            parts[#parts + 1] = ";"
+        end
+        local canonical = table.concat(parts)
+        local hashA = 0
+        local hashB = 0
+        for index = 1, #canonical do
+            local byte = string.byte(canonical, index)
+            hashA = (hashA * 131 + byte) % 2147483647
+            hashB = (hashB * 137 + byte) % 2147483629
+        end
+        return "game-setup-draft-v1:" .. tostring(#canonical) .. ":" .. tostring(hashA) .. ":" .. tostring(hashB)
+    end
+
+    local function copyArray(array)
+        local copy = {}
+        for index, item in ipairs(array) do
+            copy[index] = item
+        end
+        return copy
+    end
+
+    local function generateOffer(setupId, round, rng, selectedCardIds, counts, pool)
+        local eligible = {}
+        for _, cardId in ipairs(pool) do
+            if (counts[cardId] or 0) < MAX_COPIES then
+                eligible[#eligible + 1] = cardId
+            end
+        end
+        if #eligible < OFFER_SIZE then
+            return nil, nil, {
+                makeError("insufficient_eligible_cards", "$.selectedCardIds", "복제 제한을 지키며 3장을 제시할 수 없습니다."),
+            }
+        end
+
+        local currentRng = { seed = rng.seed, cursor = rng.cursor }
+        local offered = {}
+        for pick = 1, OFFER_SIZE do
+            local selectedIndex, nextRng, rngErrors = callNextInteger(currentRng, 1, #eligible)
+            if rngErrors then
+                return nil, nil, rngErrors
+            end
+            offered[pick] = eligible[selectedIndex]
+            table.remove(eligible, selectedIndex)
+            currentRng = nextRng
+        end
+        return {
+            round = round,
+            cardIds = offered,
+            interactionToken = buildToken(setupId, round, currentRng, selectedCardIds, offered),
+        }, currentRng, nil
+    end
+
+    local function contains(array, target)
+        for _, value in ipairs(array) do
+            if value == target then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function replay(setupId, seed, selectedCardIds, pool)
+        local counts = {}
+        local rng = { seed = seed, cursor = 0 }
+
+        for round = 1, TOTAL_DRAFTS do
+            local history = {}
+            for index = 1, round - 1 do
+                history[index] = selectedCardIds[index]
+            end
+            local offer, nextRng, offerErrors = generateOffer(setupId, round, rng, history, counts, pool)
+            if offerErrors then
+                return nil, offerErrors
+            end
+            rng = nextRng
+
+            if round <= #selectedCardIds then
+                local selectedId = selectedCardIds[round]
+                if not contains(offer.cardIds, selectedId) then
+                    return nil, {
+                        makeError(
+                            "selection_not_in_replayed_offer",
+                            "$.selectedCardIds[" .. round .. "]",
+                            "선택 이력이 결정적 드래프트 제안과 일치하지 않습니다."
+                        ),
+                    }
+                end
+                counts[selectedId] = (counts[selectedId] or 0) + 1
+                if counts[selectedId] > MAX_COPIES then
+                    return nil, {
+                        makeError("card_copy_limit_exceeded", "$.selectedCardIds[" .. round .. "]", "같은 카드는 최대 2장까지 선택할 수 있습니다."),
+                    }
+                end
+            else
+                return {
+                    schemaVersion = SCHEMA_VERSION,
+                    kind = KIND,
+                    setupId = setupId,
+                    phase = "deckDraft",
+                    rng = rng,
+                    selectedCardIds = copyArray(selectedCardIds),
+                    offer = offer,
+                }, nil
+            end
+        end
+
+        return {
+            schemaVersion = SCHEMA_VERSION,
+            kind = KIND,
+            setupId = setupId,
+            phase = "deckComplete",
+            rng = rng,
+            selectedCardIds = copyArray(selectedCardIds),
+        }, nil
+    end
+
+    local function validateStateShape(state, pool)
+        local errors = {}
+        validateJson(state, "$.state", errors, {})
+        if type(state) ~= "table" or getmetatable(state) ~= nil then
+            return nil, errors
+        end
+        checkAllowedKeys(state, {
+            schemaVersion = true,
+            kind = true,
+            setupId = true,
+            phase = true,
+            rng = true,
+            selectedCardIds = true,
+            offer = true,
+        }, "$.state", errors)
+
+        if state.schemaVersion ~= SCHEMA_VERSION then
+            appendError(errors, "unsupported_schema_version", "$.state.schemaVersion", "지원하지 않는 게임 설정 스키마입니다.")
+        end
+        if state.kind ~= KIND then
+            appendError(errors, "invalid_state_kind", "$.state.kind", "게임 설정 상태 kind가 올바르지 않습니다.")
+        end
+        if not isRuntimeId(state.setupId) then
+            appendError(errors, "invalid_setup_id", "$.state.setupId", "setupId는 ASCII 런타임 ID여야 합니다.")
+        end
+        if state.phase ~= "deckDraft" and state.phase ~= "deckComplete" then
+            appendError(errors, "invalid_setup_phase", "$.state.phase", "phase는 deckDraft 또는 deckComplete이어야 합니다.")
+        end
+
+        if type(state.rng) ~= "table" or getmetatable(state.rng) ~= nil then
+            appendError(errors, "invalid_rng", "$.state.rng", "rng는 메타테이블이 없는 테이블이어야 합니다.")
+        else
+            checkAllowedKeys(state.rng, { seed = true, cursor = true }, "$.state.rng", errors)
+            if not isSafeInteger(state.rng.seed, 0) then
+                appendError(errors, "invalid_rng_seed", "$.state.rng.seed", "seed는 0 이상의 IEEE-754 안전 정수여야 합니다.")
+            end
+            if not isSafeInteger(state.rng.cursor, 0) then
+                appendError(errors, "invalid_rng_cursor", "$.state.rng.cursor", "cursor는 0 이상의 IEEE-754 안전 정수여야 합니다.")
+            end
+        end
+
+        local selectedLength = denseArrayLength(state.selectedCardIds, "$.state.selectedCardIds", errors)
+        local poolSet = {}
+        for _, cardId in ipairs(pool) do
+            poolSet[cardId] = true
+        end
+        if selectedLength ~= nil then
+            if selectedLength > TOTAL_DRAFTS then
+                appendError(errors, "too_many_selected_cards", "$.state.selectedCardIds", "초기 덱은 10장을 초과할 수 없습니다.")
+            end
+            local counts = {}
+            for index = 1, selectedLength do
+                local cardId = state.selectedCardIds[index]
+                if not isAsciiId(cardId) then
+                    appendError(errors, "invalid_selected_card_id", "$.state.selectedCardIds[" .. index .. "]", "선택한 카드 ID가 올바르지 않습니다.")
+                elseif not poolSet[cardId] then
+                    appendError(errors, "unknown_selected_card", "$.state.selectedCardIds[" .. index .. "]", "현재 플레이어 카드 풀에 없는 카드입니다.")
+                else
+                    counts[cardId] = (counts[cardId] or 0) + 1
+                    if counts[cardId] > MAX_COPIES then
+                        appendError(errors, "card_copy_limit_exceeded", "$.state.selectedCardIds[" .. index .. "]", "같은 카드는 최대 2장까지 선택할 수 있습니다.")
+                    end
+                end
+            end
+        end
+
+        if state.phase == "deckDraft" then
+            if selectedLength ~= nil and selectedLength >= TOTAL_DRAFTS then
+                appendError(errors, "invalid_draft_progress", "$.state.phase", "10장을 모두 선택한 상태는 deckComplete이어야 합니다.")
+            end
+            if type(state.offer) ~= "table" or getmetatable(state.offer) ~= nil then
+                appendError(errors, "missing_draft_offer", "$.state.offer", "deckDraft 상태에는 현재 제안이 필요합니다.")
+            else
+                checkAllowedKeys(state.offer, {
+                    round = true,
+                    cardIds = true,
+                    interactionToken = true,
+                }, "$.state.offer", errors)
+                if not isSafeInteger(state.offer.round, 1) or state.offer.round > TOTAL_DRAFTS then
+                    appendError(errors, "invalid_offer_round", "$.state.offer.round", "제안 라운드는 1부터 10 사이의 정수여야 합니다.")
+                end
+                if selectedLength ~= nil and state.offer.round ~= selectedLength + 1 then
+                    appendError(errors, "offer_round_mismatch", "$.state.offer.round", "제안 라운드가 선택 진행도와 일치하지 않습니다.")
+                end
+                local offerLength = denseArrayLength(state.offer.cardIds, "$.state.offer.cardIds", errors)
+                if offerLength ~= nil then
+                    if offerLength ~= OFFER_SIZE then
+                        appendError(errors, "invalid_offer_size", "$.state.offer.cardIds", "드래프트 제안은 서로 다른 카드 3장이어야 합니다.")
+                    end
+                    local seen = {}
+                    for index = 1, offerLength do
+                        local cardId = state.offer.cardIds[index]
+                        if not isAsciiId(cardId) or not poolSet[cardId] then
+                            appendError(errors, "invalid_offer_card", "$.state.offer.cardIds[" .. index .. "]", "제안 카드가 현재 플레이어 카드 풀에 없습니다.")
+                        elseif seen[cardId] then
+                            appendError(errors, "duplicate_offer_card", "$.state.offer.cardIds[" .. index .. "]", "한 제안에 같은 카드를 두 번 넣을 수 없습니다.")
+                        end
+                        seen[cardId] = true
+                    end
+                end
+                if not isInteractionToken(state.offer.interactionToken) then
+                    appendError(errors, "invalid_interaction_token", "$.state.offer.interactionToken", "interactionToken 형식이 올바르지 않습니다.")
+                end
+            end
+        elseif state.phase == "deckComplete" then
+            if selectedLength ~= nil and selectedLength ~= TOTAL_DRAFTS then
+                appendError(errors, "invalid_complete_progress", "$.state.selectedCardIds", "deckComplete 상태에는 카드가 정확히 10장 있어야 합니다.")
+            end
+            if rawget(state, "offer") ~= nil then
+                appendError(errors, "offer_not_allowed", "$.state.offer", "deckComplete 상태에는 제안을 저장하지 않습니다.")
+            end
+        end
+
+        if #errors > 0 then
+            return nil, errors
+        end
+        return selectedLength, nil
+    end
+
+    local function validateAndReplay(state, staticInput)
+        local pool, poolErrors = buildPlayerPool(staticInput)
+        if poolErrors then
+            return nil, poolErrors
+        end
+        local _, shapeErrors = validateStateShape(state, pool)
+        if shapeErrors then
+            return nil, shapeErrors
+        end
+        local expected, replayErrors = replay(state.setupId, state.rng.seed, state.selectedCardIds, pool)
+        if replayErrors then
+            return nil, replayErrors
+        end
+        if not deepEqual(state, expected) then
+            return nil, {
+                makeError("setup_state_replay_mismatch", "$.state", "저장된 상태가 seed와 선택 이력으로 재생성한 RNG·제안·토큰과 일치하지 않습니다."),
+            }
+        end
+        return expected, nil, pool
+    end
+
+    local function validateSpec(spec)
+        local errors = {}
+        validateJson(spec, "$.spec", errors, {})
+        if type(spec) ~= "table" or getmetatable(spec) ~= nil then
+            return errors
+        end
+        checkAllowedKeys(spec, { setupId = true, seed = true }, "$.spec", errors)
+        if not isRuntimeId(spec.setupId) then
+            appendError(errors, "invalid_setup_id", "$.spec.setupId", "setupId는 ASCII 런타임 ID여야 합니다.")
+        end
+        if not isSafeInteger(spec.seed, 0) then
+            appendError(errors, "invalid_seed", "$.spec.seed", "seed는 0 이상의 IEEE-754 안전 정수여야 합니다.")
+        end
+        return errors
+    end
+
+    local function validateCommand(command)
+        local errors = {}
+        validateJson(command, "$.command", errors, {})
+        if type(command) ~= "table" or getmetatable(command) ~= nil then
+            return errors
+        end
+        checkAllowedKeys(command, { cardId = true, interactionToken = true }, "$.command", errors)
+        if not isAsciiId(command.cardId) then
+            appendError(errors, "invalid_command_card_id", "$.command.cardId", "cardId는 ASCII 카드 ID여야 합니다.")
+        end
+        if not isInteractionToken(command.interactionToken) then
+            appendError(errors, "invalid_command_token", "$.command.interactionToken", "interactionToken 형식이 올바르지 않습니다.")
+        end
+        return errors
+    end
+
+    local function startSetup(spec, staticInput)
+        local specErrors = validateSpec(spec)
+        if #specErrors > 0 then
+            return failure(specErrors)
+        end
+        local pool, poolErrors = buildPlayerPool(staticInput)
+        if poolErrors then
+            return failure(poolErrors)
+        end
+        local state, replayErrors = replay(spec.setupId, spec.seed, {}, pool)
+        if replayErrors then
+            return failure(replayErrors)
+        end
+        return success(state)
+    end
+
+    local function validateSetup(state, staticInput)
+        local expected, errors = validateAndReplay(state, staticInput)
+        if errors then
+            return failure(errors)
+        end
+        return success(expected)
+    end
+
+    local function chooseCard(state, command, staticInput)
+        local commandErrors = validateCommand(command)
+        if #commandErrors > 0 then
+            return failure(commandErrors)
+        end
+        local current, stateErrors, pool = validateAndReplay(state, staticInput)
+        if stateErrors then
+            return failure(stateErrors)
+        end
+        if current.phase ~= "deckDraft" then
+            return failure({
+                makeError("draft_already_complete", "$.state.phase", "카드 10장 선택이 이미 완료되었습니다."),
+            })
+        end
+
+        if command.interactionToken ~= current.offer.interactionToken then
+            local stateCopy, cloneError = cloneChecked(state, "$.state")
+            if cloneError then
+                return failure({ cloneError })
+            end
+            return success(stateCopy, false, true)
+        end
+        if not contains(current.offer.cardIds, command.cardId) then
+            return failure({
+                makeError("card_not_in_current_offer", "$.command.cardId", "현재 드래프트 제안에 없는 카드입니다."),
+            })
+        end
+
+        local selected = copyArray(current.selectedCardIds)
+        selected[#selected + 1] = command.cardId
+        local nextState, replayErrors = replay(current.setupId, current.rng.seed, selected, pool)
+        if replayErrors then
+            return failure(replayErrors)
+        end
+        return success(nextState, true, false)
+    end
+
+    local arguments = { ... }
+    local actions = {
+        start = startSetup,
+        choose = chooseCard,
+        validate = validateSetup,
+    }
+    local handler = actions[action]
+    if not handler then
+        return failure({
+            makeError("unknown_action", "$.action", "지원하지 않는 게임 설정 작업입니다: " .. tostring(action)),
+        })
+    end
+    return handler(arguments[1], arguments[2], arguments[3])
+end)

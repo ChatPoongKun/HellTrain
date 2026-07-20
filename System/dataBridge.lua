@@ -1,6 +1,21 @@
 (function(triggerId, action, ...)
     local WIRE_FORMAT = "cbs-json-nodes-v1"
-    local SUPPORTED_VIEW = "battleView"
+    local SUPPORTED_VIEWS = {
+        battleView = {
+            moduleName = "viewBuilder",
+            action = "validateBattleView",
+            errorCode = "battle_view_invalid",
+            errorMessage = "battleView 스키마 검증에 실패했습니다.",
+            validatorMessage = "viewBuilder.validateBattleView 검증을 통과하지 못했습니다.",
+        },
+        gameSetupView = {
+            moduleName = "gameSetupView",
+            action = "validate",
+            errorCode = "game_setup_view_invalid",
+            errorMessage = "gameSetupView 스키마 검증에 실패했습니다.",
+            validatorMessage = "gameSetupView.validate 검증을 통과하지 못했습니다.",
+        },
+    }
 
     local function makeError(code, path, message)
         return {
@@ -194,25 +209,25 @@
         return errors
     end
 
-    local function appendSchemaErrors(target, schemaResult)
+    local function appendSchemaErrors(target, schemaResult, config)
         if type(schemaResult) == "table" and type(schemaResult.errors) == "table" then
             for index, schemaError in ipairs(schemaResult.errors) do
                 if type(schemaError) == "table" then
                     table.insert(
                         target,
                         makeError(
-                            tostring(schemaError.code or "battle_view_invalid"),
+                            tostring(schemaError.code or config.errorCode),
                             tostring(schemaError.path or "$"),
-                            tostring(schemaError.message or "battleView 스키마 검증에 실패했습니다.")
+                            tostring(schemaError.message or config.errorMessage)
                         )
                     )
                 else
                     table.insert(
                         target,
                         makeError(
-                            "battle_view_invalid",
+                            config.errorCode,
                             "$",
-                            "battleView 스키마 오류 " .. index .. ": " .. tostring(schemaError)
+                            config.errorMessage .. " 오류 " .. index .. ": " .. tostring(schemaError)
                         )
                     )
                 end
@@ -223,16 +238,17 @@
             table.insert(
                 target,
                 makeError(
-                    "battle_view_invalid",
+                    config.errorCode,
                     "$",
-                    "viewBuilder.validateBattleView 검증을 통과하지 못했습니다."
+                    config.validatorMessage
                 )
             )
         end
     end
 
     local function validateView(viewName, view)
-        if viewName ~= SUPPORTED_VIEW then
+        local config = SUPPORTED_VIEWS[viewName]
+        if config == nil then
             return failure({
                 makeError(
                     "unsupported_view",
@@ -247,12 +263,36 @@
             return failure(errors)
         end
 
-        local schemaResult = runScript(triggerId, "viewBuilder", "validateBattleView", view)
+        if type(runScript) ~= "function" then
+            return failure({
+                makeError(
+                    "view_validator_unavailable",
+                    "$.runtime." .. config.moduleName,
+                    "View 스키마 검증기를 호출할 수 없습니다."
+                ),
+            })
+        end
+        local callOk, schemaResult = pcall(
+            runScript,
+            triggerId,
+            config.moduleName,
+            config.action,
+            view
+        )
+        if not callOk then
+            return failure({
+                makeError(
+                    "view_validator_call_failed",
+                    "$.runtime." .. config.moduleName,
+                    "View 스키마 검증기 호출에 실패했습니다: " .. tostring(schemaResult)
+                ),
+            })
+        end
         local schemaPassed = schemaResult == true
             or (type(schemaResult) == "table" and schemaResult.ok == true)
 
         if not schemaPassed then
-            appendSchemaErrors(errors, schemaResult)
+            appendSchemaErrors(errors, schemaResult, config)
             return failure(errors)
         end
 
