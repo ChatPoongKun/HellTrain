@@ -28,6 +28,18 @@ color-scheme: dark;
 box-sizing: border-box;
 }
 
+.sr-only {
+position: absolute;
+width: 1px;
+height: 1px;
+padding: 0;
+margin: -1px;
+overflow: hidden;
+clip: rect(0, 0, 0, 0);
+white-space: nowrap;
+border: 0;
+}
+
 html {
 min-width: 320px;
 background: #070b12;
@@ -876,8 +888,7 @@ min-height: 64px;
 margin-top: 11px;
 }
 
-.selection-empty,
-.selection-choice {
+.selection-empty {
 min-height: 64px;
 padding: 10px 11px;
 border: 1px solid rgba(148, 163, 184, 0.14);
@@ -908,35 +919,6 @@ background: var(--cyan-soft);
 font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 font-size: 11px;
 font-weight: 900;
-}
-
-.selection-choice {
-display: none;
-grid-template-columns: minmax(180px, 0.95fr) minmax(370px, 1.7fr) auto;
-align-items: center;
-gap: 12px;
-border-color: rgba(167, 139, 250, 0.28);
-background: linear-gradient(90deg, rgba(124, 58, 237, 0.13), rgba(2, 6, 23, 0.4));
-}
-
-.choice-name {
-min-width: 0;
-}
-
-.choice-name strong {
-display: block;
-overflow: hidden;
-color: #fff;
-font-size: 13px;
-text-overflow: ellipsis;
-white-space: nowrap;
-}
-
-.choice-name span {
-display: block;
-margin-top: 2px;
-color: var(--muted);
-font-size: 10px;
 }
 
 .forecast {
@@ -974,57 +956,6 @@ font-size: 12px;
 .forecast-item.is-rose strong { color: var(--rose); }
 .forecast-item.is-violet strong { color: var(--violet); }
 
-.choice-actions {
-display: flex;
-align-items: center;
-gap: 7px;
-}
-
-.cancel-choice,
-.play-choice {
-min-height: 40px;
-border-radius: 10px;
-cursor: pointer;
-font-size: 11px;
-font-weight: 800;
-}
-
-.cancel-choice {
-display: grid;
-padding: 0 11px;
-place-items: center;
-border: 1px solid rgba(148, 163, 184, 0.2);
-color: var(--muted);
-background: rgba(2, 6, 23, 0.36);
-}
-
-.cancel-choice:hover,
-.cancel-choice:focus-visible {
-color: #fff;
-outline: 2px solid rgba(148, 163, 184, 0.3);
-outline-offset: 2px;
-}
-
-.play-choice {
-min-width: 142px;
-padding: 0 15px;
-border: 1px solid rgba(64, 217, 255, 0.5);
-color: #03131a;
-background: linear-gradient(135deg, #8eeaff, var(--cyan));
-box-shadow: 0 8px 22px rgba(64, 217, 255, 0.16);
-}
-
-.play-choice:hover,
-.play-choice:focus-visible {
-outline: none;
-filter: brightness(1.08);
-transform: translateY(-1px);
-}
-
-.play-choice:active {
-transform: translateY(0);
-}
-
 .hand-grid {
 display: grid;
 grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1034,11 +965,9 @@ margin-top: 10px;
 
 .hand-card {
 position: relative;
-display: grid;
-grid-template-rows: auto auto auto 1fr auto;
+display: block;
 min-width: 0;
 min-height: 174px;
-padding: 12px 13px 11px;
 overflow: hidden;
 border: 1px solid rgba(148, 163, 184, 0.18);
 border-radius: 14px;
@@ -1048,6 +977,71 @@ linear-gradient(145deg, rgba(28, 40, 61, 0.96), rgba(11, 17, 28, 0.98));
 cursor: pointer;
 isolation: isolate;
 transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.hand-card-summary {
+display: grid;
+grid-template-rows: auto auto auto auto;
+min-height: 172px;
+padding: 12px 13px 11px;
+cursor: pointer;
+list-style: none;
+}
+
+.hand-card-summary::-webkit-details-marker {
+display: none;
+}
+
+.hand-card-summary:focus-visible {
+outline: 2px solid rgba(255, 255, 255, 0.82);
+outline-offset: -4px;
+}
+
+.hand-card[open] .hand-card-summary {
+min-height: 0;
+border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.hand-card-details {
+padding: 0 13px 12px;
+}
+
+.hand-card-actions {
+display: flex;
+justify-content: flex-end;
+margin-top: 10px;
+}
+
+.hand-card-action {
+min-height: 38px;
+padding: 0 14px;
+border: 1px solid rgba(64, 217, 255, 0.5);
+border-radius: 10px;
+color: #03131a;
+background: linear-gradient(135deg, #8eeaff, var(--cyan));
+cursor: pointer;
+font: inherit;
+font-size: 11px;
+font-weight: 900;
+}
+
+.hand-card-action.is-cancel {
+border-color: rgba(251, 113, 133, 0.5);
+color: #fff;
+background: rgba(190, 24, 93, 0.42);
+}
+
+.hand-card-action:hover,
+.hand-card-action:focus-visible {
+outline: 2px solid rgba(255, 255, 255, 0.58);
+outline-offset: 2px;
+filter: brightness(1.08);
+}
+
+.hand-card-action:disabled {
+cursor: not-allowed;
+filter: saturate(0.45);
+opacity: 0.55;
 }
 
 .hand-card::before {
@@ -1239,14 +1233,6 @@ margin: 0;
 grid-template-columns: minmax(200px, 0.7fr) minmax(360px, 1.3fr) minmax(200px, 0.7fr);
 }
 
-.selection-choice {
-grid-template-columns: minmax(160px, 0.75fr) minmax(300px, 1.45fr);
-}
-
-.choice-actions {
-grid-column: 1 / -1;
-justify-content: flex-end;
-}
 }
 
 @media (max-width: 900px) {
@@ -1297,13 +1283,6 @@ overflow-x: auto;
 padding-bottom: 2px;
 }
 
-.selection-choice {
-grid-template-columns: 1fr;
-}
-
-.choice-actions {
-grid-column: auto;
-}
 }
 
 @media (max-width: 680px) {
@@ -1389,16 +1368,6 @@ min-height: 0;
 
 .forecast {
 grid-template-columns: 1fr;
-}
-
-.choice-actions {
-display: grid;
-grid-template-columns: auto 1fr;
-}
-
-.play-choice {
-width: 100%;
-min-width: 0;
 }
 
 .hand-grid {
@@ -1558,8 +1527,7 @@ padding-block: 5px;
 }
 
 .selection-area,
-.selection-empty,
-.selection-choice {
+.selection-empty {
 min-height: 52px;
 }
 
@@ -1567,8 +1535,7 @@ min-height: 52px;
 margin-top: 7px;
 }
 
-.selection-empty,
-.selection-choice {
+.selection-empty {
 padding-block: 6px;
 }
 
@@ -1600,7 +1567,7 @@ padding-top: 5px;
 }
 
 /* battleView/CBS state bindings */
-button.hand-card {
+details.hand-card {
 width: 100%;
 appearance: none;
 -webkit-appearance: none;
@@ -1614,32 +1581,17 @@ box-shadow: 0 0 0 1px var(--card-accent), 0 13px 30px rgba(0, 0, 0, 0.32), 0 0 2
 transform: translateY(-4px);
 }
 
-.hand-card[data-focused="1"] {
-outline: 2px solid rgba(255, 255, 255, 0.82);
-outline-offset: 3px;
-}
-
 .hand-card[data-origin="preview"] {
 border-style: dashed;
 }
 
-.hand-card:disabled {
-cursor: not-allowed;
+.hand-card[data-playable="false"] {
 filter: saturate(0.55);
 opacity: 0.62;
-transform: none;
 }
 
 .battle-shell[data-locked="true"] .hand-grid {
 opacity: 0.82;
-}
-
-.selection-choice[data-visible="1"] {
-display: grid;
-}
-
-.selection-empty[data-hidden="1"] {
-display: none;
 }
 
 .selection-status {
@@ -2089,7 +2041,7 @@ data-outcome="{{dictelement::{{tempvar::bv_outcome}}::status}}">
 <h2 class="hand-title">내 손패</h2>
 <span class="hand-count">{{dictelement::{{tempvar::bv_hand}}::count}}장</span>
 </div>
-<div class="hand-instruction">카드를 한 번 클릭하면 상세를 보고, 다시 클릭하면 등록합니다. 등록된 카드를 다시 클릭하면 취소합니다.</div>
+<div class="hand-instruction">카드 제목을 열어 상세를 확인한 뒤 등록 또는 취소 버튼을 누르세요. 상세 열기는 서버 호출 없이 즉시 동작합니다.</div>
 </div>
 <div class="zones" aria-label="카드 영역 요약">
 <div class="zone-state"><span class="zone-label">DECK</span><span class="zone-count">{{dictelement::{{tempvar::bv_zones}}::deckCount}}</span></div>
@@ -2111,52 +2063,23 @@ data-outcome="{{dictelement::{{tempvar::bv_outcome}}::status}}">
 </div>
 
 <div class="selection-area" aria-live="polite">
-{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}::is::null}}
 <div class="selection-empty">
 <span class="step-dot">1</span>
-<span><strong>상세를 볼 카드를 클릭하세요.</strong> 카드를 쓰지 않을 때도 별도 턴 종료 버튼 없이 Risu 전송 버튼을 누릅니다.</span>
+<span><strong>카드 제목을 열어 상세를 확인하세요.</strong> 카드를 쓰지 않을 때도 별도 턴 종료 버튼 없이 Risu 전송 버튼을 누릅니다.</span>
 </div>
-{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}::isnot::null}}
-<div class="selection-empty" data-hidden="1"></div>
-{{#each::keep {{dictelement::{{tempvar::bv_hand}}::items}} as focused_card}}
-{{#when::keep::{{dictelement::{{slot::focused_card}}::instanceId}}::is::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}}}
-<div class="selection-choice" data-visible="1">
-<div class="choice-name">
-<strong>{{dictelement::{{slot::focused_card}}::name}}</strong>
-{{#when::keep::{{dictelement::{{slot::focused_card}}::selected}}::is::true}}
-<span>등록 {{dictelement::{{slot::focused_card}}::selectionOrder}}번째 · 카드를 다시 클릭하면 등록을 취소합니다.</span>
-{{/when}}
-{{#when::keep::{{dictelement::{{slot::focused_card}}::selected}}::isnot::true}}
-<span>상세 확인 중 · 카드를 다시 클릭하면 사용할 카드로 등록합니다.</span>
-{{/when}}
-</div>
-<div class="forecast" aria-label="공개 카드 수치">
-<div class="forecast-item is-cyan"><span>은폐 비용</span><strong>{{dictelement::{{slot::focused_card}}::finalStealthCost}}</strong></div>
-<div class="forecast-item is-rose"><span>저항 감소</span><strong>{{dictelement::{{slot::focused_card}}::finalResistanceDamage}}</strong></div>
-<div class="forecast-item is-violet"><span>상태</span><strong>{{dictelement::{{slot::focused_card}}::reasonCode}}</strong></div>
-</div>
-</div>
-{{/when}}
-{{/each}}
-{{/when}}
 </div>
 
 <div class="hand-grid">
 {{#each::keep {{dictelement::{{tempvar::bv_hand}}::items}} as hand_card}}
 {{settempvar::hand_card_action::{{dictelement::{{slot::hand_card}}::actionTag}}}}
-<button class="hand-card"
-type="button"
+<details class="hand-card"
 data-instance-id="{{dictelement::{{slot::hand_card}}::instanceId}}"
 data-card-id="{{dictelement::{{slot::hand_card}}::cardId}}"
 data-origin="{{dictelement::{{slot::hand_card}}::origin}}"
 data-selected="{{dictelement::{{slot::hand_card}}::selected}}"
 data-action-id="{{dictelement::{{tempvar::hand_card_action}}::id}}"
-{{#when::keep::{{dictelement::{{slot::hand_card}}::instanceId}}::is::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}}}data-focused="1"{{/when}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::instanceId}}::isnot::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}}}data-focused="0"{{/when}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::playable}}::is::true}}risu-btn="battleController|clickCard|{{dictelement::{{slot::hand_card}}::instanceId}}|{{dictelement::{{tempvar::bv}}::interactionToken}}"{{/when}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::playable}}::isnot::true}}disabled{{/when}}
-aria-label="카드 상세 및 등록 상태 전환">
+data-playable="{{dictelement::{{slot::hand_card}}::playable}}">
+<summary class="hand-card-summary">
 <span class="card-top">
 <span class="card-cost">{{dictelement::{{slot::hand_card}}::finalStealthCost}}</span>
 <span class="card-kind">{{dictelement::{{tempvar::hand_card_action}}::label}}</span>
@@ -2168,34 +2091,53 @@ aria-label="카드 상세 및 등록 상태 전환">
 <span class="card-tag is-active">{{dictelement::{{slot::card_mechanism}}::label}} <span class="tag-tooltip">{{dictelement::{{slot::card_mechanism}}::tooltip}}</span></span>
 {{/each}}
 </span>
-<span class="card-rule">
+<span class="card-bottom">
+<span class="card-select-hint">
+{{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::is::true}}등록 {{dictelement::{{slot::hand_card}}::selectionOrder}} · 상세를 열어 취소{{/when}}
+{{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::isnot::true}}상세 열기{{/when}}
+</span>
+<span class="card-damage"><small>저항</small> {{dictelement::{{slot::hand_card}}::finalResistanceDamage}}</span>
+</span>
+</summary>
+<div class="hand-card-details">
+<div class="card-rule">
 {{#each::keep {{dictelement::{{slot::hand_card}}::descriptionSegments}} as card_description_segment}}
 {{#when::keep::{{dictelement::{{slot::card_description_segment}}::kind}}::is::text}}{{dictelement::{{slot::card_description_segment}}::value}}{{/when}}
 {{#when::keep::{{dictelement::{{slot::card_description_segment}}::kind}}::isnot::text}}<span class="inline-tag">{{dictelement::{{slot::card_description_segment}}::label}} <span class="tag-tooltip">{{dictelement::{{slot::card_description_segment}}::tooltip}}</span></span>{{/when}}
 {{/each}}
-</span>
-<span class="card-rule-lines">
+</div>
+<div class="card-rule-lines">
 {{#each::keep {{dictelement::{{slot::hand_card}}::ruleLines}} as card_rule_line}}
-<span class="rule-line">
+<div class="rule-line">
 {{#each::keep {{dictelement::{{slot::card_rule_line}}::segments}} as card_rule_segment}}
 {{#when::keep::{{dictelement::{{slot::card_rule_segment}}::kind}}::is::text}}{{dictelement::{{slot::card_rule_segment}}::value}}{{/when}}
 {{#when::keep::{{dictelement::{{slot::card_rule_segment}}::kind}}::isnot::text}}<span class="inline-tag">{{dictelement::{{slot::card_rule_segment}}::label}} <span class="tag-tooltip">{{dictelement::{{slot::card_rule_segment}}::tooltip}}</span></span>{{/when}}
 {{/each}}
-</span>
+</div>
 {{/each}}
-</span>
-<span class="card-modifier"><strong>비용</strong> 기본 {{dictelement::{{slot::hand_card}}::baseStealthCost}} / 최종 {{dictelement::{{slot::hand_card}}::finalStealthCost}} · <strong>저항</strong> 기본 {{dictelement::{{slot::hand_card}}::baseResistanceDamage}} / 최종 {{dictelement::{{slot::hand_card}}::finalResistanceDamage}}</span>
-<span class="card-bottom">
-<span class="card-select-hint">
-{{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::is::true}}등록 {{dictelement::{{slot::hand_card}}::selectionOrder}} · 클릭해 취소{{/when}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::isnot::true}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::instanceId}}::is::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}}}상세 확인 중 · 클릭해 등록{{/when}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::instanceId}}::isnot::{{dictelement::{{tempvar::bv_selection}}::focusedInstanceId}}}}클릭해 상세 보기{{/when}}
+</div>
+<div class="card-modifier"><strong>비용</strong> 기본 {{dictelement::{{slot::hand_card}}::baseStealthCost}} / 최종 {{dictelement::{{slot::hand_card}}::finalStealthCost}} · <strong>저항</strong> 기본 {{dictelement::{{slot::hand_card}}::baseResistanceDamage}} / 최종 {{dictelement::{{slot::hand_card}}::finalResistanceDamage}}</div>
+<div class="forecast" aria-label="공개 카드 수치">
+<div class="forecast-item is-cyan"><span>은폐 비용</span><strong>{{dictelement::{{slot::hand_card}}::finalStealthCost}}</strong></div>
+<div class="forecast-item is-rose"><span>저항 감소</span><strong>{{dictelement::{{slot::hand_card}}::finalResistanceDamage}}</strong></div>
+<div class="forecast-item is-violet"><span>상태</span><strong>{{dictelement::{{slot::hand_card}}::reasonCode}}</strong></div>
+</div>
+<div class="hand-card-actions">
+{{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::is::true}}
+<button class="hand-card-action is-cancel" type="button"
+{{#when::keep::{{dictelement::{{slot::hand_card}}::playable}}::is::true}}risu-btn="battleController|cancelCard|{{dictelement::{{slot::hand_card}}::instanceId}}|{{dictelement::{{tempvar::bv}}::interactionToken}}"{{/when}}
+{{#when::keep::{{dictelement::{{slot::hand_card}}::playable}}::isnot::true}}disabled{{/when}}
+><span class="sr-only">{{dictelement::{{slot::hand_card}}::name}} 카드 </span>등록 취소</button>
 {{/when}}
-</span>
-<span class="card-damage"><small>저항</small> {{dictelement::{{slot::hand_card}}::finalResistanceDamage}}</span>
-</span>
-</button>
+{{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::isnot::true}}
+<button class="hand-card-action" type="button"
+{{#when::keep::{{dictelement::{{slot::hand_card}}::playable}}::is::true}}risu-btn="battleController|registerCard|{{dictelement::{{slot::hand_card}}::instanceId}}|{{dictelement::{{tempvar::bv}}::interactionToken}}"{{/when}}
+{{#when::keep::{{dictelement::{{slot::hand_card}}::playable}}::isnot::true}}disabled{{/when}}
+><span class="sr-only">{{dictelement::{{slot::hand_card}}::name}} </span>카드 등록</button>
+{{/when}}
+</div>
+</div>
+</details>
 {{/each}}
 {{#when::keep::{{dictelement::{{tempvar::bv_hand}}::count}}::is::0}}
 <div class="history-entry">현재 표시할 손패가 없습니다.</div>

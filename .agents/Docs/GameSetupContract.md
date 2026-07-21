@@ -72,7 +72,7 @@ runScript(triggerId, "gameSetup", "choose", state, {
 }, staticData)
 ```
 
-상태 전체를 먼저 재생 검증한다. 올바른 명령은 제안에 포함된 카드 한 장을 선택하고 다음 제안을 한 번 생성한다. 열 번째 선택 뒤에는 추가 RNG를 소비하지 않고 `deckComplete`로 전환한다.
+상태 전체를 먼저 cursor 0부터 한 번 재생 검증한다. 올바른 명령은 재생이 반환한 canonical state의 현재 RNG cursor에서 이어서 다음 제안만 증분 생성한다. 이 증분 경로는 기준 `replay`와 동일한 state·RNG·token을 만들어야 하며, 저장소를 새로 읽는 복구와 `validate`는 항상 전체 `replay`를 사용한다. 열 번째 선택 뒤에는 추가 RNG를 소비하지 않고 `deckComplete`로 전환한다.
 
 유효한 형식의 이전 interaction token으로 다시 클릭한 경우는 오류가 아니라 성공한 no-op이다.
 
@@ -101,7 +101,7 @@ runScript(triggerId, "gameSetup", "validate", state, staticData)
 
 1. 선택 횟수가 2보다 작은 플레이어 카드 ID만 모은다.
 2. ID를 ASCII 오름차순으로 정렬한다.
-3. `deterministicRng.nextInteger`를 사용해 비복원으로 3개를 뽑는다.
+3. 범위 `(N, N-1, N-2)`를 `deterministicRng.nextIntegers`에 한 번 전달해 비복원으로 3개를 뽑는다. batch 내부는 기존 `nextInteger`의 rejection sampling을 같은 순서로 실행하므로 RNG cursor와 추첨 결과는 v1과 정확히 같다.
 4. 추첨 순서를 그대로 화면 제안 순서로 보존한다.
 
 Lua의 `pairs` 순서, 현재 시간, 전역 난수, DB의 선언 순서는 결과에 영향을 주지 않는다. 같은 seed, 같은 정적 카드 집합과 같은 선택 이력은 별도 Lua 프로세스에서도 같은 제안과 최종 덱을 만든다.
@@ -165,14 +165,17 @@ wire 형식은 `game-setup-draft-v1:<canonicalLength>:<hashA>:<hashB>`이며 각
 
 ## 8. 후속 호스트 컨트롤러 계약
 
-`System/gameSetupController.lua`는 순수 모듈을 RisuAI 호스트에 연결하는 얇은 경계다. `init.lua`는 시작 버튼의 action을 해석하거나 상태를 직접 만들지 않고 `start`와 카드 선택 action을 이 컨트롤러에 전달한다. `main.lua`는 이 연결에 참여하지 않는다.
+`System/gameSetupController.lua`는 순수 모듈을 RisuAI 호스트에 연결하는 얇은 경계다. `init.lua`는 시작 버튼의 action을 해석하거나 상태를 직접 만들지 않고 `start`와 카드 선택 action을 이 컨트롤러에 전달한다. `main.lua`는 허용된 버튼 route, 모듈 cache와 상시 `editDisplay` anchor를 제공하지만 setup 규칙을 판정하지 않는다.
 
 컨트롤러가 소유하는 영속 키와 공개 채팅 변수는 다음과 같다.
 
 - 권위 상태: `gameSetupV1.authority`
 - 공개 View wire: `gameSetupView`
 - 준비 마커: `gameSetupReady`
-- UI anchor: `🔯🔯🔯`
+- 동적 UI body: `🔯🔯🔯`
+- 버전된 정적 shell: `helltrainUiShellV1`, `helltrainUiShellRevision`
+- 독립 popup slot: `helltrainUiPopupV1`
+- 표시 anchor index: `helltrainUiAnchorIndexV1`
 
 새 권위 상태가 없을 때 `start`는 RisuAI의 `cbs('{{randint::1::2147483646}}')`를 정확히 한 번 호출한다. 결과가 1..2147483646 범위의 정수가 아니거나 `cbs`가 없거나 예외를 던지면 다른 난수원으로 대체하지 않고 구조화 오류로 실패한다. 정상 결과가 `seed`라면 `setupId`는 `setup-<seed>`로 정하고 두 값을 권위 상태에 저장한다. 이미 권위 상태가 있는 재시작과 게시 재시도는 `cbs`를 호출하지 않고 저장 상태를 재생 검증하므로 seed와 제안을 바꾸지 않는다.
 
@@ -186,16 +189,18 @@ gameSetupReady = "updating" 쓰기/재읽기
 → 새 시작/적용 전이이면 권위 상태 쓰기/재읽기
 → gameSetupView 생성
 → gameSetupView wire 쓰기/재읽기
-→ cardDraft UI anchor 쓰기/재읽기
+→ shell revision이 다를 때만 sideBar shell 쓰기/재읽기
+→ cardDraft UI body 쓰기/재읽기
 → gameSetupReady = "ready" 쓰기/재읽기
-→ reloadDisplay
+→ controller 반환
+→ RisuAI button host가 클릭된 message pointer를 1회 remount
 ```
 
-각 호스트 쓰기는 즉시 해당 getter로 다시 읽고 방금 쓴 값과 정확히 같은지 확인한다. 읽기 결과가 다르면 `*_write_not_persisted` 계열의 구조화 오류로 실패한다. `reloadDisplay`는 권위 상태, 공개 View, UI anchor와 최종 `ready` 마커가 모두 재읽기 검증을 통과한 뒤에만 한 번 호출한다.
+각 호스트 쓰기는 즉시 해당 getter로 다시 읽고 방금 쓴 값과 정확히 같은지 확인한다. 읽기 결과가 다르면 `*_write_not_persisted` 계열의 구조화 오류로 실패한다. 동일 transaction에서 이미 검증된 canonical snapshot과 readback이 exact-equal이면 저장 직후에 또 전체 replay하지 않는다. 다음 이벤트에서 저장소를 새로 읽으면 다시 전체 검증한다. controller는 확정된 `ready`까지 게시하고 수동 reload를 호출하지 않는다. RisuAI의 `risu-btn` host가 trigger 반환 뒤 이미 클릭 message를 remount하므로, controller reload를 더하면 같은 HTML/CBS 파싱이 중복된다. `sideBar.html`은 content hash revision이 같으면 다시 읽거나 body와 함께 복사하지 않는다.
 
 RisuAI의 `getLoreBooks`는 로어북 내용을 반환하기 전에 CBS를 평가한다. 따라서 `cardDraft.html`은 `gameSetupView` wire의 쓰기와 재읽기 검증이 모두 끝난 뒤에만 로드해야 한다. View보다 먼저 로드하면 템플릿이 빈 값이나 이전 라운드의 View로 선평가된 정적 HTML이 되어, 이후 View를 게시해도 UI가 대기 화면에 머물거나 한 라운드 뒤처진다.
 
-`updating`은 성공 표시가 아니다. 게시 과정이 중단되면 `ready`를 기록하거나 reload하지 않는다. 다음 `start` 호출은 저장된 권위 상태가 유효할 때 새 상태를 덮어쓰지 않고 동일 상태에서 게시를 재개한다. 따라서 권위 저장 뒤 View/UI 게시가 실패해도 재시작이 선택 이력과 RNG를 초기화하지 않는다.
+`updating`은 성공 표시가 아니다. 게시 과정이 중단되면 controller는 `ready`를 기록하지 않는다. 다음 `start` 호출은 저장된 권위 상태가 유효할 때 새 상태를 덮어쓰지 않고 동일 상태에서 게시를 재개한다. 따라서 권위 저장 뒤 View/UI 게시가 실패해도 재시작이 선택 이력과 RNG를 초기화하지 않는다.
 
 ### 8.2 카드 선택
 
@@ -203,20 +208,19 @@ RisuAI의 `getLoreBooks`는 로어북 내용을 반환하기 전에 CBS를 평�
 
 - 현재 token이면 선택 전이 결과를 권위 키에 write-read 검증해 저장한 뒤 새 View와 UI를 위 순서대로 게시한다.
 - 이전 token이면 `gameSetup.choose`의 `applied = false`, `stale = true`를 보존한다. 이 경로는 권위 상태를 한 번도 쓰지 않고 현재 View/UI만 재게시하므로 더블클릭이 두 장을 선택하지 않는다.
-- 유효하지 않은 카드 ID, token 또는 손상된 권위 상태는 실패하며 권위 상태를 쓰거나 reload하지 않는다.
+- 유효하지 않은 카드 ID, token 또는 손상된 권위 상태는 실패하며 컨트롤러가 권위 상태를 쓰지 않는다. 클릭 message의 host remount 여부는 이 성공/실패와 무관하다.
 - 열 번째 유효 선택은 `deckComplete` 권위 상태와 `deckComplete` View를 게시한다. 현재 구현은 가짜 캐릭터 후보를 만들지 않는다.
 
 ### 8.3 오류와 입력 불변성
 
 컨트롤러의 모든 실패는 `schemaVersion`, `ok = false`, 비어 있지 않은 `errors` 배열을 가진다. 각 오류에는 문자열 `code`, `path`, `message`가 있다. 다음 상황을 최소한 구분한다.
 
-- 필요한 host getter/setter 또는 `reloadDisplay`가 없음
+- 필요한 host getter/setter가 없음
 - 하위 모듈 호출이 예외를 던짐
 - `cbs`가 없음/예외 또는 randint 결과 seed가 정수·범위 계약을 위반함
 - 저장된 권위 상태가 재생 검증에 실패함
 - 권위 상태 write-read 불일치
 - View wire write-read 불일치
-- UI anchor write-read 불일치
 - 준비 마커 write-read 불일치
 
 실패 응답은 Lua 예외를 호스트 밖으로 흘리지 않는다. 실패한 호출은 전달받은 command, 기존 권위 상태와 정적 데이터를 직접 수정하지 않는다. View/UI 게시 실패 전에 이미 write-read 검증된 권위 전이는 롤백을 가장하지 않으며, 다음 동일 token 호출은 stale 복구 경로로 현재 화면을 다시 게시한다.

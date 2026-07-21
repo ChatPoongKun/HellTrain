@@ -5,6 +5,9 @@
     local VIEW_NAME = "gameSetupView"
     local READY_NAME = "gameSetupReady"
     local UI_NAME = "🔯🔯🔯"
+    local UI_SHELL_NAME = "helltrainUiShellV1"
+    local UI_SHELL_REVISION_NAME = "helltrainUiShellRevision"
+    local UI_SHELL_REVISION = "sidebar-e3f104ae8f3037cd"
     local arguments = { ... }
     local argumentCount = select("#", ...)
 
@@ -319,7 +322,13 @@
                 makeError("cbs_unavailable", "$.host.cbs", "초기 seed를 만들 CBS 함수를 찾을 수 없습니다."),
             }
         end
-        local ok, rendered = pcall(cbs, "{{randint::1::2147483646}}")
+        -- getLoreBooks가 Lua 로어를 반환하기 전에 CBS를 평가하므로,
+        -- 소스에 완성된 동적 매크로를 두면 컴파일 캐시가 첫 seed를
+        -- 고정할 수 있다. 호스트 cbs 호출 직전에만 문자열을 조립한다.
+        local seedMacro = string.rep("{", 2)
+            .. "randint::1::2147483646"
+            .. string.rep("}", 2)
+        local ok, rendered = pcall(cbs, seedMacro)
         if not ok then
             return nil, {
                 makeError("seed_generation_failed", "$.host.cbs", "초기 seed 생성에 실패했습니다: " .. tostring(rendered)),
@@ -353,17 +362,6 @@
                 makeError("lore_loader_unavailable", "$.host.loadLores", "UI 로어북을 읽을 loadLores 함수를 찾을 수 없습니다."),
             }
         end
-        local sideOk, sideBar = pcall(loadLores, triggerId, "sideBar.html")
-        if not sideOk then
-            return nil, {
-                makeError("lore_load_failed", "$.lore.sideBar", "sideBar.html을 읽지 못했습니다: " .. tostring(sideBar)),
-            }
-        end
-        if type(sideBar) ~= "string" or sideBar == "" then
-            return nil, {
-                makeError("missing_lore", "$.lore.sideBar", "sideBar.html 로어북 내용이 없습니다."),
-            }
-        end
         local draftOk, cardDraft = pcall(loadLores, triggerId, "cardDraft.html")
         if not draftOk then
             return nil, {
@@ -375,14 +373,30 @@
                 makeError("missing_lore", "$.lore.cardDraft", "cardDraft.html 로어북 내용이 없습니다."),
             }
         end
-        return sideBar .. cardDraft, nil
+        return cardDraft, nil
+    end
+
+    local function permitCanonicalView(purpose, viewName)
+        if purpose == "gameSetupViewCanonicalV1" then
+            return true
+        end
+        return purpose == "dataBridgeCanonicalV1" and viewName == VIEW_NAME
     end
 
     local function buildTarget(state, staticData)
         local stateCopy, stateCopyError = cloneJson(state, "$.target.state")
         if stateCopyError then return nil, { stateCopyError } end
 
-        local viewReport, viewErrors = callModule("gameSetupView", "build", stateCopy, staticData)
+        -- stateCopy는 이 controller transaction에서 gameSetup.start/choose/validate가
+        -- 반환한 canonical state이다. 버튼 문자열로 위조할 수 없는
+        -- 함수 capability를 넘겨 View의 전체 authority replay만 중복 제거한다.
+        local viewReport, viewErrors = callModule(
+            "gameSetupView",
+            "_buildCanonical",
+            stateCopy,
+            staticData,
+            permitCanonicalView
+        )
         if viewErrors then return nil, viewErrors end
         if type(viewReport.view) ~= "table" or getmetatable(viewReport.view) ~= nil then
             return nil, {
@@ -402,7 +416,6 @@
         local required = {
             { name = "setChatVar", value = setChatVar },
             { name = "getChatVar", value = getChatVar },
-            { name = "reloadDisplay", value = reloadDisplay },
         }
         if writeAuthority then
             required[#required + 1] = { name = "setState", value = setState }
@@ -443,7 +456,46 @@
         return nil
     end
 
-    local function writeAuthorityVerified(state, staticData)
+    local function ensureUiShell()
+        local revisionOk, currentRevision = pcall(getChatVar, triggerId, UI_SHELL_REVISION_NAME)
+        if not revisionOk then
+            return {
+                makeError("chat_var_verify_failed", "$.chatVar.uiShellRevision", "UI shell revision을 읽지 못했습니다: " .. tostring(currentRevision)),
+            }
+        end
+        local shellOk, currentShell = pcall(getChatVar, triggerId, UI_SHELL_NAME)
+        if not shellOk then
+            return {
+                makeError("chat_var_verify_failed", "$.chatVar.uiShell", "UI shell을 읽지 못했습니다: " .. tostring(currentShell)),
+            }
+        end
+        if currentRevision == UI_SHELL_REVISION
+            and type(currentShell) == "string"
+            and currentShell ~= "" then
+            return nil
+        end
+
+        local loadOk, sideBar = pcall(loadLores, triggerId, "sideBar.html")
+        if not loadOk then
+            return {
+                makeError("lore_load_failed", "$.lore.sideBar", "sideBar.html을 읽지 못했습니다: " .. tostring(sideBar)),
+            }
+        end
+        if type(sideBar) ~= "string" or sideBar == "" then
+            return {
+                makeError("missing_lore", "$.lore.sideBar", "sideBar.html 로어북 내용이 없습니다."),
+            }
+        end
+        local shellErrors = writeChatVarVerified(UI_SHELL_NAME, sideBar, "$.chatVar.uiShell")
+        if shellErrors then return shellErrors end
+        return writeChatVarVerified(
+            UI_SHELL_REVISION_NAME,
+            UI_SHELL_REVISION,
+            "$.chatVar.uiShellRevision"
+        )
+    end
+
+    local function writeAuthorityVerified(state)
         local storedCopy, copyError = cloneJson(state, "$.state.authority")
         if copyError then return { copyError } end
         local writeOk, writeError = pcall(setState, triggerId, AUTHORITY_KEY, storedCopy)
@@ -463,13 +515,9 @@
                 makeError("state_write_not_persisted", "$.state.authority", "쓰기 뒤 읽은 상태가 저장하려던 상태와 다릅니다."),
             }
         end
-        local validated, validationErrors = callModule("gameSetup", "validate", stored, staticData)
-        if validationErrors then return validationErrors end
-        if type(validated.state) ~= "table" or not deepEqual(stored, validated.state) then
-            return {
-                makeError("state_validation_mismatch", "$.state.authority", "저장 상태의 검증 결과가 읽어낸 상태와 일치하지 않습니다."),
-            }
-        end
+        -- 동일 transaction에서 gameSetup이 만든 canonical snapshot과
+        -- host readback이 exact-equal이므로 또 전체 replay할 필요는 없다.
+        -- 다음 이벤트에서 저장소를 다시 읽을 때는 다시 검증한다.
         return nil
     end
 
@@ -486,14 +534,20 @@
     local function publishState(state, writeAuthority, actionName, applied, stale, staticData)
 
         if writeAuthority then
-            local authorityErrors = writeAuthorityVerified(state, staticData)
+            local authorityErrors = writeAuthorityVerified(state)
             if authorityErrors then return failure(authorityErrors) end
         end
 
         local target, targetErrors = buildTarget(state, staticData)
         if targetErrors then return failure(targetErrors) end
 
-        local published, publishErrors = callModule("dataBridge", "publish", VIEW_NAME, target.view)
+        local published, publishErrors = callModule(
+            "dataBridge",
+            "_publishCanonical",
+            VIEW_NAME,
+            target.view,
+            permitCanonicalView
+        )
         if publishErrors then return failure(publishErrors) end
         if type(published.encoded) ~= "string" or published.encoded == "" then
             return failure({
@@ -512,6 +566,9 @@
             })
         end
 
+        local shellErrors = ensureUiShell()
+        if shellErrors then return failure(shellErrors) end
+
         -- getLoreBooks는 로어 내용을 반환하기 전에 CBS를 평가한다. 따라서
         -- cardDraft.html은 방금 게시한 gameSetupView를 재읽을 수 있게 View
         -- write-read 검증이 끝난 뒤에만 로드해야 한다.
@@ -522,12 +579,9 @@
         local readyErrors = writeChatVarVerified(READY_NAME, "ready", "$.chatVar.gameSetupReady")
         if readyErrors then return failure(readyErrors) end
 
-        local reloadOk, reloadError = pcall(reloadDisplay, triggerId)
-        if not reloadOk then
-            return failure({
-                makeError("display_reload_failed", "$.host.reloadDisplay", "게임 설정 화면 갱신에 실패했습니다: " .. tostring(reloadError)),
-            })
-        end
+        -- start/choose는 risu-btn 호출 전용이다. RisuAI가 button trigger
+        -- 완료 직후 클릭된 message pointer를 한 번 remount하므로 여기서
+        -- 또 reload하면 같은 HTML/CBS를 두 번 파싱하게 된다.
 
         local returnState, stateError = cloneJson(target.state, "$.result.state")
         if stateError then return failure({ stateError }) end
@@ -626,14 +680,9 @@
 
         local stored, readErrors = readAuthority(true)
         if readErrors then return failure(readErrors) end
-        local validated, validationErrors = callModule("gameSetup", "validate", stored, staticData)
-        if validationErrors then return failure(validationErrors) end
-        if type(validated.state) ~= "table" or not deepEqual(stored, validated.state) then
-            return failure({
-                makeError("authority_validation_mismatch", "$.state.authority", "저장된 설정 상태의 정규 검증 결과가 원본과 일치하지 않습니다."),
-            })
-        end
-        local chosen, chooseErrors = callModule("gameSetup", "choose", validated.state, command, staticData)
+        -- choose가 저장소에서 읽은 authority를 처음부터 한 번
+        -- 재생 검증하고, 검증된 RNG cursor에서 다음 offer만 생성한다.
+        local chosen, chooseErrors = callModule("gameSetup", "choose", stored, command, staticData)
         if chooseErrors then return failure(chooseErrors) end
         if type(chosen.state) ~= "table"
             or type(chosen.applied) ~= "boolean"
@@ -647,7 +696,7 @@
                 makeError("invalid_stale_result", "$.runtime.gameSetup", "stale 선택 결과는 적용 상태일 수 없습니다."),
             })
         end
-        if chosen.stale == true and not deepEqual(chosen.state, validated.state) then
+        if chosen.stale == true and not deepEqual(chosen.state, stored) then
             return failure({
                 makeError("stale_state_changed", "$.runtime.gameSetup.state", "stale 선택이 권위 상태를 변경했습니다."),
             })

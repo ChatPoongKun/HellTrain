@@ -1,4 +1,173 @@
-(function(triggerId, action)
+(function()
+    local STATIC_CACHE_MAX_ENTRIES = 4
+    local STATIC_LORE_ORDER = {
+        "GameRegistry.db",
+        "PlayerCards.db",
+        "CharacterCards.db",
+        "CharTraits.db",
+        "Environments.db",
+        "YooJiyoung.db",
+    }
+    local staticCacheEntries = {}
+    local staticCacheClock = 0
+    local staticCacheStats = {
+        requests = 0,
+        captures = 0,
+        fastHits = 0,
+        hits = 0,
+        misses = 0,
+        validations = 0,
+        failedValidations = 0,
+        evictions = 0,
+        clears = 0,
+    }
+
+    -- 캐시의 canonical snapshot을 호출자에게 직접 노출하지 않는다. 함수는 정적
+    -- DB callback이므로 identity를 유지하고, 모든 table은 alias가 없도록 복제한다.
+    local function cloneStaticValue(value, seen)
+        if type(value) ~= "table" then
+            return value
+        end
+
+        seen = seen or {}
+        if seen[value] ~= nil then
+            return seen[value]
+        end
+
+        local copy = {}
+        seen[value] = copy
+        for key, item in pairs(value) do
+            copy[cloneStaticValue(key, seen)] = cloneStaticValue(item, seen)
+        end
+        return copy
+    end
+
+    -- getLoreBooks 결과의 metadata는 DB 판정에 사용하지 않는다. 개발/강제 refresh
+    -- 경로에서는 content와 순서 전체를 비교해 context 오염과 stale hit를 막는다.
+    -- production fast path의 배포 무효화는 main의 RUNTIME_BUNDLE_REVISION 계약이다.
+    local function captureStaticLores(triggerId)
+        staticCacheStats.captures = staticCacheStats.captures + 1
+        local captured = {}
+        for _, loreName in ipairs(STATIC_LORE_ORDER) do
+            local ok, lores = pcall(getLoreBooks, triggerId, loreName)
+            local source = {
+                status = ok and type(lores) or "read_error",
+                entries = {},
+            }
+            if not ok then
+                source.error = tostring(lores)
+            elseif type(lores) == "table" then
+                for _, lore in ipairs(lores) do
+                    if type(lore) == "table" and type(lore.content) == "string" then
+                        table.insert(source.entries, {
+                            valid = true,
+                            content = lore.content,
+                        })
+                    else
+                        table.insert(source.entries, {
+                            valid = false,
+                            loreType = type(lore),
+                            contentType = type(lore) == "table" and type(lore.content) or "none",
+                        })
+                    end
+                end
+            end
+            captured[loreName] = source
+        end
+        return captured
+    end
+
+    local function sameStaticLoreCapture(left, right)
+        for _, loreName in ipairs(STATIC_LORE_ORDER) do
+            local leftSource = left[loreName]
+            local rightSource = right[loreName]
+            if leftSource == nil
+                or rightSource == nil
+                or leftSource.status ~= rightSource.status
+                or leftSource.error ~= rightSource.error
+                or #leftSource.entries ~= #rightSource.entries then
+                return false
+            end
+            for index, leftEntry in ipairs(leftSource.entries) do
+                local rightEntry = rightSource.entries[index]
+                if rightEntry == nil
+                    or leftEntry.valid ~= rightEntry.valid
+                    or leftEntry.content ~= rightEntry.content
+                    or leftEntry.loreType ~= rightEntry.loreType
+                    or leftEntry.contentType ~= rightEntry.contentType then
+                    return false
+                end
+            end
+        end
+        return true
+    end
+
+    local function findStaticCacheEntry(captured)
+        for _, entry in ipairs(staticCacheEntries) do
+            if sameStaticLoreCapture(entry.sources, captured) then
+                staticCacheClock = staticCacheClock + 1
+                entry.lastUsed = staticCacheClock
+                entry.hits = entry.hits + 1
+                return entry
+            end
+        end
+        return nil
+    end
+
+    local function storeStaticCacheEntry(captured, report)
+        if #staticCacheEntries >= STATIC_CACHE_MAX_ENTRIES then
+            local oldestIndex = 1
+            for index = 2, #staticCacheEntries do
+                if staticCacheEntries[index].lastUsed < staticCacheEntries[oldestIndex].lastUsed then
+                    oldestIndex = index
+                end
+            end
+            table.remove(staticCacheEntries, oldestIndex)
+            staticCacheStats.evictions = staticCacheStats.evictions + 1
+        end
+
+        staticCacheClock = staticCacheClock + 1
+        table.insert(staticCacheEntries, {
+            sources = captured,
+            report = report,
+            lastUsed = staticCacheClock,
+            hits = 0,
+        })
+    end
+
+    local function clearStaticCache()
+        local removed = #staticCacheEntries
+        staticCacheEntries = {}
+        staticCacheStats.clears = staticCacheStats.clears + 1
+        return removed
+    end
+
+    local function getStaticCacheDiagnostics()
+        local diagnostics = {
+            maxEntries = STATIC_CACHE_MAX_ENTRIES,
+            entries = #staticCacheEntries,
+            requests = staticCacheStats.requests,
+            captures = staticCacheStats.captures,
+            fastHits = staticCacheStats.fastHits,
+            hits = staticCacheStats.hits,
+            misses = staticCacheStats.misses,
+            validations = staticCacheStats.validations,
+            failedValidations = staticCacheStats.failedValidations,
+            evictions = staticCacheStats.evictions,
+            clears = staticCacheStats.clears,
+            cached = {},
+        }
+        for _, entry in ipairs(staticCacheEntries) do
+            table.insert(diagnostics.cached, {
+                hits = entry.hits,
+                lastUsed = entry.lastUsed,
+                counts = cloneStaticValue(entry.report.counts),
+            })
+        end
+        return diagnostics
+    end
+
+    return function(triggerId, action)
     local SUPPORTED_SCHEMA_VERSION = 1
 
     local SOURCES = {
@@ -99,16 +268,25 @@
         }
     end
 
-    local function loadLoreModules(loreName, errors)
-        local lores = getLoreBooks(triggerId, loreName)
-        if type(lores) ~= "table" or #lores == 0 then
+    local function loadLoreModules(loreName, errors, captured)
+        local source = captured[loreName]
+        if source == nil or source.status == "read_error" then
+            addError(
+                errors,
+                "lore_read_error",
+                loreName,
+                source and source.error or "정적 DB 로어북을 읽을 수 없습니다."
+            )
+            return {}
+        end
+        if source.status ~= "table" or #source.entries == 0 then
             addError(errors, "missing_lore", loreName, "정적 DB 로어북을 찾을 수 없습니다.")
             return {}
         end
 
         local modules = {}
-        for index, lore in ipairs(lores) do
-            if type(lore) ~= "table" or type(lore.content) ~= "string" then
+        for index, lore in ipairs(source.entries) do
+            if lore.valid ~= true then
                 addError(errors, "invalid_lore", loreName .. "[" .. index .. "]", "로어북 내용이 문자열이 아닙니다.")
             else
                 local chunk, compileError = load(
@@ -146,11 +324,11 @@
         end
     end
 
-    local function loadSingleModule(source, errors)
+    local function loadSingleModule(source, errors, captured)
         local loaded = nil
 
         for _, loreName in ipairs(source.lores) do
-            local modules = loadLoreModules(loreName, errors)
+            local modules = loadLoreModules(loreName, errors, captured)
             for index, module in ipairs(modules) do
                 local path = loreName .. "[" .. index .. "]"
                 validateModuleHeader(module, source.kind, path, errors)
@@ -166,12 +344,12 @@
         return loaded
     end
 
-    local function loadMergedCollection(source, errors)
+    local function loadMergedCollection(source, errors, captured)
         local merged = {}
         local origins = {}
 
         for _, loreName in ipairs(source.lores) do
-            local modules = loadLoreModules(loreName, errors)
+            local modules = loadLoreModules(loreName, errors, captured)
             for index, module in ipairs(modules) do
                 local modulePath = loreName .. "[" .. index .. "]"
                 validateModuleHeader(module, source.kind, modulePath, errors)
@@ -780,13 +958,13 @@
         end
     end
 
-    local function loadAndValidateAll()
+    local function validateCapturedStaticData(captured)
         local errors = {}
-        local registry = loadSingleModule(SOURCES.registry, errors)
-        local cards = loadMergedCollection(SOURCES.cards, errors)
-        local traits = loadMergedCollection(SOURCES.traits, errors)
-        local environments = loadMergedCollection(SOURCES.environments, errors)
-        local characters = loadMergedCollection(SOURCES.characters, errors)
+        local registry = loadSingleModule(SOURCES.registry, errors, captured)
+        local cards = loadMergedCollection(SOURCES.cards, errors, captured)
+        local traits = loadMergedCollection(SOURCES.traits, errors, captured)
+        local environments = loadMergedCollection(SOURCES.environments, errors, captured)
+        local characters = loadMergedCollection(SOURCES.characters, errors, captured)
 
         validateRegistry(registry, errors)
         validateCards(cards, registry, errors)
@@ -814,12 +992,76 @@
         }
     end
 
+    local function loadAndValidateAll(forceRefresh)
+        staticCacheStats.requests = staticCacheStats.requests + 1
+
+        -- main production warm cache는 bundle revision + mode + chat + character별로
+        -- handler closure를 분리한다. 따라서 같은 handler의 성공 snapshot은 source를
+        -- 다시 읽지 않고 안전하게 재사용할 수 있다. main 없이 직접 실행되는 로컬
+        -- 계약 검사는 global이 nil이므로 기존처럼 매번 source identity를 확인한다.
+        if forceRefresh ~= true
+            and RUNTIME_CACHE_DEVELOPMENT_BYPASS == false
+            and #staticCacheEntries > 0 then
+            local newest = staticCacheEntries[1]
+            for index = 2, #staticCacheEntries do
+                if staticCacheEntries[index].lastUsed > newest.lastUsed then
+                    newest = staticCacheEntries[index]
+                end
+            end
+            staticCacheClock = staticCacheClock + 1
+            newest.lastUsed = staticCacheClock
+            newest.hits = newest.hits + 1
+            staticCacheStats.fastHits = staticCacheStats.fastHits + 1
+            staticCacheStats.hits = staticCacheStats.hits + 1
+            return cloneStaticValue(newest.report)
+        end
+
+        local captured = captureStaticLores(triggerId)
+        local cached = findStaticCacheEntry(captured)
+        if cached ~= nil then
+            staticCacheStats.hits = staticCacheStats.hits + 1
+            return cloneStaticValue(cached.report)
+        end
+
+        staticCacheStats.misses = staticCacheStats.misses + 1
+        staticCacheStats.validations = staticCacheStats.validations + 1
+        local report = validateCapturedStaticData(captured)
+        if report.ok == true then
+            -- canonical report는 cache 내부에만 남기고 호출자에게는 별도 snapshot을 준다.
+            storeStaticCacheEntry(captured, report)
+            return cloneStaticValue(report)
+        end
+
+        -- 실패한 compile/validation 결과는 수정 후 즉시 다시 검사할 수 있도록 캐시하지 않는다.
+        staticCacheStats.failedValidations = staticCacheStats.failedValidations + 1
+        return report
+    end
+
     local actions = {
         loadAll = loadAndValidateAll,
         validateAll = function()
             local result = loadAndValidateAll()
             result.data = nil
             return result
+        end,
+        reloadAll = function()
+            return loadAndValidateAll(true)
+        end,
+        cacheStats = function()
+            return {
+                ok = true,
+                schemaVersion = SUPPORTED_SCHEMA_VERSION,
+                errors = {},
+                cache = getStaticCacheDiagnostics(),
+            }
+        end,
+        clearCache = function()
+            return {
+                ok = true,
+                schemaVersion = SUPPORTED_SCHEMA_VERSION,
+                errors = {},
+                removed = clearStaticCache(),
+            }
         end,
     }
 
@@ -839,4 +1081,5 @@
     end
 
     return handler()
-end)
+    end
+end)()

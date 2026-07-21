@@ -1,5 +1,6 @@
 (function(triggerId, mode, htmlName)
     local UI_VAR = "🔯🔯🔯"
+    local POPUP_VAR = "helltrainUiPopupV1"
 
     if not htmlName or htmlName == "" then
         debug(1, "uiRender error: empty html name.")
@@ -18,8 +19,13 @@
             setChatVar(triggerId, UI_VAR, html)
         end,
         append = function()
-            local currentUi = getChatVar(triggerId, UI_VAR) or ""
-            setChatVar(triggerId, UI_VAR, currentUi .. html)
+            -- 기존 버튼 route 이름은 유지하되 popup을 기본 화면과 별도
+            -- slot에 둔다. 화면 전체 문자열 복사와 regex 제거를 피한다.
+            local currentPopup = getChatVar(triggerId, POPUP_VAR) or ""
+            setChatVar(triggerId, POPUP_VAR, currentPopup .. html)
+        end,
+        popup = function()
+            setChatVar(triggerId, POPUP_VAR, html)
         end
     }
 

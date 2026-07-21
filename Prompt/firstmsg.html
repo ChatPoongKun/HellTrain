@@ -157,42 +157,7 @@ transition: none;
 }
 </style>
 
-<article class="helltrain-entry" aria-label="게임 시작">
-{{#when::keep::{{getvar::gameSetupReady}}::isnot::ready}}
-<section class="helltrain-setup" aria-labelledby="helltrain-start-title">
-<p class="helltrain-setup-label">BOARDING PROTOCOL</p>
-<h2 class="helltrain-setup-title" id="helltrain-start-title">지옥철에 탑승하시겠습니까?</h2>
-<p class="helltrain-setup-copy" id="helltrain-start-copy">
-게임을 시작하면 초기 상태를 만들고, 덱을 구성하기 위한 카드 드래프트를 엽니다.
-</p>
-<button
-class="helltrain-start"
-type="button"
-risu-btn="init|start"
-aria-describedby="helltrain-start-copy"
->게임 시작</button>
-</section>
-{{/when}}
-{{#when::keep::{{getvar::gameSetupReady}}::is::ready}}
-{{settempvar::setup_raw::{{getvar::gameSetupView}}}}
-{{settempvar::setup_phase::{{dictelement::{{tempvar::setup_raw}}::phase}}}}
-{{#when::keep::{{tempvar::setup_phase}}::isnot::complete}}
-<section class="helltrain-setup" aria-live="polite">
-{{#when::keep::{{tempvar::setup_phase}}::is::deckDraft}}
-<p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>초기 덱 구성 진행 중 · 현재 단계에서 이어집니다</p>
-{{/when}}
-{{#when::keep::{{tempvar::setup_phase}}::is::deckComplete}}
-<p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>초기 덱 구성 완료 · 캐릭터 후보가 추가되면 선택 단계가 열립니다</p>
-{{/when}}
-{{#when::keep::{{tempvar::setup_phase}}::is::characterSelect}}
-<p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>탑승객 선택 진행 중 · 현재 단계에서 이어집니다</p>
-{{/when}}
-{{#when::keep::{{tempvar::setup_phase}}::is::battleReady}}
-<p class="helltrain-progress"><span class="helltrain-progress-dot" aria-hidden="true"></span>전투 준비 완료 · 게임 화면을 불러옵니다</p>
-{{/when}}
-</section>
-{{/when}}
-<div class="helltrain-dynamic-ui" aria-label="게임 화면">{{getvar::🔯🔯🔯}}</div>
-{{/when}}
+<article class="helltrain-entry" aria-label="지옥철 게임">
+<div class="helltrain-dynamic-ui" aria-label="게임 화면">@@HELLTRAIN_UI_ANCHOR_V1@@</div>
 </article>
 {{/when}}

@@ -1686,6 +1686,23 @@ assert(publishCount == 1 and published.battleView == publishedResult.encoded)
 local previousPublished = published.battleView
 assert(runScript("test", "dataBridge", "publish", "battleView", badExtra).ok == false)
 assert(publishCount == 1 and published.battleView == previousPublished, "failed publish changed chatVar")
+assertError(
+    "canonical bridge requires a function capability",
+    runScript("test", "dataBridge", "_publishCanonical", "battleView", view, "dataBridgeCanonicalV1"),
+    "internal_action_denied",
+    "$.action"
+)
+assert(publishCount == 1 and published.battleView == previousPublished,
+    "denied canonical publish changed chatVar")
+local canonicalPublished = assertOk(
+    "capability-gated canonical publish",
+    runScript("test", "dataBridge", "_publishCanonical", "battleView", view, function(purpose, viewName)
+        return purpose == "dataBridgeCanonicalV1" and viewName == "battleView"
+    end)
+)
+assert(publishCount == 2 and canonicalPublished.encoded == publishedResult.encoded
+    and published.battleView == publishedResult.encoded,
+    "canonical publish changed the validated View wire")
 
 local playerCardIds = {
     "read_the_room",

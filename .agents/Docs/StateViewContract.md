@@ -259,7 +259,7 @@ turnStartReceipt = {
 
 ## 3. `turnDraft` 버전 1
 
-`turnDraft`는 카드 상세 focus, 등록 목록과 결정적 선택 프리뷰를 권위 `battleState`에서 분리한다. 카드 클릭은 입력 상태와 권위 RNG를 변경하지 않고 매번 같은 권위 상태에서 프리뷰를 다시 계산한다. 권위 상태 전체의 결정적 fingerprint가 다르면 stale draft를 자동 보정하지 않고 거부한다.
+`turnDraft`는 v1 호환 카드 focus, 등록 목록과 결정적 선택 프리뷰를 권위 `battleState`에서 분리한다. 현재 HTML의 상세 disclosure는 로컬 DOM 상태이므로 draft나 View를 갱신하지 않는다. 명시 등록·취소는 입력 상태와 권위 RNG를 변경하지 않고 매번 같은 권위 상태에서 프리뷰를 다시 계산한다. 권위 상태 전체의 결정적 fingerprint가 다르면 stale draft를 자동 보정하지 않고 거부한다.
 
 전송 projection만 권위 상태의 복제본에 등록 카드 이동과 선언형 선택 단계 드로우를 적용한다. 후속 턴 해결기는 권위 상태와 projection을 함께 받아 `turnDraft.validateProjection`으로 선택, preview, RNG와 workingState 전체를 재생·대조한 뒤에만 그 복제본을 사용한다. 이 중간 `workingState`는 카드 해결과 턴 종료 정리가 끝나기 전에는 확정 상태로 저장하거나 일반 View 입력으로 사용하지 않는다.
 
@@ -366,7 +366,7 @@ playable, reasonCode, selected, selectionOrder
 
 `origin`은 권위 손패의 `hand` 또는 재생된 공개 드로우의 `preview`다. 손패를 위치 순서로 먼저 나열하고 아직 권위 zone이 deck·discard에 남아 있는 프리뷰 카드를 그 뒤에 덧붙인다. 등록 카드는 `selected`와 1부터 이어지는 `selectionOrder`로 표시한다.
 
-`selection`은 `count`, `mode`, `hasMainAction`, `canSubmit`, `reasonCode`와 선택 중에만 존재할 수 있는 `focusedInstanceId`를 가진다. `mode`는 `pass`, `chain_pass`, `action` 중 하나다. 잠기지 않았고 등록 카드가 모두 사용 가능하며 연계 뒤 주 행동이 최대 한 장인 정규 순서라면 세 mode 모두 전송할 수 있다. 따라서 무선택 패스와 눈치보기 단독 연계 후 패스도 `canSubmit = true`다.
+`selection`은 `count`, `mode`, `hasMainAction`, `canSubmit`, `reasonCode`와 선택 중에만 존재할 수 있는 v1 호환 `focusedInstanceId`를 가진다. 현재 UI는 이 선택적 focus 필드에 의존하지 않는다. `mode`는 `pass`, `chain_pass`, `action` 중 하나다. 잠기지 않았고 등록 카드가 모두 사용 가능하며 연계 뒤 주 행동이 최대 한 장인 정규 순서라면 세 mode 모두 전송할 수 있다. 따라서 무선택 패스와 눈치보기 단독 연계 후 패스도 `canSubmit = true`다.
 
 카드의 `canPlay`, `resolve`, `moodEffects`, `mechanismData`, `narration`과 `prototype`은 View에 들어가지 않는다. 비용과 피해의 최종값은 엔진 보정기가 생기기 전까지 기본값과 같다.
 
@@ -422,6 +422,8 @@ Lua의 빈 테이블은 자체적으로 빈 배열과 빈 객체를 구분하지
 runScript(triggerId, "dataBridge", "encode", "battleView", view)
 runScript(triggerId, "dataBridge", "publish", "battleView", view)
 ```
+
+공식 View builder가 같은 Lua transaction에서 이미 schema allowlist를 검증한 경우에만 함수 capability를 요구하는 `_encodeCanonical`/`_publishCanonical` 내부 경로를 사용할 수 있다. capability는 bridge가 전달한 purpose와 정확한 View 이름을 모두 확인해야 한다. 이 경로도 JSON-safe 검사는 유지하며, 문자열 버튼이나 일반 `encode`/`publish` 호출은 schema 검증을 우회할 수 없다. `battleController`는 내부 게시 뒤에도 채팅 변수를 다시 읽어 wire가 정확히 저장됐는지 확인한다.
 
 HTML에서는 깊은 `element` 대신 한 단계씩 `dictelement`를 사용한다. `element`는 현재 CBS 구현에서 `0`, `false`와 빈 문자열을 누락값처럼 취급할 수 있기 때문이다. wire에서 꺼낸 표시 문자열은 이미 엔티티 처리됐으므로 템플릿은 이를 다시 가공하지 않고 텍스트 위치에 둔다. 동적 속성에는 스키마가 제한한 runtime ID, enum, 숫자와 `interactionToken`만 사용한다.
 

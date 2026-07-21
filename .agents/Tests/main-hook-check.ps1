@@ -59,6 +59,75 @@ assert(type(listeners.editRequest) == "table" and #listeners.editRequest == 1,
 
 local editInput = listeners.editInput[1]
 local editRequest = listeners.editRequest[1]
+local editDisplay = listeners.editDisplay[1]
+local displayVars = {}
+function getChatVar(triggerId, key)
+    return displayVars[key]
+end
+function setChatVar(triggerId, key, value)
+    displayVars[key] = value
+end
+
+-- runScript must preserve every handler return, including an interior nil, on
+-- both the first execution and the same-event transaction-cache path.
+loreFixture = "(function() return function(_, value) return value, nil, 'tail' end end)()"
+beginRunScriptEvent("main-hook-multivalue", "contract")
+local firstValue, firstNil, firstTail = runScript("main-hook-multivalue", "multivalue", "first")
+assert(firstValue == "first" and firstNil == nil and firstTail == "tail",
+    "runScript discarded multiple returns on the source-load path")
+local cachedValue, cachedNil, cachedTail = runScript("main-hook-multivalue", "multivalue", "cached")
+assert(cachedValue == "cached" and cachedNil == nil and cachedTail == "tail",
+    "runScript discarded multiple returns on the transaction-cache path")
+
+assert(editDisplay("main-hook-check", "plain display", { index = 3 }) == "plain display",
+    "editDisplay changed a message without the UI sentinel")
+displayVars.gameSetupReady = "null"
+displayVars.helltrainUiShellV1 = "null"
+displayVars.helltrainUiPopupV1 = "null"
+local unreadyDisplay = editDisplay(
+    "main-hook-check",
+    "before@@HELLTRAIN_UI_ANCHOR_V1@@after",
+    { index = -1 }
+)
+assert(string.find(unreadyDisplay, 'risu-btn="init|start"', 1, true),
+    "editDisplay did not render the start control before setup was ready")
+assert(not string.find(unreadyDisplay, "<shell>", 1, true),
+    "editDisplay rendered game fragments before setup was ready")
+assert(not string.find(unreadyDisplay, "null", 1, true),
+    "editDisplay leaked the host's undefined chatVar sentinel")
+assert(editDisplay(
+        "main-hook-check",
+        "before@@HELLTRAIN_UI_ANCHOR_V1@@after",
+        { index = 4 }
+    ) == "before@@HELLTRAIN_UI_ANCHOR_V1@@after",
+    "editDisplay allowed a non-first message to claim the UI anchor")
+displayVars.helltrainUiShellV1 = "<shell>"
+local uiBodyKey = string.char(240, 159, 148, 175):rep(3)
+displayVars[uiBodyKey] = "<body>"
+displayVars.helltrainUiPopupV1 = "<popup>"
+displayVars.gameSetupReady = "ready"
+local injectedDisplay = editDisplay(
+    "main-hook-check",
+    "before@@HELLTRAIN_UI_ANCHOR_V1@@after",
+    { index = -1 }
+)
+assert(injectedDisplay == "before<shell><body><popup>after",
+    "editDisplay did not compose the shell, body, and popup slots")
+assert(displayVars.helltrainUiAnchorIndexV1 == "-1",
+    "editDisplay did not persist the targeted UI anchor index")
+
+local targetedReloads = {}
+local fullReloads = 0
+function reloadChat(triggerId, index)
+    targetedReloads[#targetedReloads + 1] = index
+end
+function reloadDisplay() fullReloads = fullReloads + 1 end
+assert(refreshGameUi("main-hook-check") == true and targetedReloads[1] == -1 and fullReloads == 0,
+    "refreshGameUi did not prefer the targeted anchor reload")
+displayVars.helltrainUiAnchorIndexV1 = "7"
+assert(refreshGameUi("main-hook-check") == true and targetedReloads[2] == -1 and fullReloads == 0,
+    "refreshGameUi trusted a mutable chatVar as the reload target")
+
 local authority
 local stateReadFails = false
 function getState(triggerId, key)
@@ -201,7 +270,22 @@ local buttonCall = lastCall("clickCard")
 assert(buttonCall.arguments[1] == "card-001" and buttonCall.arguments[2] == "draftv1-token",
     "button dispatch did not preserve its two arguments")
 
-hostPrint("MAIN_HOOK|scenarios=14")
+onButtonClick("main-hook-check", "battleController|registerCard|card-002|draftv1-register")
+local registerCall = lastCall("registerCard")
+assert(registerCall.arguments[1] == "card-002" and registerCall.arguments[2] == "draftv1-register",
+    "register route did not preserve instanceId/token")
+onButtonClick("main-hook-check", "battleController|cancelCard|card-002|draftv1-cancel")
+local cancelCall = lastCall("cancelCard")
+assert(cancelCall.arguments[1] == "card-002" and cancelCall.arguments[2] == "draftv1-cancel",
+    "cancel route did not preserve instanceId/token")
+
+local callsBeforeDenied = #calls
+onButtonClick("main-hook-check", "dataBridge|_publishCanonical|battleView|forged")
+assert(#calls == callsBeforeDenied, "button dispatcher exposed an internal module route")
+onButtonClick("main-hook-check", "init|start|unexpected")
+assert(#calls == callsBeforeDenied, "button dispatcher accepted an invalid start argument count")
+
+hostPrint("MAIN_HOOK|scenarios=26")
 '@
 
 Push-Location $projectRoot
@@ -220,7 +304,7 @@ try {
     if (-not ($firstText -ceq $secondText)) {
         throw "Separate Lua processes produced different main hook results.`nFIRST:`n$firstText`nSECOND:`n$secondText"
     }
-    if ($firstText -notmatch '^MAIN_HOOK\|scenarios=14$') {
+    if ($firstText -notmatch '^MAIN_HOOK\|scenarios=26$') {
         throw "Unexpected main hook vector: $firstText"
     }
     Write-Output 'main-hook-check: ok'

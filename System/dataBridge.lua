@@ -387,7 +387,7 @@
             -- battleView wire is consumed inside an HTML/CBS template.  Encode
             -- display text as entities before JSON quoting so allowed HTML tags
             -- cannot change the template structure and a decoded CBS result
-            -- cannot introduce a fresh {{...}} or :: sequence.
+            -- cannot introduce a fresh CBS directive or :: sequence.
             return encodeJsonString(escapeHtmlText(value), true)
         elseif valueType == "number" then
             return encodeNumber(value)
@@ -428,12 +428,7 @@
         return "{" .. table.concat(parts, ",") .. "}"
     end
 
-    local function encodeView(viewName, view)
-        local validation = validateView(viewName, view)
-        if not validation.ok then
-            return validation
-        end
-
+    local function encodeValidatedView(viewName, view)
         local ok, encoded = pcall(encodeTable, view)
         if not ok then
             return failure({
@@ -447,6 +442,44 @@
             encoded = encoded,
             bytes = #encoded,
         }
+    end
+
+    local function encodeView(viewName, view)
+        local validation = validateView(viewName, view)
+        if not validation.ok then
+            return validation
+        end
+        return encodeValidatedView(viewName, view)
+    end
+
+    local function authorizeCanonical(permit, viewName)
+        if type(permit) ~= "function" then
+            return false
+        end
+        local ok, allowed = pcall(permit, "dataBridgeCanonicalV1", viewName)
+        return ok and allowed == true
+    end
+
+    local function encodeCanonicalView(viewName, view, permit)
+        if SUPPORTED_VIEWS[viewName] == nil then
+            return failure({
+                makeError("unsupported_view", "$", "지원하지 않는 View입니다: " .. tostring(viewName)),
+            })
+        end
+        if not authorizeCanonical(permit, viewName) then
+            return failure({
+                makeError("internal_action_denied", "$.action", "검증된 View 전용 내부 작업에 접근할 수 없습니다."),
+            })
+        end
+
+        -- 이 경로는 같은 controller transaction에서 공식 View builder가
+        -- 이미 schema allowlist를 검증한 값만 받는다. JSON-safe 검사는
+        -- 유지해 함수, 메타테이블, 순환 참조가 bridge 밖으로 나가지 않게 한다.
+        local errors = validateJsonSafe(view)
+        if #errors > 0 then
+            return failure(errors)
+        end
+        return encodeValidatedView(viewName, view)
     end
 
     local function publishView(viewName, view)
@@ -469,9 +502,34 @@
         return result
     end
 
+    local function publishCanonicalView(viewName, view, permit)
+        local result = encodeCanonicalView(viewName, view, permit)
+        if not result.ok then
+            return result
+        end
+
+        local writeOk, writeError = pcall(setChatVar, triggerId, viewName, result.encoded)
+        if not writeOk then
+            return failure({
+                makeError(
+                    "publish_failed",
+                    "$",
+                    "View 채팅 변수 저장에 실패했습니다: " .. tostring(writeError)
+                ),
+            })
+        end
+        return result
+    end
+
     local arguments = { ... }
     local viewName = arguments[1]
     local view = arguments[2]
+
+    if action == "_encodeCanonical" then
+        return encodeCanonicalView(viewName, view, arguments[3])
+    elseif action == "_publishCanonical" then
+        return publishCanonicalView(viewName, view, arguments[3])
+    end
 
     local actions = {
         validate = validateView,

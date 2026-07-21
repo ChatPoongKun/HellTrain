@@ -1,6 +1,6 @@
 # 함락! 무한의 지옥철 현재 상태 및 실행 로드맵
 
-작성 기준일: 2026-07-16
+작성 기준일: 2026-07-21
 
 ## 1. 문서의 역할
 
@@ -20,7 +20,7 @@
 
 ## 2. 현재 상태 요약
 
-현재 프로젝트는 **화면 목업과 RisuAI용 공통 유틸리티가 있는 프로토타입**이다. 사이드바와 팝업 구조는 재사용할 기반이 있지만, 카드 선택부터 턴 판정, 정상 LLM 요청, 결과 반영으로 이어지는 플레이 가능한 전투 루프는 아직 없다.
+현재 프로젝트는 **10장 드래프트와 단일 캐릭터 전투 수직 슬라이스가 로컬 계약 검사를 통과한 통합 프로토타입**이다. 카드 선택, 턴 판정, LLM 요청·출력 훅, 결과 확정과 동적 CBS UI가 코드상 연결되었다. 다만 실제 RisuAI 배포에서의 mode별 엔진 수명, 권한, 훅 순서와 렌더링 체감 지연은 아직 검증해야 한다.
 
 지금 바로 24장의 카드나 모든 화면을 완성하면 규칙과 데이터 형식이 바뀔 때 대부분 다시 작성하게 된다. 우선 한 캐릭터와 소수 카드로 전투 수직 슬라이스를 완성한 뒤 드래프트, 보상, 도감과 전체 콘텐츠를 확장하는 것이 적절하다.
 
@@ -32,59 +32,58 @@
 |---|---|---|
 | 디버그 출력과 공통 상수 | 작성됨 | 실제 RisuAI 환경 검증 필요 |
 | `loadLores` | 작성됨 | 로어북을 이름으로 합쳐 읽는 기반으로 사용 가능 |
-| `runScript`와 버튼 라우터 | 작성됨 | `스크립트|인자` 호출 구조는 재사용 가능 |
+| `runScript`와 버튼 라우터 | 허용 route, transaction/warm/compiled 캐시와 상한·진단 완료 | 배포 content revision과 단일 main trigger 계약을 지켜야 함 |
 | 기존 `toChatVar` / `toState` | 초기 구현 | 전투 View 경로에는 사용하지 않고 상태 역변환 API도 만들지 않음. 기존 호출 정리는 후속 범위 |
 | `loadDB` / `saveDB` | JSON 전용 구현 | 진행 상태용으로 한정하며 정적 정의는 별도 `staticData.lua` 제한 로더를 사용 |
-| `System/staticData.lua` | 제한 로더·검증기 작성 및 로컬 통합 검사 통과 | 실제 RisuAI에서 로어북 검색·컴파일과 통합 검증 필요 |
-| `System/stateSchema.lua` | `battleState`·턴 시작 영수증과 projection 영수증·전체 무결성 영수증을 가진 `pendingTurn`의 strict shape·교차 연결 검증기 작성 및 로컬 검사 통과 | projection 의미 재생은 소비자 책임이며 실제 채팅 변수 저장 연결은 후속 범위 |
-| `System/viewBuilder.lua` | 검증된 draft·pendingTurn에서 선택·프리뷰·출력 대기를 재현하는 공개 허용 목록 `battleView` 생성/검증기 작성 및 로컬 검사 통과 | 실제 CBS/HTML 출력 연결은 후속 범위 |
+| `System/staticData.lua` | 제한 로더·검증기와 성공 snapshot 캐시, deep-clone 경계 완료 | 실제 RisuAI에서 cold/warm DB 조회 횟수 검증 필요 |
+| `System/stateSchema.lua` | `battleState`·턴 시작 영수증과 projection 영수증·전체 무결성 영수증을 가진 `pendingTurn`의 strict shape·교차 연결 검증기 작성 및 로컬 검사 통과 | controller 저장 경계와 로컬 통합됨. 실제 host 쓰기 권한 검증 필요 |
+| `System/viewBuilder.lua` | 공개 `battleView` 생성/검증과 content-keyed 카드 표시 캐시 완료 | `battleui.html`과 연결됨. 태그 수가 커질 때 registry key 생성 비용 계측 필요 |
 | `System/dataBridge.lua` | `cbs-json-nodes-v1` 검증·인코딩·게시 경계 작성 | 로컬 wire 재구성은 통과했으나 실제 RisuAI CBS 해석과 저장은 미검증 |
 | `System/deterministicRng.lua` | 고정 시드·커서 기반 범위 난수와 셔플 작성, 별도 프로세스 재현 검사 통과 | 실제 RisuAI Lua 런타임 교차 검증 필요 |
 | `System/cardZones.lua` | 드로우·재섞기·사용·제거·계획·턴 정리, 등록 카드 `used → hand` 복원과 보존 검사 작성 | initializer 포함 10턴 로컬 검사 통과, 실제 RisuAI 교차 검증 필요 |
 | `System/effectEngine.lua` | 선택 효과, `canPlay`·일반·무드·트리거 콜백과 효과 명령 검증·적용 구현 | 로컬 검사 통과, 실제 RisuAI 교차 검증 필요 |
-| `System/turnDraft.lua` | focus·등록·취소, 결정적 프리뷰, projection 전체 검증과 최소 projection 영수증 봉인·재생 검증 구현 | `battleView` 입력 경계는 로컬 연결, 실제 수동 전송은 후속 승인 범위 |
-| `System/turnResolver.lua` | initializer 영수증과 검증된 projection에서 카드·트리거·계획·승패·무드·정리를 해결하고 결정적 사건 로그 생성 | 로컬 다중 턴 연결 완료, 실제 저장·전송 연결은 후속 범위 |
+| `System/turnDraft.lua` | focus·등록·취소, 결정적 프리뷰, atomic interaction+token과 projection 영수증 검증 구현 | `battleView`/controller와 로컬 연결, 실제 수동 전송 검증 필요 |
+| `System/turnResolver.lua` | initializer 영수증과 검증된 projection에서 카드·트리거·계획·승패·무드·정리를 해결하고 결정적 사건 로그 생성 | 로컬 다중 턴과 controller 트랜잭션 연결 완료, 실제 host 검증 필요 |
 | `System/turnEventProjector.lua` | 판정 원본의 트리거 입력·조건·명령을 재검증하고 post-output `publicResult`와 모델용 `llmEvent` 허용 목록으로 재구성 | 트리거 누락·중복·수치 위조, 숨은 계획·runtime ID·RNG·선택 감사 자료의 비누출과 별도 프로세스 결정성 통과, `battleRuntime` 로컬 연결 완료. 실제 요청·출력 훅은 후속 범위 |
-| `System/battleRuntime.lua` | projection 봉인→resolver→사건 투영→pending 조립, 저장 결과 재사용과 `lastCommittedTurnId` 기반 멱등 확정 구현 | 로컬 트랜잭션 검증 완료, 실제 채팅 변수 저장과 훅 연결은 후속 승인 범위 |
+| `System/battleRuntime.lua` | projection 봉인→resolver→사건 투영→pending 조립, 저장 결과 재사용과 `lastCommittedTurnId` 기반 멱등 확정 구현 | 컨트롤러·훅과 로컬 통합 완료, 실제 RisuAI 연속 턴 검증 필요 |
 | `System/battleController.lua` | 저장·View·채팅 anchor, 요청 주입/출력 관측 영수증, 무출력 재시도, 미관측 부분 응답 자동 삭제와 관측 출력 commit 재개 구현 | 46개 로컬 호스트 경계 검사 통과. 실제 최신 RisuAI의 hook·전송 직렬성, 채팅 metadata 안정성·삭제 권한 검증 필요 |
-| `onButtonClick` | 작성됨 | 현재 존재하지 않는 전투 스크립트를 호출하는 버튼이 다수 있음 |
-| `editDisplay` | 빈 콜백 | 값을 반환하지 않아 실제 콜백 체인에서 문제가 될 수 있음 |
+| `onButtonClick` | setup·battle·popup 공개 action allowlist 연결 | 내부 canonical action은 버튼에서 차단됨 |
+| `editDisplay` | first-message sentinel을 start 또는 shell/body/popup으로 치환 | 비-first-message anchor 탈취 차단, 실제 host remount 검증 필요 |
 | `onStart` | 연결됨(로컬) | `prepareGeneration`의 정상 준비·마커-only 무출력 retry·자동 정리 retry를 허용하고 commit-only 복구와 실패는 새 요청을 차단한다. 실제 최신 웹 검증 필요 |
 | `editInput` | 연결됨(로컬) | 전투 상태가 있으면 비어 있지 않은 입력도 정확한 `*says nothing*` filler로 정규화한다. 실제 입력 UI와 최신 웹 검증 필요 |
 | `editRequest` / `onOutput` | 연결됨(로컬) | 저장 사건 주입과 출력 관측·멱등 commit을 `battleController`에 위임한다. 실제 최신 웹 검증 필요 |
 
-`System/main.lua`는 사용자에게 정확한 diff를 먼저 제시해 승인받은 범위로 훅을 연결했다. 이후 변경도 건별 승인을 받아야 한다.
+`System/main.lua`는 승인된 범위에서 훅, 캐시, 표시 anchor와 버튼 allowlist를 통합한다. 후속 변경은 `RuntimeCacheContract`의 revision·context·권위 상태 금지 계약을 함께 검토한다.
 
 ### 3.2 초기화와 UI 기반
 
 | 항목 | 현재 상태 | 판단 |
 |---|---|---|
-| `System/init.lua` | 초기값 목업 | `Suppression` 등 이전 용어를 사용하고 구조화 상태가 아니며 자동 호출 여부가 확인되지 않음 |
-| `System/uiRender.lua` | 기반 작성됨 | HTML을 UI 채팅 변수에 설정·추가하는 기능은 재사용 가능 |
-| `System/popupManage.lua` | 기반 작성됨 | 열기, 교체, 뒤로, 닫기 상태 관리가 구현되어 있음 |
-| `System/캐릭터 프로필.lua` | 부분 구현 | 전달받은 캐릭터 이름을 사용하지 않고 정적 프로필을 추가함 |
-| `System/cardDaft.lua` | 동작 불가 | 파일명 오탈자와 미정의 `cardUI`가 있으며 드래프트 로직이 없음 |
-| `html/firstmsg.html` | 빈 파일 | 전투 UI 메시지 앵커가 저장소 안에는 없음 |
+| `System/init.lua` | `start`/`choose`만 전달하는 얇은 라우터 | 권위 상태와 View 생성은 controller가 소유 |
+| `System/uiRender.lua` | base body와 popup slot 분리 | popup 추가가 전체 base UI를 다시 복사하지 않음 |
+| `System/popupManage.lua` | 독립 popup slot의 열기·교체·뒤로·닫기 | 허용된 popup target만 호출 |
+| `System/캐릭터 프로필.lua` | popup slot 연결 | 현재 콘텐츠는 유지영 정적 프로필 |
+| `Prompt/firstmsg.html` | 내러티브·만 19세 경계와 상시 UI sentinel 완료 | start/ready 판정은 외부 CBS가 아닌 `editDisplay`가 소유 |
 | RisuAI 캐릭터·모듈 설정 | 확인됨 | 최신 웹 버전에서 `main.lua`는 트리거 스크립트, 나머지 Lua 스크립트·정적 DB(`.db`)·HTML은 개별 로어북으로 등록하며 스토리용 로어북은 현재 없음 |
 
 ### 3.3 화면
 
-현재 모든 HTML 파일의 CBS 참조 수는 0이다. 화면에 보이는 수치와 목록은 DB나 상태에서 읽은 값이 아니다.
+핵심 `cardDraft.html`과 `battleui.html`은 각각 `gameSetupView`, `battleView`를 CBS로 읽는다. 나머지 도감·설정·안내 화면에는 아직 정적 목업 콘텐츠가 남아 있다.
 
 | 화면 | 현재 상태 | 재사용 범위 |
 |---|---|---|
 | `sideBar.html` | 버튼 연결됨 | 사이드바 구조와 팝업 진입점 재사용 |
 | 팝업 공통 | 열기·닫기 마커 존재 | 팝업 외곽과 탐색 구조 재사용 |
-| `battleui.html` | 상세 시각 목업 | 레이아웃과 스타일 참고, 모든 값을 `battleView`로 교체해야 함 |
+| `battleui.html` | `battleView` 동적 렌더링, native detail과 register/cancel route 완료 | 실제 RisuAI 접근성·모바일 체감 검증 필요 |
 | `덱 확인.html` | 정적 카드 목업 | 카드 레이아웃 참고, 목록·필터는 다시 연결해야 함 |
 | `도감.html` | 정적 목업 | 실제 도감 분류와 해금 규칙은 없음 |
 | `캐릭터 리스트.html` | 판타지 임시 콘텐츠 | 유지영 이동 버튼 하나 외에는 실제 게임 콘텐츠가 아님 |
 | `캐릭터 프로필.html` | 유지영 정적 목업 | 프로필 레이아웃 참고, 데이터 연결 필요 |
 | `플레이 가이드.html` | 다른 게임용 임시 문구 | 최종 규칙 확정 후 전면 교체 필요 |
 | `설정.html` | 표시 전용 목업 | 실제 설정 항목과 저장 동작이 없음 |
-| `cardDraft.html` | 판타지 장비 목업 | 드래프트 카드 UI로 다시 작성해야 함 |
+| `cardDraft.html` | `gameSetupView` 기반 3장 제안·상세·token 선택 UI 완료 | 캐릭터 선택 단계는 후속 범위 |
 
-`battleui.html`의 `playCard`, `planDetail`, `showDeck`, `showDiscard` 버튼이 호출하는 Lua 스크립트는 아직 존재하지 않는다. 현재 UI의 카드별 사용 버튼과 안내 문구도 최신 규칙인 “RisuAI 전송이 턴의 유일한 확정점”에 맞게 수정해야 한다.
+`battleui.html`은 별도 턴 종료·사용 확정 버튼을 두지 않고 “RisuAI 전송이 턴의 유일한 확정점”이라는 규칙을 표시한다. 카드 상세는 로컬 `<details>`로 열리고 실제 선택 변경만 Lua를 호출한다.
 
 ### 3.4 데이터와 콘텐츠
 
@@ -111,10 +110,11 @@
 - `.agents/Tests/battle-runtime-check.ps1`이 projection 봉인부터 pending 조립까지의 단일 실행, 전체 pending 무결성, 저장 결과 재사용, stale·malformed 거부, 반환 alias 차단과 최초·중복·늦은 출력 확정의 멱등성을 별도 프로세스에서 검사한다.
 - `.agents/Tests/battle-controller-check.ps1`이 46개 호스트 경계 시나리오로 저장·View write-read 검증, 요청 주입, marker-only 무출력 재시도와 attempt 쓰기 유실, 미관측 출력 자동 삭제와 중단 재개, 관측 출력 보존·commit 복구를 검사한다.
 - `.agents/Tests/main-hook-check.ps1`이 `editInput`, `onStart`, `editRequest`, `onOutput`과 기존 버튼 라우터의 성공·실패 분기를 두 독립 Lua 프로세스에서 검사한다.
+- `runtime-cache-check`, `runtime-bundle-contract-check`, `game-setup-incremental-check`, `ui-host-contract-check`이 warm/static 캐시, content revision, 71 seed·710 전이 동치와 UI slot 분리를 고정한다.
 - 로컬 검사는 `lua` 명령이 없으면 설치된 Lua Language Server의 내장 호스트를 사용한다. 이는 실제 RisuAI 런타임 검사가 아니다.
 - UI/LLM 없이 `turn_start`와 캐릭터 선택을 포함한 10턴 자동 시뮬레이터가 같은 시드의 전체 추적 재현성과 카드 보존을 검사한다.
 - 파일을 실제 RisuAI 캐릭터·모듈의 로어북과 트리거에 반영하는 패키징 절차가 저장소에 없다.
-- 캐릭터 첫 메시지는 아직 미정이며 런타임 기준선의 선행 조건으로 사용하지 않는다. 초기 UI 표시 방식은 실제 훅 검증 뒤 결정한다.
+- 캐릭터 첫 메시지는 `Prompt/firstmsg.html`에 정의되었고 외부 CBS가 아닌 상시 sentinel + `editDisplay`로 UI를 교체한다. 실제 host의 first-message index `-1`과 remount 동작은 배포 후 확인한다.
 - 실제 RisuAI에서 팝업 기반이 현재 버전과 CSS 접두사 조건에서 정상 동작하는지 회귀 테스트가 필요하다.
 
 ## 4. 이미 결정된 목표
@@ -155,7 +155,7 @@
 
 - 사용자가 RisuAI 전송 버튼을 직접 누르는 것이 턴의 유일한 확정점이다.
 - 별도 턴 종료 버튼은 두지 않으며 무선택 전송은 패스, 연계 카드만 등록한 전송은 연계 해결 후 패스다.
-- 카드 첫 클릭은 상세 표시, 같은 카드 두 번째 클릭은 등록, 등록 카드 재클릭은 취소다.
+- 카드 상세는 native disclosure로 로컬에서 열고 닫으며, 명시 등록·취소 버튼만 token이 있는 controller action을 호출한다. 기존 두 번 클릭 focus/등록 흐름은 v1 저장·호환 경계로만 남긴다.
 - 눈치보기는 권위 상태와 RNG를 바꾸지 않는 결정적 프리뷰로 현재 턴 1장을 보여주며 그 카드도 같은 턴 등록할 수 있다.
 - 눈치보기와 원래 손패 카드는 함께 사용한다. 프리뷰 카드까지 등록한 뒤 다른 원래 손패 카드를 등록하면 speculative 가지를 취소하고 마지막 카드만 사용한다.
 - 목표 UX에서는 입력창을 CSS로 입력할 수 없게 하고, 실제 문자열 편집 훅인 `editInput`에서도 입력을 정확한 filler로 정규화한다. 빈 전송 설정이 추가한 같은 `*says nothing*`은 제한된 `onStart` 준비·복구 경계에서 제거한다.
@@ -202,7 +202,7 @@
 | 결정 | 담당 | 권장안 | 필요한 시점 |
 |---|---|---|---|
 | RisuAI 런타임 구성 | 확인됨 | 항상 최신 웹 버전을 사용하며, `main.lua` 외 모든 Lua 스크립트·정적 DB(`.db`)·HTML 파일은 각각 별도 로어북으로 등록 | 1단계 |
-| 캐릭터 첫 메시지 | 후속 결정 | 서술 내용은 현재 데이터·엔진 구현의 선행 조건으로 삼지 않고, 초기 UI 표시 방식만 실제 연결 테스트 뒤 결정 | UI 연결 전 |
+| 캐릭터 첫 메시지 | 완료(로컬) | `Prompt/firstmsg.html`의 서술·성인 경계와 상시 sentinel을 사용하고, start/ready UI는 `editDisplay`가 결정 | 실제 host 렌더링 검증 |
 | `System/main.lua` 수정 허용 | 사용자 | 변경할 때마다 정확한 diff를 먼저 제시하고 해당 변경 건에 한해 명시적으로 승인 | 매 변경 시 |
 
 ### 6.2 후속 전투 단계에 필요한 규칙
@@ -390,18 +390,19 @@ Codex 작업:
 
 ### 4단계: 동적 전투 UI 수직 슬라이스
 
+상태: 로컬 통합 완료. 실제 RisuAI의 렌더링, 모바일 레이아웃과 버튼 remount 횟수 검증이 남아 있다.
+
 목표는 고정 덱과 유지영 한 명으로 카드 선택부터 결과 표시까지 화면에서 조작하는 것이다.
 
 Codex 작업:
 
 - 완료(로컬): draft focus·등록 순서·프리뷰와 pending 영수증을 각각 검증해 `selecting`·`awaitingOutput` View를 재생
 - 완료(로컬): 무선택 `pass`, 연계만 사용한 `chain_pass`, 주 행동 `action`의 전송 가능 요약과 대기 잠금 구현
-- `battleView`를 `toChatVar`로 전달
-- `battleui.html`의 하드코딩 값을 `dict_element`로 교체
-- 손패, 효과와 사건 목록을 CBS 반복문으로 교체
-- 카드 클릭은 `turnDraft`의 focus·등록·취소와 공개 프리뷰만 바꾸도록 구현
-- 무선택 패스, 연계 후 패스와 주 행동 사용을 같은 RisuAI 전송 흐름에 연결
-- 결과 공개 View와 실제 상태 전환 연결
+- 완료(로컬): `dataBridge` capability 경계로 `battleView` wire 게시·재읽기
+- 완료(로컬): `battleui.html`의 하드코딩 전투 값을 CBS View 필드와 반복문으로 교체
+- 완료(로컬): 카드 상세는 native `details`, 권위 변경은 atomic 등록·취소로 분리
+- 완료(로컬): 무선택 패스, 연계 후 패스와 주 행동을 같은 RisuAI 전송 흐름에 연결
+- 완료(로컬): pending/public result View와 멱등 상태 전환 연결
 - 손패 0, 1, 3, 5장 레이아웃 검증
 
 사용자 작업:
@@ -478,7 +479,7 @@ Codex 작업:
 
 Codex 작업:
 
-- 10회 초기 카드 드래프트 구현
+- 완료(로컬): 10회 초기 카드 드래프트, 재현 검증과 정적 shell 캐시
 - 캐릭터 후보 3명 생성과 상성 정보 View 구현
 - 보상 4종과 덱·퍽 교체 제한 구현
 - 덱 10~20장, 동일 카드 2장, 퍽 3개 제한 구현
@@ -547,13 +548,13 @@ Codex 작업:
 2. 완료: Lua 카드 DB와 카드 함수 계약 초안을 작성한다.
 3. 완료: 플레이어 카드 10장을 수직 슬라이스 프로토타입으로 고른다.
 4. 완료: `CardDataContract.md`와 유지영의 테스트 전투 데이터를 확정한다.
-5. 완료: 최신 웹 버전 사용과 `main.lua`/개별 로어북 등록 구조를 확인했다. 첫 메시지 서술은 후속 단계로 보류한다.
+5. 완료(로컬): 최신 웹 버전 구조, `main.lua` 단일 trigger/개별 로어북 계약과 `Prompt/firstmsg.html` sentinel UI를 반영했다.
 6. 완료(로컬): DB 스키마, 상태/View 경계와 계약 검증기를 만든다. 실제 RisuAI 통합 확인은 4단계 연결 작업과 함께 수행한다.
 7. 완료(로컬): 결정적 난수, 카드 영역 순환, `turnDraft` projection·최소 영수증 검증, pending/View 재생 경계, 공용 트리거, `turn_start` receipt·initializer, 총효과 기반 캐릭터 선택과 비용·효과·간파·무드·승패를 포함한 턴 해결기를 10턴 자동 진행으로 검증했다.
 8. 완료(로컬): 판정 원본을 post-output 공개 사건과 LLM 서술 사건으로 분리하고 숨은 정보·감사 식별자를 제거하는 strict 투영기를 검증한다.
 9. 완료(로컬): projection 영수증 재생, resolver, 사건 투영과 `pendingTurn` 조립·재사용·확정을 하나의 `battleRuntime` 트랜잭션으로 묶는다.
 10. 완료(로컬): 정확한 계획과 diff를 보고해 승인받은 뒤 `System/main.lua`의 `editInput`·`onStart`·`editRequest`·`onOutput`을 연결한다.
-11. 진행 중: 전투 판정과 `battleView`를 정상 수동 전송 흐름에 로컬 연결했다. 실제 최신 RisuAI에서 훅 순서와 연속 3턴을 검증한다.
+11. 다음 검증: 실제 최신 RisuAI에서 cold/warm 시작, 버튼당 remount 1회, 훅 순서와 연속 3턴을 계측한다.
 
 첫 구현 목표는 다음 한 문장으로 고정한다.
 

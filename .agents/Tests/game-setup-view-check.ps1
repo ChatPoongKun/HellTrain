@@ -236,6 +236,21 @@ assert(type(initialView.offer) == "table" and #initialView.offer.cards == 3)
 assertOk("initial View validate", runScript("game-setup-view-check", "gameSetupView", "validate", initialView))
 assertNoPrivateFields("initial View", initialView)
 
+local deniedCanonical = assertFailed(
+    "canonical View without controller capability",
+    runScript("game-setup-view-check", "gameSetupView", "_buildCanonical", initial, staticData)
+)
+assert(hasError(deniedCanonical, "internal_action_denied"),
+    "canonical View fast path was exposed to string-only button callers")
+local internalBuilt = assertOk(
+    "canonical View with controller capability",
+    runScript("game-setup-view-check", "gameSetupView", "_buildCanonical", initial, staticData, function(purpose)
+        return purpose == "gameSetupViewCanonicalV1"
+    end)
+)
+assert(canonical(internalBuilt.view) == canonical(initialView),
+    "canonical View fast path differs from the public validating build")
+
 -- Add a distinct third selection after the forced duplicate. This yields
 -- [A, A, B], whose View must group as A x2 followed by B x1.
 local distinctCard
@@ -265,6 +280,10 @@ hostileStatic.cards[riskyCardId].resolver = function() return "FUNCTION_CANARY" 
 
 local authoritySnapshot = canonical(fixtureState)
 local hostileStaticSnapshot = canonical(hostileStatic)
+assertOk(
+    "clear presentation cache",
+    runScript("game-setup-view-check", "viewBuilder", "clearPresentationCache")
+)
 local partialReport = assertOk(
     "partial View build",
     runScript("game-setup-view-check", "gameSetupView", "build", fixtureState, hostileStatic)
@@ -275,6 +294,12 @@ local repeatedPartial = assertOk(
     runScript("game-setup-view-check", "gameSetupView", "build", fixtureState, hostileStatic)
 ).view
 assert(canonical(partialView) == canonical(repeatedPartial), "same authority produced a different View")
+local presentationStats = assertOk(
+    "presentation cache stats",
+    runScript("game-setup-view-check", "viewBuilder", "presentationCacheStats")
+).cache
+assert(presentationStats.entries > 0 and presentationStats.hits >= #repeatedPartial.offer.cards,
+    "repeated View build did not reuse immutable card presentation fragments")
 assert(canonical(fixtureState) == authoritySnapshot, "partial View build mutated authority")
 assert(canonical(hostileStatic) == hostileStaticSnapshot, "partial View build mutated static data")
 
@@ -323,6 +348,54 @@ if partialView.offer.cards[1].descriptionSegments[1] then
 end
 assert(canonical(fixtureState) == authoritySnapshot, "mutating View changed authority")
 assert(canonical(hostileStatic) == hostileStaticSnapshot, "mutating View changed static data")
+local postMutationView = assertOk(
+    "post-mutation cached View build",
+    runScript("game-setup-view-check", "gameSetupView", "build", fixtureState, hostileStatic)
+).view
+assert(canonical(postMutationView) == canonical(repeatedPartial),
+    "caller mutation poisoned the presentation cache")
+
+local revisedStatic = clone(hostileStatic)
+local firstOfferId = fixtureState.offer.cardIds[1]
+local firstActionId = revisedStatic.cards[firstOfferId].actionTag
+revisedStatic.registry.actionTags[firstActionId].label = "REVISION_CANARY"
+local revisedView = assertOk(
+    "revision-keyed presentation build",
+    runScript("game-setup-view-check", "gameSetupView", "build", fixtureState, revisedStatic)
+).view
+assert(revisedView.offer.cards[1].actionTag.label == "REVISION_CANARY",
+    "registry revision reused a stale presentation fragment")
+
+-- Array boundaries are part of the presentation key. Without explicit field
+-- counts these two legal cards collapse to the same key ("rules", "rules").
+local collisionRegistry = clone(hostileStatic.registry)
+collisionRegistry.mechanisms.rules = {
+    id = "rules",
+    label = "경계 메커니즘",
+    tooltip = "캐시 필드 경계 검사용",
+}
+local collisionCard = clone(hostileStatic.cards[firstOfferId])
+collisionCard.mechanisms = { "rules" }
+collisionCard.rules = {}
+assertOk("clear collision cache", runScript(
+    "game-setup-view-check", "viewBuilder", "clearPresentationCache"
+))
+local mechanismPresentation = assertOk(
+    "mechanism-side cache boundary",
+    runScript("game-setup-view-check", "viewBuilder", "buildCardPresentation",
+        collisionCard, collisionRegistry, "$.collision")
+).card
+collisionCard.mechanisms = {}
+collisionCard.rules = { "rules" }
+local rulePresentation = assertOk(
+    "rule-side cache boundary",
+    runScript("game-setup-view-check", "viewBuilder", "buildCardPresentation",
+        collisionCard, { data = { registry = collisionRegistry } }, "$.collision")
+).card
+assert(#mechanismPresentation.mechanisms == 1 and #mechanismPresentation.ruleLines == 0,
+    "mechanism-side collision fixture was not represented")
+assert(#rulePresentation.mechanisms == 0 and #rulePresentation.ruleLines == 1,
+    "presentation cache aliased mechanism and rule array boundaries")
 partialView = repeatedPartial
 
 -- Authority replay failures must stop View construction.
@@ -397,6 +470,38 @@ assertFailed(
 )
 assert(publishCount == 1 and published.gameSetupView == publishedSnapshot,
     "failed publish changed the host payload")
+
+assert(hasError(assertFailed(
+    "canonical bridge requires capability",
+    runScript("game-setup-view-check", "dataBridge", "_publishCanonical", "gameSetupView", partialView, "forged")
+), "internal_action_denied"), "canonical bridge accepted a string capability")
+local function permitCanonical(purpose, viewName)
+    return purpose == "dataBridgeCanonicalV1" and viewName == "gameSetupView"
+end
+local canonicalPublish = assertOk(
+    "canonical bridge publish",
+    runScript(
+        "game-setup-view-check",
+        "dataBridge",
+        "_publishCanonical",
+        "gameSetupView",
+        partialView,
+        permitCanonical
+    )
+)
+assert(publishCount == 2 and published.gameSetupView == canonicalPublish.encoded,
+    "canonical bridge did not publish exactly once")
+assertFailed(
+    "canonical bridge keeps JSON-safe boundary",
+    runScript(
+        "game-setup-view-check",
+        "dataBridge",
+        "_encodeCanonical",
+        "gameSetupView",
+        functionView,
+        permitCanonical
+    )
+)
 
 local realGameSetupView = modules.gameSetupView
 modules.gameSetupView = function()

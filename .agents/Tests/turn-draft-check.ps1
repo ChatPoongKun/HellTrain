@@ -443,6 +443,59 @@ assert(type(emptyInteractionToken) == "string"
     "interaction token format is invalid")
 assert(repeatedInteractionToken == emptyInteractionToken, "equal drafts produced different interaction tokens")
 
+-- The controller-facing boundary validates authority, draft, token, and transition once.
+local atomicRequest = {
+    action = "register",
+    instanceId = BASE_A,
+    expectedInteractionToken = emptyInteractionToken,
+}
+local atomicRequestSnapshot = canonical(atomicRequest)
+local atomicRegister = assertOk(
+    "atomic register",
+    invoke("atomic register", "applyInteraction", baseState, emptyDraft, atomicRequest)
+)
+assert(canonical(atomicRequest) == atomicRequestSnapshot, "atomic interaction mutated its request")
+assert(atomicRegister.applied == true and atomicRegister.stale == false
+    and atomicRegister.changed == true and atomicRegister.interactionAction == "register",
+    "atomic register did not return its transition receipt")
+assertIds("atomic register selection", atomicRegister.draft.registeredCardInstanceIds, { BASE_A })
+assert(type(atomicRegister.interactionToken) == "string"
+    and atomicRegister.interactionToken ~= emptyInteractionToken,
+    "atomic register did not rotate its interaction token")
+
+local staleAtomicRegister = assertOk(
+    "stale atomic register",
+    invoke("stale atomic register", "applyInteraction", baseState, atomicRegister.draft, atomicRequest)
+)
+assert(staleAtomicRegister.applied == false and staleAtomicRegister.stale == true
+    and staleAtomicRegister.changed == false,
+    "stale atomic interaction applied a second transition")
+assert(canonical(staleAtomicRegister.draft) == canonical(atomicRegister.draft)
+    and staleAtomicRegister.interactionToken == atomicRegister.interactionToken,
+    "stale atomic interaction did not return the current validated draft")
+
+local atomicCancel = assertOk(
+    "atomic cancel",
+    invoke("atomic cancel", "applyInteraction", baseState, atomicRegister.draft, {
+        action = "cancel",
+        instanceId = BASE_A,
+        expectedInteractionToken = atomicRegister.interactionToken,
+    })
+)
+assert(atomicCancel.applied == true and atomicCancel.stale == false
+    and atomicCancel.interactionAction == "cancel")
+assertIds("atomic cancel selection", atomicCancel.draft.registeredCardInstanceIds, {})
+assertHasError(
+    "atomic interaction rejects unknown fields",
+    invoke("atomic interaction rejects unknown fields", "applyInteraction", baseState, emptyDraft, {
+        action = "register",
+        instanceId = BASE_A,
+        expectedInteractionToken = emptyInteractionToken,
+        trusted = true,
+    }),
+    "unexpected_field"
+)
+
 local zeroSeedState = standardState()
 zeroSeedState.rng.seed = 0
 assertState("zero-seed authority state", zeroSeedState)

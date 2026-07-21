@@ -149,6 +149,8 @@ local VIEW = "gameSetupView"
 local READY = "gameSetupReady"
 -- Keep this byte-exact when PowerShell pipes the Lua fixture to a fallback host.
 local UI = string.char(240, 159, 148, 175):rep(3)
+local UI_SHELL = "helltrainUiShellV1"
+local UI_SHELL_REVISION = "helltrainUiShellRevision"
 local states = {}
 local chatVars = {}
 local events = {}
@@ -205,6 +207,7 @@ local originalHosts = {
 }
 
 local function reset(seed)
+    moduleCalls = {}
     states = {}
     chatVars = {}
     events = {}
@@ -252,20 +255,27 @@ local function assertWriteOrder(label, expected)
     end
 end
 
+local freshWriteOrder = {
+    "chat:" .. READY .. ":updating",
+    "state:" .. AUTHORITY,
+    "chat:" .. VIEW .. ":value",
+    "chat:" .. UI_SHELL .. ":value",
+    "chat:" .. UI_SHELL_REVISION .. ":value",
+    "chat:" .. UI .. ":value",
+    "chat:" .. READY .. ":ready",
+}
 local fullWriteOrder = {
     "chat:" .. READY .. ":updating",
     "state:" .. AUTHORITY,
     "chat:" .. VIEW .. ":value",
     "chat:" .. UI .. ":value",
     "chat:" .. READY .. ":ready",
-    "reload",
 }
 local publishOnlyOrder = {
     "chat:" .. READY .. ":updating",
     "chat:" .. VIEW .. ":value",
     "chat:" .. UI .. ":value",
     "chat:" .. READY .. ":ready",
-    "reload",
 }
 
 -- RisuAI getLoreBooks parses lore CBS before returning its content. The draft
@@ -280,8 +290,9 @@ loreContentTransform = function(name, content)
 end
 local hostParsedStart = assertOk("host-parsed fresh start", controller("start"))
 assert(hostParsedStart.view.phase == "deckDraft", "host-parsed start did not build a deckDraft View")
-assert(chatVars[UI] == readFile("html/sideBar.html") .. parsedDraftPrefix .. chatVars[VIEW] .. "]",
+assert(chatVars[UI] == parsedDraftPrefix .. chatVars[VIEW] .. "]",
     "card draft lore was parsed before the fresh gameSetupView was published")
+assert(chatVars[UI_SHELL] == readFile("html/sideBar.html"), "sidebar shell was not installed separately")
 local function assertDraftLoreOrder(label)
     local viewWriteIndex
     local loreLoadIndex
@@ -324,8 +335,9 @@ assert(hostParsedChoice.applied == true and #states[AUTHORITY].selectedCardIds =
     "host-parsed choose did not advance authority")
 assert(hostParsedChoice.view.progress.selectedCount == 1 and chatVars[VIEW] ~= hostParsedBeforeChoiceWire,
     "host-parsed choose did not publish the advanced View")
-assert(chatVars[UI] == readFile("html/sideBar.html") .. parsedDraftPrefix .. chatVars[VIEW] .. "]",
+assert(chatVars[UI] == parsedDraftPrefix .. chatVars[VIEW] .. "]",
     "card draft lore used the previous gameSetupView after a choice")
+assert((loreLoadCounts["sideBar.html"] or 0) == 1, "sidebar shell was reloaded for a setup choice")
 assertDraftLoreOrder("host-parsed choose")
 
 -- Fresh start consumes exactly one CBS randint and publishes only verified data.
@@ -337,11 +349,18 @@ assert(states[AUTHORITY].setupId == "setup-12345" and states[AUTHORITY].rng.seed
     "generated seed/setupId were not persisted")
 assert(chatVars[READY] == "ready" and type(chatVars[VIEW]) == "string" and chatVars[VIEW] ~= "",
     "fresh start did not publish a ready View")
-assert(chatVars[UI] == readFile("html/sideBar.html") .. readFile("html/cardDraft.html"),
-    "fresh start UI anchor is not sidebar plus card draft; actual=" .. tostring(type(chatVars[UI]) == "string" and #chatVars[UI] or -1)
-        .. ", expected=" .. tostring(#readFile("html/sideBar.html") + #readFile("html/cardDraft.html")))
-assert(reloads == 1, "fresh start did not reload exactly once")
-assertWriteOrder("fresh start", fullWriteOrder)
+assert(chatVars[UI] == readFile("html/cardDraft.html"),
+    "fresh start UI body is not the card draft; actual=" .. tostring(type(chatVars[UI]) == "string" and #chatVars[UI] or -1)
+        .. ", expected=" .. tostring(#readFile("html/cardDraft.html")))
+assert(chatVars[UI_SHELL] == readFile("html/sideBar.html")
+        and chatVars[UI_SHELL_REVISION] == "sidebar-e3f104ae8f3037cd",
+    "fresh start did not install the versioned sidebar shell")
+assert(reloads == 0, "fresh start duplicated the host's automatic button remount")
+assert(moduleCalls.gameSetup == 1 and moduleCalls.gameSetupView == 1 and moduleCalls.deterministicRng == 1,
+    "fresh start repeated gameSetup validation/View generation or failed to batch its offer: gameSetup="
+        .. tostring(moduleCalls.gameSetup) .. ", gameSetupView=" .. tostring(moduleCalls.gameSetupView)
+        .. ", deterministicRng=" .. tostring(moduleCalls.deterministicRng))
+assertWriteOrder("fresh start", freshWriteOrder)
 local storedSnapshot = canonical(states[AUTHORITY])
 local storedWrites = stateWrites
 started.state.selectedCardIds[1] = "mutated_result_canary"
@@ -349,12 +368,15 @@ assert(canonical(states[AUTHORITY]) == storedSnapshot, "returned start state ali
 
 -- Restart/recovery validates and republishes without a new seed or authority write.
 events = {}
+moduleCalls = {}
 local restarted = assertOk("idempotent restart", controller("start"))
 assert(restarted.applied == false and restarted.stale == false)
 assert(cbsCalls == 1, "restart consumed another CBS seed")
 assert(stateWrites == storedWrites and canonical(states[AUTHORITY]) == storedSnapshot,
     "restart rewrote or changed authority")
-assert(reloads == 2, "restart did not reload once")
+assert(reloads == 0, "restart duplicated the host's automatic button remount")
+assert(moduleCalls.gameSetup == 1 and moduleCalls.gameSetupView == 1 and moduleCalls.deterministicRng == 1,
+    "restart must validate authority once and reuse it for canonical View projection")
 assertWriteOrder("idempotent restart", publishOnlyOrder)
 
 -- A valid choice is stored once. Repeating the old token is a state-write-free stale recovery.
@@ -362,19 +384,25 @@ local beforeChoice = clone(states[AUTHORITY])
 local chosenCard = beforeChoice.offer.cardIds[1]
 local oldToken = beforeChoice.offer.interactionToken
 events = {}
+moduleCalls = {}
 local chosen = assertOk("valid choose", controller("choose", chosenCard, oldToken))
 assert(chosen.applied == true and chosen.stale == false and #states[AUTHORITY].selectedCardIds == 1,
     "valid choose was not persisted once")
 assert(cbsCalls == 1, "choose consumed a setup seed")
+assert(moduleCalls.gameSetup == 1 and moduleCalls.gameSetupView == 1 and moduleCalls.deterministicRng == 2,
+    "first choose must replay current authority once and generate only the next offer")
 assertWriteOrder("valid choose", fullWriteOrder)
 local afterChoiceSnapshot = canonical(states[AUTHORITY])
 local writesAfterChoice = stateWrites
 events = {}
+moduleCalls = {}
 local stale = assertOk("stale double click", controller("choose", chosenCard, oldToken))
 assert(stale.applied == false and stale.stale == true, "old token was not a successful stale no-op")
 assert(canonical(states[AUTHORITY]) == afterChoiceSnapshot and stateWrites == writesAfterChoice,
     "stale double click wrote authority")
 assert(cbsCalls == 1, "stale recovery consumed a setup seed")
+assert(moduleCalls.gameSetup == 1 and moduleCalls.gameSetupView == 1 and moduleCalls.deterministicRng == 2,
+    "stale recovery repeated authority validation or View replay")
 assertWriteOrder("stale double click", publishOnlyOrder)
 
 -- Finish all ten rounds through the controller, preserving the setup seed.

@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$htmlPath = Join-Path $root 'html\firstmsg.html'
+$htmlPath = Join-Path $root 'Prompt\firstmsg.html'
 $cbsPath = Join-Path $root '.agents\References\CBS.md'
 
 function Assert-Contract {
@@ -16,6 +16,7 @@ function Assert-Contract {
 }
 
 $html = Get-Content -Raw -Encoding UTF8 -LiteralPath $htmlPath
+$main = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $root 'System\main.lua')
 $cbs = Get-Content -Raw -Encoding UTF8 -LiteralPath $cbsPath
 $trimmed = $html.Trim()
 $displayGuard = '{{#when::keep::{{isfirstmsg}}::is::1}}'
@@ -40,26 +41,18 @@ Assert-Contract ($whenOpen -eq $whenKeepOpen) 'every conditional must preserve i
 Assert-Contract ($whenOpen -eq $whenClose) 'CBS when blocks are not balanced'
 Assert-Contract (-not $html.Contains('{{:else}}')) 'multi-line CBS else is intentionally avoided'
 
-Assert-Contract ($displayUi.Contains('{{#when::keep::{{getvar::gameSetupReady}}::isnot::ready}}')) 'the incomplete setup branch is missing'
-Assert-Contract ($displayUi.Contains('{{#when::keep::{{getvar::gameSetupReady}}::is::ready}}')) 'the ready setup branch is missing'
-Assert-Contract ([regex]::Matches($displayUi, '\{\{getvar::gameSetupReady\}\}').Count -eq 2) 'the UI readiness boundary must depend only on the final ready marker'
-Assert-Contract ($displayUi.Contains('{{settempvar::setup_raw::{{getvar::gameSetupView}}}}')) 'the public setup view is not bound after readiness'
-Assert-Contract ($displayUi.Contains('{{dictelement::{{tempvar::setup_raw}}::phase}}')) 'the setup phase is not read from the public view'
-
-foreach ($phase in @('deckDraft', 'deckComplete', 'characterSelect', 'battleReady')) {
-    Assert-Contract ($html.Contains("::is::$phase")) "setup phase is not represented: $phase"
-}
-Assert-Contract ($html.Contains('{{tempvar::setup_phase}}::isnot::complete')) 'the completed setup status panel is not hidden'
-
 $startRoute = 'risu-btn="init|start"'
-Assert-Contract ([regex]::Matches($html, [regex]::Escape($startRoute)).Count -eq 1) 'there must be exactly one init start route'
-Assert-Contract ([regex]::Matches($html, '<button(?:\s|>)').Count -eq 1) 'the greeting exposes an unexpected button'
-Assert-Contract ([regex]::Matches($html, 'risu-btn=').Count -eq 1) 'the greeting exposes an unexpected Lua route'
-Assert-Contract ([regex]::Matches($html, '\{\{getvar::🔯🔯🔯\}\}').Count -eq 1) 'the dynamic UI anchor must exist exactly once'
+Assert-Contract (-not $html.Contains($startRoute)) 'the initial action must be injected by editDisplay, not frozen in outer CBS'
+Assert-Contract ([regex]::Matches($main, [regex]::Escape($startRoute)).Count -eq 1) 'main must expose exactly one init start route'
+Assert-Contract ($main.Contains('readUiFragment(triggerId, UI_READY_VAR) == "ready"')) 'editDisplay does not own the readiness boundary'
+$uiAnchorMarker = '@@HELLTRAIN_UI_ANCHOR_V1@@'
+Assert-Contract ([regex]::Matches($html, [regex]::Escape($uiAnchorMarker)).Count -eq 1) 'the dynamic UI anchor marker must exist exactly once'
+Assert-Contract (-not $displayUi.Contains('{{getvar::gameSetupReady}}')) 'outer CBS must not freeze the setup readiness state'
+Assert-Contract (-not $html.Contains('{{getvar::🔯🔯🔯}}')) 'the dynamic UI must be injected by editDisplay so targeted chat reloads cannot reuse stale outer CBS'
 
 Assert-Contract ($narrative.Contains('{{user}}')) 'the player identity macro is missing from the prompt-visible narrative'
 Assert-Contract ([regex]::Matches($narrative, '\{\{user\}\}').Count -ge 3) 'the player is not consistently placed in the opening narrative'
-foreach ($notice in @('만 19세 이상의 성인', '비동의적 성적 괴롭힘', '범죄', '동의하지 않았다는 사실', '치한행위를 저지르기로 결심')) {
+foreach ($notice in @('만 19세 이상의 성인', '비동의적 성적 괴롭힘', '범죄적 선택', '치한행위를 상습적으로 저질러 왔고')) {
     Assert-Contract ($narrative.Contains($notice)) "required prompt-visible narrative boundary is missing: $notice"
 }
 

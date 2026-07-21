@@ -226,94 +226,6 @@
         return report, nil
     end
 
-    local function lookupRegistryTag(registry, tagId, expectedKind, path, errors)
-        local collection = expectedKind == "action" and registry.actionTags or registry.mechanisms
-        local entry = type(collection) == "table" and collection[tagId] or nil
-        if type(entry) ~= "table"
-            or entry.id ~= tagId
-            or type(entry.label) ~= "string"
-            or entry.label == ""
-            or type(entry.tooltip) ~= "string"
-            or entry.tooltip == "" then
-            addError(errors, "invalid_tag_metadata", path, "태그 표시 정보를 찾을 수 없습니다: " .. tostring(tagId))
-            return nil
-        end
-        return {
-            kind = "tag",
-            id = tagId,
-            label = entry.label,
-            tagKind = expectedKind,
-            tooltip = entry.tooltip,
-        }
-    end
-
-    local function tokenizeForBuild(source, registry, path, errors)
-        local report, callError = callRuntime("viewBuilder", "tokenizeTags", source, registry, path)
-        if callError then
-            table.insert(errors, callError)
-            return {}
-        end
-        if report.ok ~= true or type(report.segments) ~= "table" then
-            appendNestedErrors(errors, path, report)
-            return {}
-        end
-
-        local shapeErrors = {}
-        local length = getArrayLength(report.segments, "$", shapeErrors)
-        if length == nil or #shapeErrors > 0 then
-            addError(errors, "invalid_tokenizer_result", path, "태그 해석 결과가 연속 배열이 아닙니다.")
-            return {}
-        end
-
-        local segments = {}
-        for index = 1, length do
-            local segment = report.segments[index]
-            local segmentPath = path .. ".segments[" .. index .. "]"
-            if type(segment) ~= "table" or getmetatable(segment) ~= nil then
-                addError(errors, "invalid_tokenizer_segment", segmentPath, "태그 해석 조각이 안전한 테이블이 아닙니다.")
-            elseif segment.kind == "text" and type(segment.value) == "string" and segment.value ~= "" then
-                table.insert(segments, {
-                    kind = "text",
-                    value = segment.value,
-                })
-            elseif segment.kind == "tag" and isAsciiId(segment.id) then
-                local inAction = type(registry.actionTags) == "table" and registry.actionTags[segment.id] ~= nil
-                local inMechanism = type(registry.mechanisms) == "table" and registry.mechanisms[segment.id] ~= nil
-                if inAction == inMechanism then
-                    addError(errors, "invalid_tokenizer_tag", segmentPath, "태그 종류를 하나로 결정할 수 없습니다.")
-                else
-                    local tag = lookupRegistryTag(
-                        registry,
-                        segment.id,
-                        inAction and "action" or "mechanism",
-                        segmentPath,
-                        errors
-                    )
-                    if tag then
-                        table.insert(segments, tag)
-                    end
-                end
-            else
-                addError(errors, "invalid_tokenizer_segment", segmentPath, "태그 해석 조각의 형식이 올바르지 않습니다.")
-            end
-        end
-        return segments
-    end
-
-    local function buildRuleLines(rules, registry, path, errors)
-        local lines = {}
-        if type(rules) ~= "table" then
-            addError(errors, "invalid_rules", path, "카드 규칙 목록이 배열이 아닙니다.")
-            return lines
-        end
-        for index, rule in ipairs(rules) do
-            table.insert(lines, {
-                segments = tokenizeForBuild(rule, registry, path .. "[" .. index .. "]", errors),
-            })
-        end
-        return lines
-    end
-
     local function buildOfferCard(slot, cardId, ownedCopies, data, errors)
         local path = "$.offer.cards[" .. slot .. "]"
         local card = data.cards[cardId]
@@ -326,36 +238,34 @@
             return nil
         end
 
-        local actionTag = lookupRegistryTag(data.registry, card.actionTag, "action", path .. ".actionTag", errors)
-        local mechanisms = {}
-        for index, mechanismId in ipairs(type(card.mechanisms) == "table" and card.mechanisms or {}) do
-            local tag = lookupRegistryTag(
-                data.registry,
-                mechanismId,
-                "mechanism",
-                path .. ".mechanisms[" .. index .. "]",
-                errors
-            )
-            if tag then
-                table.insert(mechanisms, tag)
-            end
+        local presentation, presentationError = callRuntime(
+            "viewBuilder",
+            "buildCardPresentation",
+            card,
+            data.registry,
+            path
+        )
+        if presentationError then
+            table.insert(errors, presentationError)
+            return nil
         end
-
-        if not actionTag or type(card.base) ~= "table" then
-            if type(card.base) ~= "table" then
-                addError(errors, "missing_card_base", path, "카드 기본 수치를 찾을 수 없습니다.")
-            end
+        if presentation.ok ~= true or type(presentation.card) ~= "table" then
+            appendNestedErrors(errors, path, presentation)
+            return nil
+        end
+        if type(card.base) ~= "table" then
+            addError(errors, "missing_card_base", path, "카드 기본 수치를 찾을 수 없습니다.")
             return nil
         end
 
         return {
             slot = slot,
-            cardId = card.id,
-            name = card.name,
-            descriptionSegments = tokenizeForBuild(card.description, data.registry, path .. ".description", errors),
-            ruleLines = buildRuleLines(card.rules, data.registry, path .. ".rules", errors),
-            actionTag = actionTag,
-            mechanisms = mechanisms,
+            cardId = presentation.card.cardId,
+            name = presentation.card.name,
+            descriptionSegments = presentation.card.descriptionSegments,
+            ruleLines = presentation.card.ruleLines,
+            actionTag = presentation.card.actionTag,
+            mechanisms = presentation.card.mechanisms,
             baseStealthCost = card.base.stealthCost,
             baseResistanceDamage = card.base.resistanceDamage,
             ownedCopies = ownedCopies,
@@ -659,20 +569,26 @@
         return success("valid", true)
     end
 
-    local function buildGameSetupView(state, staticData)
+    local function buildGameSetupView(state, staticData, canonicalInput)
         local errors = {}
-        local authorityValidation, authorityCallError = callRuntime("gameSetup", "validate", state, staticData)
-        if authorityCallError then
-            table.insert(errors, authorityCallError)
-            return failure(errors)
-        end
-        if authorityValidation.ok ~= true then
-            appendNestedErrors(errors, "$.state", authorityValidation)
-            return failure(errors)
-        end
-        local canonicalState = authorityValidation.state
-        if type(canonicalState) ~= "table" then
-            addError(errors, "invalid_authority_result", "$.state", "gameSetup.validate가 정규화된 권위 상태를 반환하지 않았습니다.")
+        local canonicalState = state
+        if canonicalInput ~= true then
+            local authorityValidation, authorityCallError = callRuntime("gameSetup", "validate", state, staticData)
+            if authorityCallError then
+                table.insert(errors, authorityCallError)
+                return failure(errors)
+            end
+            if authorityValidation.ok ~= true then
+                appendNestedErrors(errors, "$.state", authorityValidation)
+                return failure(errors)
+            end
+            canonicalState = authorityValidation.state
+            if type(canonicalState) ~= "table" then
+                addError(errors, "invalid_authority_result", "$.state", "gameSetup.validate가 정규화된 권위 상태를 반환하지 않았습니다.")
+                return failure(errors)
+            end
+        elseif type(canonicalState) ~= "table" then
+            addError(errors, "invalid_canonical_authority", "$.state", "내부 canonical authority가 테이블이 아닙니다.")
             return failure(errors)
         end
 
@@ -759,6 +675,22 @@
     local arguments = { ... }
     if action == "build" then
         return buildGameSetupView(arguments[1], arguments[2])
+    elseif action == "_buildCanonical" then
+        -- 버튼 dispatcher는 문자열 인자만 전달할 수 있다. 이 경로는
+        -- 동일 Lua transaction에서 authority를 이미 검증한 controller가
+        -- 함수 capability를 전달한 경우에만 열린다.
+        local permit = arguments[3]
+        local permitOk = false
+        if type(permit) == "function" then
+            local callOk, permitted = pcall(permit, "gameSetupViewCanonicalV1")
+            permitOk = callOk and permitted == true
+        end
+        if not permitOk then
+            local errors = {}
+            addError(errors, "internal_action_denied", "$.action", "내부 canonical View 작업에 접근할 수 없습니다.")
+            return failure(errors)
+        end
+        return buildGameSetupView(arguments[1], arguments[2], true)
     elseif action == "validate" then
         return validateGameSetupView(arguments[1])
     end

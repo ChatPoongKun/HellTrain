@@ -48,8 +48,12 @@ local modules = {
 }
 
 local moduleCalls = {}
+local moduleActions = {}
 function runScript(triggerId, name, ...)
     moduleCalls[name] = (moduleCalls[name] or 0) + 1
+    local moduleAction = select(1, ...)
+    local actionKey = tostring(name) .. "." .. tostring(moduleAction)
+    moduleActions[actionKey] = (moduleActions[actionKey] or 0) + 1
     local module = assert(modules[name], "unknown module: " .. tostring(name))
     return module(triggerId, ...)
 end
@@ -265,6 +269,9 @@ assert(states[AUTHORITY].turnNumber == 1 and type(states[AUTHORITY].turnStartRec
 assert(type(states[DRAFT]) == "table" and states[PENDING] == nil and states[LAST] == nil and states[ACTIVE] == nil)
 assert(type(chatVars.battleView) == "string" and chatVars.battleView ~= "", "initial view was not published")
 assert(reloadDisplayCount == 1, "initial view did not reload the display")
+assert(moduleActions["dataBridge._publishCanonical"] == 1
+    and moduleActions["dataBridge.publish"] == nil,
+    "controller did not use the capability-gated canonical View publisher")
 
 local reloadsBeforeExplicitPublish = reloadDisplayCount
 local published = assertOk("publish current view", controller("publishCurrentView"))
@@ -277,11 +284,14 @@ local initialInteractionToken = start.view.interactionToken
 assert(type(initialInteractionToken) == "string" and initialInteractionToken ~= "",
     "selecting View did not expose an interaction token")
 local reloadsBeforeFailedClick = reloadDisplayCount
+local turnDraftCallsBeforeFailedClick = moduleCalls.turnDraft or 0
 failNextChatVarWrite = "battleView"
 assertFails("focus publish failure", controller("clickCard", instanceId, initialInteractionToken),
     "view_write_not_persisted")
 assert(states[DRAFT].focusedInstanceId == instanceId, "failed focus publication did not persist the click transition")
 assert(reloadDisplayCount == reloadsBeforeFailedClick, "failed focus publication reloaded the display")
+assert((moduleCalls.turnDraft or 0) - turnDraftCallsBeforeFailedClick == 2,
+    "one card command should use one atomic draft transition and one persisted View inspection")
 
 local firstClick = assertOk("recover stale focus click",
     controller("clickCard", instanceId, initialInteractionToken))
@@ -302,6 +312,28 @@ assert(type(secondClick.interactionToken) == "string"
     and secondClick.interactionToken == secondClick.view.interactionToken
     and secondClick.interactionToken ~= firstClick.interactionToken,
     "applied click did not rotate the interaction token")
+
+local turnDraftCallsBeforeDirectCancel = moduleCalls.turnDraft or 0
+local directCancel = assertOk("explicit cancel card",
+    controller("cancelCard", instanceId, secondClick.interactionToken))
+assert(directCancel.applied == true and directCancel.stale == false
+    and directCancel.interactionAction == "cancel")
+assert(#directCancel.draft.registeredCardInstanceIds == 0,
+    "explicit cancel did not remove the registered card")
+assert((moduleCalls.turnDraft or 0) - turnDraftCallsBeforeDirectCancel == 2,
+    "explicit cancel repeated turnDraft ingress validation")
+
+local directRegister = assertOk("explicit register card",
+    controller("registerCard", instanceId, directCancel.interactionToken))
+assert(directRegister.applied == true and directRegister.stale == false
+    and directRegister.interactionAction == "register")
+assert(#directRegister.draft.registeredCardInstanceIds == 1
+    and directRegister.draft.registeredCardInstanceIds[1] == instanceId,
+    "explicit register required a server-side focus click")
+assert(directRegister.interactionToken == secondClick.interactionToken,
+    "equivalent legacy and explicit selection states produced different tokens")
+assert(reloadDisplayCount == reloadsBeforeFailedClick,
+    "button interactions duplicated the host's automatic message remount")
 
 appendChat("user", "*says nothing*")
 appendChat("char", "historical empty-send response")

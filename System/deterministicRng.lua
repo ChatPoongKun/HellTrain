@@ -300,6 +300,64 @@
         return errors, maximum
     end
 
+    local function nextIntegers(rng, ranges)
+        local errors = validateRng(rng)
+        local arrayErrors, length = inspectArray(ranges)
+        for _, item in ipairs(arrayErrors) do
+            item.path = string.gsub(item.path, "^%$%.array", "$.ranges")
+            table.insert(errors, item)
+        end
+
+        if length ~= nil then
+            for index = 1, length do
+                local range = ranges[index]
+                local path = "$.ranges[" .. index .. "]"
+                if type(range) ~= "table" then
+                    table.insert(errors, makeError("invalid_range", path, "범위 항목은 테이블이어야 합니다."))
+                elseif getmetatable(range) ~= nil then
+                    table.insert(errors, makeError("range_metatable_not_allowed", path, "범위 항목에는 메타테이블을 사용할 수 없습니다."))
+                else
+                    for key in pairs(range) do
+                        if key ~= "minimum" and key ~= "maximum" then
+                            table.insert(errors, makeError(
+                                "unknown_range_field",
+                                path .. "." .. tostring(key),
+                                "범위 항목에 허용되지 않은 필드가 있습니다."
+                            ))
+                        end
+                    end
+                    local rangeErrors = validateRange(range.minimum, range.maximum)
+                    for _, item in ipairs(rangeErrors) do
+                        item.path = path .. string.sub(item.path, 2)
+                        table.insert(errors, item)
+                    end
+                end
+            end
+        end
+        if #errors > 0 then
+            return failure(errors)
+        end
+
+        -- generateInteger를 기존 nextInteger와 동일한 순서로 호출한다.
+        -- batch는 Lua 모듈 경계만 합치며 RNG 소비 의미는 바꾸지 않는다.
+        local values = {}
+        local currentRng = cloneRng(rng)
+        for index = 1, length do
+            local range = ranges[index]
+            local value, nextRng, generationError = generateInteger(
+                currentRng,
+                range.minimum,
+                range.maximum
+            )
+            if generationError ~= nil then
+                return failure({ generationError })
+            end
+            values[index] = value
+            currentRng = nextRng
+        end
+        return success(values, currentRng)
+    end
+
     local function shuffle(rng, array)
         local errors = validateRng(rng)
         local arrayErrors, length = inspectArray(array)
@@ -332,6 +390,7 @@
     local actions = {
         validate = validateAction,
         nextInteger = nextInteger,
+        nextIntegers = nextIntegers,
         shuffle = shuffle,
     }
 

@@ -114,6 +114,31 @@ for index = 1, 6 do
     chainedState = report.rng
 end
 
+local batchInput = { seed = 100000, cursor = 0 }
+local batchRanges = {
+    { minimum = 1, maximum = 100 },
+    { minimum = 1, maximum = 1073741824 },
+    { minimum = -10, maximum = 10 },
+}
+local batch = assertOk("batched draws", call("nextIntegers", batchInput, batchRanges))
+local sequentialState = { seed = batchInput.seed, cursor = batchInput.cursor }
+local sequentialValues = {}
+for index, range in ipairs(batchRanges) do
+    local report = assertOk(
+        "batch reference " .. index,
+        call("nextInteger", sequentialState, range.minimum, range.maximum)
+    )
+    sequentialValues[index] = report.value
+    sequentialState = report.rng
+end
+assert(table.concat(batch.value, ",") == table.concat(sequentialValues, ","),
+    "nextIntegers changed sequential draw values")
+assert(batch.rng.seed == sequentialState.seed and batch.rng.cursor == sequentialState.cursor,
+    "nextIntegers changed sequential RNG state")
+assert(batchInput.seed == 100000 and batchInput.cursor == 0, "nextIntegers mutated its RNG input")
+assert(batchRanges[1].minimum == 1 and batchRanges[2].maximum == 1073741824,
+    "nextIntegers mutated its range input")
+
 local original = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j" }
 local shuffled = assertOk("fixed shuffle", call("shuffle", { seed = 42, cursor = 0 }, original))
 assert(table.concat(shuffled.value, ",") == "j,c,f,e,h,g,b,i,a,d", "fixed shuffle order changed")
@@ -154,6 +179,21 @@ assertError(
     call("shuffle", { seed = 1, cursor = 0 }, { [1] = "a", [3] = "c" }),
     "sparse_array",
     "$.array"
+)
+assertError(
+    "sparse batch ranges",
+    call("nextIntegers", { seed = 1, cursor = 0 }, {
+        [1] = { minimum = 1, maximum = 2 },
+        [3] = { minimum = 1, maximum = 2 },
+    }),
+    "sparse_array",
+    "$.ranges"
+)
+assertError(
+    "batch reversed range",
+    call("nextIntegers", { seed = 1, cursor = 0 }, { { minimum = 5, maximum = 4 } }),
+    "invalid_range_order",
+    "$.ranges[1].maximum"
 )
 
 print(

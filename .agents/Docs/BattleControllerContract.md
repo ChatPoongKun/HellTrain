@@ -7,11 +7,11 @@
 - `staticData.loadAll`
 - `battleBootstrap.verticalSlice`
 - `turnInitializer.prepareTurn`
-- `turnDraft.clickCard`, `turnDraft.interactionToken`, `turnDraft.project`, `turnDraft.validate`
+- `turnDraft.applyInteraction`, `turnDraft.inspect`, `turnDraft.project`, `turnDraft.validate`
 - `battleRuntime.preparePending`, `battleRuntime.reusePending`, `battleRuntime.commitPending`
 - `turnPromptFormatter.formatPending`
 - `viewBuilder.buildBattleView`
-- `dataBridge.publish`
+- `dataBridge._publishCanonical` (함수 capability가 있는 내부 경로)
 
 LLM을 직접 호출하거나 전송을 자동화하지 않는다. Continue, 프롬프트 미리보기와 과거 여러 턴의 임의 재생성은 v1에서 지원하지 않는다. 지원하는 재생성은 공개 마커로 식별할 수 있는 직전 확정 턴 하나뿐이다.
 
@@ -146,7 +146,9 @@ phase 의미는 다음과 같다.
 
 따라서 RisuAI 권한 문제로 쓰기가 조용히 무시되는 경우를 성공으로 취급하지 않는다. 읽은 테이블도 그대로 반환하거나 수정하지 않고 먼저 복제한다.
 
-`battleView` 게시도 `dataBridge.publish("battleView", view)` 뒤 `getChatVar("battleView")`가 반환한 wire와 encoder 결과가 정확히 같은지 검사한다. 확인이 끝난 뒤에만 `reloadDisplay(triggerId)`를 호출한다. 저장되지 않은 View에는 화면 reload를 요청하지 않는다.
+`battleView`는 같은 transaction에서 `viewBuilder.buildBattleView`가 schema allowlist 검증을 끝낸 값이다. 따라서 컨트롤러는 `purpose == "dataBridgeCanonicalV1"`이고 `viewName == "battleView"`일 때만 승인하는 private 함수 capability와 함께 `dataBridge._publishCanonical`을 호출한다. bridge의 JSON-safe 검사는 유지하며, 일반 외부 `publish` 경로에는 이 우회를 노출하지 않는다.
+
+게시 뒤에는 `getChatVar("battleView")`가 반환한 wire와 encoder 결과가 정확히 같은지 항상 검사한다. hook·명시적 `publishCurrentView`처럼 버튼 밖에서 게시하면 확인 뒤 `refreshGameUi`의 대상 `reloadChat(-1)`을 사용하고 불가능할 때만 `reloadDisplay`로 복구한다. `registerCard`/`cancelCard`/`clickCard`는 RisuAI button host가 클릭 message를 자동 remount하므로 수동 reload를 중복하지 않는다. 저장되지 않은 View에는 controller reload를 요청하지 않는다.
 
 채팅의 제거·추가도 `getFullChat`으로 다시 읽어 길이, 기존 prefix와 마지막 메시지를 확인한다. RisuAI 채팅 index는 0부터 시작하므로 Lua 배열의 마지막 항목은 `removeChat(triggerId, #chat - 1)`로 제거한다.
 
@@ -216,19 +218,20 @@ runScript(triggerId, "battleBootstrap", "verticalSlice", {
 
 bootstrap은 pre-initializer 상태만 반환한다. 컨트롤러가 `<battleId>-turn-001` 형식의 `turnId`로 `turnInitializer.prepareTurn`을 한 번 호출하고, 초기화된 authority와 draft가 모두 만들어진 뒤에만 저장을 시작한다. `pending`, `lastCommittedPending`, `activeRequest`는 지우고 선택 가능 View를 게시한다.
 
-### `clickCard(instanceId, expectedInteractionToken)`
+### `registerCard` / `cancelCard` / `clickCard`
+
+현재 UI는 native `details`로 카드 상세를 로컬에서 즉시 열고, 실제 권위 변경에만 `registerCard(instanceId, expectedInteractionToken)` 또는 `cancelCard(instanceId, expectedInteractionToken)`을 호출한다. `clickCard(instanceId, expectedInteractionToken)`은 첫 호출 focus, 같은 카드 두 번째 호출 등록, 등록 카드 재호출 취소라는 v1 클라이언트 호환 action으로 남는다.
 
 pending이 존재하거나 `activeRequest.phase`가 `preparing`/`inFlight`/`requestInjected`이면 `battle_view_locked`로 거부한다. `committed` binding은 이전 출력의 감사·재생성 자료일 뿐이므로 다음 턴 카드 선택을 막지 않는다.
 
-선택 가능한 `battleView.interactionToken`은 검증된 현재 draft fingerprint에서 만든 비어 있지 않은 `draftv1_...` 문자열이다. 버튼은 instance ID와 화면을 만들 때 받은 token을 함께 보내야 한다. 컨트롤러는 저장 authority·draft에서 `turnDraft.interactionToken`을 다시 계산한다.
+선택 가능한 `battleView.interactionToken`은 검증된 현재 draft fingerprint에서 만든 비어 있지 않은 `draftv1_...` 문자열이다. 버튼은 instance ID와 화면을 만들 때 받은 token을 함께 보내야 한다. 컨트롤러는 공개 action을 `click`/`register`/`cancel`로 고정한 뒤 저장 authority·draft와 함께 `turnDraft.applyInteraction`에 전달한다. 이 호출 하나가 외부 ingress 검증, 현재 token 계산, stale 판정, 전이와 다음 token 계산을 수행한다.
 
 - expected token이 비어 있거나 문자열이 아니면 `invalid_interaction_token`으로 거부한다.
-- expected token이 현재 token과 다르면 클릭 전이를 적용하지 않는다. 현재 View만 다시 게시하고 `ok = true`, `applied = false`, `stale = true`, 현재 token을 반환한다.
-- token이 정확히 같을 때만 `turnDraft.clickCard`를 호출하고 draft를 write-read 검증해 저장한 뒤 View를 게시한다. 성공은 `applied = true`, `stale = false`, 다음 View token을 반환한다.
+- expected token이 현재 token과 다르면 전이를 적용하지 않는다. 현재 View만 다시 게시하고 `ok = true`, `applied = false`, `stale = true`, 현재 token을 반환한다.
+- token이 정확히 같을 때만 선택 전이를 적용한다. 실제 draft가 바뀌면 write-read 검증해 저장한 뒤 View를 게시한다. 성공은 `stale = false`와 다음 View token을 반환하며, 이미 같은 상태인 명시 register/cancel은 `applied = false`인 멱등 no-op이다.
+- 게시된 View token은 `applyInteraction`이 계산한 다음 token과 정확히 같아야 한다. 저장 경계를 다시 읽어 만든 View가 다르면 fail-closed한다.
 
-첫 클릭 focus, 같은 카드 두 번째 클릭 등록과 등록 카드 재클릭 취소 의미는 `turnDraft` 계약을 그대로 사용한다.
-
-draft 저장 성공 뒤 View 게시만 실패한 경우 카드 전이는 이미 확정됐지만 화면의 버튼은 이전 token을 가진다. 같은 버튼 호출은 stale 분기로 들어가 현재 View만 재게시하므로 focus를 register로, register를 cancel로 두 번 진행하지 않는다.
+draft 저장 성공 뒤 View 게시만 실패한 경우 카드 전이는 이미 확정됐지만 화면의 버튼은 이전 token을 가진다. 같은 버튼 호출은 stale 분기로 들어가 현재 View만 재게시하므로 register를 cancel로 또는 legacy focus를 register로 두 번 진행하지 않는다. draft write-read와 View wire readback, pending/commit 복구 journal은 이 최적화로 완화하지 않는다.
 
 ### `prepareGeneration()`
 
@@ -285,7 +288,7 @@ pending 원본을 먼저 `lastCommittedPending`으로 복제하므로 이후 쓰
 
 authority가 active이고 pending이 있으면 pending context, 없으면 draft context를 사용한다. draft 경로에서 active binding phase가 `preparing`/`inFlight`/`requestInjected`이면 `context.generationLocked = true`도 전달한다. 이는 직전 출력 재생성 중인 현재 draft의 hand·selection을 보존하면서 View를 `awaitingOutput`, `locked = true`로 만들어 버튼을 시각적으로도 잠근다. `committed`/binding 없음은 선택 View를 잠그지 않는다. 종료 상태에는 draft·pending·추가 lock을 전달하지 않으며 종료 View 자체가 잠겨 있다.
 
-저장된 `lastCommittedPending`이 있으면 상태와 함께 `context.lastCommittedPending`으로 전달해 `view.lastTurn`을 만든다. 반대로 authority에 `lastCommittedTurnId`가 있는데 저장된 last pending이 없으면 공개 결과를 추측하지 않고 `missing_last_committed_pending`으로 실패한다. `viewBuilder` 검증, `dataBridge` 게시, raw wire 재읽기와 display reload까지 성공해야 `ok = true`다.
+저장된 `lastCommittedPending`이 있으면 상태와 함께 `context.lastCommittedPending`으로 전달해 `view.lastTurn`을 만든다. 반대로 authority에 `lastCommittedTurnId`가 있는데 저장된 last pending이 없으면 공개 결과를 추측하지 않고 `missing_last_committed_pending`으로 실패한다. `viewBuilder` 검증, `dataBridge` 게시와 raw wire 재읽기가 필수다. display는 호출 경로에 따라 host button remount 또는 검증 후 `refreshGameUi`로 반영한다.
 
 ### `getSnapshot()`
 
@@ -318,16 +321,20 @@ authority가 active이고 pending이 있으면 pending context, 없으면 draft 
 - `prepareGeneration` 성공이어도 `generationReady = false`이면 복구된 commit만 마치고 현재 전송은 취소
 - `editRequest` → `battleController.injectRequest`, 성공 시 `report.promptArray` 반환
 - 정상 `onOutput` → `battleController.commitOutput`
-- 전투 카드 버튼 → `battleController.clickCard(instanceId, battleView.interactionToken)`
+- 카드 상세 `<details>`/`<summary>` → 브라우저 로컬 상태만 변경, Lua 호출 없음
+- 카드 등록 버튼 → `battleController.registerCard(instanceId, battleView.interactionToken)`
+- 등록 취소 버튼 → `battleController.cancelCard(instanceId, battleView.interactionToken)`
+- 구 UI 카드 버튼 → `battleController.clickCard(instanceId, battleView.interactionToken)` 호환
 
-정확한 hook 실행 순서, mode별 쓰기 권한과 생성 중 중복 전송 차단은 실제 RisuAI에서 다시 확인해야 한다. 현재 UI 템플릿 변수 `🔯🔯🔯`에 전투 표시 anchor를 설정하는 일과 HTML/CBS가 `battleView`를 렌더링하도록 연결하는 일도 별도 UI 통합 범위다. 컨트롤러는 `battleView` wire 게시와 `reloadDisplay`까지만 책임진다.
+정확한 hook 실행 순서, mode별 쓰기 권한과 생성 중 중복 전송 차단은 실제 RisuAI에서 다시 확인해야 한다. UI는 `main.lua` 의 상시 first-message sentinel을 `editDisplay`에서 shell·body·popup slot으로 치환하고, `battleui.html`이 `battleView` wire를 CBS로 표시하도록 통합되었다. 컨트롤러는 검증된 wire 게시를 책임지고, button은 host 자동 remount, hook 게시는 대상 UI refresh를 사용한다.
 
 ## 10. 로컬 검증
 
 `.agents/Tests/battle-controller-check.ps1`은 실제 순수 모듈을 함께 불러와 두 개의 독립 Lua 프로세스에서 다음을 검사한다.
 
 - 명시적 ID·시드 bootstrap, 첫 턴 초기화와 선택 View 게시
-- 카드 focus·등록과 draft 저장
+- legacy 카드 focus·등록 호환, 명시 register/cancel과 draft 저장
+- 명령당 atomic draft 전이 1회와 저장 View 재검증 1회만 수행되는 호출 계약
 - 클릭 뒤 View 게시 실패, 구 interaction token 재호출의 전이 비적용·표시 복구와 token 회전
 - 무시된 `activeRequest` 쓰기의 write-read 실패, filler 보존과 저장 pending 재사용 복구
 - 연속된 trailing exact filler 전체 제거, 과거 filler 보존, 공개 마커 추가와 중복 억제
@@ -347,7 +354,7 @@ authority가 active이고 pending이 있으면 pending context, 없으면 draft 
 - 직전 재생성 동안 generation-locked View와 카드 클릭 거부, commit 뒤 draft 잠금 해제
 - authority의 확정 turnId와 저장 last pending 불일치 시 View fail-closed
 - 새 턴 pending 생성과 지원하지 않는 Continue 유사 경로 거부
-- battleView wire 재읽기와 확인 뒤 `reloadDisplay`
+- battleView wire 재읽기, button 수동 reload 없음과 비버튼 게시의 검증 후 refresh
 - strict 오류 envelope와 별도 프로세스 결정성
 
 로컬 검사는 실제 RisuAI의 hook 순서, mode별 권한, 채팅 재생성 UI 동작과 CBS/HTML 렌더링을 대신하지 않는다.

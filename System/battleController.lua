@@ -13,6 +13,10 @@
         activeRequest = "battleRuntimeV1.activeRequest",
     }
 
+    local function permitCanonicalBattleView(purpose, viewName)
+        return purpose == "dataBridgeCanonicalV1" and viewName == VIEW_NAME
+    end
+
     local function makeError(code, path, message)
         return {
             code = code,
@@ -1113,7 +1117,7 @@
         return after, true, nil
     end
 
-    local function publishCurrentViewInternal(staticData)
+    local function publishCurrentViewInternal(staticData, suppressRefresh)
         staticData = staticData or select(1, loadStaticData())
         if staticData == nil then
             local _, errors = loadStaticData()
@@ -1191,9 +1195,10 @@
 
         local published, publishErrors = callModule(
             "dataBridge",
-            "publish",
+            "_publishCanonical",
             VIEW_NAME,
-            built.view
+            built.view,
+            permitCanonicalBattleView
         )
         if publishErrors then
             return nil, publishErrors
@@ -1219,16 +1224,19 @@
                 makeError("view_write_not_persisted", "$.chatVar.battleView", "게시 뒤 읽은 battleView가 인코딩 결과와 다릅니다."),
             }
         end
-        if type(reloadDisplay) ~= "function" then
-            return nil, {
-                makeError("display_reload_unavailable", "$.host.reloadDisplay", "게시한 battleView를 화면에 반영할 reloadDisplay가 없습니다."),
-            }
-        end
-        local reloadOk, reloadError = pcall(reloadDisplay, triggerId)
-        if not reloadOk then
-            return nil, {
-                makeError("display_reload_failed", "$.host.reloadDisplay", "battleView 게시 뒤 화면 갱신에 실패했습니다: " .. tostring(reloadError)),
-            }
+        if suppressRefresh ~= true then
+            local uiRefresh = type(refreshGameUi) == "function" and refreshGameUi or reloadDisplay
+            if type(uiRefresh) ~= "function" then
+                return nil, {
+                    makeError("display_reload_unavailable", "$.host.refreshGameUi", "게시한 battleView를 화면에 반영할 UI 갱신 함수가 없습니다."),
+                }
+            end
+            local reloadOk, reloadError = pcall(uiRefresh, triggerId)
+            if not reloadOk then
+                return nil, {
+                    makeError("display_reload_failed", "$.host.refreshGameUi", "battleView 게시 뒤 화면 갱신에 실패했습니다: " .. tostring(reloadError)),
+                }
+            end
         end
 
         return {
@@ -1302,7 +1310,18 @@
         })
     end
 
-    local function clickCard(instanceId, expectedInteractionToken)
+    local function interactCard(interactionAction, instanceId, expectedInteractionToken)
+        if interactionAction ~= "click"
+            and interactionAction ~= "register"
+            and interactionAction ~= "cancel" then
+            return failure({
+                makeError(
+                    "invalid_interaction_action",
+                    "$.interactionAction",
+                    "카드 상호작용 작업은 click, register, cancel 중 하나여야 합니다."
+                ),
+            })
+        end
         local staticData, staticErrors = loadStaticData()
         if staticErrors then
             return failure(staticErrors)
@@ -1337,37 +1356,66 @@
                 })
             end
         end
-        local draft, draftErrors = readStored(KEYS.draft, true)
-        if draftErrors then
-            return failure(draftErrors)
+        if not isRuntimeId(instanceId) then
+            return failure({
+                makeError("invalid_instance_id", "$.instanceId", "카드 인스턴스 ID가 올바르지 않습니다."),
+            })
         end
         if type(expectedInteractionToken) ~= "string" or expectedInteractionToken == "" then
             return failure({
                 makeError("invalid_interaction_token", "$.expectedInteractionToken", "비어 있지 않은 draft interaction token이 필요합니다."),
             })
         end
-        local tokenReport, tokenErrors = callModule(
+        local draft, draftErrors = readStored(KEYS.draft, true)
+        if draftErrors then
+            return failure(draftErrors)
+        end
+        local interacted, interactionErrors = callModule(
             "turnDraft",
-            "interactionToken",
+            "applyInteraction",
             authority,
             staticData,
-            draft
+            draft,
+            {
+                action = interactionAction,
+                instanceId = instanceId,
+                expectedInteractionToken = expectedInteractionToken,
+            }
         )
-        if tokenErrors then
-            return failure(tokenErrors)
+        if interactionErrors then
+            return failure(interactionErrors)
         end
-        if type(tokenReport.interactionToken) ~= "string" or tokenReport.interactionToken == ""
-            or type(tokenReport.draft) ~= "table" then
+        if type(interacted.draft) ~= "table"
+            or type(interacted.interactionToken) ~= "string"
+            or interacted.interactionToken == ""
+            or type(interacted.applied) ~= "boolean"
+            or type(interacted.stale) ~= "boolean"
+            or interacted.interactionAction ~= interactionAction then
             return failure({
-                makeError("invalid_interaction_token_result", "$.runtime.turnDraft.interactionToken", "검증된 draft와 interaction token이 없습니다."),
+                makeError(
+                    "invalid_interaction_result",
+                    "$.runtime.turnDraft.applyInteraction",
+                    "검증된 카드 상호작용 결과와 다음 interaction token이 없습니다."
+                ),
             })
         end
-        if expectedInteractionToken ~= tokenReport.interactionToken then
-            local published, publishErrors = publishCurrentViewInternal(staticData)
+        if interacted.stale then
+            if interacted.applied then
+                return failure({
+                    makeError(
+                        "invalid_stale_interaction_result",
+                        "$.runtime.turnDraft.applyInteraction",
+                        "stale 카드 상호작용은 전이를 적용할 수 없습니다."
+                    ),
+                })
+            end
+            -- risu-btn host가 클릭 message를 자동 remount하므로 수동
+            -- refresh를 중복하지 않는다.
+            local published, publishErrors = publishCurrentViewInternal(staticData, true)
             if publishErrors then
                 return failure(publishErrors)
             end
-            if published.view.interactionToken ~= tokenReport.interactionToken then
+            if published.view.interactionToken ~= interacted.interactionToken then
                 return failure({
                     makeError("view_interaction_token_mismatch", "$.view.interactionToken", "재게시 View가 현재 draft interaction token과 일치하지 않습니다."),
                 })
@@ -1375,47 +1423,47 @@
             return success({
                 applied = false,
                 stale = true,
-                interactionToken = tokenReport.interactionToken,
-                draft = tokenReport.draft,
+                interactionAction = interactionAction,
+                interactionToken = interacted.interactionToken,
+                draft = interacted.draft,
                 view = published.view,
             })
         end
-        local clicked, clickErrors = callModule(
-            "turnDraft",
-            "clickCard",
-            authority,
-            staticData,
-            tokenReport.draft,
-            instanceId
-        )
-        if clickErrors then
-            return failure(clickErrors)
+        if interacted.applied then
+            local writeErrors = writeStored(KEYS.draft, interacted.draft)
+            if writeErrors then
+                return failure(writeErrors)
+            end
         end
-        if type(clicked.draft) ~= "table" then
-            return failure({
-                makeError("missing_clicked_draft", "$.runtime.turnDraft.draft", "카드 클릭 결과에 draft가 없습니다."),
-            })
-        end
-        local writeErrors = writeStored(KEYS.draft, clicked.draft)
-        if writeErrors then
-            return failure(writeErrors)
-        end
-        local published, publishErrors = publishCurrentViewInternal(staticData)
+        local published, publishErrors = publishCurrentViewInternal(staticData, true)
         if publishErrors then
             return failure(publishErrors)
         end
-        if type(published.view.interactionToken) ~= "string" or published.view.interactionToken == "" then
+        if published.view.interactionToken ~= interacted.interactionToken then
             return failure({
-                makeError("missing_view_interaction_token", "$.view.interactionToken", "적용된 카드 전이 View에 다음 interaction token이 없습니다."),
+                makeError("view_interaction_token_mismatch", "$.view.interactionToken", "카드 전이 View가 계산된 다음 interaction token과 일치하지 않습니다."),
             })
         end
         return success({
-            applied = true,
+            applied = interacted.applied,
             stale = false,
-            interactionToken = published.view.interactionToken,
-            draft = clicked.draft,
+            interactionAction = interactionAction,
+            interactionToken = interacted.interactionToken,
+            draft = interacted.draft,
             view = published.view,
         })
+    end
+
+    local function clickCard(instanceId, expectedInteractionToken)
+        return interactCard("click", instanceId, expectedInteractionToken)
+    end
+
+    local function registerCard(instanceId, expectedInteractionToken)
+        return interactCard("register", instanceId, expectedInteractionToken)
+    end
+
+    local function cancelCard(instanceId, expectedInteractionToken)
+        return interactCard("cancel", instanceId, expectedInteractionToken)
     end
 
     local loadBoundPending
@@ -2294,6 +2342,10 @@
         return startVerticalSlice(arguments[1], arguments[2])
     elseif action == "clickCard" then
         return clickCard(arguments[1], arguments[2])
+    elseif action == "registerCard" then
+        return registerCard(arguments[1], arguments[2])
+    elseif action == "cancelCard" then
+        return cancelCard(arguments[1], arguments[2])
     elseif action == "prepareGeneration" then
         return prepareGeneration()
     elseif action == "injectRequest" then

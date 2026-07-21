@@ -1,7 +1,14 @@
 (function(triggerId, action, targetScript, ...)
-    local POPUP_VAR = "🔯🔯🔯"
+    local POPUP_VAR = "helltrainUiPopupV1"
     local POPUP_STATE = "popupState"
     local targetArgs = {...}
+    local ALLOWED_POPUP_HTML = {
+        ["캐릭터 리스트"] = true,
+        ["도감"] = true,
+        ["덱 확인"] = true,
+        ["플레이 가이드"] = true,
+        ["설정"] = true,
+    }
 
     local function emptyState()
         return {
@@ -35,9 +42,7 @@
     end
 
     local function clearPopupHtml()
-        local uiBuilder = getChatVar(triggerId, POPUP_VAR) or ""
-        uiBuilder = uiBuilder:gsub("(<!%-%- popup %-%->).-(<!%-%- popup %-%->)", "%1%2")
-        setChatVar(triggerId, POPUP_VAR, uiBuilder)
+        setChatVar(triggerId, POPUP_VAR, "")
     end
 
     local function makeEntry(script, args)
@@ -45,6 +50,22 @@
             script = script,
             args = args or {}
         }
+    end
+
+    local function isAllowedEntry(entry)
+        if type(entry) ~= "table" or type(entry.script) ~= "string" then
+            return false
+        end
+        local args = type(entry.args) == "table" and entry.args or {}
+        if entry.script == "uiRender" then
+            return (args[1] == "append" or args[1] == "popup")
+                and ALLOWED_POPUP_HTML[args[2]] == true
+                and args[3] == nil
+        end
+        if entry.script == "캐릭터 프로필" then
+            return args[1] == "유지영" and args[2] == nil
+        end
+        return false
     end
 
     local function argsEqual(left, right)
@@ -83,11 +104,16 @@
     local function renderPopup(entry)
         if not entry or not entry.script or entry.script == "" then
             debug(1, "popupManage error: empty target script.")
-            return
+            return false
+        end
+        if not isAllowedEntry(entry) then
+            debug(1, "popupManage error: disallowed popup target.")
+            return false
         end
 
         clearPopupHtml()
         runScript(triggerId, entry.script, table.unpack(entry.args or {}))
+        return true
     end
 
     local actions = {}
@@ -106,7 +132,9 @@
             history = {}
         }
 
-        renderPopup(nextEntry)
+        if not renderPopup(nextEntry) then
+            return
+        end
         setPopupState(nextState)
     end
 
@@ -119,7 +147,9 @@
         end
 
         state.current = nextEntry
-        renderPopup(nextEntry)
+        if not renderPopup(nextEntry) then
+            return
+        end
         setPopupState(state)
     end
 
@@ -128,7 +158,9 @@
         local nextEntry = makeEntry(targetScript, targetArgs)
 
         state.current = nextEntry
-        renderPopup(nextEntry)
+        if not renderPopup(nextEntry) then
+            return
+        end
         setPopupState(state)
     end
 
@@ -142,7 +174,9 @@
         end
 
         state.current = previous
-        renderPopup(previous)
+        if not renderPopup(previous) then
+            return
+        end
         setPopupState(state)
     end
 

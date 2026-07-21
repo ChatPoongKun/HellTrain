@@ -318,7 +318,7 @@
         return pool, nil
     end
 
-    local function callNextInteger(rng, minimum, maximum)
+    local function callNextIntegers(rng, ranges)
         if type(runScript) ~= "function" then
             return nil, nil, {
                 makeError("runtime_unavailable", "$.runtime.deterministicRng", "deterministicRng를 호출할 runScript가 없습니다."),
@@ -328,14 +328,13 @@
             runScript,
             triggerId,
             "deterministicRng",
-            "nextInteger",
+            "nextIntegers",
             rng,
-            minimum,
-            maximum
+            ranges
         )
         if not ok then
             return nil, nil, {
-                makeError("module_call_failed", "$.runtime.deterministicRng", "deterministicRng.nextInteger 호출에 실패했습니다: " .. tostring(report)),
+                makeError("module_call_failed", "$.runtime.deterministicRng", "deterministicRng.nextIntegers 호출에 실패했습니다: " .. tostring(report)),
             }
         end
         if type(report) ~= "table" then
@@ -348,18 +347,45 @@
             appendNestedErrors(errors, report.errors, "$.runtime.deterministicRng")
             return nil, nil, errors
         end
-        if not isSafeInteger(report.value, minimum)
-            or report.value > maximum
-            or type(report.rng) ~= "table"
+
+        local errors = {}
+        local valueCount = denseArrayLength(report.value, "$.runtime.deterministicRng.value", errors)
+        if valueCount ~= #ranges then
+            appendError(
+                errors,
+                "invalid_rng_batch_size",
+                "$.runtime.deterministicRng.value",
+                "deterministicRng의 batch 결과 개수가 요청 개수와 다릅니다."
+            )
+        elseif valueCount ~= nil then
+            for index = 1, valueCount do
+                local value = report.value[index]
+                local range = ranges[index]
+                if not isSafeInteger(value, range.minimum) or value > range.maximum then
+                    appendError(
+                        errors,
+                        "invalid_rng_batch_value",
+                        "$.runtime.deterministicRng.value[" .. index .. "]",
+                        "deterministicRng의 batch 결과가 요청 범위를 벗어났습니다."
+                    )
+                end
+            end
+        end
+        if type(report.rng) ~= "table"
             or not isSafeInteger(report.rng.seed, 0)
             or not isSafeInteger(report.rng.cursor, 0)
             or report.rng.seed ~= rng.seed
             or report.rng.cursor <= rng.cursor then
-            return nil, nil, {
-                makeError("invalid_rng_result", "$.runtime.deterministicRng", "deterministicRng의 결과 계약이 올바르지 않습니다."),
-            }
+            appendError(errors, "invalid_rng_result", "$.runtime.deterministicRng", "deterministicRng의 결과 계약이 올바르지 않습니다.")
         end
-        return report.value, {
+        if #errors > 0 then
+            return nil, nil, errors
+        end
+        local values = {}
+        for index = 1, valueCount do
+            values[index] = report.value[index]
+        end
+        return values, {
             seed = report.rng.seed,
             cursor = report.rng.cursor,
         }, nil
@@ -417,16 +443,22 @@
             }
         end
 
-        local currentRng = { seed = rng.seed, cursor = rng.cursor }
+        local ranges = {}
+        for pick = 1, OFFER_SIZE do
+            ranges[pick] = {
+                minimum = 1,
+                maximum = #eligible - pick + 1,
+            }
+        end
+        local selectedIndices, currentRng, rngErrors = callNextIntegers(rng, ranges)
+        if rngErrors then
+            return nil, nil, rngErrors
+        end
         local offered = {}
         for pick = 1, OFFER_SIZE do
-            local selectedIndex, nextRng, rngErrors = callNextInteger(currentRng, 1, #eligible)
-            if rngErrors then
-                return nil, nil, rngErrors
-            end
+            local selectedIndex = selectedIndices[pick]
             offered[pick] = eligible[selectedIndex]
             table.remove(eligible, selectedIndex)
-            currentRng = nextRng
         end
         return {
             round = round,
@@ -445,6 +477,10 @@
     end
 
     local function replay(setupId, seed, selectedCardIds, pool)
+        -- 저장/복구 경계의 기준 구현이다. seed와 전체 선택 이력만으로
+        -- authority를 처음부터 다시 만들며 validate는 항상 이 경로를 쓴다.
+        -- 버튼 처리의 다음 상태 생성은 아래 advanceValidatedState에서 현재
+        -- 검증이 끝난 RNG cursor부터 이어 가되, 이 구현은 삭제하지 않는다.
         local counts = {}
         local rng = { seed = seed, cursor = 0 }
 
@@ -496,6 +532,63 @@
             phase = "deckComplete",
             rng = rng,
             selectedCardIds = copyArray(selectedCardIds),
+        }, nil
+    end
+
+    local function advanceValidatedState(current, selectedCardId, pool)
+        -- current는 같은 choose 호출에서 validateAndReplay를 통과해 얻은
+        -- canonical snapshot이다. 외부/저장 값을 이 함수에 직접 넣지 않는다.
+        local selected = copyArray(current.selectedCardIds)
+        selected[#selected + 1] = selectedCardId
+
+        local counts = {}
+        for _, cardId in ipairs(selected) do
+            counts[cardId] = (counts[cardId] or 0) + 1
+            if counts[cardId] > MAX_COPIES then
+                return nil, {
+                    makeError(
+                        "card_copy_limit_exceeded",
+                        "$.selectedCardIds[" .. #selected .. "]",
+                        "같은 카드는 최대 2장까지 선택할 수 있습니다."
+                    ),
+                }
+            end
+        end
+
+        if #selected == TOTAL_DRAFTS then
+            return {
+                schemaVersion = SCHEMA_VERSION,
+                kind = KIND,
+                setupId = current.setupId,
+                phase = "deckComplete",
+                rng = {
+                    seed = current.rng.seed,
+                    cursor = current.rng.cursor,
+                },
+                selectedCardIds = selected,
+            }, nil
+        end
+
+        local nextRound = #selected + 1
+        local offer, nextRng, offerErrors = generateOffer(
+            current.setupId,
+            nextRound,
+            current.rng,
+            selected,
+            counts,
+            pool
+        )
+        if offerErrors then
+            return nil, offerErrors
+        end
+        return {
+            schemaVersion = SCHEMA_VERSION,
+            kind = KIND,
+            setupId = current.setupId,
+            phase = "deckDraft",
+            rng = nextRng,
+            selectedCardIds = selected,
+            offer = offer,
         }, nil
     end
 
@@ -725,11 +818,9 @@
             })
         end
 
-        local selected = copyArray(current.selectedCardIds)
-        selected[#selected + 1] = command.cardId
-        local nextState, replayErrors = replay(current.setupId, current.rng.seed, selected, pool)
-        if replayErrors then
-            return failure(replayErrors)
+        local nextState, advanceErrors = advanceValidatedState(current, command.cardId, pool)
+        if advanceErrors then
+            return failure(advanceErrors)
         end
         return success(nextState, true, false)
     end

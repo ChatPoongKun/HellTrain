@@ -19,8 +19,8 @@
         }
     end
 
-    local function success(draft, projection, receipt, interactionToken)
-        return {
+    local function success(draft, projection, receipt, interactionToken, fields)
+        local report = {
             ok = true,
             schemaVersion = SCHEMA_VERSION,
             errors = {},
@@ -29,6 +29,10 @@
             receipt = receipt,
             interactionToken = interactionToken,
         }
+        for key, value in pairs(fields or {}) do
+            report[key] = value
+        end
+        return report
     end
 
     local function isFinite(value)
@@ -914,43 +918,46 @@
         return success(validated.draft)
     end
 
-    local function getInteractionToken(state, staticData, draft)
-        local validated, errors = validateInternal(state, staticData, draft)
-        if errors then
-            return failure(errors)
-        end
-        local draftFingerprint, fingerprintError = fingerprint(validated.draft)
+    local function interactionTokenForDraft(draft)
+        local draftFingerprint, fingerprintError = fingerprint(draft)
         if fingerprintError then
-            return failure({ fingerprintError })
+            return nil, fingerprintError
         end
-        local token = table.concat({
+        return table.concat({
             "draftv1",
             tostring(draftFingerprint.length),
             tostring(draftFingerprint.hashA),
             tostring(draftFingerprint.hashB),
-        }, "_")
-        return success(validated.draft, nil, nil, token)
+        }, "_"), nil
     end
 
-    local function focusCard(state, staticData, draft, instanceId)
+    local function inspectDraft(state, staticData, draft)
         local validated, errors = validateInternal(state, staticData, draft)
         if errors then
             return failure(errors)
         end
+        local token, tokenError = interactionTokenForDraft(validated.draft)
+        if tokenError then
+            return failure({ tokenError })
+        end
+        return success(validated.draft, nil, nil, token)
+    end
+
+    local function focusValidated(validated, instanceId)
         if not isRuntimeId(instanceId) then
-            return failure({
+            return nil, {
                 makeError("invalid_instance_id", "$.instanceId", "상세 표시 카드 ID가 올바르지 않습니다."),
-            })
+            }
         end
         local visible = visibleInstanceSet(validated.state, validated.replay.preview)
         if not visible[instanceId] then
-            return failure({
+            return nil, {
                 makeError(
                     "card_not_visible",
                     "$.instanceId",
                     "상세 표시 카드는 현재 손패 또는 프리뷰에 있어야 합니다."
                 ),
-            })
+            }
         end
 
         local nextDraft, draftError = buildDraft(
@@ -960,9 +967,9 @@
             validated.replay
         )
         if draftError then
-            return failure({ draftError })
+            return nil, { draftError }
         end
-        return success(nextDraft)
+        return nextDraft, nil
     end
 
     local function registeredSet(values)
@@ -983,31 +990,27 @@
         return set
     end
 
-    local function registerCard(state, staticData, draft, instanceId)
-        local validated, errors = validateInternal(state, staticData, draft)
-        if errors then
-            return failure(errors)
-        end
+    local function registerValidated(validated, instanceId)
         if not isRuntimeId(instanceId) then
-            return failure({
+            return nil, {
                 makeError("invalid_instance_id", "$.instanceId", "등록 카드 ID가 올바르지 않습니다."),
-            })
+            }
         end
 
         local visible = visibleInstanceSet(validated.state, validated.replay.preview)
         if not visible[instanceId] then
-            return failure({
+            return nil, {
                 makeError(
                     "card_not_visible",
                     "$.instanceId",
                     "등록 카드는 현재 손패 또는 프리뷰에 있어야 합니다."
                 ),
-            })
+            }
         end
 
         local currentIds = validated.draft.registeredCardInstanceIds
         if registeredSet(currentIds)[instanceId] then
-            return success(validated.draft)
+            return validated.draft, nil
         end
 
         local targetInstance, targetCard = findCard(validated.staticData, validated.state, instanceId)
@@ -1016,9 +1019,9 @@
             targetCard = targetInstance and validated.staticData.cards[targetInstance.cardId] or nil
         end
         if type(targetCard) ~= "table" then
-            return failure({
+            return nil, {
                 makeError("unknown_card", "$.instanceId", "정적 DB에서 등록 카드를 찾을 수 없습니다."),
-            })
+            }
         end
 
         local originalHand = baseHandSet(validated.state)
@@ -1063,24 +1066,20 @@
 
         local replay, replayErrors = replaySelection(validated.state, validated.staticData, nextIds, false)
         if replayErrors then
-            return failure(replayErrors)
+            return nil, replayErrors
         end
         local nextDraft, draftError = buildDraft(validated.state, nextIds, instanceId, replay)
         if draftError then
-            return failure({ draftError })
+            return nil, { draftError }
         end
-        return success(nextDraft)
+        return nextDraft, nil
     end
 
-    local function cancelCard(state, staticData, draft, instanceId)
-        local validated, errors = validateInternal(state, staticData, draft)
-        if errors then
-            return failure(errors)
-        end
+    local function cancelValidated(validated, instanceId)
         if not isRuntimeId(instanceId) then
-            return failure({
+            return nil, {
                 makeError("invalid_instance_id", "$.instanceId", "취소 카드 ID가 올바르지 않습니다."),
-            })
+            }
         end
 
         local found = false
@@ -1093,7 +1092,7 @@
             end
         end
         if not found then
-            return success(validated.draft)
+            return validated.draft, nil
         end
 
         local replay, replayErrors = replaySelection(
@@ -1103,7 +1102,7 @@
             true
         )
         if replayErrors then
-            return failure(replayErrors)
+            return nil, replayErrors
         end
 
         local focusedInstanceId = validated.draft.focusedInstanceId
@@ -1118,7 +1117,156 @@
             replay
         )
         if draftError then
-            return failure({ draftError })
+            return nil, { draftError }
+        end
+        return nextDraft, nil
+    end
+
+    local function clickValidated(validated, instanceId)
+        if not isRuntimeId(instanceId) then
+            return nil, {
+                makeError("invalid_instance_id", "$.instanceId", "클릭 카드 ID가 올바르지 않습니다."),
+            }
+        end
+
+        if registeredSet(validated.draft.registeredCardInstanceIds)[instanceId] then
+            return cancelValidated(validated, instanceId)
+        end
+        if validated.draft.focusedInstanceId == instanceId then
+            return registerValidated(validated, instanceId)
+        end
+        return focusValidated(validated, instanceId)
+    end
+
+    local function runValidatedTransition(validated, interactionAction, instanceId)
+        if interactionAction == "click" then
+            return clickValidated(validated, instanceId)
+        elseif interactionAction == "register" then
+            return registerValidated(validated, instanceId)
+        elseif interactionAction == "cancel" then
+            return cancelValidated(validated, instanceId)
+        end
+        return nil, {
+            makeError(
+                "invalid_interaction_action",
+                "$.interaction.action",
+                "카드 상호작용 작업은 click, register, cancel 중 하나여야 합니다."
+            ),
+        }
+    end
+
+    local function applyInteraction(state, staticData, draft, interaction)
+        if type(interaction) ~= "table" or getmetatable(interaction) ~= nil then
+            return failure({
+                makeError("invalid_interaction", "$.interaction", "카드 상호작용 요청은 일반 객체여야 합니다."),
+            })
+        end
+        local requestErrors = {}
+        checkAllowedKeys(interaction, {
+            action = true,
+            instanceId = true,
+            expectedInteractionToken = true,
+        }, "$.interaction", requestErrors)
+        local interactionAction = rawget(interaction, "action")
+        local instanceId = rawget(interaction, "instanceId")
+        local expectedInteractionToken = rawget(interaction, "expectedInteractionToken")
+        if interactionAction ~= "click"
+            and interactionAction ~= "register"
+            and interactionAction ~= "cancel" then
+            table.insert(requestErrors, makeError(
+                "invalid_interaction_action",
+                "$.interaction.action",
+                "카드 상호작용 작업은 click, register, cancel 중 하나여야 합니다."
+            ))
+        end
+        if not isRuntimeId(instanceId) then
+            table.insert(requestErrors, makeError(
+                "invalid_instance_id",
+                "$.interaction.instanceId",
+                "카드 상호작용 인스턴스 ID가 올바르지 않습니다."
+            ))
+        end
+        if type(expectedInteractionToken) ~= "string" or expectedInteractionToken == "" then
+            table.insert(requestErrors, makeError(
+                "invalid_interaction_token",
+                "$.interaction.expectedInteractionToken",
+                "비어 있지 않은 draft interaction token이 필요합니다."
+            ))
+        end
+        if #requestErrors > 0 then
+            return failure(requestErrors)
+        end
+
+        local validated, errors = validateInternal(state, staticData, draft)
+        if errors then
+            return failure(errors)
+        end
+        local currentToken, tokenError = interactionTokenForDraft(validated.draft)
+        if tokenError then
+            return failure({ tokenError })
+        end
+        if expectedInteractionToken ~= currentToken then
+            return success(validated.draft, nil, nil, currentToken, {
+                applied = false,
+                stale = true,
+                changed = false,
+                interactionAction = interactionAction,
+            })
+        end
+
+        local nextDraft, transitionErrors = runValidatedTransition(
+            validated,
+            interactionAction,
+            instanceId
+        )
+        if transitionErrors then
+            return failure(transitionErrors)
+        end
+        local nextToken, nextTokenError = interactionTokenForDraft(nextDraft)
+        if nextTokenError then
+            return failure({ nextTokenError })
+        end
+        local changed = not deepEqual(validated.draft, nextDraft)
+        return success(nextDraft, nil, nil, nextToken, {
+            applied = changed,
+            stale = false,
+            changed = changed,
+            interactionAction = interactionAction,
+        })
+    end
+
+    local function focusCard(state, staticData, draft, instanceId)
+        local validated, errors = validateInternal(state, staticData, draft)
+        if errors then
+            return failure(errors)
+        end
+        local nextDraft, transitionErrors = focusValidated(validated, instanceId)
+        if transitionErrors then
+            return failure(transitionErrors)
+        end
+        return success(nextDraft)
+    end
+
+    local function registerCard(state, staticData, draft, instanceId)
+        local validated, errors = validateInternal(state, staticData, draft)
+        if errors then
+            return failure(errors)
+        end
+        local nextDraft, transitionErrors = registerValidated(validated, instanceId)
+        if transitionErrors then
+            return failure(transitionErrors)
+        end
+        return success(nextDraft)
+    end
+
+    local function cancelCard(state, staticData, draft, instanceId)
+        local validated, errors = validateInternal(state, staticData, draft)
+        if errors then
+            return failure(errors)
+        end
+        local nextDraft, transitionErrors = cancelValidated(validated, instanceId)
+        if transitionErrors then
+            return failure(transitionErrors)
         end
         return success(nextDraft)
     end
@@ -1128,19 +1276,11 @@
         if errors then
             return failure(errors)
         end
-        if not isRuntimeId(instanceId) then
-            return failure({
-                makeError("invalid_instance_id", "$.instanceId", "클릭 카드 ID가 올바르지 않습니다."),
-            })
+        local nextDraft, transitionErrors = clickValidated(validated, instanceId)
+        if transitionErrors then
+            return failure(transitionErrors)
         end
-
-        if registeredSet(validated.draft.registeredCardInstanceIds)[instanceId] then
-            return cancelCard(state, staticData, validated.draft, instanceId)
-        end
-        if validated.draft.focusedInstanceId == instanceId then
-            return registerCard(state, staticData, validated.draft, instanceId)
-        end
-        return focusCard(state, staticData, validated.draft, instanceId)
+        return success(nextDraft)
     end
 
     local function buildProjection(state, sourceValue, replay)
@@ -1520,7 +1660,9 @@
     local actions = {
         newDraft = newDraft,
         validate = validateDraft,
-        interactionToken = getInteractionToken,
+        inspect = inspectDraft,
+        interactionToken = inspectDraft,
+        applyInteraction = applyInteraction,
         focusCard = focusCard,
         registerCard = registerCard,
         cancelCard = cancelCard,

@@ -1,4 +1,92 @@
-(function(triggerId, action, ...)
+(function()
+    local PRESENTATION_CACHE_MAX_ENTRIES = 256
+    local presentationCache = {}
+    local presentationCacheSize = 0
+    local presentationClock = 0
+    local presentationStats = { hits = 0, misses = 0, evictions = 0 }
+
+    local function resolveRegistry(registry)
+        if type(registry) == "table" and type(registry.registry) == "table" then
+            return registry.registry
+        end
+        if type(registry) == "table" and type(registry.data) == "table" then
+            return resolveRegistry(registry.data)
+        end
+        return registry
+    end
+
+    local function clonePresentation(value, seen)
+        if type(value) ~= "table" then return value end
+        seen = seen or {}
+        if seen[value] ~= nil then return seen[value] end
+        local copy = {}
+        seen[value] = copy
+        for key, item in pairs(value) do
+            copy[clonePresentation(key, seen)] = clonePresentation(item, seen)
+        end
+        return copy
+    end
+
+    local function presentationKey(card, registry)
+        local parts = {}
+        local function append(value)
+            local text = tostring(value or "")
+            parts[#parts + 1] = tostring(#text) .. ":" .. text
+        end
+        append("presentation-v2")
+        append("card.id")
+        append(type(card) == "table" and card.id)
+        append("card.name")
+        append(type(card) == "table" and card.name)
+        append("card.description")
+        append(type(card) == "table" and card.description)
+        append("card.actionTag")
+        append(type(card) == "table" and card.actionTag)
+        local mechanisms = type(card) == "table" and type(card.mechanisms) == "table" and card.mechanisms or {}
+        append("card.mechanisms")
+        append(#mechanisms)
+        for _, value in ipairs(mechanisms) do append(value) end
+        local rules = type(card) == "table" and type(card.rules) == "table" and card.rules or {}
+        append("card.rules")
+        append(#rules)
+        for _, value in ipairs(rules) do append(value) end
+
+        registry = resolveRegistry(registry)
+        for _, collectionName in ipairs({ "actionTags", "mechanisms" }) do
+            append("registry." .. collectionName)
+            local collection = type(registry) == "table" and registry[collectionName] or nil
+            local keys = {}
+            for key in pairs(type(collection) == "table" and collection or {}) do keys[#keys + 1] = key end
+            table.sort(keys, function(left, right) return tostring(left) < tostring(right) end)
+            append(#keys)
+            for _, key in ipairs(keys) do
+                local entry = collection[key]
+                append(key)
+                append(type(entry) == "table" and entry.id)
+                append(type(entry) == "table" and entry.label)
+                append(type(entry) == "table" and entry.tooltip)
+            end
+        end
+        return table.concat(parts, "|")
+    end
+
+    local function evictPresentationIfNeeded()
+        if presentationCacheSize < PRESENTATION_CACHE_MAX_ENTRIES then return end
+        local oldestKey
+        local oldest
+        for key, entry in pairs(presentationCache) do
+            if oldest == nil or entry.lastUsed < oldest.lastUsed then
+                oldestKey, oldest = key, entry
+            end
+        end
+        if oldestKey ~= nil then
+            presentationCache[oldestKey] = nil
+            presentationCacheSize = presentationCacheSize - 1
+            presentationStats.evictions = presentationStats.evictions + 1
+        end
+    end
+
+    return function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
 
     local function addError(errors, code, path, message)
@@ -207,16 +295,6 @@
         end
     end
 
-    local function resolveRegistry(registry)
-        if type(registry) == "table" and type(registry.registry) == "table" then
-            return registry.registry
-        end
-        if type(registry) == "table" and type(registry.data) == "table" then
-            return resolveRegistry(registry.data)
-        end
-        return registry
-    end
-
     local function lookupTag(registry, tagId, path, errors)
         registry = resolveRegistry(registry)
         local action = type(registry) == "table"
@@ -335,7 +413,7 @@
         return lines
     end
 
-    local function buildSafeCardSummary(card, registry, path, errors)
+    local function buildSafeCardSummaryUncached(card, registry, path, errors)
         if type(card) ~= "table" then
             addError(errors, "missing_card", path, "카드 정의를 찾을 수 없습니다.")
             return nil
@@ -364,6 +442,33 @@
             },
             mechanisms = mechanisms,
         }
+    end
+
+    local function buildSafeCardSummary(card, registry, path, errors)
+        local key = presentationKey(card, registry)
+        local cached = presentationCache[key]
+        if cached ~= nil then
+            presentationClock = presentationClock + 1
+            cached.lastUsed = presentationClock
+            cached.hits = cached.hits + 1
+            presentationStats.hits = presentationStats.hits + 1
+            return clonePresentation(cached.value)
+        end
+
+        presentationStats.misses = presentationStats.misses + 1
+        local beforeErrors = #errors
+        local built = buildSafeCardSummaryUncached(card, registry, path, errors)
+        if built ~= nil and #errors == beforeErrors then
+            evictPresentationIfNeeded()
+            presentationClock = presentationClock + 1
+            presentationCache[key] = {
+                value = clonePresentation(built),
+                lastUsed = presentationClock,
+                hits = 0,
+            }
+            presentationCacheSize = presentationCacheSize + 1
+        end
+        return built
     end
 
     local function buildPlanView(slot, owner, cards, registry, path, errors)
@@ -615,9 +720,11 @@
                 addError(errors, "missing_turn_draft", "$.context.draft", "선택 중 battleView에는 검증할 turnDraft가 필요합니다.")
                 return failure(errors)
             end
-            local draftValidation, draftCallError = callRuntime(
+            -- turnDraft inspect는 외부 draft를 한 번만 재생 검증하면서
+            -- 정규 draft와 interaction token을 함께 반환한다.
+            local draftInspection, draftCallError = callRuntime(
                 "turnDraft",
-                "validate",
+                "inspect",
                 state,
                 data,
                 draftInput
@@ -626,27 +733,12 @@
                 table.insert(errors, draftCallError)
                 return failure(errors)
             end
-            if draftValidation.ok ~= true then
-                appendNestedErrors(errors, "$.context.draft", draftValidation)
+            if draftInspection.ok ~= true then
+                appendNestedErrors(errors, "$.context.draft", draftInspection)
                 return failure(errors)
             end
-            local tokenReport, tokenCallError = callRuntime(
-                "turnDraft",
-                "interactionToken",
-                state,
-                data,
-                draftValidation.draft
-            )
-            if tokenCallError then
-                table.insert(errors, tokenCallError)
-                return failure(errors)
-            end
-            if tokenReport.ok ~= true then
-                appendNestedErrors(errors, "$.context.draft", tokenReport)
-                return failure(errors)
-            end
-            if type(tokenReport.interactionToken) ~= "string"
-                or string.match(tokenReport.interactionToken, "^draftv1_%d+_%d+_%d+$") == nil then
+            if type(draftInspection.interactionToken) ~= "string"
+                or string.match(draftInspection.interactionToken, "^draftv1_%d+_%d+_%d+$") == nil then
                 addError(
                     errors,
                     "invalid_interaction_token",
@@ -655,16 +747,16 @@
                 )
                 return failure(errors)
             end
-            interactionToken = tokenReport.interactionToken
+            interactionToken = draftInspection.interactionToken
             phase = generationLocked and "awaitingOutput" or "selecting"
             locked = generationLocked == true
             local startReceipt = type(state.turnStartReceipt) == "table" and state.turnStartReceipt or nil
             turnId = startReceipt and startReceipt.turnId
                 or string.format("%s-turn-%03d", state.battleId, state.turnNumber)
-            selectedIds = draftValidation.draft.registeredCardInstanceIds
-            previewIds = draftValidation.draft.preview.availableDrawnInstanceIds
+            selectedIds = draftInspection.draft.registeredCardInstanceIds
+            previewIds = draftInspection.draft.preview.availableDrawnInstanceIds
             if not generationLocked then
-                focusedInstanceId = draftValidation.draft.focusedInstanceId
+                focusedInstanceId = draftInspection.draft.focusedInstanceId
             end
         else
             if draftInput ~= nil or pendingInput ~= nil or generationLocked then
@@ -1541,6 +1633,31 @@
     local arguments = { ... }
     if action == "tokenizeTags" then
         return tokenizeTags(arguments[1], arguments[2], arguments[3])
+    elseif action == "buildCardPresentation" then
+        local errors = {}
+        local card = buildSafeCardSummary(arguments[1], arguments[2], arguments[3] or "$.card", errors)
+        if #errors > 0 or card == nil then
+            return failure(errors)
+        end
+        return success("card", card)
+    elseif action == "presentationCacheStats" then
+        return {
+            ok = true,
+            schemaVersion = SCHEMA_VERSION,
+            errors = {},
+            cache = {
+                entries = presentationCacheSize,
+                maxEntries = PRESENTATION_CACHE_MAX_ENTRIES,
+                hits = presentationStats.hits,
+                misses = presentationStats.misses,
+                evictions = presentationStats.evictions,
+            },
+        }
+    elseif action == "clearPresentationCache" then
+        local removed = presentationCacheSize
+        presentationCache = {}
+        presentationCacheSize = 0
+        return success("removed", removed)
     elseif action == "validateBattleView" then
         return validateBattleView(arguments[1])
     elseif action == "buildBattleView" then
@@ -1558,4 +1675,5 @@
     local errors = {}
     addError(errors, "unknown_action", "$", "지원하지 않는 View 작업입니다: " .. tostring(action))
     return failure(errors)
-end)
+    end
+end)()

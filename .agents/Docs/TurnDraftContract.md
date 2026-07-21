@@ -73,7 +73,7 @@ v1에서는 플레이어 `chain` 카드의 `draw_cards`만 허용한다. 선택 
 }
 ```
 
-- `focusedInstanceId`는 상세 표시만 제어하며 사용 등록이나 프리뷰를 만들지 않는다.
+- `focusedInstanceId`는 v1 두 번 클릭 UI 호환용 상세 표시만 제어하며 사용 등록이나 프리뷰를 만들지 않는다. 현재 HTML의 상세 열기는 native `details` 로컬 상태이므로 이 필드를 쓰거나 갱신하지 않아도 된다.
 - `registeredCardInstanceIds`는 연계 카드들 뒤에 주 행동 0장 또는 1장이 오는 정규 순서다.
 - `preview.events`와 RNG는 캐시일 뿐이다. 모든 action과 projection은 같은 권위 상태에서 다시 계산해 저장값과 대조한다.
 - `availableDrawnInstanceIds`는 현재 draft UI에 계속 표시할 프리뷰 카드다. 등록되어 내부 `used`로 투영된 카드도 재클릭 취소를 위해 이 목록에 남는다.
@@ -90,11 +90,15 @@ v1에서는 플레이어 `chain` 카드의 `draw_cards`만 허용한다. 선택 
 runScript(triggerId, "turnDraft", action, battleState, staticData, draft, instanceId)
 ```
 
+`applyInteraction`만 마지막 인수에 instance ID 대신 `{ action, instanceId, expectedInteractionToken }` 요청 객체를 받는다.
+
 | action | 역할 |
 |---|---|
 | `newDraft` | 현재 권위 상태에서 빈 draft 생성 |
 | `validate` | 스키마, source, 등록 순서와 프리뷰 재계산 결과 검사 |
-| `interactionToken` | 검증된 draft 전체의 정규 fingerprint를 `draftv1_<length>_<hashA>_<hashB>` 토큰으로 반환 |
+| `inspect` | draft를 한 번 재생 검증하고 정규 draft와 `draftv1_<length>_<hashA>_<hashB>` interaction token을 함께 반환 |
+| `interactionToken` | `inspect`와 같은 결과를 반환하는 v1 호환 action |
+| `applyInteraction` | `{ action, instanceId, expectedInteractionToken }`을 검증하고 token 비교와 `click`/`register`/`cancel` 전이를 한 번의 draft 검증 경계에서 수행 |
 | `focusCard` | 상세 표시 카드만 변경 |
 | `registerCard` | 카드를 사용 목록에 정규 순서로 등록 |
 | `cancelCard` | 등록 카드 취소와 의존 프리뷰 연쇄 정리 |
@@ -106,7 +110,9 @@ runScript(triggerId, "turnDraft", action, battleState, staticData, draft, instan
 
 모든 성공·실패 경로는 입력 `battleState`와 입력 draft를 변경하지 않는다. 등록하려는 카드는 원래 플레이어 손패 또는 앞선 등록 카드가 만든 현재 프리뷰에 있어야 한다.
 
-`interactionToken`은 UI가 렌더링한 draft와 클릭 시점의 저장 draft가 같은지 확인하는 낙관적 동시성 표식이다. 토큰이 오래되었다면 호출자는 클릭 전이를 적용하지 않고 현재 View만 다시 게시해야 한다. 이 토큰은 비밀이나 권한 표식이 아니며, 모든 실제 검증은 여전히 권위 상태와 draft를 기준으로 한다.
+`interactionToken`은 UI가 렌더링한 draft와 클릭 시점의 저장 draft가 같은지 확인하는 낙관적 동시성 표식이다. `applyInteraction`은 권위 상태와 draft를 한 번 검증한 뒤 현재 token을 계산한다. 토큰이 오래되었다면 전이를 적용하지 않고 `applied = false`, `stale = true`, 정규 draft와 현재 token을 반환한다. token이 맞으면 같은 validated context를 private transition helper에 전달하고 다음 token까지 계산한다. 공개 입력의 `trusted` 플래그나 검증 우회는 허용하지 않는다.
+
+이 토큰은 비밀이나 권한 표식이 아니며, 모든 실제 검증은 여전히 권위 상태와 draft를 기준으로 한다. 기존 `focusCard`/`registerCard`/`cancelCard`/`clickCard` action도 호환을 위해 남지만 각각의 공개 호출 경계에서만 한 번 검증하고 내부 helper에서는 재검증하지 않는다.
 
 ## 5. 등록과 취소 규칙
 
@@ -153,6 +159,7 @@ schemaVersion, kind, mode, selectedCardInstanceIds, source, projectedRng
 `.agents/Tests/turn-draft-check.ps1`은 다음을 검사한다.
 
 - focus, 등록, 교체, 취소와 speculative branch reset 전이
+- atomic register/cancel, stale token 멱등성, 요청 allowlist와 입력 불변성
 - 무선택 패스, 눈치보기 단독 패스와 눈치보기+주 행동
 - 최대 손패, discard 재섞기, 빈 덱과 제외 영역 경계
 - preview 및 RNG 변조와 권위 상태 변경의 stale 거부
