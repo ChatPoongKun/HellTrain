@@ -612,8 +612,7 @@ animation-iteration-count: 1 !important;
 <div class="draft-shell">
 <header class="draft-header">
 <div>
-<div class="draft-kicker">INFINITE HELLTRAIN · DECK DRAFT</div>
-<h2 class="draft-title">이번 칸에서 가져갈 카드</h2>
+<h2 class="draft-title">치한 스킬을 선택하세요.</h2>
 <p class="draft-subtitle">세 장을 살펴보고 한 장을 골라 초기 덱에 추가하세요.</p>
 </div>
 <div class="draft-round" aria-label="현재 드래프트 회차">
@@ -675,27 +674,8 @@ aria-label="카드 상세 보기"
 <span class="draft-details-inner">
 <span class="draft-details-content">
 <span class="draft-description">
-{{#each::keep {{dictelement::{{slot::setup_offer_card}}::descriptionSegments}} as setup_description_segment}}
-{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::kind}}::is::text}}{{dictelement::{{slot::setup_description_segment}}::value}}{{/when}}
-{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::kind}}::isnot::text}}
-{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::tagKind}}::is::mechanism}}<span class="draft-inline-tag is-mechanism" tabindex="0">{{dictelement::{{slot::setup_description_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_description_segment}}::tooltip}}</span></span>{{/when}}
-{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::tagKind}}::isnot::mechanism}}<span class="draft-inline-tag" tabindex="0">{{dictelement::{{slot::setup_description_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_description_segment}}::tooltip}}</span></span>{{/when}}
-{{/when}}
-{{/each}}
-</span>
-<span class="draft-rule-lines">
-{{#each::keep {{dictelement::{{slot::setup_offer_card}}::ruleLines}} as setup_rule_line}}
-<span class="draft-rule-line">
-{{#each::keep {{dictelement::{{slot::setup_rule_line}}::segments}} as setup_rule_segment}}
-{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::kind}}::is::text}}{{dictelement::{{slot::setup_rule_segment}}::value}}{{/when}}
-{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::kind}}::isnot::text}}
-{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::tagKind}}::is::mechanism}}<span class="draft-inline-tag is-mechanism" tabindex="0">{{dictelement::{{slot::setup_rule_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_rule_segment}}::tooltip}}</span></span>{{/when}}
-{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::tagKind}}::isnot::mechanism}}<span class="draft-inline-tag" tabindex="0">{{dictelement::{{slot::setup_rule_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_rule_segment}}::tooltip}}</span></span>{{/when}}
-{{/when}}
-{{/each}}
-</span>
-{{/each}}
-</span>
+{{#each::keep {{dictelement::{{slot::setup_offer_card}}::descriptionSegments}} as setup_description_segment}}{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::kind}}::is::text}}{{dictelement::{{slot::setup_description_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::kind}}::isnot::text}}{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::tagKind}}::is::mechanism}}<span class="draft-inline-tag is-mechanism" tabindex="0">{{dictelement::{{slot::setup_description_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_description_segment}}::tooltip}}</span></span>{{/when}}{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::tagKind}}::isnot::mechanism}}<span class="draft-inline-tag" tabindex="0">{{dictelement::{{slot::setup_description_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_description_segment}}::tooltip}}</span></span>{{/when}}{{/when}}{{/each}}</span>
+<span class="draft-rule-lines">{{#each::keep {{dictelement::{{slot::setup_offer_card}}::ruleLines}} as setup_rule_line}}<span class="draft-rule-line">{{#each::keep {{dictelement::{{slot::setup_rule_line}}::segments}} as setup_rule_segment}}{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::kind}}::is::text}}{{dictelement::{{slot::setup_rule_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::kind}}::isnot::text}}{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::tagKind}}::is::mechanism}}<span class="draft-inline-tag is-mechanism" tabindex="0">{{dictelement::{{slot::setup_rule_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_rule_segment}}::tooltip}}</span></span>{{/when}}{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::tagKind}}::isnot::mechanism}}<span class="draft-inline-tag" tabindex="0">{{dictelement::{{slot::setup_rule_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_rule_segment}}::tooltip}}</span></span>{{/when}}{{/when}}{{/each}}</span>{{/each}}</span>
 </span>
 </span>
 </span>
