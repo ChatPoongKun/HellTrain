@@ -8,8 +8,51 @@
     local UI_SHELL_NAME = "helltrainUiShellV1"
     local UI_SHELL_REVISION_NAME = "helltrainUiShellRevision"
     local UI_SHELL_REVISION = "sidebar-e3f104ae8f3037cd"
+    local DIAGNOSTIC_SCOPE = "helltrain.gameSetupController"
     local arguments = { ... }
     local argumentCount = select("#", ...)
+
+    local function diagnosticText(value)
+        return tostring(value):gsub("[\r\n]+", " ")
+    end
+
+    local function emitDiagnostic(depth, event, fields)
+        if type(DEBUG) ~= "number" or depth > DEBUG then
+            return
+        end
+
+        if type(print) ~= "function" then
+            return
+        end
+
+        local parts = {
+            "[" .. DIAGNOSTIC_SCOPE .. "]",
+            "depth=" .. tostring(depth),
+            "event=" .. diagnosticText(event),
+        }
+        for _, key in ipairs({ "action", "errorCount", "code", "path", "message" }) do
+            local value = type(fields) == "table" and fields[key] or nil
+            if value ~= nil then
+                parts[#parts + 1] = key .. "=" .. diagnosticText(value)
+            end
+        end
+        pcall(print, table.concat(parts, " | "))
+
+        for index, item in ipairs(type(fields) == "table" and type(fields.errors) == "table" and fields.errors or {}) do
+            local errorParts = {
+                "[" .. DIAGNOSTIC_SCOPE .. "]",
+                "depth=" .. tostring(depth),
+                "event=request_error",
+                "index=" .. tostring(index),
+            }
+            for _, key in ipairs({ "code", "path", "message" }) do
+                if type(item) == "table" and item[key] ~= nil then
+                    errorParts[#errorParts + 1] = key .. "=" .. diagnosticText(item[key])
+                end
+            end
+            pcall(print, table.concat(errorParts, " | "))
+        end
+    end
 
     local function makeError(code, path, message)
         return {
@@ -725,15 +768,35 @@
         })
     end
 
-    if result.ok ~= true and type(alertError) == "function" then
+    if result.ok ~= true then
         local first = type(result.errors) == "table" and result.errors[1] or nil
+        local diagnosticErrors = {}
+        for index, item in ipairs(type(result.errors) == "table" and result.errors or {}) do
+            diagnosticErrors[index] = {
+                code = type(item) == "table" and tostring(item.code) or "invalid_error",
+                path = type(item) == "table" and tostring(item.path) or "$",
+                message = type(item) == "table" and tostring(item.message) or tostring(item),
+            }
+        end
+        emitDiagnostic(1, "request_failed", {
+            action = tostring(action),
+            errorCount = #diagnosticErrors,
+            errors = diagnosticErrors,
+        })
+
         local message = "게임 설정을 처리하지 못했습니다."
         if type(first) == "table" then
             message = message
                 .. "\n[" .. tostring(first.code) .. "] "
                 .. tostring(first.message)
+                .. "\n경로: " .. tostring(first.path)
+            if #diagnosticErrors > 1 then
+                message = message .. "\n전체 오류 수: " .. tostring(#diagnosticErrors)
+            end
         end
-        pcall(alertError, triggerId, message)
+        if type(alertError) == "function" then
+            pcall(alertError, triggerId, message)
+        end
     end
     return result
 end)

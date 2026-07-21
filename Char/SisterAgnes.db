@@ -1,0 +1,59 @@
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        sister_agnes = {
+            id = "sister_agnes",
+            name = "아그네스 수녀",
+
+            publicProfile = {
+                age = 29,
+                occupation = "가톨릭 수녀",
+                appearance = {
+                    hairColor = "검은색",
+                    eyeColor = "맑은 검은색",
+                    skin = "화장기 없이 깨끗한 피부",
+                    height = 163,
+                    weight = 51,
+                    threeSize = "86-60-87",
+                    style = "단정한 검은 수도복과 흰 베일, 목에 건 작은 십자가",
+                },
+                personality = {
+                    traits = { "gentle", "devout", "resolute" },
+                    likes = { "prayer", "volunteering", "choral_music" },
+                },
+                background = {
+                    family = "수도 공동체에서 생활하며 가족과도 원만하게 지냄",
+                    hobbies = "성가 연습, 자수, 아동 도서 읽기",
+                    boardingReason = "복지시설 봉사를 마치고 수도원으로 돌아가는 길",
+                },
+            },
+
+            privateProfile = {
+                sexualKnowledge = "상담과 교육에 필요한 지식은 갖추었지만 자신의 욕망과는 분리해 생각함",
+                sexualExperience = "연애 및 성관계 경험이 없으며 정결 서원을 지키고 있음",
+                hiddenDesire = "욕망이 존재한다는 사실보다 그것을 인정하는 순간 자신의 신념이 흔들릴까 두려워함",
+                virginity = {
+                    kiss = "경험 없음",
+                    oral = "경험 없음",
+                    vaginal = "경험 없음",
+                    anal = "경험 없음",
+                },
+            },
+
+            battle = {
+                startingResistance = 36,
+                startingMood = "suspicion",
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                traitIds = { "vow_of_chastity" },
+                deck = {
+                    "agnes_cover_with_sleeves",
+                    "agnes_quiet_admonition",
+                    "agnes_change_carriage",
+                    "agnes_ask_nearby_passenger",
+                },
+            },
+        },
+    },
+}

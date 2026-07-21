@@ -10,7 +10,8 @@
 | `cardDatabase` | `cards` | `PlayerCards.db`, `CharacterCards.db` |
 | `traitDatabase` | `traits` | `CharTraits.db` |
 | `environmentDatabase` | `environments` | `Environments.db` |
-| `characterDatabase` | `characters` | `YooJiyoung.db` |
+| `characterList` | `characters` | `CharacterList.db` |
+| `characterDatabase` | `characters` | `CharacterList.db`가 지정한 개별 영문 DB |
 
 모든 컬렉션 키와 항목의 `id`는 같아야 하며 전체 병합 범위에서 종류별 ID가 중복되면 오류다. 게임 ID 값은 종류와 관계없이 `lower_snake_case`를 사용하고, `schemaVersion` 같은 스키마 필드명은 lowerCamelCase를 사용한다.
 
@@ -55,7 +56,9 @@ id, owner, name, visibility, description, rules, modifiers
 
 ## 6. 캐릭터
 
-캐릭터 정의는 공개 프로필과 비공개 프로필을 분리한다. 전투 정보에는 시작 저항, 시작 무드, 기본 드로우 수, 최대 손패, 특징 ID, 카드 ID와 선택 성향만 둔다. `battle.baseDrawCount`와 `battle.maxHandSize`는 1 이상의 정수이며 기본 드로우 수는 최대 손패보다 클 수 없다. 유지영의 현재 값은 각각 3과 5다.
+`CharacterList.db`는 캐릭터 ID와 개별 DB 파일명만 보관한다. 같은 이름으로 등록된 여러 목록 로어 엔트리는 하나의 목록으로 병합한다. 각 항목은 `{ id = "yoo_jiyoung", database = "YooJiyoung.db" }` 형태이며, 개별 DB 이름은 영문자로 시작하고 영문자·숫자·밑줄만 사용한 `.db` 파일명이어야 한다. 하나의 개별 DB는 목록의 캐릭터 한 명만 정의한다. 목록에 없는 정의, 목록 ID와 다른 정의, 누락된 DB와 동일 DB의 중복 연결은 전체 로딩 오류다.
+
+개별 캐릭터 DB의 정의는 공개 프로필과 비공개 프로필을 분리한다. 전투 정보에는 시작 저항, 시작 무드, 기본 드로우 수, 최대 손패, 특징 ID, 카드 ID와 선택 성향만 둔다. `battle.baseDrawCount`와 `battle.maxHandSize`는 1 이상의 정수이며 기본 드로우 수는 최대 손패보다 클 수 없다. 유지영의 현재 값은 각각 3과 5다. 모든 개별 DB를 불러와 병합한 캐릭터 컬렉션에서 표시용 `name`은 고유해야 하며, 중복되면 `duplicate_character_name` 오류로 전체 정적 데이터 로딩을 중단한다.
 
 누적 플레이 횟수와 사건 횟수는 정적 캐릭터 정의가 아니라 함수 없는 저장 상태에 둔다. View 생성기는 `privateProfile`을 명시적으로 허용한 화면이나 LLM 사건이 아니면 복사하지 않는다.
 

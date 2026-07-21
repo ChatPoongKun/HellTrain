@@ -1,12 +1,13 @@
 (function()
     local STATIC_CACHE_MAX_ENTRIES = 4
-    local STATIC_LORE_ORDER = {
+    local DIAGNOSTIC_SCOPE = "helltrain.staticData"
+    local STATIC_BASE_LORE_ORDER = {
         "GameRegistry.db",
         "PlayerCards.db",
         "CharacterCards.db",
         "CharTraits.db",
         "Environments.db",
-        "YooJiyoung.db",
+        "CharacterList.db",
     }
     local staticCacheEntries = {}
     local staticCacheClock = 0
@@ -21,6 +22,46 @@
         evictions = 0,
         clears = 0,
     }
+
+    -- 호스트 진단 출력은 print 한 줄로 통일한다. DB 본문이나 프로필은 남기지
+    -- 않고 로어 이름, 개수, 헤더와 오류 경로만 기록한다.
+    local function diagnosticsEnabled(depth)
+        return type(DEBUG) == "number" and depth <= DEBUG
+    end
+
+    local function diagnosticText(value)
+        return tostring(value):gsub("[\r\n]+", " ")
+    end
+
+    local function emitDiagnostic(depth, event, fields)
+        if not diagnosticsEnabled(depth) then
+            return
+        end
+
+        if type(print) ~= "function" then
+            return
+        end
+
+        local parts = {
+            "[" .. DIAGNOSTIC_SCOPE .. "]",
+            "depth=" .. tostring(depth),
+            "event=" .. diagnosticText(event),
+        }
+        local fieldOrder = {
+            "action", "forceRefresh", "cachedEntries", "cache", "ok",
+            "lore", "status", "entryCount", "error", "entryIndex",
+            "schemaVersion", "kindType", "kind", "code", "path", "message",
+            "expectedKind", "actualKindType", "actualKind", "errorCount",
+            "cards", "traits", "environments", "characters",
+        }
+        for _, key in ipairs(fieldOrder) do
+            local value = type(fields) == "table" and fields[key] or nil
+            if value ~= nil then
+                parts[#parts + 1] = key .. "=" .. diagnosticText(value)
+            end
+        end
+        pcall(print, table.concat(parts, " | "))
+    end
 
     -- 캐시의 canonical snapshot을 호출자에게 직접 노출하지 않는다. 함수는 정적
     -- DB callback이므로 identity를 유지하고, 모든 table은 alias가 없도록 복제한다.
@@ -45,61 +86,110 @@
     -- getLoreBooks 결과의 metadata는 DB 판정에 사용하지 않는다. 개발/강제 refresh
     -- 경로에서는 content와 순서 전체를 비교해 context 오염과 stale hit를 막는다.
     -- production fast path의 배포 무효화는 main의 RUNTIME_BUNDLE_REVISION 계약이다.
-    local function captureStaticLores(triggerId)
-        staticCacheStats.captures = staticCacheStats.captures + 1
-        local captured = {}
-        for _, loreName in ipairs(STATIC_LORE_ORDER) do
-            local ok, lores = pcall(getLoreBooks, triggerId, loreName)
-            local source = {
-                status = ok and type(lores) or "read_error",
-                entries = {},
-            }
-            if not ok then
-                source.error = tostring(lores)
-            elseif type(lores) == "table" then
-                for _, lore in ipairs(lores) do
-                    if type(lore) == "table" and type(lore.content) == "string" then
-                        table.insert(source.entries, {
-                            valid = true,
-                            content = lore.content,
-                        })
-                    else
-                        table.insert(source.entries, {
-                            valid = false,
-                            loreType = type(lore),
-                            contentType = type(lore) == "table" and type(lore.content) or "none",
-                        })
-                    end
+    local function captureStaticLore(triggerId, captured, loreName)
+        if captured[loreName] ~= nil then
+            return
+        end
+
+        local ok, lores = pcall(getLoreBooks, triggerId, loreName)
+        local source = {
+            status = ok and type(lores) or "read_error",
+            entries = {},
+        }
+        if not ok then
+            source.error = tostring(lores)
+        elseif type(lores) == "table" then
+            for _, lore in ipairs(lores) do
+                if type(lore) == "table" and type(lore.content) == "string" then
+                    table.insert(source.entries, {
+                        valid = true,
+                        content = lore.content,
+                    })
+                else
+                    table.insert(source.entries, {
+                        valid = false,
+                        loreType = type(lore),
+                        contentType = type(lore) == "table" and type(lore.content) or "none",
+                    })
                 end
             end
-            captured[loreName] = source
+        end
+        captured[loreName] = source
+        table.insert(captured.order, loreName)
+
+        emitDiagnostic(source.status == "read_error" and 1 or 2, "lore_capture", {
+            lore = loreName,
+            status = source.status,
+            entryCount = #source.entries,
+            error = source.error,
+        })
+    end
+
+    local function captureBaseStaticLores(triggerId)
+        staticCacheStats.captures = staticCacheStats.captures + 1
+        local captured = {
+            order = {},
+        }
+        for _, loreName in ipairs(STATIC_BASE_LORE_ORDER) do
+            captureStaticLore(triggerId, captured, loreName)
         end
         return captured
     end
 
-    local function sameStaticLoreCapture(left, right)
-        for _, loreName in ipairs(STATIC_LORE_ORDER) do
-            local leftSource = left[loreName]
-            local rightSource = right[loreName]
-            if leftSource == nil
-                or rightSource == nil
-                or leftSource.status ~= rightSource.status
-                or leftSource.error ~= rightSource.error
-                or #leftSource.entries ~= #rightSource.entries then
+    local function sameStaticLoreSource(leftSource, rightSource)
+        if leftSource == nil
+            or rightSource == nil
+            or leftSource.status ~= rightSource.status
+            or leftSource.error ~= rightSource.error
+            or #leftSource.entries ~= #rightSource.entries then
+            return false
+        end
+        for index, leftEntry in ipairs(leftSource.entries) do
+            local rightEntry = rightSource.entries[index]
+            if rightEntry == nil
+                or leftEntry.valid ~= rightEntry.valid
+                or leftEntry.content ~= rightEntry.content
+                or leftEntry.loreType ~= rightEntry.loreType
+                or leftEntry.contentType ~= rightEntry.contentType then
                 return false
-            end
-            for index, leftEntry in ipairs(leftSource.entries) do
-                local rightEntry = rightSource.entries[index]
-                if rightEntry == nil
-                    or leftEntry.valid ~= rightEntry.valid
-                    or leftEntry.content ~= rightEntry.content
-                    or leftEntry.loreType ~= rightEntry.loreType
-                    or leftEntry.contentType ~= rightEntry.contentType then
-                    return false
-                end
             end
         end
         return true
+    end
+
+    local function sameStaticLoreCapture(left, right)
+        if type(left.order) ~= "table"
+            or type(right.order) ~= "table"
+            or #left.order ~= #right.order then
+            return false
+        end
+        for index, loreName in ipairs(left.order) do
+            if right.order[index] ~= loreName
+                or not sameStaticLoreSource(left[loreName], right[loreName]) then
+                return false
+            end
+        end
+        return true
+    end
+
+    local function findCachedDynamicLoreOrder(captured)
+        for _, entry in ipairs(staticCacheEntries) do
+            local sameBase = true
+            for _, loreName in ipairs(STATIC_BASE_LORE_ORDER) do
+                if not sameStaticLoreSource(entry.sources[loreName], captured[loreName]) then
+                    sameBase = false
+                    break
+                end
+            end
+            if sameBase then
+                local dynamicOrder = {}
+                for index = #STATIC_BASE_LORE_ORDER + 1, #entry.sources.order do
+                    table.insert(dynamicOrder, entry.sources.order[index])
+                end
+                return dynamicOrder
+            end
+        end
+        return nil
     end
 
     local function findStaticCacheEntry(captured)
@@ -191,15 +281,28 @@
             collection = "environments",
             lores = { "Environments.db" },
         },
-        characters = {
-            kind = "characterDatabase",
+        characterList = {
+            kind = "characterList",
             collection = "characters",
-            lores = { "YooJiyoung.db" },
+            lores = { "CharacterList.db" },
         },
+    }
+    local RESERVED_CHARACTER_DATABASES = {
+        ["GameRegistry.db"] = true,
+        ["PlayerCards.db"] = true,
+        ["CharacterCards.db"] = true,
+        ["CharTraits.db"] = true,
+        ["Environments.db"] = true,
+        ["CharacterList.db"] = true,
     }
 
     local function addError(errors, code, path, message)
         table.insert(errors, {
+            code = code,
+            path = path,
+            message = message,
+        })
+        emitDiagnostic(1, "validation_error", {
             code = code,
             path = path,
             message = message,
@@ -257,6 +360,11 @@
             and string.match(value, "^[a-z][a-z0-9_]*$") ~= nil
     end
 
+    local function isCharacterDatabaseName(value)
+        return type(value) == "string"
+            and string.match(value, "^[A-Za-z][A-Za-z0-9_]*%.db$") ~= nil
+    end
+
     local function makeDatabaseEnvironment()
         return {
             ipairs = ipairs,
@@ -306,6 +414,13 @@
                         addError(errors, "invalid_module", loreName .. "[" .. index .. "]", "DB 청크가 테이블을 반환하지 않았습니다.")
                     else
                         table.insert(modules, result)
+                        emitDiagnostic(2, "module_loaded", {
+                            lore = loreName,
+                            entryIndex = index,
+                            schemaVersion = tostring(result.schemaVersion),
+                            kindType = type(result.kind),
+                            kind = type(result.kind) == "string" and result.kind or tostring(result.kind),
+                        })
                     end
                 end
             end
@@ -320,7 +435,23 @@
         end
 
         if module.kind ~= expectedKind then
-            addError(errors, "unexpected_kind", path .. ".kind", "예상한 DB 종류와 다릅니다.")
+            local actualKind = type(module.kind) == "string" and module.kind or tostring(module.kind)
+            emitDiagnostic(1, "module_header_mismatch", {
+                path = path .. ".kind",
+                expectedKind = expectedKind,
+                actualKindType = type(module.kind),
+                actualKind = actualKind,
+            })
+            addError(
+                errors,
+                "unexpected_kind",
+                path .. ".kind",
+                "예상한 DB 종류와 다릅니다. (expected="
+                    .. tostring(expectedKind)
+                    .. ", actual="
+                    .. actualKind
+                    .. ")"
+            )
         end
     end
 
@@ -377,6 +508,147 @@
         end
 
         return merged
+    end
+
+    local function sortedAsciiKeys(collection)
+        local keys = {}
+        if type(collection) == "table" then
+            for key in pairs(collection) do
+                if isAsciiId(key) then
+                    table.insert(keys, key)
+                end
+            end
+        end
+        table.sort(keys)
+        return keys
+    end
+
+    local function collectCharacterDatabaseNames(characterList)
+        local names = {}
+        local seen = {}
+        for _, characterId in ipairs(sortedAsciiKeys(characterList)) do
+            local entry = characterList[characterId]
+            local database = type(entry) == "table" and entry.database or nil
+            if isCharacterDatabaseName(database)
+                and RESERVED_CHARACTER_DATABASES[database] ~= true
+                and seen[database] ~= true then
+                seen[database] = true
+                table.insert(names, database)
+            end
+        end
+        return names
+    end
+
+    local function validateCharacterList(characterList, errors)
+        if type(characterList) ~= "table" then
+            addError(errors, "missing_character_list", "characterList", "캐릭터 목록이 없습니다.")
+            return
+        end
+        if next(characterList) == nil then
+            addError(errors, "empty_character_list", "characterList", "캐릭터 목록이 비어 있습니다.")
+            return
+        end
+
+        local firstCharacterByDatabase = {}
+        for key, entry in pairs(characterList) do
+            local path = "characterList." .. tostring(key)
+            if not isAsciiId(key) or type(entry) ~= "table" or entry.id ~= key then
+                addError(errors, "invalid_character_list_id", path, "캐릭터 목록 키와 내부 ID가 올바르지 않습니다.")
+            else
+                for field in pairs(entry) do
+                    if field ~= "id" and field ~= "database" then
+                        addError(
+                            errors,
+                            "unexpected_character_list_field",
+                            path .. "." .. tostring(field),
+                            "캐릭터 목록에는 id와 database만 사용할 수 있습니다."
+                        )
+                    end
+                end
+
+                if not isCharacterDatabaseName(entry.database) then
+                    addError(
+                        errors,
+                        "invalid_character_database_name",
+                        path .. ".database",
+                        "개별 캐릭터 DB 이름은 영문자로 시작하고 영문자, 숫자, 밑줄만 사용한 .db 파일명이어야 합니다."
+                    )
+                elseif RESERVED_CHARACTER_DATABASES[entry.database] == true then
+                    addError(
+                        errors,
+                        "reserved_character_database_name",
+                        path .. ".database",
+                        "공용 정적 DB 이름은 개별 캐릭터 DB로 사용할 수 없습니다."
+                    )
+                else
+                    local firstId = firstCharacterByDatabase[entry.database]
+                    if firstId ~= nil then
+                        addError(
+                            errors,
+                            "duplicate_character_database",
+                            path .. ".database",
+                            "개별 캐릭터 DB '" .. entry.database .. "'는 이미 characterList."
+                                .. firstId .. ".database에서 사용되었습니다."
+                        )
+                    else
+                        firstCharacterByDatabase[entry.database] = key
+                    end
+                end
+            end
+        end
+    end
+
+    local function loadCharacterDefinitions(characterList, errors, captured)
+        local characters = {}
+        for _, characterId in ipairs(sortedAsciiKeys(characterList)) do
+            local entry = characterList[characterId]
+            local database = type(entry) == "table" and entry.database or nil
+            if isCharacterDatabaseName(database)
+                and RESERVED_CHARACTER_DATABASES[database] ~= true then
+                local modules = loadLoreModules(database, errors, captured)
+                if #modules > 1 then
+                    addError(
+                        errors,
+                        "duplicate_character_module",
+                        database,
+                        "개별 캐릭터 DB는 하나의 로어 엔트리만 등록할 수 있습니다."
+                    )
+                end
+
+                for index, module in ipairs(modules) do
+                    local modulePath = database .. "[" .. index .. "]"
+                    validateModuleHeader(module, "characterDatabase", modulePath, errors)
+                    local collection = module.characters
+                    if type(collection) ~= "table" then
+                        addError(errors, "missing_collection", modulePath .. ".characters", "캐릭터 DB 컬렉션이 없습니다.")
+                    else
+                        local definition = collection[characterId]
+                        if definition == nil then
+                            addError(
+                                errors,
+                                "missing_listed_character",
+                                modulePath .. ".characters." .. characterId,
+                                "캐릭터 목록에 등록된 ID의 정의가 개별 DB에 없습니다."
+                            )
+                        elseif characters[characterId] == nil then
+                            characters[characterId] = definition
+                        end
+
+                        for definedId in pairs(collection) do
+                            if definedId ~= characterId then
+                                addError(
+                                    errors,
+                                    "unlisted_character_definition",
+                                    modulePath .. ".characters." .. tostring(definedId),
+                                    "개별 캐릭터 DB에는 목록에서 연결한 캐릭터 한 명만 정의할 수 있습니다."
+                                )
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return characters
     end
 
     local function validateRegistryCollection(collection, path, errors, ownerRequired)
@@ -892,6 +1164,8 @@
             return
         end
 
+        local namedCharacters = {}
+
         for key, character in pairs(characters) do
             local path = "characters." .. tostring(key)
             if not isAsciiId(key) or type(character) ~= "table" or character.id ~= key then
@@ -899,6 +1173,11 @@
             else
                 if type(character.name) ~= "string" or character.name == "" then
                     addError(errors, "missing_name", path .. ".name", "캐릭터 이름이 없습니다.")
+                else
+                    table.insert(namedCharacters, {
+                        id = key,
+                        name = character.name,
+                    })
                 end
                 if type(character.publicProfile) ~= "table" then
                     addError(errors, "missing_public_profile", path .. ".publicProfile", "공개 프로필이 없습니다.")
@@ -956,15 +1235,45 @@
                 end
             end
         end
+
+        -- pairs 순서에 따라 중복 오류의 위치가 달라지지 않도록 내부 ID 순으로
+        -- 검사한다. 같은 표시 이름은 선택 화면에서 구분할 수 없으므로 정적 데이터
+        -- 로딩 자체를 실패시킨다.
+        table.sort(namedCharacters, function(left, right)
+            return left.id < right.id
+        end)
+        local firstCharacterByName = {}
+        for _, entry in ipairs(namedCharacters) do
+            local firstId = firstCharacterByName[entry.name]
+            if firstId ~= nil then
+                addError(
+                    errors,
+                    "duplicate_character_name",
+                    "characters." .. entry.id .. ".name",
+                    "캐릭터 이름 '" .. entry.name .. "'은 이미 characters."
+                        .. firstId .. ".name에서 사용되었습니다. 캐릭터 이름은 중복될 수 없습니다."
+                )
+            else
+                firstCharacterByName[entry.name] = entry.id
+            end
+        end
     end
 
-    local function validateCapturedStaticData(captured)
+    local function validateCapturedStaticData(captured, discoveredCharacterList, discoveryErrors)
         local errors = {}
+        for _, item in ipairs(discoveryErrors or {}) do
+            table.insert(errors, item)
+        end
         local registry = loadSingleModule(SOURCES.registry, errors, captured)
         local cards = loadMergedCollection(SOURCES.cards, errors, captured)
         local traits = loadMergedCollection(SOURCES.traits, errors, captured)
         local environments = loadMergedCollection(SOURCES.environments, errors, captured)
-        local characters = loadMergedCollection(SOURCES.characters, errors, captured)
+        local characterList = discoveredCharacterList
+        if characterList == nil then
+            characterList = loadMergedCollection(SOURCES.characterList, errors, captured)
+        end
+        validateCharacterList(characterList, errors)
+        local characters = loadCharacterDefinitions(characterList, errors, captured)
 
         validateRegistry(registry, errors)
         validateCards(cards, registry, errors)
@@ -994,6 +1303,10 @@
 
     local function loadAndValidateAll(forceRefresh)
         staticCacheStats.requests = staticCacheStats.requests + 1
+        emitDiagnostic(2, "validation_requested", {
+            forceRefresh = forceRefresh == true,
+            cachedEntries = #staticCacheEntries,
+        })
 
         -- main production warm cache는 bundle revision + mode + chat + character별로
         -- handler closure를 분리한다. 따라서 같은 handler의 성공 snapshot은 source를
@@ -1013,19 +1326,46 @@
             newest.hits = newest.hits + 1
             staticCacheStats.fastHits = staticCacheStats.fastHits + 1
             staticCacheStats.hits = staticCacheStats.hits + 1
+            emitDiagnostic(2, "validation_cache_hit", {
+                cache = "production_fast",
+                ok = newest.report.ok == true,
+            })
             return cloneStaticValue(newest.report)
         end
 
-        local captured = captureStaticLores(triggerId)
+        local captured = captureBaseStaticLores(triggerId)
+        local discoveredCharacterList = nil
+        local discoveryErrors = nil
+        local dynamicLoreOrder = findCachedDynamicLoreOrder(captured)
+        if dynamicLoreOrder == nil then
+            discoveryErrors = {}
+            discoveredCharacterList = loadMergedCollection(SOURCES.characterList, discoveryErrors, captured)
+            dynamicLoreOrder = collectCharacterDatabaseNames(discoveredCharacterList)
+        end
+        for _, database in ipairs(dynamicLoreOrder) do
+            captureStaticLore(triggerId, captured, database)
+        end
         local cached = findStaticCacheEntry(captured)
         if cached ~= nil then
             staticCacheStats.hits = staticCacheStats.hits + 1
+            emitDiagnostic(2, "validation_cache_hit", {
+                cache = "source_identity",
+                ok = cached.report.ok == true,
+            })
             return cloneStaticValue(cached.report)
         end
 
         staticCacheStats.misses = staticCacheStats.misses + 1
         staticCacheStats.validations = staticCacheStats.validations + 1
-        local report = validateCapturedStaticData(captured)
+        local report = validateCapturedStaticData(captured, discoveredCharacterList, discoveryErrors)
+        emitDiagnostic(report.ok == true and 2 or 1, "validation_completed", {
+            ok = report.ok == true,
+            errorCount = #report.errors,
+            cards = report.counts.cards,
+            traits = report.counts.traits,
+            environments = report.counts.environments,
+            characters = report.counts.characters,
+        })
         if report.ok == true then
             -- canonical report는 cache 내부에만 남기고 호출자에게는 별도 snapshot을 준다.
             storeStaticCacheEntry(captured, report)
@@ -1064,6 +1404,10 @@
             }
         end,
     }
+
+    emitDiagnostic(2, "request", {
+        action = tostring(action),
+    })
 
     local handler = actions[action]
     if not handler then

@@ -20,5 +20,81 @@ return {
                 },
             },
         },
+
+        iron_composure = {
+            id = "iron_composure",
+            owner = "character",
+            name = "철벽의 자기통제",
+            visibility = "public",
+            description = "감정이 흔들리는 모습을 약점으로 여기며 평정심을 완강하게 유지합니다.",
+            rules = {
+                "순응 방향 무드 이동에 필요한 무드 성과 기준이 2 증가합니다.",
+            },
+            modifiers = {
+                {
+                    timing = "moodPerformanceThreshold",
+                    operation = "add",
+                    direction = "compliance",
+                    amount = 2,
+                },
+            },
+        },
+
+        teasing_facade = {
+            id = "teasing_facade",
+            owner = "character",
+            name = "능청스러운 허세",
+            visibility = "public",
+            description = "당황스러운 순간에도 장난과 도발로 주도권을 되찾으려 합니다.",
+            rules = {
+                "순응 방향 무드 이동에 필요한 무드 성과 기준이 1 증가합니다.",
+            },
+            modifiers = {
+                {
+                    timing = "moodPerformanceThreshold",
+                    operation = "add",
+                    direction = "compliance",
+                    amount = 1,
+                },
+            },
+        },
+
+        worldly_composure = {
+            id = "worldly_composure",
+            owner = "character",
+            name = "연륜의 여유",
+            visibility = "public",
+            description = "상대의 의도를 서둘러 드러내지 않고 차분하게 상황의 속도를 조절합니다.",
+            rules = {
+                "순응 방향 무드 이동에 필요한 무드 성과 기준이 1 증가합니다.",
+            },
+            modifiers = {
+                {
+                    timing = "moodPerformanceThreshold",
+                    operation = "add",
+                    direction = "compliance",
+                    amount = 1,
+                },
+            },
+        },
+
+        vow_of_chastity = {
+            id = "vow_of_chastity",
+            owner = "character",
+            name = "정결 서원",
+            visibility = "public",
+            description = "굳은 신앙과 정결의 서원으로 마음이 흔들리는 것을 강하게 억누릅니다.",
+            rules = {
+                "순응 방향 무드 이동에 필요한 무드 성과 기준이 2 증가합니다.",
+            },
+            modifiers = {
+                {
+                    timing = "moodPerformanceThreshold",
+                    operation = "add",
+                    direction = "compliance",
+                    amount = 2,
+                },
+            },
+        },
     },
 }

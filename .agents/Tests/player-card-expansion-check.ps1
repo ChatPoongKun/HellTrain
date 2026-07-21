@@ -63,7 +63,12 @@ local lorePaths = {
     ["CharacterCards.db"] = "DB/CharacterCards.db",
     ["CharTraits.db"] = "DB/CharTraits.db",
     ["Environments.db"] = "DB/Environments.db",
+    ["CharacterList.db"] = "Char/CharacterList.db",
     ["YooJiyoung.db"] = "Char/YooJiyoung.db",
+    ["YoonSeoa.db"] = "Char/YoonSeoa.db",
+    ["HanJenny.db"] = "Char/HanJenny.db",
+    ["SeoMiryeong.db"] = "Char/SeoMiryeong.db",
+    ["SisterAgnes.db"] = "Char/SisterAgnes.db",
 }
 
 function getLoreBooks(triggerId, name)
@@ -168,7 +173,7 @@ for _, card in pairs(staticData.cards) do
     end
 end
 assert(playerCardCount == 10, "expanded player card pool must contain ten definitions")
-assert(staticReport.counts.cards == 14, "combined static card count must be fourteen")
+assert(staticReport.counts.cards == 30, "combined static card count must be thirty")
 
 for cardId, expected in pairs(expectedDefinitions) do
     local card = assert(staticData.cards[cardId], "missing expanded card: " .. cardId)

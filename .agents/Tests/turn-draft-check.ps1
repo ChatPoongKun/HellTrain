@@ -46,7 +46,12 @@ local lorePaths = {
     ["CharacterCards.db"] = "DB/CharacterCards.db",
     ["CharTraits.db"] = "DB/CharTraits.db",
     ["Environments.db"] = "DB/Environments.db",
+    ["CharacterList.db"] = "Char/CharacterList.db",
     ["YooJiyoung.db"] = "Char/YooJiyoung.db",
+    ["YoonSeoa.db"] = "Char/YoonSeoa.db",
+    ["HanJenny.db"] = "Char/HanJenny.db",
+    ["SeoMiryeong.db"] = "Char/SeoMiryeong.db",
+    ["SisterAgnes.db"] = "Char/SisterAgnes.db",
 }
 local loreOverrides = {}
 
@@ -341,7 +346,7 @@ local staticLoad = assertOk(
     runScript("turn-draft-check", "staticData", "loadAll")
 )
 staticData = staticLoad.data
-assert(staticLoad.counts.cards == 14, "turn draft fixture did not load all fourteen cards")
+assert(staticLoad.counts.cards == 30, "turn draft fixture did not load all thirty cards")
 
 local eyeDefinition = staticData.cards.read_the_room
 assert(type(eyeDefinition) == "table", "read_the_room definition is missing")

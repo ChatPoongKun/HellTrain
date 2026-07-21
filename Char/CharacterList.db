@@ -1,0 +1,26 @@
+return {
+    schemaVersion = 1,
+    kind = "characterList",
+    characters = {
+        yoo_jiyoung = {
+            id = "yoo_jiyoung",
+            database = "YooJiyoung.db",
+        },
+        yoon_seoa = {
+            id = "yoon_seoa",
+            database = "YoonSeoa.db",
+        },
+        han_jenny = {
+            id = "han_jenny",
+            database = "HanJenny.db",
+        },
+        seo_miryeong = {
+            id = "seo_miryeong",
+            database = "SeoMiryeong.db",
+        },
+        sister_agnes = {
+            id = "sister_agnes",
+            database = "SisterAgnes.db",
+        },
+    },
+}

@@ -45,7 +45,12 @@ local lorePaths = {
     ["CharacterCards.db"] = "DB/CharacterCards.db",
     ["CharTraits.db"] = "DB/CharTraits.db",
     ["Environments.db"] = "DB/Environments.db",
+    ["CharacterList.db"] = "Char/CharacterList.db",
     ["YooJiyoung.db"] = "Char/YooJiyoung.db",
+    ["YoonSeoa.db"] = "Char/YoonSeoa.db",
+    ["HanJenny.db"] = "Char/HanJenny.db",
+    ["SeoMiryeong.db"] = "Char/SeoMiryeong.db",
+    ["SisterAgnes.db"] = "Char/SisterAgnes.db",
 }
 
 local function chatIdForEvent(triggerId)
@@ -241,8 +246,8 @@ local firstStatic = assert(runScript("event-static-a", "staticData", "loadAll"))
 assert(firstStatic.ok == true and firstStatic.data.cards.accidental_brush.prototype == true)
 local initialDbCompiles = staticDbCompileCount
 local initialDbFetches = dbLoreFetchCount
-assert(initialDbCompiles == 6, "unexpected first static DB compile count: " .. tostring(initialDbCompiles))
-assert(initialDbFetches == 6, "unexpected first static DB lore fetch count")
+assert(initialDbCompiles == 11, "unexpected first static DB compile count: " .. tostring(initialDbCompiles))
+assert(initialDbFetches == 11, "unexpected first static DB lore fetch count")
 
 firstStatic.data.cards.accidental_brush.name = "POISONED_CACHE"
 firstStatic.data.registry.actionTags.approach.label = "POISONED_REGISTRY"
@@ -281,9 +286,9 @@ beginEvent("event-static-h", "chat-a", "character-a")
 local restored = assert(runScript("event-static-h", "staticData", "loadAll"))
 assert(restored.ok == true and restored.data.cards.accidental_brush.prototype == true)
 local restoredCompileCount = staticDbCompileCount
-assert(restoredCompileCount == initialDbCompiles + 12,
+assert(restoredCompileCount == initialDbCompiles + 22,
     "restored exact DB source did not reuse the prior successful snapshot")
-assert(dbLoreFetchCount == initialDbFetches + 12,
+assert(dbLoreFetchCount == initialDbFetches + 22,
     "failed forced validations did not perform their DB source reads")
 
 local changedPlayerCards, replacementCount = string.gsub(
@@ -298,13 +303,13 @@ beginEvent("event-static-i", "chat-a", "character-a")
 local productionStale = assert(runScript("event-static-i", "staticData", "loadAll"))
 assert(productionStale.ok == true and productionStale.data.cards.subtle_approach.prototype == true,
     "production snapshot bypassed the explicit revision/refresh contract")
-assert(dbLoreFetchCount == initialDbFetches + 12,
+assert(dbLoreFetchCount == initialDbFetches + 22,
     "production static warm path fetched a changed DB without refresh")
 beginEvent("event-static-i-refresh", "chat-a", "character-a")
 local changed = assert(runScript("event-static-i-refresh", "staticData", "reloadAll"))
 assert(changed.ok == true and changed.data.cards.subtle_approach.prototype == false,
     "forced valid DB refresh returned a stale snapshot")
-assert(staticDbCompileCount == restoredCompileCount + 6,
+assert(staticDbCompileCount == restoredCompileCount + 11,
     "valid forced DB refresh did not perform exactly one new validation")
 
 loreOverrides["PlayerCards.db"] = nil
@@ -316,7 +321,7 @@ beginEvent("event-static-j-refresh", "chat-a", "character-a")
 local restoredAgain = assert(runScript("event-static-j-refresh", "staticData", "reloadAll"))
 assert(restoredAgain.data.cards.subtle_approach.prototype == true,
     "forced DB restore reused another static snapshot")
-assert(staticDbCompileCount == restoredCompileCount + 6,
+assert(staticDbCompileCount == restoredCompileCount + 11,
     "return to exact DB source missed its isolated cache entry")
 
 beginEvent("event-static-k", "chat-a", "character-a")
@@ -324,12 +329,12 @@ local clearedStatic = assert(runScript("event-static-k", "staticData", "clearCac
 assert(clearedStatic.ok == true and clearedStatic.removed == 2)
 beginEvent("event-static-l", "chat-a", "character-a")
 assert(runScript("event-static-l", "staticData", "loadAll").ok == true)
-assert(staticDbCompileCount == restoredCompileCount + 12,
+assert(staticDbCompileCount == restoredCompileCount + 22,
     "explicit static cache clear did not force revalidation")
 
 beginEvent("event-static-m", "chat-a", "character-a")
 local finalStaticStats = assert(runScript("event-static-m", "staticData", "cacheStats")).cache
-assert(dbLoreFetchCount == 36, "unexpected production DB lore fetch total")
+assert(dbLoreFetchCount == 66, "unexpected production DB lore fetch total")
 
 local beforeDevelopmentDbFetches = dbLoreFetchCount
 assert(setRunScriptCacheDevelopmentMode(true) == true)
@@ -337,7 +342,7 @@ beginEvent("event-static-dev-a", "chat-a", "character-a")
 assert(runScript("event-static-dev-a", "staticData", "loadAll").ok == true)
 beginEvent("event-static-dev-b", "chat-a", "character-a")
 assert(runScript("event-static-dev-b", "staticData", "loadAll").ok == true)
-assert(dbLoreFetchCount == beforeDevelopmentDbFetches + 12,
+assert(dbLoreFetchCount == beforeDevelopmentDbFetches + 22,
     "development bypass did not rebuild static data once per event")
 assert(setRunScriptCacheDevelopmentMode(false) == false)
 
@@ -374,7 +379,7 @@ try {
         throw "The runtime cache check failed.`n$($output -join "`n")"
     }
     $text = $output -join "`n"
-    if ($text -notmatch '^RUNTIME_CACHE\|compiles=14\|txHits=51\|warmHits=18\|sourceFetches=20\|dbValidations=5\|dbHits=6\|devDbReloads=12$') {
+    if ($text -notmatch '^RUNTIME_CACHE\|compiles=14\|txHits=51\|warmHits=18\|sourceFetches=20\|dbValidations=5\|dbHits=6\|devDbReloads=22$') {
         throw "Unexpected runtime cache vector: $text"
     }
     Write-Output 'runtime-cache-check: ok'

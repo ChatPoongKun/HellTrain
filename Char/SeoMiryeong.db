@@ -1,0 +1,59 @@
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        seo_miryeong = {
+            id = "seo_miryeong",
+            name = "서미령",
+
+            publicProfile = {
+                age = 41,
+                occupation = "플라워숍 대표",
+                appearance = {
+                    hairColor = "부드러운 갈색",
+                    eyeColor = "갈색",
+                    skin = "차분한 윤기가 도는 피부",
+                    height = 164,
+                    weight = 60,
+                    threeSize = "96-67-97",
+                    style = "단정한 원피스와 카디건, 왼손의 결혼반지",
+                },
+                personality = {
+                    traits = { "maternal", "patient", "perceptive" },
+                    likes = { "flowers", "tea", "quiet_conversation" },
+                },
+                background = {
+                    family = "남편과 함께 살며 독립한 자녀가 한 명 있음",
+                    hobbies = "홈베이킹, 꽃꽂이, 고전 영화 감상",
+                    boardingReason = "외부 행사 장식을 마치고 가게로 돌아가는 길",
+                },
+            },
+
+            privateProfile = {
+                sexualKnowledge = "결혼 생활을 통해 성에 대해 현실적이고 성숙한 지식을 갖고 있음",
+                sexualExperience = "배우자와의 오랜 관계 경험이 있으며 자신의 경계를 분명히 알고 있음",
+                hiddenDesire = "상대의 의도를 알아차리고도 모르는 척하며 상황의 속도를 통제하려는 성향이 있음",
+                virginity = {
+                    kiss = "경험 있음",
+                    oral = "경험 있음",
+                    vaginal = "경험 있음",
+                    anal = "경험 없음",
+                },
+            },
+
+            battle = {
+                startingResistance = 34,
+                startingMood = "suspicion",
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                traitIds = { "worldly_composure" },
+                deck = {
+                    "miryeong_draw_cardigan_closed",
+                    "miryeong_gentle_boundary",
+                    "miryeong_move_beside_door",
+                    "miryeong_calm_request_for_help",
+                },
+            },
+        },
+    },
+}

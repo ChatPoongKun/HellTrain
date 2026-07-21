@@ -1,0 +1,59 @@
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        han_jenny = {
+            id = "han_jenny",
+            name = "한제니",
+
+            publicProfile = {
+                age = 24,
+                occupation = "패션·뷰티 인플루언서",
+                appearance = {
+                    hairColor = "애시 블론드",
+                    eyeColor = "밝은 갈색",
+                    skin = "건강하게 그을린 피부",
+                    height = 165,
+                    weight = 52,
+                    threeSize = "90-59-88",
+                    style = "크롭 재킷, 짧은 스커트, 화려한 네일과 액세서리",
+                },
+                personality = {
+                    traits = { "extrovert", "teasing", "quick_witted" },
+                    likes = { "fashion", "attention", "nightlife" },
+                },
+                background = {
+                    family = "자취 중이며 가족과는 자주 연락함",
+                    hobbies = "쇼핑, 라이브 방송, 클럽 탐방",
+                    boardingReason = "브랜드 행사 촬영을 마치고 귀가하는 길",
+                },
+            },
+
+            privateProfile = {
+                sexualKnowledge = "인터넷과 연애 경험으로 성 지식이 풍부하며 노골적인 농담에도 익숙함",
+                sexualExperience = "가벼운 만남과 연애를 모두 경험했지만 주도권을 넘기는 것은 꺼림",
+                hiddenDesire = "상대를 놀리는 역할에는 익숙하지만 예상 밖의 반격에는 쉽게 페이스를 잃음",
+                virginity = {
+                    kiss = "경험 있음",
+                    oral = "경험 있음",
+                    vaginal = "경험 있음",
+                    anal = "경험 없음",
+                },
+            },
+
+            battle = {
+                startingResistance = 27,
+                startingMood = "ignore",
+                baseDrawCount = 4,
+                maxHandSize = 5,
+                traitIds = { "teasing_facade" },
+                deck = {
+                    "jenny_slip_away_laughing",
+                    "jenny_phone_camera_feint",
+                    "jenny_teasing_counter",
+                    "jenny_fake_livestream",
+                },
+            },
+        },
+    },
+}

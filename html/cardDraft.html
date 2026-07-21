@@ -231,26 +231,39 @@ gap: 8px;
 
 .setup-draft .draft-cost,
 .setup-draft .draft-damage {
-display: inline-grid;
+display: inline-flex;
 min-width: 42px;
 min-height: 38px;
-place-items: center;
+padding: 0 8px;
+align-items: center;
+justify-content: center;
+gap: 5px;
 border-radius: 10px;
 font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
 font-size: 16px;
 font-weight: 900;
 }
 
+.setup-draft .draft-stat-icon {
+display: inline-flex;
+width: 20px;
+height: 20px;
+flex: 0 0 20px;
+align-items: center;
+justify-content: center;
+}
+
+.setup-draft .draft-stat-icon img {
+display: block;
+width: 100%;
+height: 100%;
+object-fit: contain;
+}
+
 .setup-draft .draft-cost {
 border: 1px solid rgba(70, 217, 239, 0.32);
 color: var(--draft-cyan);
 background: rgba(2, 8, 14, 0.62);
-}
-
-.setup-draft .draft-cost::before {
-margin-right: 4px;
-content: "◐";
-font-size: 10px;
 }
 
 .setup-draft .draft-copy-count {
@@ -405,15 +418,6 @@ color: var(--draft-cyan);
 border: 1px solid rgba(251, 113, 133, 0.3);
 color: var(--draft-rose);
 background: var(--draft-rose-soft);
-}
-
-.setup-draft .draft-damage small {
-display: block;
-margin-right: 4px;
-color: #fecdd3;
-font-family: inherit;
-font-size: 8px;
-font-weight: 800;
 }
 
 .setup-draft .draft-confirm {
@@ -648,7 +652,7 @@ aria-label="카드 상세 보기"
 >
 <label class="draft-card" for="setup-draft-card-{{dictelement::{{slot::setup_offer_card}}::slot}}">
 <span class="draft-card-top">
-<span class="draft-cost" aria-label="기본 은폐 비용 {{dictelement::{{slot::setup_offer_card}}::baseStealthCost}}">{{dictelement::{{slot::setup_offer_card}}::baseStealthCost}}</span>
+<span class="draft-cost" aria-label="기본 은폐 비용 {{dictelement::{{slot::setup_offer_card}}::baseStealthCost}}"><span class="draft-stat-icon" aria-hidden="true">{{img::cost.png}}</span><span>{{dictelement::{{slot::setup_offer_card}}::baseStealthCost}}</span></span>
 <span class="draft-copy-count">보유 {{dictelement::{{slot::setup_offer_card}}::ownedCopies}} / 2</span>
 </span>
 
@@ -698,7 +702,7 @@ aria-label="카드 상세 보기"
 
 <span class="draft-card-bottom">
 <span class="draft-first-hint">클릭해 상세 보기<br>선택 후 아래에서 확정</span>
-<span class="draft-damage" aria-label="기본 저항 피해 {{dictelement::{{slot::setup_offer_card}}::baseResistanceDamage}}"><small>저항</small>{{dictelement::{{slot::setup_offer_card}}::baseResistanceDamage}}</span>
+<span class="draft-damage" aria-label="기본 저항 피해 {{dictelement::{{slot::setup_offer_card}}::baseResistanceDamage}}"><span class="draft-stat-icon" aria-hidden="true">{{img::damage.png}}</span><span>{{dictelement::{{slot::setup_offer_card}}::baseResistanceDamage}}</span></span>
 </span>
 </label>
 <button

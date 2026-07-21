@@ -50,7 +50,12 @@ local lorePaths = {
     ["CharacterCards.db"] = "DB/CharacterCards.db",
     ["CharTraits.db"] = "DB/CharTraits.db",
     ["Environments.db"] = "DB/Environments.db",
+    ["CharacterList.db"] = "Char/CharacterList.db",
     ["YooJiyoung.db"] = "Char/YooJiyoung.db",
+    ["YoonSeoa.db"] = "Char/YoonSeoa.db",
+    ["HanJenny.db"] = "Char/HanJenny.db",
+    ["SeoMiryeong.db"] = "Char/SeoMiryeong.db",
+    ["SisterAgnes.db"] = "Char/SisterAgnes.db",
 }
 
 function getLoreBooks(triggerId, name)
@@ -172,7 +177,7 @@ end
 
 local staticLoad = assertOk("static lore load", runScript("turn-resolver-check", "staticData", "loadAll"))
 local staticData = staticLoad.data
-assert(staticLoad.counts.cards == 14, "resolver fixture did not load all fourteen cards")
+assert(staticLoad.counts.cards == 30, "resolver fixture did not load all thirty cards")
 
 local function makeCard(instanceId, cardId, owner, zone, position)
     return {

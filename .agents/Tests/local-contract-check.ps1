@@ -66,16 +66,34 @@ local lorePaths = {
     ["CharacterCards.db"] = "DB/CharacterCards.db",
     ["CharTraits.db"] = "DB/CharTraits.db",
     ["Environments.db"] = "DB/Environments.db",
+    ["CharacterList.db"] = "Char/CharacterList.db",
     ["YooJiyoung.db"] = "Char/YooJiyoung.db",
+    ["YoonSeoa.db"] = "Char/YoonSeoa.db",
+    ["HanJenny.db"] = "Char/HanJenny.db",
+    ["SeoMiryeong.db"] = "Char/SeoMiryeong.db",
+    ["SisterAgnes.db"] = "Char/SisterAgnes.db",
 }
 local loreOverrides = {}
+local loreExtraEntries = {}
 
 function getLoreBooks(triggerId, name)
     local path = lorePaths[name]
-    if not path then
+    local primary = loreOverrides[name]
+    if primary == nil and path ~= nil then
+        primary = readFile(path)
+    end
+    local extras = loreExtraEntries[name] or {}
+    if primary == nil and #extras == 0 then
         return {}
     end
-    return { { content = loreOverrides[name] or readFile(path) } }
+    local entries = {}
+    if primary ~= nil then
+        table.insert(entries, { content = primary })
+    end
+    for _, content in ipairs(extras) do
+        table.insert(entries, { content = content })
+    end
+    return entries
 end
 
 local function clone(value, active)
@@ -180,12 +198,233 @@ local staticLoad = assertOk(
 local staticData = staticLoad.data
 local registry = staticData.registry
 local cards = staticData.cards
-assert(staticLoad.counts.cards == 14)
-assert(staticLoad.counts.traits == 1)
+assert(staticLoad.counts.cards == 30)
+assert(staticLoad.counts.traits == 5)
 assert(staticLoad.counts.environments == 1)
-assert(staticLoad.counts.characters == 1)
+assert(staticLoad.counts.characters == 5)
 assert(staticData.characters.yoo_jiyoung.battle.baseDrawCount == 3)
 assert(staticData.characters.yoo_jiyoung.battle.maxHandSize == 5)
+
+local addedCharacterIds = {
+    "yoon_seoa",
+    "han_jenny",
+    "seo_miryeong",
+    "sister_agnes",
+}
+for _, characterId in ipairs(addedCharacterIds) do
+    local character = assert(staticData.characters[characterId], "missing added character: " .. characterId)
+    assert(character.publicProfile.age >= 20, "added character must be an adult: " .. characterId)
+    assert(#character.battle.deck == 4, "added character deck must contain four cards: " .. characterId)
+    assert(#character.battle.traitIds == 1, "added character must have one defining trait: " .. characterId)
+
+    local context = {
+        turn = 1,
+        mood = character.battle.startingMood,
+        player = { stealth = 30, handCount = 3 },
+        character = {
+            resistance = character.battle.startingResistance,
+            publicActionTag = "vigilance",
+        },
+    }
+    for _, cardId in ipairs(character.battle.deck) do
+        local card = assert(cards[cardId], "missing added character card: " .. cardId)
+        context.card = { id = cardId, instanceId = "content-check-" .. cardId }
+        local plan = type(card.mechanismData) == "table" and card.mechanismData.plan or nil
+        if plan then
+            local evaluated = assertOk(
+                "added character plan " .. cardId,
+                runScript(
+                    "test",
+                    "effectEngine",
+                    "evaluateTrigger",
+                    staticData,
+                    plan,
+                    context,
+                    { type = "card_declared", side = "player" }
+                )
+            )
+            assert(evaluated.matched == true and #evaluated.commands > 0,
+                "added character plan did not produce commands: " .. cardId)
+        else
+            local evaluated = assertOk(
+                "added character card " .. cardId,
+                runScript("test", "effectEngine", "evaluateCardResolve", staticData, cardId, context)
+            )
+            assert(#evaluated.commands > 0, "added character card did not produce commands: " .. cardId)
+        end
+    end
+end
+
+local function characterListEntry(characterId, database)
+    return ([[
+return {
+    schemaVersion = 1,
+    kind = "characterList",
+    characters = {
+        %s = {
+            id = "%s",
+            database = "%s",
+        },
+    },
+}
+]]):format(characterId, characterId, database)
+end
+
+local function characterDatabaseEntry(characterId, characterName)
+    return ([[
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        %s = {
+            id = "%s",
+            name = "%s",
+            publicProfile = {},
+            battle = {
+                startingResistance = 30,
+                startingMood = "ignore",
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                traitIds = {},
+                deck = { "close_collar" },
+            },
+        },
+    },
+}
+]]):format(characterId, characterId, characterName)
+end
+
+do
+local mismatchedManifestSource, mismatchedManifestReplacementCount = string.gsub(
+    readFile("Char/CharacterList.db"),
+    'kind = "characterList"',
+    'kind = "characterDatabase"',
+    1
+)
+assert(mismatchedManifestReplacementCount == 1, "character list diagnostic fixture replacement failed")
+
+local diagnosticEvents = {}
+local previousDebug = DEBUG
+local previousPrint = print
+DEBUG = 2
+print = function(message)
+    diagnosticEvents[#diagnosticEvents + 1] = tostring(message)
+end
+loreOverrides["CharacterList.db"] = mismatchedManifestSource
+local mismatchedManifestReport = runScript("test", "staticData", "loadAll")
+loreOverrides["CharacterList.db"] = nil
+DEBUG = previousDebug
+print = previousPrint
+
+local mismatchedManifestError = assertError(
+    "character list kind mismatch is actionable",
+    mismatchedManifestReport,
+    "unexpected_kind",
+    "CharacterList.db[1].kind"
+)
+assert(mismatchedManifestReport.data == nil, "kind-mismatched character list exposed static data")
+assert(
+    mismatchedManifestError.message:find("expected=characterList", 1, true)
+        and mismatchedManifestError.message:find("actual=characterDatabase", 1, true),
+    "kind mismatch error did not include expected and actual kinds"
+)
+local sawHeaderMismatchDiagnostic = false
+for _, event in ipairs(diagnosticEvents) do
+    if type(event) == "string"
+        and event:find("[helltrain.staticData]", 1, true)
+        and event:find("event=module_header_mismatch", 1, true)
+        and event:find("path=CharacterList.db[1].kind", 1, true)
+        and event:find("expectedKind=characterList", 1, true)
+        and event:find("actualKind=characterDatabase", 1, true) then
+        sawHeaderMismatchDiagnostic = true
+    end
+end
+assert(sawHeaderMismatchDiagnostic, "kind mismatch did not emit a structured console diagnostic")
+end
+
+loreExtraEntries["CharacterList.db"] = {
+    characterListEntry("kim_mina", "KimMina.db"),
+}
+loreOverrides["KimMina.db"] = characterDatabaseEntry("kim_mina", "김미나")
+local mergedCharacterReport = assertOk(
+    "multiple character list lore entries merge",
+    runScript("test", "staticData", "loadAll")
+)
+loreOverrides["KimMina.db"] = nil
+assert(mergedCharacterReport.counts.characters == 6)
+assert(mergedCharacterReport.data.characters.yoo_jiyoung.name == "유지영")
+assert(mergedCharacterReport.data.characters.kim_mina.name == "김미나")
+
+loreExtraEntries["CharacterList.db"] = {
+    characterListEntry("yoo_jiyoung_copy", "YooJiyoungCopy.db"),
+}
+loreOverrides["YooJiyoungCopy.db"] = characterDatabaseEntry("yoo_jiyoung_copy", "유지영")
+local duplicateCharacterNameReport = runScript("test", "staticData", "loadAll")
+loreExtraEntries["CharacterList.db"] = nil
+loreOverrides["YooJiyoungCopy.db"] = nil
+local duplicateCharacterNameError = assertError(
+    "duplicate character display name stops static loading",
+    duplicateCharacterNameReport,
+    "duplicate_character_name",
+    "characters.yoo_jiyoung_copy.name"
+)
+assert(duplicateCharacterNameReport.data == nil, "duplicate character name exposed static data")
+assert(
+    duplicateCharacterNameError.message:find("characters.yoo_jiyoung.name", 1, true),
+    "duplicate character name error did not identify the first definition"
+)
+
+local listWithEmbeddedData, embeddedReplacementCount = string.gsub(
+    characterListEntry("embedded_profile", "EmbeddedProfile.db"),
+    'database = "EmbeddedProfile.db",',
+    'database = "EmbeddedProfile.db",\n            name = "목록에 들어가면 안 되는 이름",',
+    1
+)
+assert(embeddedReplacementCount == 1, "embedded character list fixture replacement failed")
+loreExtraEntries["CharacterList.db"] = { listWithEmbeddedData }
+local embeddedCharacterDataReport = runScript("test", "staticData", "loadAll")
+loreExtraEntries["CharacterList.db"] = nil
+assertError(
+    "character list contains only id and database",
+    embeddedCharacterDataReport,
+    "unexpected_character_list_field",
+    "characterList.embedded_profile.name"
+)
+assert(embeddedCharacterDataReport.data == nil, "embedded character list data was accepted")
+
+loreExtraEntries["CharacterList.db"] = {
+    characterListEntry("missing_person", "MissingPerson.db"),
+}
+local missingCharacterDatabaseReport = runScript("test", "staticData", "loadAll")
+loreExtraEntries["CharacterList.db"] = nil
+assertError(
+    "listed character database must exist",
+    missingCharacterDatabaseReport,
+    "missing_lore",
+    "MissingPerson.db"
+)
+assert(missingCharacterDatabaseReport.data == nil, "missing character database exposed static data")
+
+loreExtraEntries["CharacterList.db"] = {
+    characterListEntry("mismatched_person", "MismatchedPerson.db"),
+}
+loreOverrides["MismatchedPerson.db"] = characterDatabaseEntry("different_person", "다른 사람")
+local mismatchedCharacterDatabaseReport = runScript("test", "staticData", "loadAll")
+loreExtraEntries["CharacterList.db"] = nil
+loreOverrides["MismatchedPerson.db"] = nil
+assertError(
+    "listed character id must match individual database",
+    mismatchedCharacterDatabaseReport,
+    "missing_listed_character",
+    "MismatchedPerson.db[1].characters.mismatched_person"
+)
+assertError(
+    "individual database cannot define an unlisted character",
+    mismatchedCharacterDatabaseReport,
+    "unlisted_character_definition",
+    "MismatchedPerson.db[1].characters.different_person"
+)
+assert(mismatchedCharacterDatabaseReport.data == nil, "mismatched character database exposed static data")
 
 local fractionalPlanSource, durationReplacementCount = string.gsub(
     readFile("DB/PlayerCards.db"),

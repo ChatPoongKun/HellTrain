@@ -1,0 +1,59 @@
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        yoon_seoa = {
+            id = "yoon_seoa",
+            name = "윤서아",
+
+            publicProfile = {
+                age = 32,
+                occupation = "대기업 전략기획팀장",
+                appearance = {
+                    hairColor = "검은색",
+                    eyeColor = "짙은 갈색",
+                    skin = "희고 매끈한 피부",
+                    height = 171,
+                    weight = 55,
+                    threeSize = "88-61-89",
+                    style = "몸에 꼭 맞는 정장, 검은 스타킹, 은테 안경",
+                },
+                personality = {
+                    traits = { "imperious", "composed", "perfectionist" },
+                    likes = { "order", "competence", "black_coffee" },
+                },
+                background = {
+                    family = "혼자 살며 가족과는 필요한 연락만 주고받음",
+                    hobbies = "와인 수집, 야간 수영, 경제지 읽기",
+                    boardingReason = "늦은 회의를 마치고 귀가하는 길",
+                },
+            },
+
+            privateProfile = {
+                sexualKnowledge = "성 지식과 연애 경험은 충분하지만 사생활을 철저히 통제함",
+                sexualExperience = "몇 차례의 진지한 교제와 성관계 경험이 있음",
+                hiddenDesire = "자신의 동요를 간파당하거나 주도권을 잃는 상황을 두려워하면서도 의식함",
+                virginity = {
+                    kiss = "경험 있음",
+                    oral = "경험 있음",
+                    vaginal = "경험 있음",
+                    anal = "경험 없음",
+                },
+            },
+
+            battle = {
+                startingResistance = 38,
+                startingMood = "rejection",
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                traitIds = { "iron_composure" },
+                deck = {
+                    "seoa_document_bag_guard",
+                    "seoa_measured_warning",
+                    "seoa_scan_for_witnesses",
+                    "seoa_cold_stare",
+                },
+            },
+        },
+    },
+}

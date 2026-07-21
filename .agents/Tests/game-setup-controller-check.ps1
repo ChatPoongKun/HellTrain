@@ -54,7 +54,12 @@ local lorePaths = {
     ["CharacterCards.db"] = "DB/CharacterCards.db",
     ["CharTraits.db"] = "DB/CharTraits.db",
     ["Environments.db"] = "DB/Environments.db",
+    ["CharacterList.db"] = "Char/CharacterList.db",
     ["YooJiyoung.db"] = "Char/YooJiyoung.db",
+    ["YoonSeoa.db"] = "Char/YoonSeoa.db",
+    ["HanJenny.db"] = "Char/HanJenny.db",
+    ["SeoMiryeong.db"] = "Char/SeoMiryeong.db",
+    ["SisterAgnes.db"] = "Char/SisterAgnes.db",
     ["sideBar.html"] = "html/sideBar.html",
     ["cardDraft.html"] = "html/cardDraft.html",
 }
@@ -162,6 +167,8 @@ local cbsThrows = false
 local dropStateWrite = false
 local dropChatKey
 local dropReadyValue
+local lastAlert
+DEBUG = 0
 
 local function record(value) events[#events + 1] = value end
 function setState(triggerId, key, value)
@@ -194,7 +201,9 @@ function cbs(source)
     if cbsThrows then error("injected cbs failure") end
     return cbsValue
 end
-function alertError() end
+function alertError(triggerId, message)
+    lastAlert = message
+end
 
 local originalHosts = {
     setState = setState,
@@ -219,6 +228,7 @@ local function reset(seed)
     dropStateWrite = false
     dropChatKey = nil
     dropReadyValue = nil
+    lastAlert = nil
     loreContentTransform = nil
     loreLoadCounts = {}
     setState = originalHosts.setState
@@ -277,6 +287,59 @@ local publishOnlyOrder = {
     "chat:" .. UI .. ":value",
     "chat:" .. READY .. ":ready",
 }
+
+-- Static DB header failures expose the exact lore entry in the modal even when
+-- the browser console is unavailable or filtered.
+do
+reset("12000")
+local consoleDiagnostics = {}
+local previousPrint = print
+local previousDebug = DEBUG
+DEBUG = 2
+print = function(message)
+    consoleDiagnostics[#consoleDiagnostics + 1] = tostring(message)
+end
+loreContentTransform = function(name, content)
+    if name ~= "CharacterList.db" then return content end
+    local replaced, count = string.gsub(
+        content,
+        'kind = "characterList"',
+        'kind = "characterDatabase"',
+        1
+    )
+    assert(count == 1, "character list controller diagnostic fixture replacement failed")
+    return replaced
+end
+local headerMismatch = assertFailed("static header mismatch", controller("start"), "unexpected_kind")
+print = previousPrint
+DEBUG = previousDebug
+assert(headerMismatch.errors[1].path == "CharacterList.db[1].kind",
+    "static header mismatch did not remain the first actionable error")
+assert(type(lastAlert) == "string"
+        and lastAlert:find("expected=characterList", 1, true)
+        and lastAlert:find("actual=characterDatabase", 1, true)
+        and lastAlert:find("CharacterList.db[1].kind", 1, true),
+    "static header mismatch alert did not include kinds and path")
+local sawControllerFailureDiagnostic = false
+local sawControllerErrorDiagnostic = false
+for _, diagnostic in ipairs(consoleDiagnostics) do
+    if type(diagnostic) == "string"
+        and diagnostic:find("[helltrain.gameSetupController]", 1, true)
+        and diagnostic:find("event=request_failed", 1, true)
+        and diagnostic:find("action=start", 1, true) then
+        sawControllerFailureDiagnostic = true
+    end
+    if type(diagnostic) == "string"
+        and diagnostic:find("[helltrain.gameSetupController]", 1, true)
+        and diagnostic:find("event=request_error", 1, true)
+        and diagnostic:find("code=unexpected_kind", 1, true)
+        and diagnostic:find("path=CharacterList.db[1].kind", 1, true) then
+        sawControllerErrorDiagnostic = true
+    end
+end
+assert(sawControllerFailureDiagnostic, "controller failure did not emit its structured error list")
+assert(sawControllerErrorDiagnostic, "controller failure did not print its actionable error path")
+end
 
 -- RisuAI getLoreBooks parses lore CBS before returning its content. The draft
 -- lore must therefore be loaded after the new View is published, both on the
