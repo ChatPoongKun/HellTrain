@@ -1,6 +1,3 @@
 .VSCodeCounter/
 .vscode/settings.json
-.agents/References/RisuAI/
-.agents/References/CBS.md
-.agents/References/Lua.md
-.agents/References/Special thnx.md
+.agents/
