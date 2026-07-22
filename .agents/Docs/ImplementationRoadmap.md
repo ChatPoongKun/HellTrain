@@ -49,10 +49,10 @@
 | `System/battleRuntime.lua` | projection 봉인→resolver→사건 투영→pending 조립, 저장 결과 재사용과 `lastCommittedTurnId` 기반 멱등 확정 구현 | 컨트롤러·훅과 로컬 통합 완료, 실제 RisuAI 연속 턴 검증 필요 |
 | `System/battleController.lua` | setup 결합 검증·첫 턴 초기화·부분 복구, 저장·View·채팅 anchor, 요청 주입/출력 관측 영수증, 무출력 재시도, 미관측 부분 응답 자동 삭제와 관측 출력 commit 재개 구현 | 로컬 호스트 경계 검사 통과. 실제 최신 RisuAI의 setup 인계, hook·전송 직렬성, 채팅 metadata 안정성·삭제 권한 검증 필요 |
 | `onButtonClick` | setup·battle·popup 공개 action allowlist 연결 | 내부 canonical action은 버튼에서 차단됨 |
-| `editDisplay` | first-message sentinel을 start 또는 shell/body/popup으로 치환 | 비-first-message anchor 탈취 차단, 실제 host remount 검증 필요 |
-| `onStart` | 연결됨(로컬) | `prepareGeneration`의 정상 준비·마커-only 무출력 retry·자동 정리 retry를 허용하고 commit-only 복구와 실패는 새 요청을 차단한다. 실제 최신 웹 검증 필요 |
+| `editDisplay` | 시작 전 first-message sentinel과 시작 후 실제 user UI anchor를 shell/body/popup으로 치환 | 활성 anchor 인덱스만 렌더, 실제 host remount 검증 필요 |
+| `onStart` | 연결됨(로컬) | exact user UI anchor를 빈 전송 신호로 제거하고 정상 준비·prefix-only 무출력 retry·자동 정리 retry를 허용하며 commit/UI 복구와 실패는 새 요청을 차단한다. 실제 최신 웹 검증 필요 |
 | `editInput` | 연결됨(로컬) | 전투 상태가 있으면 비어 있지 않은 입력도 정확한 `*says nothing*` filler로 정규화한다. 실제 입력 UI와 최신 웹 검증 필요 |
-| `editRequest` / `onOutput` | 연결됨(로컬) | 저장 사건 주입과 출력 관측·멱등 commit을 `battleController`에 위임한다. 실제 최신 웹 검증 필요 |
+| `editRequest` / `onOutput` | 연결됨(로컬) | request-only 사건/system+user 지시 주입, 출력 관측·멱등 commit과 장면 뒤 다음 user UI anchor 생성을 연결한다. 실제 최신 웹 검증 필요 |
 
 `System/main.lua`는 승인된 범위에서 훅, 캐시, 표시 anchor와 버튼 allowlist를 통합한다. 후속 변경은 `RuntimeCacheContract`의 revision·context·권위 상태 금지 계약을 함께 검토한다.
 
@@ -111,8 +111,8 @@
 - `.agents/Tests/deterministic-rng-check.ps1`, `.agents/Tests/card-zones-check.ps1`, `.agents/Tests/turn-draft-check.ps1`, `.agents/Tests/effect-engine-check.ps1`, `.agents/Tests/trigger-pipeline-check.ps1`, `.agents/Tests/character-selector-check.ps1`, `.agents/Tests/turn-initializer-check.ps1`, `.agents/Tests/turn-resolver-check.ps1`, `.agents/Tests/multi-turn-check.ps1`이 난수 재현, 카드 보존, 승인된 선택·패스 전이, 효과 명령, 트리거 순서, 캐릭터 점수, 턴 시작 영수증, 결정적 단일 턴 해결과 10턴 반복을 검사한다.
 - `.agents/Tests/turn-event-projector-check.ps1`이 일반 행동·제거·승패, 숨은 계획 억제·배치·만료와 공개 발동, 트리거 입력·조건·명령 재현, 내부 canary 폐기, malformed 원본의 fail-closed 처리와 10턴·별도 프로세스 결정성을 검사한다.
 - `.agents/Tests/battle-runtime-check.ps1`이 projection 봉인부터 pending 조립까지의 단일 실행, 전체 pending 무결성, 저장 결과 재사용, stale·malformed 거부, 반환 alias 차단과 최초·중복·늦은 출력 확정의 멱등성을 별도 프로세스에서 검사한다.
-- `.agents/Tests/battle-controller-check.ps1`이 54개 호스트 경계 시나리오로 setup 결합·첫 턴 인계·부분 복구, 저장·View write-read 검증, 요청 주입, marker-only 무출력 재시도와 attempt 쓰기 유실, 미관측 출력 자동 삭제와 중단 재개, 관측 출력 보존·commit 복구를 검사한다.
-- `.agents/Tests/main-hook-check.ps1`이 `editInput`, `onStart`, `editRequest`, `onOutput`과 기존 버튼 라우터의 성공·실패 분기를 두 독립 Lua 프로세스에서 검사한다.
+- `.agents/Tests/battle-controller-check.ps1`이 56개 호스트 경계 시나리오로 setup 결합·첫 턴 인계·부분 복구, 저장·View write-read 검증, UI anchor 제출과 request-only 주입, prefix-only 무출력 재시도, 미관측 출력 자동 삭제와 관측 출력 commit/UI 복구를 검사한다.
+- `.agents/Tests/main-hook-check.ps1`이 `editInput`, `onStart`, `editRequest`, `onOutput`, 실제 user UI anchor 수명주기와 기존 버튼 라우터의 성공·실패 분기를 두 독립 Lua 프로세스에서 검사한다.
 - `runtime-cache-check`, `runtime-bundle-contract-check`, `game-setup-incremental-check`, `ui-host-contract-check`이 warm/static 캐시, content revision, 71 seed·852 전이 동치와 UI slot 분리를 고정한다.
 - 게임 설정 관련 검사는 10장 선택 뒤 서로 다른 후보 3명, 공개 정보 allowlist, `init|chooseCharacter|<characterId>|<interactionToken>` 경로, `battleReady` 결합과 첫 전투 View 게시를 고정한다.
 - `.agents/Tests/setup-to-battle-flow-check.ps1`이 실제 모듈 전체로 시작→10장 드래프트→후보 3명→캐릭터 확정→첫 전투 UI와 첫 턴 진행을 연결하며, 현재 전체 32개 로컬 검사 파일이 모두 통과한다.
@@ -163,12 +163,12 @@
 - 카드 상세는 native disclosure로 로컬에서 열고 닫으며, 명시 등록·취소 버튼만 token이 있는 controller action을 호출한다. 기존 두 번 클릭 focus/등록 흐름은 v1 저장·호환 경계로만 남긴다.
 - 눈치보기는 권위 상태와 RNG를 바꾸지 않는 결정적 프리뷰로 현재 턴 1장을 보여주며 그 카드도 같은 턴 등록할 수 있다.
 - 눈치보기와 원래 손패 카드는 함께 사용한다. 프리뷰 카드까지 등록한 뒤 다른 원래 손패 카드를 등록하면 speculative 가지를 취소하고 마지막 카드만 사용한다.
-- 목표 UX에서는 입력창을 CSS로 입력할 수 없게 하고, 실제 문자열 편집 훅인 `editInput`에서도 입력을 정확한 filler로 정규화한다. 빈 전송 설정이 추가한 같은 `*says nothing*`은 제한된 `onStart` 준비·복구 경계에서 제거한다.
+- 게임 시작 직후 실제 user-role UI anchor를 추가하므로 입력창을 비운 채 Risu 전송 버튼만 눌러도 턴을 제출할 수 있다. 비어 있지 않은 입력은 `editInput`에서 filler로 정규화하며, anchor 뒤의 호환 filler도 제한된 `onStart` 준비·복구 경계에서 제거한다.
 - Lua는 저수준 LLM 호출이나 자동 전송을 하지 않는다.
-- 제한된 `onStart`에서 결과를 대기 트랜잭션으로 결정하고 `editRequest`에는 저장된 턴 사건만 추가한다. 자동 복구가 이미 관측된 출력의 commit만 마친 경우에는 새 LLM 요청을 취소한다.
+- 제한된 `onStart`에서 결과를 대기 트랜잭션으로 결정하고 `editRequest`에는 저장된 턴 사건과 장면 지시를 request-only로 추가한다. 자동 복구가 commit 또는 UI anchor 복구만 마친 경우에는 새 LLM 요청을 취소한다.
 - 프리셋, 캐릭터 설정과 로어북을 포함한 정상 요청을 유지한다.
 - 정상 출력이 도착하면 `onOutput`에서 결과를 한 번만 반영하고 공개한다.
-- 실패·재시도·재생성은 같은 `turnResult`를 사용한다.
+- 실패·재시도는 같은 `turnResult`를 사용한다. 기본 출력 재생성은 UI anchor 구조에서 지원하지 않는다.
 - 전투 UI는 최신 출력 아래의 사용자 메시지 하나만 유지한다.
 - 화면마다 `battleView`, `deckView`, `collectionView` 같은 구조화 채팅 변수 하나를 사용한다.
 - 고정 정보는 `dict_element`, 가변 목록은 CBS 반복문으로 출력한다.
@@ -222,11 +222,11 @@
 
 | 미정 사항 | 담당 | 정해야 할 내용 |
 |---|---|---|
-| 빈 입력 전송 경로 | 완료(로컬 연결) | `editInput`은 전투 입력 문자열을 정확한 filler로 정규화하고, 빈 입력 UX와 제한된 `onStart`를 유지한다. `useSayNothing`이 자동 삽입한 같은 `*says nothing*`은 `onStart` 준비·복구 경계에서 제거한다. 최신 Risu가 사용자 공개 마커 뒤의 빈 전송에는 filler를 추가하지 않는 경우, 정확한 마커-only 상태를 같은 요청의 무출력 재시도로 처리한다. 전투 중 자동 계속은 끄고 수동 Continue·프롬프트 미리보기는 사용하지 않으며, 실제 재생성은 저장된 직전 pending을 재사용한다. 최신 웹 검증은 남아 있다. |
+| 빈 입력 전송 경로 | 완료(로컬 연결) | 게임 시작과 각 정상 출력 뒤 exact user UI anchor를 마지막 메시지로 둔다. 빈 입력 전송은 새 메시지 없이 `onStart`를 호출하며, durable pending/binding/View 저장 뒤 현재 UI anchor를 제거한다. `useSayNothing` 호환 filler도 정리한다. 전투 중 자동 계속·Continue·프롬프트 미리보기는 사용하지 않는다. 최신 웹 검증은 남아 있다. |
 | 턴 사건 형식 | 완료(로컬 계약) | `TurnEventProjectionContract.md`와 strict 투영기로 행동·생각·결과 필드, 숨은 계획과 캐릭터 카드의 공개 경계를 확정. 실제 프롬프트 문장과 RisuAI 전달은 후속 연결 범위 |
 | 기본 묘사 지침 | 완료(수직 슬라이스) | 기존 프리셋의 문체·길이·시점을 유지하고, formatter는 판정 준수·한 장면 구성·게임 시스템 용어 비노출에 필요한 최소 지침만 추가한다. |
-| 생성 실패 UX | 완료(로컬 계약) | pending·RNG·공개 마커를 잠근 채 다음 빈 전송에서 재사용한다. 마커 뒤가 완전히 비었고 출력·정리 영수증이 없으면 채팅 변경 없이 attempt만 올려 재시도한다. chat anchor와 정리 영수증이 정확히 맞을 때만 미관측 부분 응답을 자동 삭제하고, `onOutput`이 관측한 응답은 보존한 채 commit만 재개한다. 위변조·불명확한 suffix는 삭제하지 않는다. 실제 경고 문구, Continue 금지와 생성 중 전송 직렬성은 통합 검사에서 확인한다. |
-| 출력 재생성 | 완료(직전 턴 범위) | 공개 턴 번호의 사용자 메시지와 저장된 직전 pending을 연결한다. 직전 출력의 실제 재생성은 같은 판정과 LLM 사건을 재사용하고 권위 상태는 중복 반영하지 않는다. 과거 여러 턴의 임의 재생성은 수직 슬라이스 범위에서 지원하지 않는다. |
+| 생성 실패 UX | 완료(로컬 계약) | pending·RNG·request-only 지시를 잠근 채 다음 빈 전송에서 재사용한다. response 위치가 비었고 출력·정리 영수증이 없으면 채팅 변경 없이 attempt만 올려 재시도한다. chat anchor와 정리 영수증이 정확히 맞을 때만 미관측 부분 응답을 자동 삭제하고, `onOutput`이 관측한 응답은 보존한 채 commit만 재개한다. 위변조·불명확한 suffix는 삭제하지 않는다. |
+| 출력 재생성 | 비지원(v1 UI anchor) | 장면 다음의 마지막 user 메시지가 다음 전투 UI이므로 Risu 기본 재생성과 안전하게 결합하지 않는다. 별도 request source가 호스트 API에 생기기 전에는 사용하지 않는다. |
 
 ### 6.4 전체 게임 루프 전에 필요한 결정
 

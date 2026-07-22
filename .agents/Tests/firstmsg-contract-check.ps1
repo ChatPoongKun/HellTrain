@@ -47,6 +47,7 @@ Assert-Contract ([regex]::Matches($main, [regex]::Escape($startRoute)).Count -eq
 Assert-Contract ($main.Contains('readUiFragment(triggerId, UI_READY_VAR) == "ready"')) 'editDisplay does not own the readiness boundary'
 $uiAnchorMarker = '@@HELLTRAIN_UI_ANCHOR_V1@@'
 Assert-Contract ([regex]::Matches($html, [regex]::Escape($uiAnchorMarker)).Count -eq 1) 'the dynamic UI anchor marker must exist exactly once'
+Assert-Contract ($displayUi.Contains('.helltrain-entry:has(.helltrain-dynamic-ui:empty)')) 'the retired first-message UI shell is not hidden'
 Assert-Contract (-not $displayUi.Contains('{{getvar::gameSetupReady}}')) 'outer CBS must not freeze the setup readiness state'
 Assert-Contract (-not $html.Contains('{{getvar::🔯🔯🔯}}')) 'the dynamic UI must be injected by editDisplay so targeted chat reloads cannot reuse stale outer CBS'
 

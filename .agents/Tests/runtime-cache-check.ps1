@@ -33,6 +33,7 @@ function async(callback)
 end
 
 local scriptSources = {}
+local scriptLoreOverrides = {}
 local loreOverrides = {}
 local scriptLoreFetches = {}
 local dbLoreFetchCount = 0
@@ -81,6 +82,9 @@ function getLoreBooks(triggerId, loreName)
     local scriptName = string.match(loreName, "^(.-)%.lua$")
     if scriptName ~= nil then
         scriptLoreFetches[scriptName] = (scriptLoreFetches[scriptName] or 0) + 1
+        if scriptLoreOverrides[scriptName] ~= nil then
+            return scriptLoreOverrides[scriptName]
+        end
         local source = scriptSources[scriptName]
         if source == nil and scriptName == "staticData" then
             source = readFile("System/staticData.lua")
@@ -348,6 +352,27 @@ assert(setRunScriptCacheDevelopmentMode(false) == false)
 
 local finalRunStats = getRunScriptCacheDiagnostics()
 local summaryCompileCount = loreCompileCount
+
+-- Executable lore entries are complete modules. In the host, duplicate names
+-- can arise across local/global/module sources. The authoritative bundle is the
+-- last module source and must replace stale character/global copies instead of
+-- being concatenated into an accidental immediate function call.
+scriptLoreOverrides.duplicate = {
+    {
+        content = "(function() error('stale higher-precedence copy executed') end)",
+    },
+    {
+        content = "(function(triggerId, mode, htmlName) "
+            .. "return 'last:' .. tostring(mode) .. ':' .. tostring(htmlName) end)",
+    },
+}
+beginEvent("event-duplicate", "chat-a", "character-a")
+assert(runScript("event-duplicate", "duplicate", "append", "character-list")
+        == "last:append:character-list",
+    "duplicate executable lore entries were concatenated or precedence changed")
+assert(scriptLoreFetches.duplicate == 1,
+    "duplicate executable lore was fetched more than once")
+
 for index = 1, 140 do
     local scriptName = "limitFixture" .. tostring(index)
     scriptSources[scriptName] = versionOne

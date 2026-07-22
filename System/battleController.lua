@@ -1,8 +1,9 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
-    local ACTIVE_REQUEST_SCHEMA_VERSION = 2
+    local ACTIVE_REQUEST_SCHEMA_VERSION = 3
     local VIEW_NAME = "battleView"
     local UI_BODY_NAME = "🔯🔯🔯"
+    local UI_ANCHOR_MARKER = "@@HELLTRAIN_UI_ANCHOR_V1@@"
     local SAY_NOTHING = "*says nothing*"
     local CHAT_FINGERPRINT_ALGORITHM = "canonical_poly131_137_chat_v1"
 
@@ -564,7 +565,7 @@
             schemaVersion = true,
             kind = true,
             prefixMessageCount = true,
-            markerIndex = true,
+            responseIndex = true,
             prefixFingerprint = true,
         }
         for key in pairs(anchor) do
@@ -572,14 +573,14 @@
                 errors[#errors + 1] = makeError("unknown_chat_anchor_field", path .. "." .. tostring(key), "채팅 anchor에 알 수 없는 필드가 있습니다.")
             end
         end
-        if anchor.schemaVersion ~= 1 or anchor.kind ~= "battleChatAnchor" then
+        if anchor.schemaVersion ~= 2 or anchor.kind ~= "battleChatAnchor" then
             errors[#errors + 1] = makeError("invalid_chat_anchor_schema", path, "채팅 anchor 스키마가 올바르지 않습니다.")
         end
         if not isInteger(anchor.prefixMessageCount, 0) then
             errors[#errors + 1] = makeError("invalid_chat_anchor_count", path .. ".prefixMessageCount", "anchor prefix 메시지 수가 올바르지 않습니다.")
         end
-        if not isInteger(anchor.markerIndex, 0) or anchor.markerIndex ~= anchor.prefixMessageCount then
-            errors[#errors + 1] = makeError("invalid_chat_anchor_index", path .. ".markerIndex", "0-based 마커 위치가 prefix 메시지 수와 일치하지 않습니다.")
+        if not isInteger(anchor.responseIndex, 0) or anchor.responseIndex ~= anchor.prefixMessageCount then
+            errors[#errors + 1] = makeError("invalid_chat_anchor_index", path .. ".responseIndex", "0-based 응답 위치가 prefix 메시지 수와 일치하지 않습니다.")
         end
         validateFingerprint(anchor.prefixFingerprint, path .. ".prefixFingerprint", errors)
     end
@@ -607,7 +608,7 @@
         if receipt.attemptNumber ~= binding.attemptNumber then
             errors[#errors + 1] = makeError("output_observed_attempt_mismatch", path .. ".attemptNumber", "출력 관측 영수증의 시도 번호가 요청과 다릅니다.")
         end
-        local expectedIndex = type(binding.chatAnchor) == "table" and binding.chatAnchor.markerIndex + 1 or nil
+        local expectedIndex = type(binding.chatAnchor) == "table" and binding.chatAnchor.responseIndex or nil
         if not isInteger(receipt.responseIndex, 0) or receipt.responseIndex ~= expectedIndex then
             errors[#errors + 1] = makeError("output_observed_index_mismatch", path .. ".responseIndex", "출력 관측 위치가 채팅 anchor 다음 위치와 다릅니다.")
         end
@@ -649,7 +650,7 @@
         if receipt.attemptNumber ~= binding.attemptNumber then
             errors[#errors + 1] = makeError("cleanup_attempt_mismatch", path .. ".attemptNumber", "복구 정리 시도 번호가 요청과 다릅니다.")
         end
-        local expectedIndex = type(binding.chatAnchor) == "table" and binding.chatAnchor.markerIndex + 1 or nil
+        local expectedIndex = type(binding.chatAnchor) == "table" and binding.chatAnchor.responseIndex or nil
         if not isInteger(receipt.responseIndex, 0) or receipt.responseIndex ~= expectedIndex then
             errors[#errors + 1] = makeError("cleanup_response_index_mismatch", path .. ".responseIndex", "복구 정리 응답 위치가 채팅 anchor 다음 위치와 다릅니다.")
         end
@@ -833,21 +834,21 @@
             and message.data == SAY_NOTHING
     end
 
-    local function isExactMarker(message, marker)
+    local function isExactUiAnchor(message)
         return type(message) == "table"
             and message.role == "user"
-            and message.data == marker
+            and message.data == UI_ANCHOR_MARKER
     end
 
-    local function createPlannedChatAnchor(chat, marker)
+    local function createPlannedChatAnchor(chat)
         local logicalLength = #chat
         while logicalLength > 0 and isExactFiller(chat[logicalLength]) do
             logicalLength = logicalLength - 1
         end
-        local prefixMessageCount = logicalLength
-        if logicalLength > 0 and isExactMarker(chat[logicalLength], marker) then
-            prefixMessageCount = logicalLength - 1
+        if logicalLength > 0 and isExactUiAnchor(chat[logicalLength]) then
+            logicalLength = logicalLength - 1
         end
+        local prefixMessageCount = logicalLength
         local fingerprint, fingerprintError = fingerprintChatRange(
             chat,
             1,
@@ -856,10 +857,10 @@
         )
         if fingerprintError then return nil, { fingerprintError } end
         return {
-            schemaVersion = 1,
+            schemaVersion = 2,
             kind = "battleChatAnchor",
             prefixMessageCount = prefixMessageCount,
-            markerIndex = prefixMessageCount,
+            responseIndex = prefixMessageCount,
             prefixFingerprint = fingerprint,
         }, nil
     end
@@ -881,7 +882,7 @@
         if fingerprintError then return { fingerprintError } end
         if not fingerprintsEqual(fingerprint, anchor.prefixFingerprint) then
             return {
-                makeError("chat_anchor_prefix_mismatch", "$.chat", "마커 이전 대화가 요청 준비 시점의 채팅 anchor와 다릅니다."),
+                makeError("chat_anchor_prefix_mismatch", "$.chat", "요청 이전 대화가 요청 준비 시점의 채팅 anchor와 다릅니다."),
             }
         end
         return nil
@@ -890,21 +891,23 @@
     local function inspectPreparingTopology(binding, chat)
         local prefixErrors = validateAnchorPrefix(binding, chat)
         if prefixErrors then return nil, prefixErrors end
-        local markerLuaIndex = binding.chatAnchor.markerIndex + 1
-        local cursor = markerLuaIndex
-        local markerPresent = isExactMarker(chat[cursor], binding.publicMarker)
-        if markerPresent then cursor = cursor + 1 end
+        local cursor = binding.chatAnchor.prefixMessageCount + 1
+        local uiAnchorPresent = false
+        if isExactUiAnchor(chat[cursor]) then
+            uiAnchorPresent = true
+            cursor = cursor + 1
+        end
         local fillerCount = 0
         for index = cursor, #chat do
             if not isExactFiller(chat[index]) then
                 return nil, {
-                    makeError("preparing_chat_topology_mismatch", "$.chat[" .. index .. "]", "준비 중인 요청의 anchor 뒤에는 고정 공개 마커와 trailing filler만 올 수 있습니다."),
+                    makeError("preparing_chat_topology_mismatch", "$.chat[" .. index .. "]", "준비 중인 요청의 anchor 뒤에는 UI 제출 메시지와 trailing filler만 올 수 있습니다."),
                 }
             end
             fillerCount = fillerCount + 1
         end
         return {
-            markerPresent = markerPresent,
+            uiAnchorPresent = uiAnchorPresent,
             fillerCount = fillerCount,
         }, nil
     end
@@ -912,15 +915,10 @@
     local function inspectAnchoredTopology(binding, chat, requireFiller)
         local prefixErrors = validateAnchorPrefix(binding, chat)
         if prefixErrors then return nil, prefixErrors end
-        local markerLuaIndex = binding.chatAnchor.markerIndex + 1
-        if not isExactMarker(chat[markerLuaIndex], binding.publicMarker) then
-            return nil, {
-                makeError("chat_anchor_marker_mismatch", "$.chat[" .. markerLuaIndex .. "]", "저장된 위치에 이 요청의 공개 턴 마커가 없습니다."),
-            }
-        end
+        local prefixCount = binding.chatAnchor.prefixMessageCount
         local fillerCount = 0
         local cursor = #chat
-        while cursor > markerLuaIndex and isExactFiller(chat[cursor]) do
+        while cursor > prefixCount and isExactFiller(chat[cursor]) do
             fillerCount = fillerCount + 1
             cursor = cursor - 1
         end
@@ -931,12 +929,12 @@
         end
         local responsePresent = false
         local responseFingerprint
-        local responseLuaIndex = markerLuaIndex + 1
+        local responseLuaIndex = prefixCount + 1
         if cursor == responseLuaIndex then
             local response = chat[responseLuaIndex]
             if type(response) ~= "table" or response.role ~= "char" then
                 return nil, {
-                    makeError("recovery_response_role_mismatch", "$.chat[" .. responseLuaIndex .. "]", "공개 마커 뒤의 미확정 응답이 캐릭터 메시지가 아닙니다."),
+                    makeError("recovery_response_role_mismatch", "$.chat[" .. responseLuaIndex .. "]", "요청 응답 위치의 미확정 메시지가 캐릭터 메시지가 아닙니다."),
                 }
             end
             responsePresent = true
@@ -948,19 +946,34 @@
                 "$.recovery.response"
             )
             if fingerprintError then return nil, { fingerprintError } end
-        elseif cursor ~= markerLuaIndex then
+        elseif cursor ~= prefixCount then
             return nil, {
                 makeError("recovery_chat_topology_mismatch", "$.chat", "채팅 anchor 뒤에 자동 복구가 소유한다고 증명할 수 없는 메시지가 있습니다."),
             }
         end
         return {
-            markerLuaIndex = markerLuaIndex,
             responseLuaIndex = responseLuaIndex,
             responseIndex = responseLuaIndex - 1,
             responsePresent = responsePresent,
             responseFingerprint = responseFingerprint,
             fillerCount = fillerCount,
         }, nil
+    end
+
+    local function inspectCommittedUiSubmission(binding, chat)
+        local cursor = #chat
+        while cursor > 0 and isExactFiller(chat[cursor]) do
+            cursor = cursor - 1
+        end
+        if cursor == 0 or not isExactUiAnchor(chat[cursor]) then
+            return nil, false, nil
+        end
+        local withoutUi = {}
+        for index = 1, cursor - 1 do
+            withoutUi[index] = chat[index]
+        end
+        local topology, topologyErrors = inspectAnchoredTopology(binding, withoutUi, false)
+        return topology, true, topologyErrors
     end
 
     local function inspectObservedOutput(binding, chat, allowTrailingFillers)
@@ -1028,6 +1041,48 @@
         end
     end
 
+    local function removeTrailingUiAnchor(chat)
+        if not isExactUiAnchor(chat[#chat]) then
+            return chat, false, nil
+        end
+        if type(removeChat) ~= "function" then
+            return nil, false, {
+                makeError("chat_write_unavailable", "$.host.removeChat", "UI 제출 메시지를 제거할 removeChat 호스트 함수를 찾을 수 없습니다."),
+            }
+        end
+        local ok, removeError = pcall(removeChat, triggerId, #chat - 1)
+        if not ok then
+            return nil, false, {
+                makeError("ui_anchor_remove_failed", "$.chat[" .. #chat .. "]", "이전 전투 UI 메시지를 제거하지 못했습니다: " .. tostring(removeError)),
+            }
+        end
+        local after, readErrors = readChat()
+        if readErrors then return nil, false, readErrors end
+        if #after ~= #chat - 1 then
+            return nil, false, {
+                makeError("ui_anchor_remove_not_persisted", "$.chat", "전투 UI 메시지 제거 뒤 대화 길이가 바뀌지 않았습니다."),
+            }
+        end
+        for index = 1, #after do
+            if not deepEqual(after[index], chat[index]) then
+                return nil, false, {
+                    makeError("ui_anchor_remove_mismatch", "$.chat[" .. index .. "]", "전투 UI 메시지 제거가 앞선 대화를 변경했습니다."),
+                }
+            end
+        end
+        return after, true, nil
+    end
+
+    local function hasFreshSubmitSuffix(chat)
+        local cursor = #chat
+        local fillerFound = false
+        while cursor > 0 and isExactFiller(chat[cursor]) do
+            fillerFound = true
+            cursor = cursor - 1
+        end
+        return fillerFound or (cursor > 0 and isExactUiAnchor(chat[cursor]))
+    end
+
     local function removeRecoveryResponse(chat, luaIndex, expectedFingerprint)
         if luaIndex ~= #chat then
             return nil, {
@@ -1077,45 +1132,6 @@
             end
         end
         return after, nil
-    end
-
-    local function ensurePublicMarker(chat, marker)
-        local last = chat[#chat]
-        if type(last) == "table" and last.role == "user" and last.data == marker then
-            return chat, false, nil
-        end
-        if type(addChat) ~= "function" then
-            return nil, false, {
-                makeError("chat_write_unavailable", "$.host.addChat", "addChat 호스트 함수를 찾을 수 없습니다."),
-            }
-        end
-        local ok, addError = pcall(addChat, triggerId, "user", marker)
-        if not ok then
-            return nil, false, {
-                makeError("public_marker_add_failed", "$.chat", "공개 턴 마커를 추가하지 못했습니다: " .. tostring(addError)),
-            }
-        end
-        local after, readErrors = readChat()
-        if readErrors then
-            return nil, false, readErrors
-        end
-        local added = after[#after]
-        if #after ~= #chat + 1
-            or type(added) ~= "table"
-            or added.role ~= "user"
-            or added.data ~= marker then
-            return nil, false, {
-                makeError("public_marker_add_not_persisted", "$.chat", "쓰기 뒤 공개 턴 마커를 확인하지 못했습니다."),
-            }
-        end
-        for index = 1, #chat do
-            if not deepEqual(after[index], chat[index]) then
-                return nil, false, {
-                    makeError("public_marker_add_mismatch", "$.chat[" .. index .. "]", "공개 턴 마커 추가가 기존 대화를 변경했습니다."),
-                }
-            end
-        end
-        return after, true, nil
     end
 
     local function publishCurrentViewInternal(staticData, suppressRefresh)
@@ -1948,7 +1964,7 @@
         if topologyErrors then return failure(topologyErrors) end
         if topology.responsePresent or topology.fillerCount ~= 0 then
             return failure({
-                makeError("zero_output_retry_topology_mismatch", "$.chat", "무출력 재시도에는 공개 마커 뒤가 완전히 비어 있어야 합니다."),
+                makeError("zero_output_retry_topology_mismatch", "$.chat", "무출력 재시도에는 요청 응답 위치가 완전히 비어 있어야 합니다."),
             })
         end
         local traceErrors = validateNoPendingCommitTrace(binding, authority)
@@ -2060,8 +2076,7 @@
         if authorityErrors then return failure(authorityErrors) end
         local chat, chatErrors = readChat()
         if chatErrors then return failure(chatErrors) end
-        local last = chat[#chat]
-        local freshSend = isExactFiller(last)
+        local freshSend = hasFreshSubmitSuffix(chat)
 
         local storedBinding, storedBindingErrors = readStored(KEYS.activeRequest, false)
         if storedBindingErrors then return failure(storedBindingErrors) end
@@ -2079,18 +2094,90 @@
                     if authorityErrors then return failure(authorityErrors) end
                     chat, chatErrors = readChat()
                     if chatErrors then return failure(chatErrors) end
-                    last = chat[#chat]
-                    freshSend = isExactFiller(last)
+                    freshSend = hasFreshSubmitSuffix(chat)
                     storedBinding, storedBindingErrors = readStored(KEYS.activeRequest, true)
                     if storedBindingErrors then return failure(storedBindingErrors) end
                 end
             end
 
+            -- commit은 끝났지만 onOutput의 UI anchor 추가가 실패한 경우, 새 턴을
+            -- 만들지 않고 현재 View만 다시 게시해 main.onStart가 anchor를 복구한다.
+            if storedBinding.phase == "committed" and not freshSend then
+                local committedTopology, committedTopologyErrors = inspectAnchoredTopology(
+                    storedBinding,
+                    chat,
+                    false
+                )
+                if committedTopologyErrors then return failure(committedTopologyErrors) end
+                if committedTopology.responsePresent and committedTopology.fillerCount == 0 then
+                    local published, publishErrors = publishCurrentViewInternal(staticData, true)
+                    if publishErrors then return failure(publishErrors) end
+                    return success({
+                        generationReady = false,
+                        uiAnchorRequired = true,
+                        outputCommitted = false,
+                        commitRecovered = false,
+                        turnId = storedBinding.turnId,
+                        turnNumber = storedBinding.turnNumber,
+                        source = storedBinding.source,
+                        publicMarker = storedBinding.publicMarker,
+                        attemptNumber = storedBinding.attemptNumber,
+                        reused = true,
+                        removedSayNothing = false,
+                        removedSayNothingCount = 0,
+                        removedUiAnchor = false,
+                        removedUncommittedOutput = false,
+                        markerAdded = false,
+                        view = published.view,
+                    })
+                end
+                return failure({
+                    makeError(
+                        "unsupported_generation_source",
+                        "$.chat",
+                        "직전 장면을 제거한 재생성은 전투 UI anchor 구조에서 지원하지 않습니다."
+                    ),
+                })
+            end
+
+            if storedBinding.phase == "committed" and freshSend then
+                local submittedTopology, hasUiAnchor, submittedTopologyErrors = inspectCommittedUiSubmission(
+                    storedBinding,
+                    chat
+                )
+                if submittedTopologyErrors then return failure(submittedTopologyErrors) end
+                if hasUiAnchor and not submittedTopology.responsePresent then
+                    return failure({
+                        makeError(
+                            "unsupported_generation_source",
+                            "$.chat",
+                            "직전 장면이 없는 UI anchor에서는 다음 턴을 시작할 수 없습니다."
+                        ),
+                    })
+                end
+            end
+
             if storedBinding.phase == "inFlight" or storedBinding.phase == "requestInjected" then
                 if storedBinding.recoveringCleanup == nil and not freshSend then
+                    local topology, topologyErrors = inspectAnchoredTopology(storedBinding, chat, false)
+                    if topologyErrors then return failure(topologyErrors) end
                     if storedBinding.outputObserved == nil
-                        and isExactMarker(last, storedBinding.publicMarker) then
+                        and not topology.responsePresent
+                        and topology.fillerCount == 0 then
                         return retryWithoutOutput(storedBinding, chat, staticData, authority)
+                    end
+                    if storedBinding.outputObserved ~= nil
+                        and topology.responsePresent
+                        and topology.fillerCount == 0 then
+                        local committed = commitOutput()
+                        if type(committed) ~= "table" or committed.ok ~= true then return committed end
+                        committed.generationReady = false
+                        committed.commitRecovered = true
+                        committed.zeroOutputRetry = false
+                        committed.removedSayNothing = false
+                        committed.removedSayNothingCount = 0
+                        committed.removedUncommittedOutput = false
+                        return committed
                     end
                     return failure({
                         makeError(
@@ -2169,34 +2256,13 @@
             end
             sourceName = "pending"
         else
-            local lastCommitted, lastErrors = readStored(KEYS.lastCommittedPending, true)
-            if lastErrors then
-                return failure({
-                    makeError("unsupported_generation_source", "$.chat", "새 빈 입력도 준비 중인 요청도 직전 턴 재생성 마커도 찾지 못했습니다."),
-                })
-            end
-            local formattedLast, formatLastErrors = formatPending(lastCommitted, staticData)
-            if formatLastErrors then
-                return failure(formatLastErrors)
-            end
-            if type(last) ~= "table" or last.role ~= "user" or last.data ~= formattedLast.publicMarker then
-                return failure({
-                    makeError("unsupported_generation_source", "$.chat", "Continue와 프롬프트 미리보기는 지원하지 않으며, 직전 공개 턴 마커의 즉시 재생성만 허용합니다."),
-                })
-            end
-            local reuse, reuseErrors = callModule(
-                "battleRuntime",
-                "reusePending",
-                authority,
-                staticData,
-                lastCommitted
-            )
-            if reuseErrors then
-                return failure(reuseErrors)
-            end
-            selectedPending = reuse.pendingTurn
-            sourceName = "lastCommittedPending"
-            reused = true
+            return failure({
+                makeError(
+                    "unsupported_generation_source",
+                    "$.chat",
+                    "제출할 전투 UI 메시지나 준비 중인 요청을 찾지 못했습니다."
+                ),
+            })
         end
 
         if type(selectedPending) ~= "table" then
@@ -2220,7 +2286,7 @@
             local topology, topologyErrors = inspectPreparingTopology(binding, chat)
             if topologyErrors then return failure(topologyErrors) end
         else
-            local chatAnchor, anchorErrors = createPlannedChatAnchor(chat, formatted.publicMarker)
+            local chatAnchor, anchorErrors = createPlannedChatAnchor(chat)
             if anchorErrors then return failure(anchorErrors) end
             local bindingErrors
             binding, bindingErrors = buildBinding(
@@ -2266,23 +2332,21 @@
         if removeErrors then
             return failure(removeErrors)
         end
+        local uiAnchorRemoved
+        nextChat, uiAnchorRemoved, removeErrors = removeTrailingUiAnchor(nextChat)
+        if removeErrors then
+            return failure(removeErrors)
+        end
         if not freshSend and removedCount > 0 then
             return failure({
                 makeError("generation_classification_changed", "$.chat", "생성 분류 뒤 대화의 빈 입력 상태가 바뀌었습니다."),
             })
         end
-        local finalChat, markerAdded, markerErrors = ensurePublicMarker(nextChat, formatted.publicMarker)
-        if markerErrors then
-            return failure(markerErrors)
-        end
-        if type(finalChat) ~= "table" then
-            return failure({ makeError("invalid_chat_result", "$.chat", "공개 턴 마커 처리 결과가 올바르지 않습니다.") })
-        end
-        local finalTopology, finalTopologyErrors = inspectAnchoredTopology(binding, finalChat, false)
+        local finalTopology, finalTopologyErrors = inspectAnchoredTopology(binding, nextChat, false)
         if finalTopologyErrors then return failure(finalTopologyErrors) end
         if finalTopology.responsePresent or finalTopology.fillerCount ~= 0 then
             return failure({
-                makeError("prepared_chat_topology_mismatch", "$.chat", "요청 준비 뒤 공개 마커 다음에 예상하지 않은 메시지가 남아 있습니다."),
+                makeError("prepared_chat_topology_mismatch", "$.chat", "요청 준비 뒤 응답 위치에 예상하지 않은 메시지가 남아 있습니다."),
             })
         end
         binding.phase = "inFlight"
@@ -2303,7 +2367,8 @@
             reused = reused,
             removedSayNothing = removedCount > 0,
             removedSayNothingCount = removedCount,
-            markerAdded = markerAdded,
+            removedUiAnchor = uiAnchorRemoved == true,
+            markerAdded = false,
             attemptNumber = binding.attemptNumber,
             recoveredAbandonedRequest = false,
             zeroOutputRetry = false,
@@ -2392,33 +2457,41 @@
             })
         end
 
-        local alreadyInjected = false
-        local deduplicated = false
+        local requestCue = {
+            role = "user",
+            content = formatted.publicMarker,
+        }
+        local systemCount = 0
+        local cueCount = 0
         local normalizedPrompt = {}
         for _, message in ipairs(promptCopy) do
             if deepEqual(message, formatted.message) then
-                if alreadyInjected then
-                    deduplicated = true
-                else
-                    normalizedPrompt[#normalizedPrompt + 1] = message
-                    alreadyInjected = true
-                end
+                systemCount = systemCount + 1
+            elseif deepEqual(message, requestCue) then
+                cueCount = cueCount + 1
             else
                 normalizedPrompt[#normalizedPrompt + 1] = message
             end
         end
+        local alreadyInjected = systemCount >= 1 and cueCount >= 1
+        local deduplicated = systemCount > 1 or cueCount > 1
         promptCopy = normalizedPrompt
-        if not alreadyInjected then
-            local messageCopy, messageCloneError = cloneJson(formatted.message, "$.activeRequest.message")
-            if messageCloneError then
-                return failure({ messageCloneError })
-            end
-            promptCopy[#promptCopy + 1] = messageCopy
+        local messageCopy, messageCloneError = cloneJson(formatted.message, "$.activeRequest.message")
+        if messageCloneError then
+            return failure({ messageCloneError })
         end
+        local cueCopy, cueCloneError = cloneJson(requestCue, "$.activeRequest.publicMarker")
+        if cueCloneError then
+            return failure({ cueCloneError })
+        end
+        -- 확정 사건을 먼저 제공하고 장면 묘사 지시를 마지막 user 메시지로 둔다.
+        -- 두 메시지는 editRequest 결과에만 존재하며 실제 채팅에는 저장하지 않는다.
+        promptCopy[#promptCopy + 1] = messageCopy
+        promptCopy[#promptCopy + 1] = cueCopy
 
         -- This durable phase is the authority boundary between editRequest and
         -- onOutput. Without it, a host-side editRequest failure could still run
-        -- onOutput and commit a turn whose private event never reached the model.
+        -- onOutput and commit a turn whose event/cue never reached the model.
         if binding.phase == "inFlight" then
             binding.phase = "requestInjected"
             local receiptWriteErrors = writeStored(KEYS.activeRequest, binding)
@@ -2619,7 +2692,9 @@
             end
         end
 
-        local published, publishErrors = publishCurrentViewInternal(staticData)
+        -- 현재 턴 UI 메시지는 onStart에서 제거됐다. View만 게시하고,
+        -- onOutput 훅이 장면 응답 다음에 새 UI anchor를 만든 뒤 갱신한다.
+        local published, publishErrors = publishCurrentViewInternal(staticData, true)
         if publishErrors then
             return failure(publishErrors)
         end

@@ -51,7 +51,7 @@ Lua 모듈·HTML·DB는 모두 로어북이지만 `main.lua`만 트리거 스크
 
 3. 비공개 프로필, 캐릭터 카드 ID, setup/battle seed가 화면에 나타나지 않는지 확인한다.
 4. 열린 후보 아래의 선택 확정 버튼을 누른다.
-5. 캐릭터 선택 화면이 전투 UI로 바뀌고 선택한 캐릭터가 표시되는지 확인한다.
+5. 게임 시작 직후 별도 user-role UI 채팅이 추가되고, 그 자리에서 드래프트·캐릭터 선택·전투 UI가 이어지는지 확인한다.
 6. 전투가 1턴이며 플레이어 기본 손패가 3장인지 확인한다. 별도 턴 종료 버튼은 없어야 한다.
 
 캐릭터 확정 버튼을 빠르게 더블클릭해도 같은 battle ID의 전투를 다시 초기화하거나 첫 손패를 다시 뽑으면 안 된다. 화면 새로고침 또는 접근 가능한 기존 시작 버튼의 재호출 뒤에도 현재 전투 진행·선택이 보존되어야 한다.
@@ -61,12 +61,12 @@ Lua 모듈·HTML·DB는 모두 로어북이지만 `main.lua`만 트리거 스크
 1. 손패 카드 하나의 상세를 연다. 이 첫 동작만으로 권위 선택이 바뀌면 안 된다.
 2. 상세의 등록 버튼을 눌러 사용 카드로 등록되는지 확인한다.
 3. 같은 카드의 취소 버튼을 눌러 등록이 해제되는지 확인한다.
-4. 카드를 다시 등록하거나 아무 카드도 등록하지 않은 상태에서 RisuAI의 전송 버튼을 누른다.
-5. 공개 채팅에 `[전투 턴 1]` 마커가 하나만 생기고, 모델이 그 턴의 장면을 응답하는지 확인한다.
-6. 출력이 끝난 뒤 결과가 한 번만 반영되고 2턴의 선택 가능한 전투 UI가 나타나는지 확인한다.
+4. 카드를 다시 등록하거나 아무 카드도 등록하지 않은 상태에서 입력창을 비운 채 RisuAI의 전송 버튼을 누른다.
+5. 이전 전투 UI 채팅이 제거되고, `[전투 턴 1] ...` 지시문이 공개 채팅에 보이지 않은 채 모델이 그 턴의 장면을 응답하는지 확인한다.
+6. 출력이 끝난 뒤 결과가 한 번만 반영되고 장면 바로 다음의 새 user-role 채팅에 2턴 전투 UI가 나타나는지 확인한다.
 7. 같은 방식으로 최소 3턴을 진행해 손패·저항·은폐·무드와 카드 영역이 정상적으로 갱신되는지 확인한다.
 
-전투 중 입력 문자열은 공개 사용자 대사로 쓰이지 않는다. 전송은 턴의 유일한 확정점이며, 생성 중 Continue나 병렬 전송은 사용하지 않는다.
+전투 중 입력 문자열은 공개 사용자 대사로 쓰이지 않는다. 전송은 턴의 유일한 확정점이며, 전투 UI가 열린 동안 프롬프트 미리보기·자동 계속·Continue·병렬 전송은 사용하지 않는다.
 
 ## 5. 실패 시 확인할 키
 
@@ -78,6 +78,7 @@ Lua 모듈·HTML·DB는 모두 로어북이지만 `main.lua`만 트리거 스크
 | `gameSetupView` | 드래프트 또는 캐릭터 후보의 공개 wire |
 | `helltrainUiShellV1` | sidebar를 포함한 고정 shell |
 | `helltrainUiShellRevision` | 현재 shell revision |
+| `helltrainUiAnchorIndexV1` | 현재 user-role UI 채팅의 0-based 인덱스 |
 | `🔯🔯🔯` | 현재 `cardDraft.html`, `characterSelect.html` 또는 `battleui.html` body |
 | `battleView` | 첫 턴 이후 전투 공개 wire |
 
@@ -96,7 +97,7 @@ Lua 모듈·HTML·DB는 모두 로어북이지만 `main.lua`만 트리거 스크
 
 - 열 번째 카드 뒤 멈춤: `gameSetupV1.authority.phase`, `gameSetupView`, `characterSelect.html` 로어 이름, `🔯🔯🔯`
 - 캐릭터 확정 뒤 전투 UI 없음: setup phase가 `battleReady`인지, 전투 authority·draft가 생겼는지, `battleView`, `battleui.html`과 `🔯🔯🔯`
-- 전송 뒤 턴이 진행되지 않음: `pending`, `activeRequest.phase`, 공개 턴 마커 바로 뒤의 캐릭터 응답, `lastCommittedPending`
+- 전송 뒤 턴이 진행되지 않음: `pending`, `activeRequest.phase`, 저장 `responseIndex`의 캐릭터 응답, `lastCommittedPending`, `helltrainUiAnchorIndexV1`
 - 재호출로 초기화됨: setup/battle의 `battleId`, 전투 `turnNumber`, draft interaction token이 호출 전후 보존되는지
 
 오류 조사 시 seed, RNG나 비공개 사건을 일반 사용자 메시지에 붙이지 않는다. 필요한 값은 로컬 진단용으로만 확인한다.

@@ -180,6 +180,7 @@ local PENDING = "battleRuntimeV1.pending"
 local LAST = "battleRuntimeV1.lastCommittedPending"
 local ACTIVE = "battleRuntimeV1.activeRequest"
 local UI_BODY = string.char(240, 159, 148, 175):rep(3)
+local UI_ANCHOR = "@@HELLTRAIN_UI_ANCHOR_V1@@"
 
 local states = {}
 local stateWriteCount = 0
@@ -229,8 +230,13 @@ function getFullChat(triggerId)
     return clone(chat)
 end
 local failRemoveChatOnOccurrence
+local dropNextRemoveChat = false
 function removeChat(triggerId, zeroBasedIndex)
     assert(type(zeroBasedIndex) == "number" and zeroBasedIndex % 1 == 0, "removeChat index must be integer")
+    if dropNextRemoveChat then
+        dropNextRemoveChat = false
+        return
+    end
     if type(failRemoveChatOnOccurrence) == "number" then
         failRemoveChatOnOccurrence = failRemoveChatOnOccurrence - 1
         if failRemoveChatOnOccurrence == 0 then
@@ -267,6 +273,16 @@ local function sayNothingCount()
     local count = 0
     for _, message in ipairs(chat) do
         if message.role == "user" and message.data == "*says nothing*" then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function uiAnchorCount()
+    local count = 0
+    for _, message in ipairs(chat) do
+        if message.role == "user" and message.data == UI_ANCHOR then
             count = count + 1
         end
     end
@@ -352,32 +368,32 @@ assert(reloadDisplayCount == reloadsBeforeFailedClick,
 
 appendChat("user", "*says nothing*")
 appendChat("char", "historical empty-send response")
-appendChat("user", "*says nothing*")
+appendChat("user", UI_ANCHOR)
 local preparePendingCalls = moduleCalls.battleRuntime or 0
 failNextStateWrite = ACTIVE
 assertFails("dropped binding write", controller("prepareGeneration"), "state_write_not_persisted")
-assert(chat[#chat].role == "user" and chat[#chat].data == "*says nothing*",
+assert(chat[#chat].role == "user" and chat[#chat].data == UI_ANCHOR,
     "failed state persistence changed the chat before recovery")
 assert(type(states[PENDING]) == "table" and states[DRAFT] == nil and states[ACTIVE] == nil,
     "partial state write did not leave a reusable pending boundary")
 local preparePendingCallsAfterFailure = moduleCalls.battleRuntime or 0
 assert(preparePendingCallsAfterFailure > preparePendingCalls, "first prepare did not reach battleRuntime")
 
-appendChat("user", "*says nothing*")
 local prepared = assertOk("recover generation", controller("prepareGeneration"))
 assert(prepared.source == "pending" and prepared.reused == true)
-assert(prepared.removedSayNothing == true and prepared.removedSayNothingCount == 2
-    and prepared.markerAdded == true)
+assert(prepared.removedSayNothing == false and prepared.removedSayNothingCount == 0
+    and prepared.removedUiAnchor == true and prepared.markerAdded == false)
 assert(states[PENDING].turnId == "controller-battle-turn-001" and states[DRAFT] == nil)
 assert(states[ACTIVE].source == "pending" and states[ACTIVE].phase == "inFlight"
     and states[ACTIVE].turnId == states[PENDING].turnId)
-assert(chat[#chat].role == "user" and chat[#chat].data == prepared.publicMarker)
+assert(chat[#chat].role == "char" and chat[#chat].data == "historical empty-send response")
 assert(prepared.publicMarker == states[ACTIVE].publicMarker
     and string.find(prepared.publicMarker, "1", 1, true),
     "prepared marker was not the persisted turn-one marker")
 local firstMarker = prepared.publicMarker
-assert(markerCount(firstMarker) == 1, "generation recovery duplicated the public marker")
-assert(sayNothingCount() == 1, "trailing cleanup removed a historical exact filler or left a trailing filler")
+assert(markerCount(firstMarker) == 0, "request-only cue leaked into the raw chat")
+assert(uiAnchorCount() == 0, "generation preparation left the submitted UI anchor in chat")
+assert(sayNothingCount() == 1, "UI-anchor cleanup removed a historical exact filler")
 assert(moduleCalls.battleRuntime > preparePendingCallsAfterFailure, "generation recovery did not validate/reuse pending")
 
 local basePrompt = {
@@ -415,7 +431,7 @@ assert(stateWriteCount == writesAfterDroppedReceipt
 local writesBeforeInject = stateWriteCount
 local injected = assertOk("inject request", controller("injectRequest", basePrompt))
 assert(canonical(basePrompt) == basePromptSnapshot, "injectRequest mutated its input")
-assert(#injected.promptArray == #basePrompt + 1 and injected.injected == true)
+assert(#injected.promptArray == #basePrompt + 2 and injected.injected == true)
 assert(injected.requestPhase == "requestInjected" and states[ACTIVE].phase == "requestInjected",
     "injectRequest did not persist its requestInjected receipt")
 assert(injected.promptArray[1].content == "preset-system" and injected.promptArray[2].content == "normal-context")
@@ -423,6 +439,11 @@ assert(injected.promptArray[3].role == "system"
     and injected.promptArray[3].content ~= ""
     and canonical(injected.promptArray[3]) == canonical(states[ACTIVE].message),
     "formatter message was not appended")
+assert(injected.promptArray[4].role == "user"
+    and injected.promptArray[4].content == prepared.publicMarker,
+    "request-only scene cue was not appended after the private event")
+assert(markerCount(prepared.publicMarker) == 0,
+    "request-only scene cue was persisted in the raw chat")
 assert(stateWriteCount == writesBeforeInject + 1,
     "first injectRequest did not write exactly one persistent receipt")
 
@@ -437,11 +458,15 @@ assert(reinjected.requestPhase == "requestInjected" and stateWriteCount == write
 
 local duplicatedPrompt = clone(injected.promptArray)
 duplicatedPrompt[#duplicatedPrompt + 1] = clone(states[ACTIVE].message)
+duplicatedPrompt[#duplicatedPrompt + 1] = {
+    role = "user",
+    content = states[ACTIVE].publicMarker,
+}
 local deduplicated = assertOk("deduplicate private event prompt",
     controller("injectRequest", duplicatedPrompt))
 assert(deduplicated.injected == false and deduplicated.deduplicated == true
     and canonical(deduplicated.promptArray) == injectedSnapshot,
-    "duplicate private events were not collapsed to the first exact message")
+    "duplicate request-only messages were not normalized")
 assert(states[ACTIVE].phase == "requestInjected" and stateWriteCount == writesBeforeReinject,
     "duplicate prompt normalization rewrote the injection receipt")
 
@@ -471,16 +496,17 @@ assert(firstZeroRetry.generationReady == true
 assert(states[ACTIVE].phase == "inFlight"
     and canonical(states[PENDING]) == firstZeroRetryPending
     and canonical(chat) == firstZeroRetryChat
-    and chat[#chat].data == firstMarker and markerCount(firstMarker) == 1,
-    "zero-output retry changed its pending turn, chat anchor, or public marker")
+    and chat[#chat].data == "historical empty-send response" and markerCount(firstMarker) == 0,
+    "zero-output retry changed its pending turn or prefix-only chat anchor")
 
 local reinjectedAfterZeroRetry = assertOk("inject zero-output retry",
     controller("injectRequest", basePrompt))
 assert(reinjectedAfterZeroRetry.requestPhase == "requestInjected"
     and states[ACTIVE].attemptNumber == firstZeroRetryAttempt + 1
-    and canonical(reinjectedAfterZeroRetry.promptArray[#reinjectedAfterZeroRetry.promptArray])
-        == canonical(states[ACTIVE].message),
-    "zero-output retry did not reuse and reinject the original private event")
+    and canonical(reinjectedAfterZeroRetry.promptArray[#reinjectedAfterZeroRetry.promptArray - 1])
+        == canonical(states[ACTIVE].message)
+    and reinjectedAfterZeroRetry.promptArray[#reinjectedAfterZeroRetry.promptArray].content == firstMarker,
+    "zero-output retry did not reuse and reinject the original event/cue")
 
 local writesBeforeMissingOutputCommit = stateWriteCount
 assertFails("commit without character output", controller("commitOutput"),
@@ -545,7 +571,7 @@ assert(resumedRetry.generationReady == true
     and resumedRetry.removedSayNothingCount == 0
     and resumedRetry.attemptNumber == firstAttempt + 1,
     "interrupted cleanup did not resume as the same-turn retry")
-assert(chat[#chat].role == "user" and chat[#chat].data == firstMarker
+assert(chat[#chat].role == "char" and chat[#chat].data == "historical empty-send response"
     and canonical(states[PENDING]) == firstPendingBeforeRecovery
     and states[ACTIVE].phase == "inFlight"
     and states[ACTIVE].recoveringCleanup == nil,
@@ -554,8 +580,9 @@ assert(chat[#chat].role == "user" and chat[#chat].data == firstMarker
 local recoveredInjected = assertOk("inject recovered request",
     controller("injectRequest", basePrompt))
 assert(recoveredInjected.requestPhase == "requestInjected"
-    and canonical(recoveredInjected.promptArray[#recoveredInjected.promptArray])
+    and canonical(recoveredInjected.promptArray[#recoveredInjected.promptArray - 1])
         == canonical(states[ACTIVE].message)
+    and recoveredInjected.promptArray[#recoveredInjected.promptArray].content == firstMarker
     and states[ACTIVE].attemptNumber == firstAttempt + 1,
     "recovered attempt did not reuse the same private event")
 
@@ -570,11 +597,11 @@ assert(automaticRetry.generationReady == true
     and automaticRetry.removedSayNothingCount == 1
     and automaticRetry.attemptNumber == firstAttempt + 2,
     "unobserved response was not atomically cleaned for retry")
-assert(chat[#chat].role == "user" and chat[#chat].data == firstMarker
-    and markerCount(firstMarker) == 1
+assert(chat[#chat].role == "char" and chat[#chat].data == "historical empty-send response"
+    and markerCount(firstMarker) == 0
     and canonical(states[PENDING]) == firstPendingBeforeRecovery
     and states[ACTIVE].phase == "inFlight",
-    "automatic retry changed the marker or pending turn")
+    "automatic retry changed the prefix-only chat or pending turn")
 
 local finalFirstInjected = assertOk("inject final first-turn retry",
     controller("injectRequest", basePrompt))
@@ -638,112 +665,59 @@ assertFails("inject committed request", controller("injectRequest", basePrompt),
 
 assert(chat[#chat].role == "char" and chat[#chat].data == "first scene",
     "first committed response was not preserved")
+appendChat("user", UI_ANCHOR)
+table.remove(chat, #chat - 1)
+assertFails("reject next turn after removed committed scene", controller("prepareGeneration"),
+    "unsupported_generation_source")
+table.insert(chat, #chat, { role = "char", data = "first scene", time = #chat })
 table.remove(chat, #chat)
-assert(chat[#chat].data == prepared.publicMarker, "reroll fixture did not expose the immediate marker")
-failStateWriteOnOccurrence = { key = ACTIVE, remaining = 2 }
-assertFails("dropped reroll in-flight phase write", controller("prepareGeneration"),
-    "state_write_not_persisted")
-assert(states[PENDING] == nil and states[ACTIVE].source == "lastCommittedPending"
-    and states[ACTIVE].phase == "preparing",
-    "reroll phase failure did not preserve its original preparing source")
-local rerollPreparingView = assertOk("publish preparing reroll view",
-    controller("publishCurrentView"))
-assert(rerollPreparingView.view.phase == "awaitingOutput"
-    and rerollPreparingView.view.locked == true,
-    "preparing reroll did not remain generation-locked")
+assert(chat[#chat].role == "char" and chat[#chat].data == "first scene",
+    "removed-scene fixture did not restore the committed response")
+local chatBeforeUiRepair = canonical(chat)
+local uiRepair = assertOk("request missing committed UI anchor", controller("prepareGeneration"))
+assert(uiRepair.generationReady == false and uiRepair.uiAnchorRequired == true
+    and uiRepair.commitRecovered == false and states[ACTIVE].phase == "committed",
+    "committed response without a UI anchor was not classified as a UI-only repair")
+assert(canonical(chat) == chatBeforeUiRepair and markerCount(firstMarker) == 0,
+    "UI-only repair changed chat or persisted the request cue")
 
-appendChat("user", "*says nothing*")
-local rerollPrepared = assertOk("prepare immediate reroll", controller("prepareGeneration"))
-assert(rerollPrepared.source == "lastCommittedPending" and rerollPrepared.reused == true)
-assert(rerollPrepared.removedSayNothing == true and rerollPrepared.removedSayNothingCount == 1
-    and rerollPrepared.markerAdded == false)
-assert(markerCount(firstMarker) == 1, "immediate reroll duplicated the public marker")
-assert(states[PENDING] == nil and states[ACTIVE].source == "lastCommittedPending"
-    and states[ACTIVE].phase == "inFlight",
-    "reroll did not bind an in-flight request without creating a current pending")
-assert(rerollPrepared.view.phase == "awaitingOutput" and rerollPrepared.view.locked == true,
-    "immediate reroll did not publish a generation-locked View")
-local rerollAttemptBeforeZeroRetry = states[ACTIVE].attemptNumber
-local rerollChatBeforeZeroRetry = canonical(chat)
-local repeatedReroll = assertOk("retry zero-output reroll while in flight",
-    controller("prepareGeneration"))
-assert(repeatedReroll.generationReady == true
-    and repeatedReroll.recoveredAbandonedRequest == true
-    and repeatedReroll.zeroOutputRetry == true
-    and repeatedReroll.source == "lastCommittedPending"
-    and repeatedReroll.attemptNumber == rerollAttemptBeforeZeroRetry + 1
-    and repeatedReroll.removedSayNothingCount == 0
-    and repeatedReroll.removedUncommittedOutput == false
-    and repeatedReroll.markerAdded == false,
-    "marker-only reroll was not resumed without chat cleanup")
-assert(canonical(chat) == rerollChatBeforeZeroRetry
-    and states[ACTIVE].phase == "inFlight" and states[PENDING] == nil
-    and markerCount(firstMarker) == 1,
-    "zero-output reroll changed chat, request phase, or pending state")
-assertFails("click during reroll", controller("clickCard", instanceId), "battle_view_locked")
-local rerollInjected = assertOk("inject reroll request", controller("injectRequest", basePrompt))
-assert(canonical(rerollInjected.promptArray[3]) == canonical(injected.promptArray[3]),
-    "immediate reroll changed the stored turn prompt")
-assert(states[ACTIVE].phase == "requestInjected",
-    "reroll injection did not persist its request receipt")
-local rerollInjectedView = assertOk("publish injected reroll view",
-    controller("publishCurrentView"))
-assert(rerollInjectedView.view.phase == "awaitingOutput"
-    and rerollInjectedView.view.locked == true,
-    "requestInjected reroll did not remain generation-locked")
-assertFails("click after reroll injection", controller("clickCard", instanceId),
-    "battle_view_locked")
-appendChat("char", "rerolled scene")
-local writesBeforeInjectedRerollOnStart = stateWriteCount
-assertFails("repeated reroll onStart after injection", controller("prepareGeneration"),
-    "request_already_in_flight")
-assert(stateWriteCount == writesBeforeInjectedRerollOnStart
-    and states[ACTIVE].phase == "requestInjected" and states[PENDING] == nil
-    and chat[#chat].role == "char" and chat[#chat].data == "rerolled scene",
-    "character output without a filler was retried or changed")
-local rerollCommit = assertOk("commit reroll output", controller("commitOutput"))
-assert(rerollCommit.applied == false and rerollCommit.initializedNextTurn == false)
-assert(rerollCommit.view.phase == "selecting" and rerollCommit.view.locked == false
-    and states[ACTIVE].phase == "committed",
-    "reroll completion did not unlock the current draft")
-local afterReroll = assertOk("snapshot after reroll", controller("getSnapshot")).snapshot
-assert(canonical(afterReroll.authorityState) == turnTwoStateSnapshot, "reroll changed next-turn authority")
-assert(canonical(afterReroll.draft) == turnTwoDraftSnapshot, "reroll changed next-turn draft")
-
-appendChat("user", "*says nothing*")
-appendChat("user", "*says nothing*")
-failNextAddChat = true
-assertFails("dropped second marker write", controller("prepareGeneration"), "public_marker_add_not_persisted")
+appendChat("user", UI_ANCHOR)
+dropNextRemoveChat = true
+assertFails("dropped second UI anchor removal", controller("prepareGeneration"),
+    "ui_anchor_remove_not_persisted")
 assert(type(states[PENDING]) == "table" and states[PENDING].turnId == "controller-battle-turn-002"
     and states[ACTIVE].phase == "preparing",
-    "marker failure did not leave a resumable preparing binding")
-assert(markerCount(firstMarker) == 1 and sayNothingCount() == 1,
-    "marker failure left trailing fillers or changed historical filler")
+    "UI anchor removal failure did not leave a resumable preparing binding")
+assert(uiAnchorCount() == 1 and markerCount(firstMarker) == 0 and sayNothingCount() == 1,
+    "UI anchor removal failure changed historical chat or leaked the request cue")
 assertFails("inject preparing request", controller("injectRequest", basePrompt), "request_not_in_flight")
-assertFails("click while marker recovery pending", controller("clickCard", instanceId), "battle_view_locked")
+assertFails("click while UI anchor recovery pending", controller("clickCard", instanceId), "battle_view_locked")
 
 failStateWriteOnOccurrence = { key = ACTIVE, remaining = 2 }
 assertFails("dropped in-flight phase write", controller("prepareGeneration"), "state_write_not_persisted")
 local secondMarker = states[ACTIVE].publicMarker
-assert(states[ACTIVE].phase == "preparing" and chat[#chat].data == secondMarker,
-    "final phase failure did not preserve a preparing binding beside its persisted marker")
-assert(markerCount(secondMarker) == 1,
-    "final phase failure did not leave exactly one recoverable public marker")
+assert(states[ACTIVE].phase == "preparing"
+    and chat[#chat].role == "char" and chat[#chat].data == "first scene"
+    and uiAnchorCount() == 0,
+    "final phase failure did not preserve a prefix-only preparing binding")
+assert(markerCount(secondMarker) == 0,
+    "final phase failure persisted the request-only scene cue")
 assertFails("inject after dropped in-flight phase", controller("injectRequest", basePrompt),
     "request_not_in_flight")
 assertFails("click after dropped in-flight phase", controller("clickCard", instanceId),
     "battle_view_locked")
 
-local secondPrepared = assertOk("resume second marker", controller("prepareGeneration"))
+local secondPrepared = assertOk("resume second UI submission", controller("prepareGeneration"))
 assert(secondPrepared.source == "pending" and secondPrepared.reused == true and secondPrepared.turnNumber == 2)
 assert(secondPrepared.removedSayNothingCount == 0 and secondPrepared.markerAdded == false
+    and secondPrepared.removedUiAnchor == false
     and states[ACTIVE].phase == "inFlight",
-    "marker recovery did not advance preparing to inFlight")
+    "UI submission recovery did not advance preparing to inFlight")
 assert(secondPrepared.publicMarker == states[ACTIVE].publicMarker
     and string.find(secondPrepared.publicMarker, "2", 1, true),
     "second marker was not the persisted turn-two marker")
-assert(markerCount(firstMarker) == 1 and markerCount(secondPrepared.publicMarker) == 1,
-    "second turn did not add exactly one public marker")
+assert(markerCount(firstMarker) == 0 and markerCount(secondPrepared.publicMarker) == 0,
+    "second turn persisted a request-only scene cue")
 local secondAttemptBeforeZeroRetry = states[ACTIVE].attemptNumber
 local secondPendingBeforeZeroRetry = canonical(states[PENDING])
 local secondChatBeforeZeroRetry = canonical(chat)
@@ -757,17 +731,19 @@ assert(repeatedSecondTurn.generationReady == true
     and repeatedSecondTurn.removedSayNothingCount == 0
     and repeatedSecondTurn.removedUncommittedOutput == false
     and repeatedSecondTurn.markerAdded == false,
-    "second marker-only request was not resumed as a zero-output retry")
+    "second prefix-only request was not resumed as a zero-output retry")
 assert(canonical(states[PENDING]) == secondPendingBeforeZeroRetry
     and canonical(chat) == secondChatBeforeZeroRetry
     and states[ACTIVE].phase == "inFlight"
-    and markerCount(secondPrepared.publicMarker) == 1,
+    and markerCount(secondPrepared.publicMarker) == 0,
     "second zero-output retry changed its pending turn or chat")
 
 local secondInjected = assertOk("inject second-turn request", controller("injectRequest", basePrompt))
 assert(secondInjected.requestPhase == "requestInjected"
-    and canonical(secondInjected.promptArray[#secondInjected.promptArray]) == canonical(states[ACTIVE].message),
-    "second-turn request did not persist and return its private event")
+    and canonical(secondInjected.promptArray[#secondInjected.promptArray - 1]) == canonical(states[ACTIVE].message)
+    and secondInjected.promptArray[#secondInjected.promptArray].role == "user"
+    and secondInjected.promptArray[#secondInjected.promptArray].content == secondPrepared.publicMarker,
+    "second-turn request did not return its request-only event/cue pair")
 appendChat("char", "second scene")
 
 local initializerCallsBeforeCommitRecovery = moduleCalls.turnInitializer or 0
@@ -790,15 +766,14 @@ assert((moduleCalls.turnInitializer or 0) == initializerCallsBeforeCommitRecover
     "partial commit did not initialize the next turn exactly once")
 
 local fillersBeforeObservedRecovery = sayNothingCount()
-appendChat("user", "*says nothing*")
 local recoveredCommit = assertOk("recover observed output commit",
     controller("prepareGeneration"))
 assert(recoveredCommit.applied == false
     and recoveredCommit.initializedNextTurn == false
     and recoveredCommit.generationReady == false
     and recoveredCommit.commitRecovered == true
-    and recoveredCommit.removedSayNothing == true
-    and recoveredCommit.removedSayNothingCount == 1
+    and recoveredCommit.removedSayNothing == false
+    and recoveredCommit.removedSayNothingCount == 0
     and recoveredCommit.removedUncommittedOutput == false,
     "observed output recovery retried generation instead of resuming commit")
 assert(chat[#chat].role == "char" and chat[#chat].data == "second scene"
@@ -827,8 +802,8 @@ assert((moduleCalls.turnInitializer or 0) == initializerCallsBeforePendingClearR
     "matching pending cleanup initialized the active turn again")
 
 appendChat("char", "continue-like output")
-assertFails("unsupported continue-like source", controller("prepareGeneration"),
-    "unsupported_generation_source")
+assertFails("reject ambiguous continue-like suffix", controller("prepareGeneration"),
+    "recovery_chat_topology_mismatch")
 
 chatVars.battleView = "stale-wire"
 failNextChatVarWrite = "battleView"
@@ -844,7 +819,7 @@ local signature = canonical({
     lastCommitted = finalSnapshot.lastCommittedPending,
     activeRequest = finalSnapshot.activeRequest,
     prompt = secondPrepared.publicMarker,
-    markerCount = markerCount(firstMarker) + markerCount(secondPrepared.publicMarker),
+    requestCueLeakCount = markerCount(firstMarker) + markerCount(secondPrepared.publicMarker),
 })
 
 local function makeBattleReady(setupId, seed, firstCardSlot, characterSlot)
@@ -1005,7 +980,7 @@ assert(recoveredUi.applied == false
         and chatVars[UI_BODY] == readFile("html/battleui.html"),
     "setup battle UI retry did not reuse runtime and finish publication")
 
-print("BATTLE_CONTROLLER|hash=" .. stableHash(signature) .. "|scenarios=54")
+print("BATTLE_CONTROLLER|hash=" .. stableHash(signature) .. "|scenarios=56")
 '@
 
 Push-Location $projectRoot
@@ -1027,7 +1002,7 @@ try {
     if (-not ($firstText -ceq $secondText)) {
         throw "Separate Lua processes produced different battle controller results.`nFIRST:`n$firstText`nSECOND:`n$secondText"
     }
-    if ($firstText -notmatch '^BATTLE_CONTROLLER\|hash=\d{10}\|scenarios=54$') {
+    if ($firstText -notmatch '^BATTLE_CONTROLLER\|hash=\d{10}\|scenarios=56$') {
         throw "Unexpected battle controller determinism vector: $firstText"
     }
 

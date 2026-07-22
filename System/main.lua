@@ -153,11 +153,44 @@ function loadLores(triggerId, lore)
     end
 end
 
+-- Executable lore entries are complete modules, not mergeable fragments. RisuAI
+-- returns matches in local -> global -> module order. This game's authoritative
+-- runtime bundle is the module entry, so the last non-empty match must replace
+-- stale character/global copies. Concatenating duplicate modules can turn two
+-- adjacent anonymous functions into an accidental function call.
+local function loadScriptLore(triggerId, script)
+    local loreName = script .. ".lua"
+    local targetLores = getLoreBooks(triggerId, loreName)
+    if type(targetLores) ~= "table" then
+        return nil
+    end
+
+    local source = nil
+    local sourceCount = 0
+    for _, loreEntry in ipairs(targetLores) do
+        local content = type(loreEntry) == "table" and loreEntry.content or nil
+        if type(content) == "string" and content ~= "" then
+            sourceCount = sourceCount + 1
+            source = content
+        end
+    end
+
+    if sourceCount > 1 then
+        debug(2, "runScript warning: duplicate lorebook '" .. loreName
+            .. "'; using the last match.")
+    end
+    if source == nil then
+        return nil
+    end
+
+    return source:gsub("%-%-%-[^\r\n]*", "")
+end
+
 -- 배포 시 executable Lua lore 또는 static DB가 바뀌면 이 revision도 반드시 올린다. production
 -- warm path는 이 명시적 계약 덕분에 이벤트 사이에서 getLoreBooks/CBS bridge를
 -- 생략한다. 개발 중에는 setRunScriptCacheDevelopmentMode(true)를 사용하면 매
 -- 이벤트의 첫 모듈 호출에서 source를 다시 확인한다.
-RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION or "runtime-bundle-f308624226844d1a"
+RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION or "runtime-bundle-e00e6baf9217d924"
 RUNTIME_CACHE_DEVELOPMENT_BYPASS = RUNTIME_CACHE_DEVELOPMENT_BYPASS == true
 
 local RUN_SCRIPT_SOURCE_CACHE_MAX_ENTRIES = 64
@@ -612,7 +645,7 @@ function runScript(triggerId, script, ...)
 
     if handler == nil then
         runScriptCacheStats.sourceFetches = runScriptCacheStats.sourceFetches + 1
-        local source = loadLores(triggerId, script..".lua")
+        local source = loadScriptLore(triggerId, script)
         if not source then
             runScriptCacheStats.missingSources = runScriptCacheStats.missingSources + 1
             debug(1, "runScript error: lorebook '" .. script .. "' not found.")
@@ -761,16 +794,31 @@ local function readUiFragment(triggerId, name)
     return ok and type(value) == "string" and value ~= "null" and value or ""
 end
 
--- 버튼 controller가 전역 CBS 재평가 없이 현재 UI anchor만 다시 그리게 한다.
--- anchor를 찾지 못하거나 대상 갱신 API가 없는 구버전에서는 전체 갱신으로 복구한다.
+local function parseUiAnchorIndex(rawIndex)
+    local index = tonumber(rawIndex)
+    if index == nil or index % 1 ~= 0 or index < -1 then
+        return nil
+    end
+    return index
+end
+
+local function isExactUiAnchorMessage(message)
+    return type(message) == "table"
+        and message.role == "user"
+        and message.data == UI_ANCHOR_MARKER
+end
+
+-- 현재 UI 전용 사용자 메시지만 다시 그린다. 초기 진입 전에는 first message의
+-- -1 anchor를 사용하고, 게임 시작 뒤에는 실제 채팅 인덱스를 chatVar로 추적한다.
 function refreshGameUi(triggerId)
     local rawIndex = readUiFragment(triggerId, UI_ANCHOR_INDEX_VAR)
-    if rawIndex ~= "" and rawIndex ~= "-1" then
-        debug(3, "ignored invalid UI anchor index: " .. tostring(rawIndex))
+    local index = parseUiAnchorIndex(rawIndex)
+    if index == nil then
+        index = -1
+        if rawIndex ~= "" then
+            debug(2, "invalid UI anchor index; falling back to first message: " .. tostring(rawIndex))
+        end
     end
-    -- v1 anchor는 고정 first-message(-1)다. chatVar는 관측/호환용일 뿐
-    -- reload 대상을 결정하는 권위로 사용하지 않는다.
-    local index = -1
     if type(reloadChat) == "function" then
         local targetedOk, targetedError = pcall(reloadChat, triggerId, index)
         if targetedOk then
@@ -783,6 +831,58 @@ function refreshGameUi(triggerId)
     end
     reloadDisplay(triggerId)
     return true
+end
+
+-- 게임 UI를 장면 채팅과 분리된 마지막 user 메시지에 둔다. 같은 anchor가 이미
+-- 마지막에 있으면 재사용하므로 onOutput/복구 훅이 중복 호출돼도 메시지가 늘지 않는다.
+function ensureGameUiAnchor(triggerId)
+    if type(getFullChat) ~= "function" or type(addChat) ~= "function" then
+        error("getFullChat/addChat host functions are unavailable")
+    end
+    local readOk, chat = pcall(getFullChat, triggerId)
+    if not readOk or type(chat) ~= "table" then
+        error("failed to read chat for UI anchor: " .. tostring(chat))
+    end
+
+    local previousIndex = parseUiAnchorIndex(readUiFragment(triggerId, UI_ANCHOR_INDEX_VAR))
+    if previousIndex == nil then
+        previousIndex = -1
+    end
+    local anchorIndex
+    if isExactUiAnchorMessage(chat[#chat]) then
+        anchorIndex = #chat - 1
+    else
+        local addOk, addError = pcall(addChat, triggerId, "user", UI_ANCHOR_MARKER)
+        if not addOk then
+            error("failed to add UI anchor: " .. tostring(addError))
+        end
+        local verifyOk, after = pcall(getFullChat, triggerId)
+        if not verifyOk
+            or type(after) ~= "table"
+            or #after ~= #chat + 1
+            or not isExactUiAnchorMessage(after[#after]) then
+            error("UI anchor write was not persisted")
+        end
+        anchorIndex = #after - 1
+    end
+
+    if type(setChatVar) ~= "function" then
+        error("setChatVar host function is unavailable")
+    end
+    setChatVar(triggerId, UI_ANCHOR_INDEX_VAR, tostring(anchorIndex))
+    if readUiFragment(triggerId, UI_ANCHOR_INDEX_VAR) ~= tostring(anchorIndex) then
+        error("UI anchor index write was not persisted")
+    end
+
+    -- 새 anchor를 활성화한 뒤 이전 UI가 있던 메시지도 다시 그려 잔상을 없앤다.
+    if previousIndex ~= nil and previousIndex ~= anchorIndex and type(reloadChat) == "function" then
+        local retiredOk, retiredError = pcall(reloadChat, triggerId, previousIndex)
+        if not retiredOk then
+            debug(2, "previous UI anchor reload failed: " .. tostring(retiredError))
+        end
+    end
+    refreshGameUi(triggerId)
+    return anchorIndex
 end
 
 -- outer CBS가 이미 계산된 msgDisplay를 특정 메시지만 remount해도 최신 UI로
@@ -798,14 +898,14 @@ listenEdit("editDisplay", function(triggerId, data, meta)
     end
 
     local index = type(meta) == "table" and meta.index or nil
-    if index ~= -1 then
-        return data
-    end
-    if type(setChatVar) == "function" then
-        local encodedIndex = tostring(index)
-        if readUiFragment(triggerId, UI_ANCHOR_INDEX_VAR) ~= encodedIndex then
-            pcall(setChatVar, triggerId, UI_ANCHOR_INDEX_VAR, encodedIndex)
-        end
+    local dedicatedAnchor = data == UI_ANCHOR_MARKER and type(index) == "number" and index >= 0
+    local activeIndex = parseUiAnchorIndex(readUiFragment(triggerId, UI_ANCHOR_INDEX_VAR))
+    local renderHere = (dedicatedAnchor and activeIndex == index)
+        or (index == -1 and (activeIndex == nil or activeIndex == -1))
+    if not renderHere then
+        local markerEnd = markerStart + #UI_ANCHOR_MARKER - 1
+        return string.sub(data, 1, markerStart - 1)
+            .. string.sub(data, markerEnd + 1)
     end
 
     local rendered = SETUP_START_MARKUP
@@ -877,10 +977,18 @@ onButtonClick = async(function(triggerId, data)
     end
     debug(3, "Button route: " .. tostring(script) .. "|" .. tostring(parts[1]))
 
-    runScript(triggerId, script, table.unpack(parts))
+    local report = runScript(triggerId, script, table.unpack(parts))
+    if script == "init" and parts[1] == "start" then
+        if controllerSucceeded("onButtonClick.init.start", report) then
+            local anchorOk, anchorError = pcall(ensureGameUiAnchor, triggerId)
+            if not anchorOk then
+                debug(1, "onButtonClick.init.start: UI anchor 생성 실패: " .. tostring(anchorError))
+            end
+        end
+    end
 end)
 
---정상 요청에 저장된 비공개 턴 사건을 추가
+--정상 요청에 저장된 비공개 턴 사건과 사용자 장면 지시를 request에만 추가
 listenEdit("editRequest", function(triggerId, data)
     beginRunScriptEvent(triggerId, "editRequest")
     local report = runScript(
@@ -911,6 +1019,14 @@ onStart = async(function(triggerId)
         return false
     end
 
+    if report.commitRecovered == true or report.uiAnchorRequired == true then
+        local anchorOk, anchorError = pcall(ensureGameUiAnchor, triggerId)
+        if not anchorOk then
+            debug(1, "onStart: 복구 UI anchor 생성 실패: " .. tostring(anchorError))
+            return false
+        end
+    end
+
     -- 관측된 출력을 보존하고 commit만 복구한 경우 새 HTTP 요청은 취소한다.
     return report.generationReady == true
 end)
@@ -923,7 +1039,12 @@ onOutput = async(function(triggerId)
         "battleController",
         "commitOutput"
     )
-    controllerSucceeded("onOutput", report)
+    if controllerSucceeded("onOutput", report) and report.outputCommitted == true then
+        local anchorOk, anchorError = pcall(ensureGameUiAnchor, triggerId)
+        if not anchorOk then
+            debug(1, "onOutput: 다음 턴 UI anchor 생성 실패: " .. tostring(anchorError))
+        end
+    end
 end)
 
 --[[

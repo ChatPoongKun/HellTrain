@@ -1,6 +1,6 @@
 # 턴 프롬프트 조립 계약
 
-이 문서는 확정 대기 중인 `pendingTurn`을 모델 요청에 넣을 한 개의 system 메시지와 공개 사용자 마커로 바꾸는 스키마 버전 1의 경계를 정의한다. 구현은 `System/turnPromptFormatter.lua`다. 이 모듈은 원본 런타임 로그를 요약하지 않고, `turnEventProjector`가 이미 만든 `llmEvent`를 다시 검증한 뒤 허용 필드만 새 객체로 조립한다.
+이 문서는 확정 대기 중인 `pendingTurn`을 모델 요청에만 넣을 한 개의 system 메시지와 user 장면 지시로 바꾸는 스키마 버전 1의 경계를 정의한다. 구현은 `System/turnPromptFormatter.lua`다. 이 모듈은 원본 런타임 로그를 요약하지 않고, `turnEventProjector`가 이미 만든 `llmEvent`를 다시 검증한 뒤 허용 필드만 새 객체로 조립한다.
 
 ## 1. 호출과 책임
 
@@ -19,7 +19,7 @@ runScript(triggerId, "turnPromptFormatter", "formatPending", pendingTurn, static
 - `llmEvent`의 envelope, 사건 순서, 허용 type과 type별 payload를 fail-closed로 검사한다.
 - 허용 필드만 새 테이블에 복사해 키 정렬 canonical JSON으로 직렬화한다.
 - 기존 프리셋을 보존하면서 이번 턴의 확정 사실만 기계적으로 반영하라는 고정 지침을 만든다.
-- 공개 사용자 대화에 사용할, 사건 세부정보가 없는 고정 형식 마커를 만든다.
+- request-only user 메시지에 사용할, 사건 세부정보가 없는 고정 형식 장면 지시를 만든다.
 
 이 모듈은 상태 저장, `editRequest`, 채팅 추가, UI 변경, 턴 확정과 재판정을 하지 않는다. 입력 객체도 변경하지 않는다. 실제 훅은 성공 반환값을 사용해 요청 복사본을 조립해야 한다.
 
@@ -40,13 +40,13 @@ runScript(triggerId, "turnPromptFormatter", "formatPending", pendingTurn, static
 }
 ```
 
-마커의 숫자는 `pendingTurn.beforeState.turnNumber`다. 형식은 문자 하나까지 고정하며 다음 식으로만 만든다.
+`publicMarker`라는 호환 필드 이름을 유지하지만 실제 채팅 마커가 아니다. 숫자는 `pendingTurn.beforeState.turnNumber`이며 형식은 문자 하나까지 고정한다.
 
 ```text
 [전투 턴 N] 이번 턴에 실제로 벌어진 일을 하나의 장면으로 이어서 묘사한다.
 ```
 
-마커에는 `battleId`, `turnId`, 카드, 행동, 수치나 승패를 넣지 않는다. 기술 식별자나 재처리 키도 아니며, 사용자가 보내는 이번 턴 묘사 요청이다.
+지시에는 `battleId`, `turnId`, 카드, 행동, 수치나 승패를 넣지 않는다. 기술 식별자나 재처리 키도 아니며, `editRequest`가 모델에게만 보내는 이번 턴 묘사 요청이다.
 
 실패 결과는 `ok = false`, `schemaVersion = 1`, 하나 이상의 `{ code, path, message }`만 가진다. 부분 `message`나 `publicMarker`를 반환하지 않는다.
 
@@ -98,7 +98,7 @@ envelope는 정확히 `schemaVersion`, `events`만 가진다. 각 사건은 정�
 
 ## 5. 비공개 경계
 
-system 메시지와 공개 마커 양쪽에 다음 자료를 넣지 않는다.
+system 메시지와 request-only user 지시 양쪽에 다음 자료를 넣지 않는다.
 
 - `battleId`, `turnId`, `eventId`, `resolutionId`
 - 카드 인스턴스 ID, 카드 ID와 선택 카드 배열
@@ -116,9 +116,9 @@ system 메시지와 공개 마커 양쪽에 다음 자료를 넣지 않는다.
 
 1. 현재 권위 상태와 같은 `pendingTurn`을 재사용하거나 새로 준비한다.
 2. `formatPending`이 성공한 경우에만 진행한다.
-3. 기존 `request.messages`를 복사하고, 반환된 `message` 한 개를 추가한다.
+3. 기존 `request.messages`를 복사하고 반환된 system `message`를 추가한다.
 4. 기존 프리셋 메시지를 삭제하거나 수정하지 않는다.
-5. 반환된 `publicMarker`를 이번 턴 사용자 대화 본문으로 사용한다.
+5. `{ role = "user", content = publicMarker }`를 system 사건 뒤에 추가하되, 두 메시지는 request 배열에만 두고 실제 사용자 채팅에는 저장하지 않는다.
 6. 정상 모델 출력이 도착하기 전에는 `afterState`나 `publicResult`를 확정·공개하지 않는다.
 
 포맷터 실패를 무시하고 원본 `llmEvent` 또는 `pendingTurn`으로 대체 프롬프트를 만들어서는 안 된다.
@@ -127,7 +127,7 @@ system 메시지와 공개 마커 양쪽에 다음 자료를 넣지 않는다.
 
 `.agents/Tests/turn-prompt-formatter-check.ps1`은 실제 초기화, 드래프트, 해결과 사건 투영을 거쳐 만든 `pendingTurn`으로 다음을 검사한다.
 
-- 고정 system 지침, 카드 narration과 공개 마커 완전 일치
+- 고정 system 지침, 카드 narration과 request-only user 지시 완전 일치
 - runtime ID, 카드 ID, 캐릭터 비공개 프로필과 내부 상태 비누출
 - 일반 정적 데이터와 `loadAll` wrapper의 동일 결과
 - payload·사건 canary, 알 수 없는 type·effect op, 위조 narration과 중복 필수 사건 거부
@@ -135,4 +135,4 @@ system 메시지와 공개 마커 양쪽에 다음 자료를 넣지 않는다.
 - 성공·실패 양쪽의 입력 불변성과 호스트 쓰기 부재
 - 두 독립 Lua 프로세스의 전체 메시지 결정성
 
-이 검사는 실제 RisuAI `onStart`/`onOutput` 순서, `editRequest` 적용, 사용자 마커 채팅 렌더링과 모델 응답 품질을 대신하지 않는다.
+이 검사는 실제 RisuAI `onStart`/`onOutput` 순서, `editRequest` 적용, request-only 지시의 raw-chat 비노출과 모델 응답 품질을 대신하지 않는다.

@@ -61,6 +61,9 @@ assert(chatVars.helltrainUiPopupV1 == nil, "base UI write polluted popup slot")
 invoke("uiRender", "append", "도감")
 assert(chatVars["🔯🔯🔯"] == "<battleui.html>", "popup append copied or changed base UI")
 assert(chatVars.helltrainUiPopupV1 == "<도감.html>", "legacy append route did not use popup slot")
+invoke("uiRender", "append", "캐릭터 리스트")
+assert(chatVars.helltrainUiPopupV1 == "<캐릭터 리스트.html>",
+    "legacy append route accumulated more than one popup")
 
 invoke("popupManage", "root", "uiRender", "append", "설정")
 assert(chatVars.helltrainUiPopupV1 == "<설정.html>", "allowed root popup was not rendered")

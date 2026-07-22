@@ -67,6 +67,25 @@ end
 function setChatVar(triggerId, key, value)
     displayVars[key] = value
 end
+local chat = {}
+local dropNextAddChat = false
+local function copyChat()
+    local copy = {}
+    for index, message in ipairs(chat) do
+        copy[index] = { role = message.role, data = message.data }
+    end
+    return copy
+end
+function getFullChat()
+    return copyChat()
+end
+function addChat(triggerId, role, data)
+    if dropNextAddChat then
+        dropNextAddChat = false
+        return
+    end
+    chat[#chat + 1] = { role = role, data = data }
+end
 
 -- runScript must preserve every handler return, including an interior nil, on
 -- both the first execution and the same-event transaction-cache path.
@@ -99,8 +118,8 @@ assert(editDisplay(
         "main-hook-check",
         "before@@HELLTRAIN_UI_ANCHOR_V1@@after",
         { index = 4 }
-    ) == "before@@HELLTRAIN_UI_ANCHOR_V1@@after",
-    "editDisplay allowed a non-first message to claim the UI anchor")
+    ) == "beforeafter",
+    "editDisplay did not retire a non-dedicated UI sentinel")
 displayVars.helltrainUiShellV1 = "<shell>"
 local uiBodyKey = string.char(240, 159, 148, 175):rep(3)
 displayVars[uiBodyKey] = "<body>"
@@ -113,8 +132,28 @@ local injectedDisplay = editDisplay(
 )
 assert(injectedDisplay == "before<shell><body><popup>after",
     "editDisplay did not compose the shell, body, and popup slots")
-assert(displayVars.helltrainUiAnchorIndexV1 == "-1",
-    "editDisplay did not persist the targeted UI anchor index")
+assert(displayVars.helltrainUiAnchorIndexV1 == nil,
+    "editDisplay mutated the active UI anchor index")
+
+displayVars.helltrainUiAnchorIndexV1 = "4"
+assert(editDisplay(
+        "main-hook-check",
+        "@@HELLTRAIN_UI_ANCHOR_V1@@",
+        { index = 4 }
+    ) == "<shell><body><popup>",
+    "editDisplay did not render the exact active user UI anchor")
+assert(editDisplay(
+        "main-hook-check",
+        "@@HELLTRAIN_UI_ANCHOR_V1@@",
+        { index = 3 }
+    ) == "",
+    "editDisplay rendered an inactive user UI anchor")
+assert(editDisplay(
+        "main-hook-check",
+        "before@@HELLTRAIN_UI_ANCHOR_V1@@after",
+        { index = -1 }
+    ) == "beforeafter",
+    "editDisplay did not retire the first-message bootstrap UI")
 
 local targetedReloads = {}
 local fullReloads = 0
@@ -122,11 +161,42 @@ function reloadChat(triggerId, index)
     targetedReloads[#targetedReloads + 1] = index
 end
 function reloadDisplay() fullReloads = fullReloads + 1 end
+displayVars.helltrainUiAnchorIndexV1 = nil
 assert(refreshGameUi("main-hook-check") == true and targetedReloads[1] == -1 and fullReloads == 0,
-    "refreshGameUi did not prefer the targeted anchor reload")
+    "refreshGameUi did not fall back to the first-message anchor")
 displayVars.helltrainUiAnchorIndexV1 = "7"
-assert(refreshGameUi("main-hook-check") == true and targetedReloads[2] == -1 and fullReloads == 0,
-    "refreshGameUi trusted a mutable chatVar as the reload target")
+assert(refreshGameUi("main-hook-check") == true and targetedReloads[2] == 7 and fullReloads == 0,
+    "refreshGameUi did not target the persisted user UI anchor")
+displayVars.helltrainUiAnchorIndexV1 = "7.5"
+local printBeforeInvalidAnchor = print
+print = function() end
+assert(refreshGameUi("main-hook-check") == true and targetedReloads[3] == -1 and fullReloads == 0,
+    "refreshGameUi accepted a non-integer UI anchor index")
+print = printBeforeInvalidAnchor
+
+targetedReloads = {}
+displayVars.helltrainUiAnchorIndexV1 = nil
+chat = {}
+assert(ensureGameUiAnchor("main-hook-check") == 0
+    and #chat == 1 and chat[1].role == "user"
+    and chat[1].data == "@@HELLTRAIN_UI_ANCHOR_V1@@"
+    and displayVars.helltrainUiAnchorIndexV1 == "0"
+    and targetedReloads[1] == -1 and targetedReloads[2] == 0,
+    "ensureGameUiAnchor did not retire the first-message UI and activate the user chat")
+local anchorCountBeforeIdempotent = #chat
+assert(ensureGameUiAnchor("main-hook-check") == 0
+    and #chat == anchorCountBeforeIdempotent,
+    "ensureGameUiAnchor duplicated an existing trailing anchor")
+
+chat = {}
+displayVars.helltrainUiAnchorIndexV1 = "0"
+dropNextAddChat = true
+local droppedAnchorOk = pcall(ensureGameUiAnchor, "main-hook-check")
+assert(droppedAnchorOk == false and #chat == 0
+    and displayVars.helltrainUiAnchorIndexV1 == "0",
+    "ensureGameUiAnchor accepted a silent addChat failure")
+assert(ensureGameUiAnchor("main-hook-check") == 0 and #chat == 1,
+    "ensureGameUiAnchor did not recover after a silent addChat failure")
 
 local authority
 local stateReadFails = false
@@ -186,10 +256,28 @@ end
 assert(onStart("main-hook-check") == true, "generation-ready onStart did not allow the request")
 lastCall("prepareGeneration")
 
+chat = { { role = "char", data = "recovered scene" } }
+displayVars.helltrainUiAnchorIndexV1 = "0"
+targetedReloads = {}
 responder = function()
     return { ok = true, generationReady = false, commitRecovered = true, errors = {} }
 end
 assert(onStart("main-hook-check") == false, "commit-only recovery did not cancel the new request")
+lastCall("prepareGeneration")
+assert(#chat == 2 and chat[1].role == "char" and chat[2].role == "user"
+    and chat[2].data == "@@HELLTRAIN_UI_ANCHOR_V1@@"
+    and displayVars.helltrainUiAnchorIndexV1 == "1"
+    and targetedReloads[1] == 0 and targetedReloads[2] == 1,
+    "commit-only recovery did not append the UI after the preserved scene")
+
+chat = { { role = "char", data = "anchor repair scene" } }
+displayVars.helltrainUiAnchorIndexV1 = "0"
+responder = function()
+    return { ok = true, generationReady = false, uiAnchorRequired = true, errors = {} }
+end
+assert(onStart("main-hook-check") == false and #chat == 2
+    and chat[2].role == "user" and chat[2].data == "@@HELLTRAIN_UI_ANCHOR_V1@@",
+    "UI-only repair did not cancel generation and restore the user anchor")
 lastCall("prepareGeneration")
 
 responder = function()
@@ -215,6 +303,7 @@ local originalPrompt = {
 local injectedPrompt = {
     { role = "system", content = "preset" },
     { role = "system", content = "private turn event" },
+    { role = "user", content = "private scene request" },
 }
 responder = function(triggerId, script, action, prompt)
     assert(prompt == originalPrompt, "editRequest did not pass its original prompt object")
@@ -243,12 +332,27 @@ assert(editRequest("main-hook-check", originalPrompt) == originalPrompt,
     "malformed successful editRequest did not preserve the original prompt")
 lastCall("injectRequest")
 
+chat = { { role = "char", data = "normal output scene" } }
+displayVars.helltrainUiAnchorIndexV1 = "0"
+targetedReloads = {}
 responder = function()
-    return { ok = true, errors = {} }
+    return { ok = true, outputCommitted = true, errors = {} }
 end
 onOutput("main-hook-check")
 lastCall("commitOutput")
+assert(#chat == 2 and chat[1].role == "char" and chat[2].role == "user"
+    and chat[2].data == "@@HELLTRAIN_UI_ANCHOR_V1@@"
+    and displayVars.helltrainUiAnchorIndexV1 == "1"
+    and targetedReloads[1] == 0 and targetedReloads[2] == 1,
+    "successful onOutput did not place the next UI after the scene")
+local chatCountBeforeDuplicateOutput = #chat
+onOutput("main-hook-check")
+lastCall("commitOutput")
+assert(#chat == chatCountBeforeDuplicateOutput,
+    "duplicate successful onOutput appended another UI anchor")
 
+chat = { { role = "char", data = "failed commit scene" } }
+displayVars.helltrainUiAnchorIndexV1 = "0"
 responder = function()
     return {
         ok = false,
@@ -259,8 +363,27 @@ responder = function()
 end
 onOutput("main-hook-check")
 lastCall("commitOutput")
+assert(#chat == 1 and chat[1].data == "failed commit scene",
+    "failed onOutput changed the chat or appended a UI anchor")
 assert(string.find(logLines[#logLines], "commit_failed", 1, true),
     "onOutput failure was not logged")
+
+chat = {}
+displayVars.helltrainUiAnchorIndexV1 = nil
+targetedReloads = {}
+responder = function(triggerId, script, action)
+    assert(script == "init" and action == "start", "unexpected setup start route")
+    return { ok = true, errors = {} }
+end
+onButtonClick("main-hook-check", "init|start")
+local startCall = assert(calls[#calls], "missing setup start controller call")
+assert(startCall.script == "init" and startCall.action == "start"
+    and #chat == 1 and chat[1].role == "user"
+    and chat[1].data == "@@HELLTRAIN_UI_ANCHOR_V1@@"
+    and displayVars.helltrainUiAnchorIndexV1 == "0",
+    "successful game start did not create the deck-building user UI chat")
+onButtonClick("main-hook-check", "init|start")
+assert(#chat == 1, "repeated successful game start duplicated the UI anchor")
 
 responder = function(triggerId, script, action, first, second)
     return { triggerId, script, action, first, second }
@@ -296,7 +419,7 @@ assert(#calls == callsBeforeDenied, "button dispatcher accepted an invalid start
 onButtonClick("main-hook-check", "init|chooseCharacter|yoo_jiyoung")
 assert(#calls == callsBeforeDenied, "button dispatcher accepted an invalid chooseCharacter argument count")
 
-hostPrint("MAIN_HOOK|scenarios=27")
+hostPrint("MAIN_HOOK|scenarios=35")
 '@
 
 Push-Location $projectRoot
@@ -315,7 +438,7 @@ try {
     if (-not ($firstText -ceq $secondText)) {
         throw "Separate Lua processes produced different main hook results.`nFIRST:`n$firstText`nSECOND:`n$secondText"
     }
-    if ($firstText -notmatch '^MAIN_HOOK\|scenarios=27$') {
+    if ($firstText -notmatch '^MAIN_HOOK\|scenarios=35$') {
         throw "Unexpected main hook vector: $firstText"
     }
     Write-Output 'main-hook-check: ok'

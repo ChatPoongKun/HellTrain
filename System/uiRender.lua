@@ -19,10 +19,9 @@
             setChatVar(triggerId, UI_VAR, html)
         end,
         append = function()
-            -- 기존 버튼 route 이름은 유지하되 popup을 기본 화면과 별도
-            -- slot에 둔다. 화면 전체 문자열 복사와 regex 제거를 피한다.
-            local currentPopup = getChatVar(triggerId, POPUP_VAR) or ""
-            setChatVar(triggerId, POPUP_VAR, currentPopup .. html)
+            -- 기존 버튼 route 이름은 호환용으로 유지한다. popup slot은 한 번에
+            -- 하나의 창만 소유하므로 append도 교체로 처리한다.
+            setChatVar(triggerId, POPUP_VAR, html)
         end,
         popup = function()
             setChatVar(triggerId, POPUP_VAR, html)

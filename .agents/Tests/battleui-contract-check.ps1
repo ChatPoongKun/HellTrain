@@ -18,8 +18,10 @@ function Assert-Contract {
 $html = Get-Content -Raw -LiteralPath $htmlPath
 $contract = Get-Content -Raw -LiteralPath $contractPath
 $bodyMatch = [regex]::Match($html, '(?s)<body>(.*)</body>')
-Assert-Contract $bodyMatch.Success 'body element is missing'
-$body = $bodyMatch.Groups[1].Value
+$hasBodyOpen = $html.Contains('<body>')
+$hasBodyClose = $html.Contains('</body>')
+Assert-Contract ($hasBodyOpen -eq $hasBodyClose) 'body wrapper is only partially present'
+$body = if ($bodyMatch.Success) { $bodyMatch.Groups[1].Value } else { $html }
 
 Assert-Contract ($body.Contains('{{getvar::battleView}}')) 'battleView chat variable is not read'
 foreach ($node in @(
@@ -54,8 +56,10 @@ $registerRoute = 'risu-btn="battleController|registerCard|{{dictelement::{{slot:
 $cancelRoute = 'risu-btn="battleController|cancelCard|{{dictelement::{{slot::hand_card}}::instanceId}}|{{dictelement::{{tempvar::bv}}::interactionToken}}"'
 Assert-Contract ($body.Contains($registerRoute)) 'explicit register route does not include instanceId and interactionToken'
 Assert-Contract ($body.Contains($cancelRoute)) 'explicit cancel route does not include instanceId and interactionToken'
-$disabledCondition = '{{#when::keep::{{dictelement::{{slot::hand_card}}::playable}}::isnot::true}}disabled{{/when}}'
-Assert-Contract ($body.Contains($disabledCondition)) 'unplayable cards do not receive a literal disabled attribute'
+$unplayableCondition = '{{#when::keep::{{dictelement::{{slot::hand_card}}::playable}}::isnot::true}}'
+Assert-Contract ($body.Contains($unplayableCondition)) 'unplayable card branches are missing'
+Assert-Contract ([regex]::Matches($body, '<button class="hand-card-action(?: is-cancel)?" type="button" disabled>').Count -eq 2) 'unplayable register/cancel branches do not render literal disabled buttons'
+Assert-Contract (-not [regex]::IsMatch($body, '(?s)<button[^>]*\{\{#when')) 'CBS control syntax must not appear inside a button opening tag'
 Assert-Contract (-not $body.Contains('{{:else}}')) 'CBS else remains despite the current keep/else newline ambiguity'
 Assert-Contract ([regex]::Matches($body, 'risu-btn=').Count -eq 2) 'battle UI must expose only register and cancel routes'
 Assert-Contract ($body.Contains('data-selected="{{dictelement::{{slot::hand_card}}::selected}}"')) 'selected state is not bound to card markup'
@@ -84,7 +88,10 @@ Assert-Contract ($body.Contains('<progress class="route-native"')) 'turn progres
 Assert-Contract ($body.Contains('<progress class="meter-native"')) 'resistance progress is not value/max driven'
 Assert-Contract (-not [regex]::IsMatch($html, '(?m)^width:\s*(?:33\.33|60|80)%;')) 'a hardcoded mock progress ratio remains'
 
-Assert-Contract ($body.Contains('Risu 전송 버튼으로 제출 또는 패스')) 'Risu send button is not documented as the only submit/pass control'
+Assert-Contract ($body.Contains('선택을 마쳤다면 Risu 전송 버튼으로 제출 또는 패스')) 'Risu send button is not documented as the only submit/pass control'
+Assert-Contract ($body.Contains('입력창은 비워 둔 채 Risu 전송 버튼을 누르세요.')) 'blank-send instruction is missing'
+Assert-Contract (-not $body.Contains('마침표(.)')) 'legacy period-submit instruction remains'
+Assert-Contract (-not $body.Contains('*says nothing*')) 'internal filler text leaked into the battle UI'
 Assert-Contract ($body.Contains('{{dictelement::{{tempvar::bv_public_action}}::status}}')) 'public action status is not projected'
 Assert-Contract ($body.Contains('{{dictelement::{{tempvar::bv_public_tag}}::label}}')) 'public action tag label is not projected'
 Assert-Contract ($body.Contains('{{dictelement::{{tempvar::bv_last_turn}}::summaries}}')) 'lastTurn public summaries are not projected'
