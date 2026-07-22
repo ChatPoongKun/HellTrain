@@ -5,6 +5,12 @@
     local OFFER_SIZE = 3
     local MAX_COPIES = 2
     local MINIMUM_POOL_SIZE = 7
+    local CHARACTER_OFFER_SIZE = 3
+    local MINIMUM_CHARACTER_POOL_SIZE = 3
+    local BATTLE_SEED_MODULUS = 2147483646
+    local BATTLE_SEED_DOMAIN_OFFSET = 104729
+    local DEFAULT_ENVIRONMENT_ID = "uncrowded"
+    local DEFAULT_TURN_LIMIT = 10
     local MAX_SAFE_INTEGER = 9007199254740991
 
     local function makeError(code, path, message)
@@ -66,6 +72,11 @@
     local function isInteractionToken(value)
         return type(value) == "string"
             and string.match(value, "^game%-setup%-draft%-v1:%d+:%d+:%d+$") ~= nil
+    end
+
+    local function isCharacterInteractionToken(value)
+        return type(value) == "string"
+            and string.match(value, "^game%-setup%-character%-v1:%d+:%d+:%d+$") ~= nil
     end
 
     local function appendError(errors, code, path, message)
@@ -318,6 +329,45 @@
         return pool, nil
     end
 
+    local function buildCharacterPool(staticInput)
+        local errors = {}
+        local staticData = normalizeStaticData(staticInput)
+        if type(staticData) ~= "table" or getmetatable(staticData) ~= nil then
+            appendError(errors, "invalid_static_data", "$.staticData", "정적 데이터는 메타테이블이 없는 테이블이어야 합니다.")
+            return nil, errors
+        end
+        local characters = rawget(staticData, "characters")
+        if type(characters) ~= "table" or getmetatable(characters) ~= nil then
+            appendError(errors, "invalid_character_database", "$.staticData.characters", "characters는 메타테이블이 없는 캐릭터 맵이어야 합니다.")
+            return nil, errors
+        end
+
+        local pool = {}
+        for characterId, character in pairs(characters) do
+            local characterPath = pathForKey("$.staticData.characters", characterId)
+            if type(characterId) ~= "string" or not isAsciiId(characterId) then
+                appendError(errors, "invalid_character_id", characterPath, "캐릭터 맵 키는 lower_snake_case ASCII ID여야 합니다.")
+            elseif type(character) ~= "table" or getmetatable(character) ~= nil then
+                appendError(errors, "invalid_character_record", characterPath, "캐릭터 레코드는 메타테이블이 없는 테이블이어야 합니다.")
+            else
+                pool[#pool + 1] = characterId
+            end
+        end
+        table.sort(pool)
+        if #pool < MINIMUM_CHARACTER_POOL_SIZE then
+            appendError(
+                errors,
+                "insufficient_character_pool",
+                "$.staticData.characters",
+                "캐릭터 선택에서는 서로 다른 후보가 최소 3명 필요합니다."
+            )
+        end
+        if #errors > 0 then
+            return nil, errors
+        end
+        return pool, nil
+    end
+
     local function callNextIntegers(rng, ranges)
         if type(runScript) ~= "function" then
             return nil, nil, {
@@ -430,6 +480,73 @@
         return copy
     end
 
+    local function buildCharacterToken(setupId, rng, characterIds)
+        local parts = {
+            "setupId=", tostring(#setupId), ":", setupId,
+            "|cursor=", tostring(rng.cursor),
+            "|characters=", tostring(#characterIds), ":",
+        }
+        for _, characterId in ipairs(characterIds) do
+            parts[#parts + 1] = tostring(#characterId)
+            parts[#parts + 1] = ":"
+            parts[#parts + 1] = characterId
+            parts[#parts + 1] = ";"
+        end
+        local canonical = table.concat(parts)
+        local hashA = 0
+        local hashB = 0
+        for index = 1, #canonical do
+            local byte = string.byte(canonical, index)
+            hashA = (hashA * 131 + byte) % 2147483647
+            hashB = (hashB * 137 + byte) % 2147483629
+        end
+        return "game-setup-character-v1:" .. tostring(#canonical) .. ":" .. tostring(hashA) .. ":" .. tostring(hashB)
+    end
+
+    local function generateCharacterOffer(setupId, rng, characterPool)
+        local candidates = copyArray(characterPool)
+        local ranges = {}
+        for pick = 1, CHARACTER_OFFER_SIZE do
+            ranges[pick] = {
+                minimum = 1,
+                maximum = #candidates - pick + 1,
+            }
+        end
+        local selectedIndices, nextRng, rngErrors = callNextIntegers(rng, ranges)
+        if rngErrors then
+            return nil, nil, rngErrors
+        end
+
+        local selected = {}
+        for pick = 1, CHARACTER_OFFER_SIZE do
+            local selectedIndex = selectedIndices[pick]
+            selected[pick] = candidates[selectedIndex]
+            table.remove(candidates, selectedIndex)
+        end
+        return {
+            characterIds = selected,
+            interactionToken = buildCharacterToken(setupId, nextRng, selected),
+        }, nextRng, nil
+    end
+
+    local function deriveBattleSeed(setupSeed)
+        -- 1-based seed 공간 안에서 고정 domain offset만큼 순환한다.
+        -- setup RNG cursor와 드래프트/캐릭터 선택 경로는 결과에 관여하지 않는다.
+        -- 큰 IEEE-754 안전 정수도 offset 덧셈 전에 범위를 줄여 중간 계산이
+        -- MAX_SAFE_INTEGER를 넘지 않게 한다.
+        local normalized = (setupSeed - 1) % BATTLE_SEED_MODULUS
+        return ((normalized + BATTLE_SEED_DOMAIN_OFFSET) % BATTLE_SEED_MODULUS) + 1
+    end
+
+    local function buildBattleSpec(setupId, setupSeed)
+        return {
+            battleId = "battle-" .. setupId,
+            seed = deriveBattleSeed(setupSeed),
+            environmentId = DEFAULT_ENVIRONMENT_ID,
+            turnLimit = DEFAULT_TURN_LIMIT,
+        }
+    end
+
     local function generateOffer(setupId, round, rng, selectedCardIds, counts, pool)
         local eligible = {}
         for _, cardId in ipairs(pool) do
@@ -535,6 +652,66 @@
         }, nil
     end
 
+    local function replayForPhase(setupId, seed, selectedCardIds, pool, phase, characterPool, selectedCharacterId)
+        local deckState, deckErrors = replay(setupId, seed, selectedCardIds, pool)
+        if deckErrors then
+            return nil, deckErrors
+        end
+        if phase == "deckDraft" or phase == "deckComplete" then
+            return deckState, nil
+        end
+        if deckState.phase ~= "deckComplete" then
+            return nil, {
+                makeError("character_selection_before_deck_complete", "$.state.phase", "캐릭터 선택은 초기 덱 10장을 완성한 뒤에만 시작할 수 있습니다."),
+            }
+        end
+        if type(characterPool) ~= "table" then
+            return nil, {
+                makeError("character_pool_unavailable", "$.staticData.characters", "캐릭터 선택을 재생할 캐릭터 풀이 없습니다."),
+            }
+        end
+
+        local characterOffer, nextRng, offerErrors = generateCharacterOffer(
+            setupId,
+            deckState.rng,
+            characterPool
+        )
+        if offerErrors then
+            return nil, offerErrors
+        end
+        if phase == "characterSelect" then
+            return {
+                schemaVersion = SCHEMA_VERSION,
+                kind = KIND,
+                setupId = setupId,
+                phase = "characterSelect",
+                rng = nextRng,
+                selectedCardIds = copyArray(selectedCardIds),
+                characterOffer = characterOffer,
+            }, nil
+        end
+        if phase ~= "battleReady" then
+            return nil, {
+                makeError("invalid_setup_phase", "$.state.phase", "지원하지 않는 게임 설정 phase입니다."),
+            }
+        end
+        if not contains(characterOffer.characterIds, selectedCharacterId) then
+            return nil, {
+                makeError("selection_not_in_replayed_character_offer", "$.state.selectedCharacterId", "선택 캐릭터가 결정적으로 재생한 후보에 포함되지 않습니다."),
+            }
+        end
+        return {
+            schemaVersion = SCHEMA_VERSION,
+            kind = KIND,
+            setupId = setupId,
+            phase = "battleReady",
+            rng = nextRng,
+            selectedCardIds = copyArray(selectedCardIds),
+            selectedCharacterId = selectedCharacterId,
+            battleSpec = buildBattleSpec(setupId, seed),
+        }, nil
+    end
+
     local function advanceValidatedState(current, selectedCardId, pool)
         -- current는 같은 choose 호출에서 validateAndReplay를 통과해 얻은
         -- canonical snapshot이다. 외부/저장 값을 이 함수에 직접 넣지 않는다.
@@ -592,7 +769,7 @@
         }, nil
     end
 
-    local function validateStateShape(state, pool)
+    local function validateStateShape(state, pool, characterPool)
         local errors = {}
         validateJson(state, "$.state", errors, {})
         if type(state) ~= "table" or getmetatable(state) ~= nil then
@@ -606,6 +783,9 @@
             rng = true,
             selectedCardIds = true,
             offer = true,
+            characterOffer = true,
+            selectedCharacterId = true,
+            battleSpec = true,
         }, "$.state", errors)
 
         if state.schemaVersion ~= SCHEMA_VERSION then
@@ -617,8 +797,11 @@
         if not isRuntimeId(state.setupId) then
             appendError(errors, "invalid_setup_id", "$.state.setupId", "setupId는 ASCII 런타임 ID여야 합니다.")
         end
-        if state.phase ~= "deckDraft" and state.phase ~= "deckComplete" then
-            appendError(errors, "invalid_setup_phase", "$.state.phase", "phase는 deckDraft 또는 deckComplete이어야 합니다.")
+        if state.phase ~= "deckDraft"
+            and state.phase ~= "deckComplete"
+            and state.phase ~= "characterSelect"
+            and state.phase ~= "battleReady" then
+            appendError(errors, "invalid_setup_phase", "$.state.phase", "지원하지 않는 게임 설정 phase입니다.")
         end
 
         if type(state.rng) ~= "table" or getmetatable(state.rng) ~= nil then
@@ -656,6 +839,11 @@
                     end
                 end
             end
+        end
+
+        local characterPoolSet = {}
+        for _, characterId in ipairs(characterPool or {}) do
+            characterPoolSet[characterId] = true
         end
 
         if state.phase == "deckDraft" then
@@ -696,12 +884,95 @@
                     appendError(errors, "invalid_interaction_token", "$.state.offer.interactionToken", "interactionToken 형식이 올바르지 않습니다.")
                 end
             end
+            if rawget(state, "characterOffer") ~= nil
+                or rawget(state, "selectedCharacterId") ~= nil
+                or rawget(state, "battleSpec") ~= nil then
+                appendError(errors, "character_fields_not_allowed", "$.state", "deckDraft 상태에는 캐릭터 선택 필드를 저장하지 않습니다.")
+            end
         elseif state.phase == "deckComplete" then
             if selectedLength ~= nil and selectedLength ~= TOTAL_DRAFTS then
                 appendError(errors, "invalid_complete_progress", "$.state.selectedCardIds", "deckComplete 상태에는 카드가 정확히 10장 있어야 합니다.")
             end
             if rawget(state, "offer") ~= nil then
                 appendError(errors, "offer_not_allowed", "$.state.offer", "deckComplete 상태에는 제안을 저장하지 않습니다.")
+            end
+            if rawget(state, "characterOffer") ~= nil
+                or rawget(state, "selectedCharacterId") ~= nil
+                or rawget(state, "battleSpec") ~= nil then
+                appendError(errors, "character_fields_not_allowed", "$.state", "deckComplete 상태에는 캐릭터 선택 결과를 저장하지 않습니다.")
+            end
+        elseif state.phase == "characterSelect" then
+            if selectedLength ~= nil and selectedLength ~= TOTAL_DRAFTS then
+                appendError(errors, "invalid_character_select_progress", "$.state.selectedCardIds", "characterSelect 상태에는 카드가 정확히 10장 있어야 합니다.")
+            end
+            if rawget(state, "offer") ~= nil then
+                appendError(errors, "offer_not_allowed", "$.state.offer", "characterSelect 상태에는 카드 제안을 저장하지 않습니다.")
+            end
+            if rawget(state, "selectedCharacterId") ~= nil or rawget(state, "battleSpec") ~= nil then
+                appendError(errors, "battle_fields_not_allowed", "$.state", "characterSelect 상태에는 전투 준비 결과를 저장하지 않습니다.")
+            end
+            if type(state.characterOffer) ~= "table" or getmetatable(state.characterOffer) ~= nil then
+                appendError(errors, "missing_character_offer", "$.state.characterOffer", "characterSelect 상태에는 캐릭터 후보가 필요합니다.")
+            else
+                checkAllowedKeys(state.characterOffer, {
+                    characterIds = true,
+                    interactionToken = true,
+                }, "$.state.characterOffer", errors)
+                local characterLength = denseArrayLength(
+                    state.characterOffer.characterIds,
+                    "$.state.characterOffer.characterIds",
+                    errors
+                )
+                if characterLength ~= nil then
+                    if characterLength ~= CHARACTER_OFFER_SIZE then
+                        appendError(errors, "invalid_character_offer_size", "$.state.characterOffer.characterIds", "캐릭터 후보는 서로 다른 3명이어야 합니다.")
+                    end
+                    local seen = {}
+                    for index = 1, characterLength do
+                        local characterId = state.characterOffer.characterIds[index]
+                        if not isAsciiId(characterId) or not characterPoolSet[characterId] then
+                            appendError(errors, "invalid_offered_character", "$.state.characterOffer.characterIds[" .. index .. "]", "후보가 현재 캐릭터 풀에 없습니다.")
+                        elseif seen[characterId] then
+                            appendError(errors, "duplicate_offered_character", "$.state.characterOffer.characterIds[" .. index .. "]", "한 제안에 같은 캐릭터를 두 번 넣을 수 없습니다.")
+                        end
+                        seen[characterId] = true
+                    end
+                end
+                if not isCharacterInteractionToken(state.characterOffer.interactionToken) then
+                    appendError(errors, "invalid_character_interaction_token", "$.state.characterOffer.interactionToken", "캐릭터 interactionToken 형식이 올바르지 않습니다.")
+                end
+            end
+        elseif state.phase == "battleReady" then
+            if selectedLength ~= nil and selectedLength ~= TOTAL_DRAFTS then
+                appendError(errors, "invalid_battle_ready_progress", "$.state.selectedCardIds", "battleReady 상태에는 카드가 정확히 10장 있어야 합니다.")
+            end
+            if rawget(state, "offer") ~= nil or rawget(state, "characterOffer") ~= nil then
+                appendError(errors, "offer_not_allowed", "$.state", "battleReady 상태에는 제안을 저장하지 않습니다.")
+            end
+            if not isAsciiId(state.selectedCharacterId) or not characterPoolSet[state.selectedCharacterId] then
+                appendError(errors, "invalid_selected_character", "$.state.selectedCharacterId", "선택 캐릭터가 현재 캐릭터 풀에 없습니다.")
+            end
+            if type(state.battleSpec) ~= "table" or getmetatable(state.battleSpec) ~= nil then
+                appendError(errors, "invalid_battle_spec", "$.state.battleSpec", "battleSpec은 메타테이블이 없는 객체여야 합니다.")
+            else
+                checkAllowedKeys(state.battleSpec, {
+                    battleId = true,
+                    seed = true,
+                    environmentId = true,
+                    turnLimit = true,
+                }, "$.state.battleSpec", errors)
+                if not isRuntimeId(state.battleSpec.battleId) then
+                    appendError(errors, "invalid_battle_id", "$.state.battleSpec.battleId", "battleId는 ASCII 런타임 ID여야 합니다.")
+                end
+                if not isSafeInteger(state.battleSpec.seed, 1) or state.battleSpec.seed > BATTLE_SEED_MODULUS then
+                    appendError(errors, "invalid_battle_seed", "$.state.battleSpec.seed", "전투 seed는 1부터 2147483646 사이의 정수여야 합니다.")
+                end
+                if state.battleSpec.environmentId ~= DEFAULT_ENVIRONMENT_ID then
+                    appendError(errors, "invalid_battle_environment", "$.state.battleSpec.environmentId", "초기 환경은 uncrowded여야 합니다.")
+                end
+                if state.battleSpec.turnLimit ~= DEFAULT_TURN_LIMIT then
+                    appendError(errors, "invalid_battle_turn_limit", "$.state.battleSpec.turnLimit", "초기 턴 제한은 10이어야 합니다.")
+                end
             end
         end
 
@@ -716,11 +987,28 @@
         if poolErrors then
             return nil, poolErrors
         end
-        local _, shapeErrors = validateStateShape(state, pool)
+        local characterPool = nil
+        if type(state) == "table"
+            and (state.phase == "characterSelect" or state.phase == "battleReady") then
+            local characterErrors
+            characterPool, characterErrors = buildCharacterPool(staticInput)
+            if characterErrors then
+                return nil, characterErrors
+            end
+        end
+        local _, shapeErrors = validateStateShape(state, pool, characterPool)
         if shapeErrors then
             return nil, shapeErrors
         end
-        local expected, replayErrors = replay(state.setupId, state.rng.seed, state.selectedCardIds, pool)
+        local expected, replayErrors = replayForPhase(
+            state.setupId,
+            state.rng.seed,
+            state.selectedCardIds,
+            pool,
+            state.phase,
+            characterPool,
+            state.selectedCharacterId
+        )
         if replayErrors then
             return nil, replayErrors
         end
@@ -729,7 +1017,7 @@
                 makeError("setup_state_replay_mismatch", "$.state", "저장된 상태가 seed와 선택 이력으로 재생성한 RNG·제안·토큰과 일치하지 않습니다."),
             }
         end
-        return expected, nil, pool
+        return expected, nil, pool, characterPool
     end
 
     local function validateSpec(spec)
@@ -760,6 +1048,22 @@
         end
         if not isInteractionToken(command.interactionToken) then
             appendError(errors, "invalid_command_token", "$.command.interactionToken", "interactionToken 형식이 올바르지 않습니다.")
+        end
+        return errors
+    end
+
+    local function validateCharacterCommand(command)
+        local errors = {}
+        validateJson(command, "$.command", errors, {})
+        if type(command) ~= "table" or getmetatable(command) ~= nil then
+            return errors
+        end
+        checkAllowedKeys(command, { characterId = true, interactionToken = true }, "$.command", errors)
+        if not isAsciiId(command.characterId) then
+            appendError(errors, "invalid_command_character_id", "$.command.characterId", "characterId는 ASCII 캐릭터 ID여야 합니다.")
+        end
+        if not isCharacterInteractionToken(command.interactionToken) then
+            appendError(errors, "invalid_command_token", "$.command.interactionToken", "캐릭터 interactionToken 형식이 올바르지 않습니다.")
         end
         return errors
     end
@@ -825,10 +1129,86 @@
         return success(nextState, true, false)
     end
 
+    local function beginCharacterSelect(state, staticInput)
+        local current, stateErrors = validateAndReplay(state, staticInput)
+        if stateErrors then
+            return failure(stateErrors)
+        end
+        if current.phase ~= "deckComplete" then
+            return failure({
+                makeError("deck_not_complete", "$.state.phase", "캐릭터 선택은 deckComplete 상태에서만 시작할 수 있습니다."),
+            })
+        end
+        local characterPool, characterErrors = buildCharacterPool(staticInput)
+        if characterErrors then
+            return failure(characterErrors)
+        end
+        local characterOffer, nextRng, offerErrors = generateCharacterOffer(
+            current.setupId,
+            current.rng,
+            characterPool
+        )
+        if offerErrors then
+            return failure(offerErrors)
+        end
+        return success({
+            schemaVersion = SCHEMA_VERSION,
+            kind = KIND,
+            setupId = current.setupId,
+            phase = "characterSelect",
+            rng = nextRng,
+            selectedCardIds = copyArray(current.selectedCardIds),
+            characterOffer = characterOffer,
+        }, true, false)
+    end
+
+    local function chooseCharacter(state, command, staticInput)
+        local commandErrors = validateCharacterCommand(command)
+        if #commandErrors > 0 then
+            return failure(commandErrors)
+        end
+        local current, stateErrors = validateAndReplay(state, staticInput)
+        if stateErrors then
+            return failure(stateErrors)
+        end
+        if current.phase == "battleReady" then
+            return success(current, false, true)
+        end
+        if current.phase ~= "characterSelect" then
+            return failure({
+                makeError("character_selection_not_started", "$.state.phase", "현재 상태에서는 캐릭터를 선택할 수 없습니다."),
+            })
+        end
+        if command.interactionToken ~= current.characterOffer.interactionToken then
+            return success(current, false, true)
+        end
+        if not contains(current.characterOffer.characterIds, command.characterId) then
+            return failure({
+                makeError("character_not_in_current_offer", "$.command.characterId", "현재 제안에 없는 캐릭터입니다."),
+            })
+        end
+
+        return success({
+            schemaVersion = SCHEMA_VERSION,
+            kind = KIND,
+            setupId = current.setupId,
+            phase = "battleReady",
+            rng = {
+                seed = current.rng.seed,
+                cursor = current.rng.cursor,
+            },
+            selectedCardIds = copyArray(current.selectedCardIds),
+            selectedCharacterId = command.characterId,
+            battleSpec = buildBattleSpec(current.setupId, current.rng.seed),
+        }, true, false)
+    end
+
     local arguments = { ... }
     local actions = {
         start = startSetup,
         choose = chooseCard,
+        beginCharacterSelect = beginCharacterSelect,
+        chooseCharacter = chooseCharacter,
         validate = validateSetup,
     }
     local handler = actions[action]

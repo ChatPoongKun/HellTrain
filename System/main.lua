@@ -157,7 +157,7 @@ end
 -- warm path는 이 명시적 계약 덕분에 이벤트 사이에서 getLoreBooks/CBS bridge를
 -- 생략한다. 개발 중에는 setRunScriptCacheDevelopmentMode(true)를 사용하면 매
 -- 이벤트의 첫 모듈 호출에서 source를 다시 확인한다.
-RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION or "runtime-bundle-41e9d1348521a163"
+RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION or "runtime-bundle-f308624226844d1a"
 RUNTIME_CACHE_DEVELOPMENT_BYPASS = RUNTIME_CACHE_DEVELOPMENT_BYPASS == true
 
 local RUN_SCRIPT_SOURCE_CACHE_MAX_ENTRIES = 64
@@ -838,7 +838,7 @@ end)
 
 --버튼 클릭시 동작
 local BUTTON_ACTIONS = {
-    init = { start = true, choose = true },
+    init = { start = true, choose = true, chooseCharacter = true },
     battleController = { clickCard = true, registerCard = true, cancelCard = true },
     popupManage = { root = true, push = true, replace = true, back = true, close = true },
 }
@@ -852,6 +852,7 @@ local function isAllowedButtonRoute(script, arguments)
     if script == "init" then
         return (action == "start" and #arguments == 1)
             or (action == "choose" and #arguments == 3)
+            or (action == "chooseCharacter" and #arguments == 3)
     elseif script == "battleController" then
         return #arguments == 3
     elseif action == "back" or action == "close" then

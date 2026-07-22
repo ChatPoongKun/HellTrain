@@ -399,24 +399,37 @@
         return seed, nil
     end
 
-    local function loadSetupUi()
+    local function loadSetupUi(phase)
         if type(loadLores) ~= "function" then
             return nil, {
                 makeError("lore_loader_unavailable", "$.host.loadLores", "UI 로어북을 읽을 loadLores 함수를 찾을 수 없습니다."),
             }
         end
-        local draftOk, cardDraft = pcall(loadLores, triggerId, "cardDraft.html")
-        if not draftOk then
+        local loreName
+        local lorePath
+        if phase == "deckDraft" or phase == "deckComplete" then
+            loreName = "cardDraft.html"
+            lorePath = "$.lore.cardDraft"
+        elseif phase == "characterSelect" then
+            loreName = "characterSelect.html"
+            lorePath = "$.lore.characterSelect"
+        else
             return nil, {
-                makeError("lore_load_failed", "$.lore.cardDraft", "cardDraft.html을 읽지 못했습니다: " .. tostring(cardDraft)),
+                makeError("invalid_setup_ui_phase", "$.state.phase", "이 설정 phase에는 setup UI를 게시할 수 없습니다."),
             }
         end
-        if type(cardDraft) ~= "string" or cardDraft == "" then
+        local loadOk, setupUi = pcall(loadLores, triggerId, loreName)
+        if not loadOk then
             return nil, {
-                makeError("missing_lore", "$.lore.cardDraft", "cardDraft.html 로어북 내용이 없습니다."),
+                makeError("lore_load_failed", lorePath, loreName .. "을 읽지 못했습니다: " .. tostring(setupUi)),
             }
         end
-        return cardDraft, nil
+        if type(setupUi) ~= "string" or setupUi == "" then
+            return nil, {
+                makeError("missing_lore", lorePath, loreName .. " 로어북 내용이 없습니다."),
+            }
+        end
+        return setupUi, nil
     end
 
     local function permitCanonicalView(purpose, viewName)
@@ -538,7 +551,43 @@
         )
     end
 
-    local function writeAuthorityVerified(state)
+    local function verifyExpectedAuthority(expectedAuthority, expectMissing)
+        local beforeOk, before = pcall(getState, triggerId, AUTHORITY_KEY)
+        if not beforeOk then
+            return {
+                makeError(
+                    "state_verify_read_failed",
+                    "$.state.authority",
+                    "권위 상태 쓰기 직전 현재 값을 읽지 못했습니다: " .. tostring(before)
+                ),
+            }
+        end
+        if expectMissing == true then
+            if before ~= nil then
+                return {
+                    makeError(
+                        "authority_concurrent_change",
+                        "$.state.authority",
+                        "새 설정을 저장하기 전에 다른 요청이 권위 상태를 만들었습니다."
+                    ),
+                }
+            end
+        elseif type(expectedAuthority) ~= "table" or not deepEqual(before, expectedAuthority) then
+            return {
+                makeError(
+                    "authority_concurrent_change",
+                    "$.state.authority",
+                    "설정 전이를 저장하기 전에 권위 상태가 다른 요청에 의해 변경되었습니다."
+                ),
+            }
+        end
+        return nil
+    end
+
+    local function writeAuthorityVerified(state, expectedAuthority, expectMissing)
+        local concurrentErrors = verifyExpectedAuthority(expectedAuthority, expectMissing)
+        if concurrentErrors then return concurrentErrors end
+
         local storedCopy, copyError = cloneJson(state, "$.state.authority")
         if copyError then return { copyError } end
         local writeOk, writeError = pcall(setState, triggerId, AUTHORITY_KEY, storedCopy)
@@ -564,9 +613,14 @@
         return nil
     end
 
-    local function beginPublish(writeAuthority)
+    local function beginPublish(writeAuthority, expectedAuthority, expectMissing)
         local hostErrors = preflightHost(writeAuthority)
         if hostErrors then return failure(hostErrors) end
+
+        if writeAuthority then
+            local concurrentErrors = verifyExpectedAuthority(expectedAuthority, expectMissing)
+            if concurrentErrors then return failure(concurrentErrors) end
+        end
 
         local updatingErrors = writeChatVarVerified(READY_NAME, "updating", "$.chatVar.gameSetupReady")
         if updatingErrors then return failure(updatingErrors) end
@@ -574,10 +628,23 @@
         return nil
     end
 
-    local function publishState(state, writeAuthority, actionName, applied, stale, staticData)
+    local function publishState(
+        state,
+        writeAuthority,
+        actionName,
+        applied,
+        stale,
+        staticData,
+        expectedAuthority,
+        expectMissing
+    )
 
         if writeAuthority then
-            local authorityErrors = writeAuthorityVerified(state)
+            local authorityErrors = writeAuthorityVerified(
+                state,
+                expectedAuthority,
+                expectMissing
+            )
             if authorityErrors then return failure(authorityErrors) end
         end
 
@@ -613,9 +680,9 @@
         if shellErrors then return failure(shellErrors) end
 
         -- getLoreBooks는 로어 내용을 반환하기 전에 CBS를 평가한다. 따라서
-        -- cardDraft.html은 방금 게시한 gameSetupView를 재읽을 수 있게 View
+        -- setup HTML은 방금 게시한 gameSetupView를 재읽을 수 있게 View
         -- write-read 검증이 끝난 뒤에만 로드해야 한다.
-        local ui, loadUiErrors = loadSetupUi()
+        local ui, loadUiErrors = loadSetupUi(state.phase)
         if loadUiErrors then return failure(loadUiErrors) end
         local uiErrors = writeChatVarVerified(UI_NAME, ui, "$.chatVar.ui")
         if uiErrors then return failure(uiErrors) end
@@ -636,6 +703,154 @@
             stale = stale,
             state = returnState,
             view = returnView,
+        })
+    end
+
+    local function validateTransitionResult(report, previousState, moduleAction)
+        if type(report) ~= "table"
+            or type(report.state) ~= "table"
+            or type(report.applied) ~= "boolean"
+            or type(report.stale) ~= "boolean" then
+            return nil, {
+                makeError(
+                    "invalid_transition_result",
+                    "$.runtime.gameSetup." .. tostring(moduleAction),
+                    "설정 전이 결과에 state/applied/stale가 올바르게 포함되지 않았습니다."
+                ),
+            }
+        end
+        if report.stale == true and report.applied ~= false then
+            return nil, {
+                makeError(
+                    "invalid_stale_result",
+                    "$.runtime.gameSetup." .. tostring(moduleAction),
+                    "stale 설정 전이는 적용 상태일 수 없습니다."
+                ),
+            }
+        end
+        if report.stale == true and not deepEqual(report.state, previousState) then
+            return nil, {
+                makeError(
+                    "stale_state_changed",
+                    "$.runtime.gameSetup." .. tostring(moduleAction) .. ".state",
+                    "stale 설정 전이가 권위 상태를 변경했습니다."
+                ),
+            }
+        end
+        return report, nil
+    end
+
+    local function advanceDeckComplete(state, staticData)
+        if state.phase ~= "deckComplete" then
+            return state, false, nil
+        end
+        local advanced, advanceErrors = callModule(
+            "gameSetup",
+            "beginCharacterSelect",
+            state,
+            staticData
+        )
+        if advanceErrors then return nil, false, advanceErrors end
+        local checked, checkedErrors = validateTransitionResult(
+            advanced,
+            state,
+            "beginCharacterSelect"
+        )
+        if checkedErrors then return nil, false, checkedErrors end
+        if checked.applied ~= true
+            or checked.stale ~= false
+            or checked.state.phase ~= "characterSelect" then
+            return nil, false, {
+                makeError(
+                    "invalid_character_select_transition",
+                    "$.runtime.gameSetup.beginCharacterSelect",
+                    "deckComplete는 적용된 characterSelect 상태로 정확히 한 번 전환되어야 합니다."
+                ),
+            }
+        end
+        return checked.state, true, nil
+    end
+
+    local function handoffBattle(
+        state,
+        writeAuthority,
+        actionName,
+        applied,
+        stale,
+        staticData,
+        expectedAuthority,
+        expectMissing
+    )
+        local target, targetErrors = buildTarget(state, staticData)
+        if targetErrors then return failure(targetErrors) end
+        if target.state.phase ~= "battleReady" then
+            return failure({
+                makeError("setup_not_battle_ready", "$.state.phase", "battleReady 설정만 전투로 인계할 수 있습니다."),
+            })
+        end
+
+        local beginErrors = beginPublish(
+            writeAuthority,
+            expectedAuthority,
+            expectMissing
+        )
+        if beginErrors then return beginErrors end
+        if writeAuthority then
+            local authorityErrors = writeAuthorityVerified(
+                target.state,
+                expectedAuthority,
+                expectMissing
+            )
+            if authorityErrors then return failure(authorityErrors) end
+        end
+
+        -- 저장된 battleReady 복구에서 UI chatVar만 사라졌을 수도 있으므로
+        -- 전투 body를 게시하기 전에 shell을 항상 보장한다.
+        local shellErrors = ensureUiShell()
+        if shellErrors then return failure(shellErrors) end
+
+        local battle, battleErrors = callModule(
+            "battleController",
+            "startFromSetup",
+            target.state
+        )
+        if battleErrors then return failure(battleErrors) end
+        if type(battle.applied) ~= "boolean"
+            or type(battle.reused) ~= "boolean"
+            or type(battle.recovered) ~= "boolean"
+            or battle.applied == battle.reused
+            or battle.battleId ~= target.state.battleSpec.battleId
+            or battle.setupId ~= target.state.setupId
+            or not isSafeInteger(battle.turnNumber, 1)
+            or type(battle.view) ~= "table" then
+            return failure({
+                makeError(
+                    "invalid_battle_handoff_result",
+                    "$.runtime.battleController.startFromSetup",
+                    "전투 인계 결과가 setup identity와 필수 결과 계약을 만족하지 않습니다."
+                ),
+            })
+        end
+
+        local readyErrors = writeChatVarVerified(READY_NAME, "ready", "$.chatVar.gameSetupReady")
+        if readyErrors then return failure(readyErrors) end
+
+        local returnState, stateError = cloneJson(target.state, "$.result.state")
+        if stateError then return failure({ stateError }) end
+        local returnView, viewError = cloneJson(target.view, "$.result.view")
+        if viewError then return failure({ viewError }) end
+        local returnBattle, battleError = cloneJson(battle, "$.result.battle")
+        if battleError then return failure({ battleError }) end
+        local returnBattleView, battleViewError = cloneJson(battle.view, "$.result.battleView")
+        if battleViewError then return failure({ battleViewError }) end
+        return success({
+            action = actionName,
+            applied = applied,
+            stale = stale,
+            state = returnState,
+            view = returnView,
+            battle = returnBattle,
+            battleView = returnBattleView,
         })
     end
 
@@ -663,6 +878,29 @@
             end
             return { cardId = cardId, interactionToken = interactionToken }, nil
         end
+        if action == "chooseCharacter" then
+            if argumentCount ~= 2 then
+                return nil, {
+                    makeError(
+                        "invalid_argument_count",
+                        "$.arguments",
+                        "chooseCharacter 작업에는 characterId와 interactionToken이 필요합니다."
+                    ),
+                }
+            end
+            local characterId = arguments[1]
+            local interactionToken = arguments[2]
+            if type(characterId) ~= "string" or type(interactionToken) ~= "string" then
+                return nil, {
+                    makeError(
+                        "invalid_choose_character_arguments",
+                        "$.arguments",
+                        "characterId와 interactionToken은 문자열이어야 합니다."
+                    ),
+                }
+            end
+            return { characterId = characterId, interactionToken = interactionToken }, nil
+        end
         return nil, {
             makeError("unknown_action", "$.action", "지원하지 않는 게임 설정 컨트롤러 작업입니다: " .. tostring(action)),
         }
@@ -678,9 +916,12 @@
         if action == "start" then
             local stored, readErrors = readAuthority(false)
             if readErrors then return failure(readErrors) end
+            local expectedAuthority = stored
+            local expectMissing = stored == nil
             local state
             local writeAuthority = false
             local applied = false
+            local publishBegun = false
             if stored ~= nil then
                 local validated, validationErrors = callModule("gameSetup", "validate", stored, staticData)
                 if validationErrors then return failure(validationErrors) end
@@ -691,8 +932,9 @@
                 end
                 state = validated.state
             else
-                local beginErrors = beginPublish(true)
+                local beginErrors = beginPublish(true, expectedAuthority, expectMissing)
                 if beginErrors then return beginErrors end
+                publishBegun = true
 
                 local seed, seedErrors = generateSetupSeed()
                 if seedErrors then return failure(seedErrors) end
@@ -714,46 +956,101 @@
                 applied = true
             end
 
-            if not writeAuthority then
-                local beginErrors = beginPublish(false)
+            local advancedState, advanced, advanceErrors = advanceDeckComplete(state, staticData)
+            if advanceErrors then return failure(advanceErrors) end
+            state = advancedState
+            if advanced then
+                writeAuthority = true
+                applied = true
+            end
+
+            if state.phase == "battleReady" then
+                return handoffBattle(
+                    state,
+                    writeAuthority,
+                    "start",
+                    applied,
+                    false,
+                    staticData,
+                    expectedAuthority,
+                    expectMissing
+                )
+            end
+            if not publishBegun then
+                local beginErrors = beginPublish(
+                    writeAuthority,
+                    expectedAuthority,
+                    expectMissing
+                )
                 if beginErrors then return beginErrors end
             end
-            return publishState(state, writeAuthority, "start", applied, false, staticData)
+            return publishState(
+                state,
+                writeAuthority,
+                "start",
+                applied,
+                false,
+                staticData,
+                expectedAuthority,
+                expectMissing
+            )
         end
 
         local stored, readErrors = readAuthority(true)
         if readErrors then return failure(readErrors) end
-        -- choose가 저장소에서 읽은 authority를 처음부터 한 번
-        -- 재생 검증하고, 검증된 RNG cursor에서 다음 offer만 생성한다.
-        local chosen, chooseErrors = callModule("gameSetup", "choose", stored, command, staticData)
-        if chooseErrors then return failure(chooseErrors) end
-        if type(chosen.state) ~= "table"
-            or type(chosen.applied) ~= "boolean"
-            or type(chosen.stale) ~= "boolean" then
-            return failure({
-                makeError("invalid_choose_result", "$.runtime.gameSetup", "카드 선택 결과에 state/applied/stale가 올바르게 포함되지 않았습니다."),
-            })
+        local moduleAction = action == "chooseCharacter" and "chooseCharacter" or "choose"
+        -- 저장소에서 읽은 authority를 gameSetup이 처음부터 재생 검증한 뒤
+        -- 현재 카드 또는 캐릭터 interaction token만 적용한다.
+        local transitioned, transitionErrors = callModule(
+            "gameSetup",
+            moduleAction,
+            stored,
+            command,
+            staticData
+        )
+        if transitionErrors then return failure(transitionErrors) end
+        local checked, checkedErrors = validateTransitionResult(
+            transitioned,
+            stored,
+            moduleAction
+        )
+        if checkedErrors then return failure(checkedErrors) end
+
+        local state = checked.state
+        local applied = checked.applied
+        local stale = checked.stale
+        local advancedState, advanced, advanceErrors = advanceDeckComplete(state, staticData)
+        if advanceErrors then return failure(advanceErrors) end
+        if advanced then
+            state = advancedState
+            applied = true
+            stale = false
         end
-        if chosen.stale == true and chosen.applied ~= false then
-            return failure({
-                makeError("invalid_stale_result", "$.runtime.gameSetup", "stale 선택 결과는 적용 상태일 수 없습니다."),
-            })
+
+        local writeAuthority = applied == true
+        if state.phase == "battleReady" then
+            return handoffBattle(
+                state,
+                writeAuthority,
+                action,
+                applied,
+                stale,
+                staticData,
+                stored,
+                false
+            )
         end
-        if chosen.stale == true and not deepEqual(chosen.state, stored) then
-            return failure({
-                makeError("stale_state_changed", "$.runtime.gameSetup.state", "stale 선택이 권위 상태를 변경했습니다."),
-            })
-        end
-        local writeAuthority = chosen.applied == true
-        local beginErrors = beginPublish(writeAuthority)
+        local beginErrors = beginPublish(writeAuthority, stored, false)
         if beginErrors then return beginErrors end
         return publishState(
-            chosen.state,
+            state,
             writeAuthority,
-            "choose",
-            chosen.applied,
-            chosen.stale,
-            staticData
+            action,
+            applied,
+            stale,
+            staticData,
+            stored,
+            false
         )
     end
 

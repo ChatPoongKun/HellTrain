@@ -2,6 +2,7 @@
     local SCHEMA_VERSION = 1
     local ACTIVE_REQUEST_SCHEMA_VERSION = 2
     local VIEW_NAME = "battleView"
+    local UI_BODY_NAME = "🔯🔯🔯"
     local SAY_NOTHING = "*says nothing*"
     local CHAT_FINGERPRINT_ALGORITHM = "canonical_poly131_137_chat_v1"
 
@@ -1224,6 +1225,48 @@
                 makeError("view_write_not_persisted", "$.chatVar.battleView", "게시 뒤 읽은 battleView가 인코딩 결과와 다릅니다."),
             }
         end
+
+        -- getLoreBooks/loadLores는 HTML을 반환하기 전에 CBS를 평가한다.
+        -- 따라서 battleui.html은 방금 쓴 battleView wire를 재읽어 확인한
+        -- 뒤에만 로드해야 현재 턴의 View로 렌더링된다.
+        if type(loadLores) ~= "function" then
+            return nil, {
+                makeError("lore_loader_unavailable", "$.host.loadLores", "전투 UI 로어북을 읽을 loadLores 함수를 찾을 수 없습니다."),
+            }
+        end
+        local loadOk, battleUi = pcall(loadLores, triggerId, "battleui.html")
+        if not loadOk then
+            return nil, {
+                makeError("lore_load_failed", "$.lore.battleui", "battleui.html을 읽지 못했습니다: " .. tostring(battleUi)),
+            }
+        end
+        if type(battleUi) ~= "string" or battleUi == "" then
+            return nil, {
+                makeError("missing_lore", "$.lore.battleui", "battleui.html 로어북 내용이 없습니다."),
+            }
+        end
+        if type(setChatVar) ~= "function" or type(getChatVar) ~= "function" then
+            return nil, {
+                makeError("ui_write_unavailable", "$.host.setChatVar", "전투 UI를 게시할 setChatVar/getChatVar 함수를 찾을 수 없습니다."),
+            }
+        end
+        local uiWriteOk, uiWriteError = pcall(setChatVar, triggerId, UI_BODY_NAME, battleUi)
+        if not uiWriteOk then
+            return nil, {
+                makeError("ui_write_failed", "$.chatVar.battleUi", "전투 UI 쓰기에 실패했습니다: " .. tostring(uiWriteError)),
+            }
+        end
+        local uiReadOk, storedUi = pcall(getChatVar, triggerId, UI_BODY_NAME)
+        if not uiReadOk then
+            return nil, {
+                makeError("ui_verify_read_failed", "$.chatVar.battleUi", "쓰기 뒤 전투 UI를 읽지 못했습니다: " .. tostring(storedUi)),
+            }
+        end
+        if storedUi ~= battleUi then
+            return nil, {
+                makeError("ui_write_not_persisted", "$.chatVar.battleUi", "쓰기 뒤 읽은 전투 UI가 로드한 battleui.html과 다릅니다."),
+            }
+        end
         if suppressRefresh ~= true then
             local uiRefresh = type(refreshGameUi) == "function" and refreshGameUi or reloadDisplay
             if type(uiRefresh) ~= "function" then
@@ -1243,7 +1286,308 @@
             view = built.view,
             wireFormat = published.wireFormat,
             bytes = published.bytes,
+            ui = battleUi,
         }, nil
+    end
+
+    local function validateBattleReadySetup(setupState, staticData)
+        local setupCopy, setupCopyError = cloneJson(setupState, "$.setupState")
+        if setupCopyError then
+            return nil, nil, { setupCopyError }
+        end
+        local validated, validationErrors = callModule(
+            "gameSetup",
+            "validate",
+            setupCopy,
+            staticData
+        )
+        if validationErrors then
+            return nil, nil, validationErrors
+        end
+        if type(validated.state) ~= "table" or getmetatable(validated.state) ~= nil then
+            return nil, nil, {
+                makeError("missing_validated_setup", "$.runtime.gameSetup.state", "gameSetup.validate가 정규 설정 상태를 반환하지 않았습니다."),
+            }
+        end
+        if not deepEqual(setupCopy, validated.state) then
+            return nil, nil, {
+                makeError("setup_validation_mismatch", "$.setupState", "설정 상태가 gameSetup.validate의 정규 상태와 정확히 일치하지 않습니다."),
+            }
+        end
+        if validated.state.phase ~= "battleReady" then
+            return nil, nil, {
+                makeError("setup_not_battle_ready", "$.setupState.phase", "캐릭터 선택까지 끝난 battleReady 설정만 전투를 시작할 수 있습니다."),
+            }
+        end
+
+        local battleSpec = validated.state.battleSpec
+        if type(battleSpec) ~= "table" or getmetatable(battleSpec) ~= nil then
+            return nil, nil, {
+                makeError("missing_battle_spec", "$.setupState.battleSpec", "battleReady 설정에 전투 사양이 없습니다."),
+            }
+        end
+        local playerCardIds, deckCopyError = cloneJson(
+            validated.state.selectedCardIds,
+            "$.setupState.selectedCardIds"
+        )
+        if deckCopyError then
+            return nil, nil, { deckCopyError }
+        end
+        local normalizedSetup, normalizedError = cloneJson(validated.state, "$.setupState")
+        if normalizedError then
+            return nil, nil, { normalizedError }
+        end
+        return normalizedSetup, {
+            battleId = battleSpec.battleId,
+            seed = battleSpec.seed,
+            playerCardIds = playerCardIds,
+            characterId = validated.state.selectedCharacterId,
+            environmentId = battleSpec.environmentId,
+            turnLimit = battleSpec.turnLimit,
+        }, nil
+    end
+
+    local function buildInitialBattleFromSetup(spec, staticData)
+        local bootstrap, bootstrapErrors = callModule(
+            "battleBootstrap",
+            "fromSetup",
+            spec,
+            staticData
+        )
+        if bootstrapErrors then
+            return nil, bootstrapErrors
+        end
+        if bootstrap.referencesValidated ~= true or type(bootstrap.state) ~= "table" then
+            return nil, {
+                makeError("invalid_setup_bootstrap_result", "$.runtime.battleBootstrap", "fromSetup이 검증된 battleState를 반환하지 않았습니다."),
+            }
+        end
+        local turnId, turnIdErrors = makeTurnId(bootstrap.state)
+        if turnIdErrors then
+            return nil, turnIdErrors
+        end
+        local initialized, initializeErrors = callModule(
+            "turnInitializer",
+            "prepareTurn",
+            bootstrap.state,
+            staticData,
+            { turnId = turnId }
+        )
+        if initializeErrors then
+            return nil, initializeErrors
+        end
+        if type(initialized.state) ~= "table" or type(initialized.draft) ~= "table" then
+            return nil, {
+                makeError("invalid_initial_turn", "$.runtime.turnInitializer", "setup 전투의 첫 턴 상태와 draft가 없습니다."),
+            }
+        end
+        if initialized.state.battleId ~= spec.battleId then
+            return nil, {
+                makeError("initialized_battle_id_mismatch", "$.runtime.turnInitializer.state.battleId", "첫 턴 상태의 battleId가 설정 사양과 다릅니다."),
+            }
+        end
+        return {
+            authority = initialized.state,
+            draft = initialized.draft,
+            pending = nil,
+            lastCommittedPending = nil,
+            activeRequest = nil,
+            turnId = turnId,
+        }, nil
+    end
+
+    local function readRuntimeBundle()
+        local values = {}
+        for _, name in ipairs({
+            "authority",
+            "draft",
+            "pending",
+            "lastCommittedPending",
+            "activeRequest",
+        }) do
+            local value, errors = readStored(KEYS[name], false)
+            if errors then
+                return nil, errors
+            end
+            values[name] = value
+        end
+        return values, nil
+    end
+
+    local function writeInitialRuntime(expected)
+        for _, name in ipairs({
+            "authority",
+            "draft",
+            "pending",
+            "lastCommittedPending",
+            "activeRequest",
+        }) do
+            local writeErrors = writeStored(KEYS[name], expected[name])
+            if writeErrors then
+                return writeErrors
+            end
+        end
+        return nil
+    end
+
+    local function validateExistingSetupBinding(authority, spec)
+        local errors = {}
+        local function conflict(path, message)
+            errors[#errors + 1] = makeError("battle_setup_conflict", path, message)
+        end
+
+        if type(authority.rng) ~= "table" or authority.rng.seed ~= spec.seed then
+            conflict("$.state.authority.rng.seed", "기존 전투의 RNG seed가 setup 전투 사양과 다릅니다.")
+        end
+        if authority.environmentId ~= spec.environmentId then
+            conflict("$.state.authority.environmentId", "기존 전투의 환경이 setup 전투 사양과 다릅니다.")
+        end
+        if authority.turnLimit ~= spec.turnLimit then
+            conflict("$.state.authority.turnLimit", "기존 전투의 턴 제한이 setup 전투 사양과 다릅니다.")
+        end
+        if type(authority.character) ~= "table"
+            or authority.character.characterId ~= spec.characterId then
+            conflict("$.state.authority.character.characterId", "기존 전투의 캐릭터가 setup 선택 결과와 다릅니다.")
+        end
+
+        local initialPlayerCards = {}
+        for _, instance in ipairs(type(authority.cardInstances) == "table" and authority.cardInstances or {}) do
+            if type(instance) == "table" and type(instance.instanceId) == "string" then
+                local rawIndex = string.match(instance.instanceId, "^player%-(%d%d%d)$")
+                local index = rawIndex ~= nil and tonumber(rawIndex) or nil
+                if index ~= nil and index >= 1 and index <= #spec.playerCardIds then
+                    if initialPlayerCards[index] ~= nil then
+                        conflict(
+                            "$.state.authority.cardInstances",
+                            "기존 전투에 같은 초기 플레이어 instanceId가 중복되었습니다."
+                        )
+                    else
+                        initialPlayerCards[index] = {
+                            cardId = instance.cardId,
+                            owner = instance.owner,
+                        }
+                    end
+                end
+            end
+        end
+        for index, expectedCardId in ipairs(spec.playerCardIds) do
+            local actual = initialPlayerCards[index]
+            local instanceId = string.format("player-%03d", index)
+            if type(actual) ~= "table"
+                or actual.owner ~= "player"
+                or actual.cardId ~= expectedCardId then
+                conflict(
+                    "$.state.authority.cardInstances[" .. string.format("%q", instanceId) .. "]",
+                    "기존 전투의 초기 플레이어 덱이 setup에서 선택한 카드 순서와 다릅니다."
+                )
+            end
+        end
+
+        if #errors > 0 then
+            return errors
+        end
+        return nil
+    end
+
+    local function startFromSetup(setupState)
+        local staticData, staticErrors = loadStaticData()
+        if staticErrors then
+            return failure(staticErrors)
+        end
+        local canonicalSetup, spec, setupErrors = validateBattleReadySetup(setupState, staticData)
+        if setupErrors then
+            return failure(setupErrors)
+        end
+
+        local current, currentErrors = readRuntimeBundle()
+        if currentErrors then
+            return failure(currentErrors)
+        end
+        if current.authority ~= nil then
+            if type(current.authority) ~= "table"
+                or current.authority.battleId ~= spec.battleId then
+                return failure({
+                    makeError(
+                        "battle_runtime_conflict",
+                        "$.state.authority.battleId",
+                        "다른 전투의 권위 상태가 있어 setup 전투로 덮어쓸 수 없습니다."
+                    ),
+                })
+            end
+            local bindingErrors = validateExistingSetupBinding(current.authority, spec)
+            if bindingErrors then
+                return failure(bindingErrors)
+            end
+
+            -- 정상적인 같은 전투는 첫 턴 중이라도 draft 선택, pending,
+            -- generation binding이 진행됐을 수 있다. 이 상태를 다시 만들지
+            -- 않고 현재 권위 경계에서 View/UI만 재게시한다.
+            local looksLikeInitialPartial = current.authority.status == "active"
+                and current.draft == nil
+                and current.pending == nil
+                and current.lastCommittedPending == nil
+                and current.activeRequest == nil
+            if not looksLikeInitialPartial then
+                local published, publishErrors = publishCurrentViewInternal(staticData, true)
+                if publishErrors then
+                    return failure(publishErrors)
+                end
+                return success({
+                    applied = false,
+                    reused = true,
+                    recovered = false,
+                    battleId = current.authority.battleId,
+                    turnNumber = current.authority.turnNumber,
+                    setupId = canonicalSetup.setupId,
+                    view = published.view,
+                })
+            end
+        end
+
+        -- 새 시작, 또는 authority까지만 저장된 안전한 부분 write를 같은
+        -- 결정적 초기 상태와 exact 비교한 뒤에만 완성한다.
+        local expected, expectedErrors = buildInitialBattleFromSetup(spec, staticData)
+        if expectedErrors then
+            return failure(expectedErrors)
+        end
+        for _, name in ipairs({
+            "authority",
+            "draft",
+            "pending",
+            "lastCommittedPending",
+            "activeRequest",
+        }) do
+            local existing = current[name]
+            if existing ~= nil and not deepEqual(existing, expected[name]) then
+                return failure({
+                    makeError(
+                        "unsafe_partial_battle_runtime",
+                        "$.state[" .. string.format("%q", KEYS[name]) .. "]",
+                        "기존 부분 전투 상태가 setup에서 재생한 초기 상태와 일치하지 않아 복구할 수 없습니다."
+                    ),
+                })
+            end
+        end
+
+        local recovered = current.authority ~= nil or current.draft ~= nil
+        local writeErrors = writeInitialRuntime(expected)
+        if writeErrors then
+            return failure(writeErrors)
+        end
+        local published, publishErrors = publishCurrentViewInternal(staticData, true)
+        if publishErrors then
+            return failure(publishErrors)
+        end
+        return success({
+            applied = true,
+            reused = false,
+            recovered = recovered,
+            battleId = expected.authority.battleId,
+            turnId = expected.turnId,
+            turnNumber = expected.authority.turnNumber,
+            setupId = canonicalSetup.setupId,
+            view = published.view,
+        })
     end
 
     local function startVerticalSlice(battleId, seed)
@@ -2340,6 +2684,8 @@
     local arguments = { ... }
     if action == "startVerticalSlice" then
         return startVerticalSlice(arguments[1], arguments[2])
+    elseif action == "startFromSetup" then
+        return startFromSetup(arguments[1])
     elseif action == "clickCard" then
         return clickCard(arguments[1], arguments[2])
     elseif action == "registerCard" then

@@ -2,6 +2,7 @@
     local SCHEMA_VERSION = 1
     local TOTAL_ROUNDS = 10
     local OFFER_SIZE = 3
+    local CHARACTER_OFFER_SIZE = 3
     local COPY_LIMIT = 2
 
     local function addError(errors, code, path, message)
@@ -272,6 +273,123 @@
         }
     end
 
+    local function buildAppearanceSummary(profile, path, errors)
+        if type(profile) ~= "table" or type(profile.appearance) ~= "table" then
+            addError(errors, "missing_public_appearance", path, "공개 외형 정보를 찾을 수 없습니다.")
+            return nil
+        end
+
+        local appearance = profile.appearance
+        local parts = {}
+        local function appendText(value, suffix)
+            if type(value) == "string" and value ~= "" then
+                parts[#parts + 1] = value .. (suffix or "")
+            end
+        end
+        local function appendNumber(value, suffix)
+            if isFinite(value) then
+                parts[#parts + 1] = tostring(value) .. suffix
+            end
+        end
+
+        appendText(appearance.hairColor, " 머리")
+        appendText(appearance.eyeColor, " 눈")
+        appendText(appearance.skin)
+        appendNumber(appearance.height, "cm")
+        appendNumber(appearance.weight, "kg")
+        appendText(appearance.threeSize, "")
+        appendText(appearance.style)
+
+        if #parts == 0 then
+            addError(errors, "empty_public_appearance", path, "표시할 수 있는 공개 외형 요약이 없습니다.")
+            return nil
+        end
+        return table.concat(parts, " · ")
+    end
+
+    local function buildCharacterOfferItem(slot, characterId, data, errors)
+        local path = "$.characterOffer.characters[" .. slot .. "]"
+        local character = data.characters[characterId]
+        if type(character) ~= "table" or character.id ~= characterId then
+            addError(errors, "missing_character", path .. ".characterId", "제안된 캐릭터를 찾을 수 없습니다: " .. tostring(characterId))
+            return nil
+        end
+        if type(character.name) ~= "string" or character.name == "" then
+            addError(errors, "invalid_character_name", path .. ".name", "캐릭터 이름이 필요합니다.")
+            return nil
+        end
+
+        local profile = character.publicProfile
+        if type(profile) ~= "table" then
+            addError(errors, "missing_public_profile", path, "캐릭터 공개 프로필을 찾을 수 없습니다.")
+            return nil
+        end
+        if not isInteger(profile.age, 1) then
+            addError(errors, "invalid_character_age", path .. ".age", "공개 나이는 1 이상의 정수여야 합니다.")
+        end
+        if type(profile.occupation) ~= "string" or profile.occupation == "" then
+            addError(errors, "invalid_character_occupation", path .. ".occupation", "공개 직업이 필요합니다.")
+        end
+        local appearanceSummary = buildAppearanceSummary(profile, path .. ".appearanceSummary", errors)
+
+        local battle = character.battle
+        if type(battle) ~= "table" then
+            addError(errors, "missing_character_battle", path, "캐릭터 전투 정보를 찾을 수 없습니다.")
+            return nil
+        end
+        local mood = type(data.registry.moods) == "table" and data.registry.moods[battle.startingMood] or nil
+        if type(mood) ~= "table"
+            or mood.id ~= battle.startingMood
+            or type(mood.label) ~= "string"
+            or mood.label == "" then
+            addError(errors, "missing_starting_mood", path .. ".startingMood", "공개 시작 무드를 찾을 수 없습니다.")
+            return nil
+        end
+
+        local traits = {}
+        if type(battle.traitIds) ~= "table" then
+            addError(errors, "invalid_character_traits", path .. ".traits", "캐릭터 특징 목록을 찾을 수 없습니다.")
+        else
+            for index, traitId in ipairs(battle.traitIds) do
+                local trait = data.traits[traitId]
+                local traitPath = path .. ".traits[" .. index .. "]"
+                if type(trait) ~= "table"
+                    or trait.id ~= traitId
+                    or trait.owner ~= "character"
+                    or trait.visibility ~= "public"
+                    or type(trait.name) ~= "string"
+                    or trait.name == ""
+                    or type(trait.description) ~= "string"
+                    or trait.description == "" then
+                    addError(errors, "invalid_public_trait", traitPath, "공개 캐릭터 특징을 표시할 수 없습니다.")
+                else
+                    traits[#traits + 1] = {
+                        id = trait.id,
+                        name = trait.name,
+                        description = trait.description,
+                    }
+                end
+            end
+        end
+
+        return {
+            slot = slot,
+            characterId = character.id,
+            name = character.name,
+            age = profile.age,
+            occupation = profile.occupation,
+            appearanceSummary = appearanceSummary,
+            startingResistance = battle.startingResistance,
+            startingMood = {
+                id = mood.id,
+                label = mood.label,
+            },
+            baseDrawCount = battle.baseDrawCount,
+            maxHandSize = battle.maxHandSize,
+            traits = traits,
+        }
+    end
+
     local function validateTagView(value, path, errors, expectedTagKind)
         if type(value) ~= "table" then
             addError(errors, "invalid_tag_view", path, "태그 View가 테이블이 아닙니다.")
@@ -411,6 +529,108 @@
         end
     end
 
+    local function validateCharacterTrait(trait, path, seenTraits, errors)
+        if type(trait) ~= "table" then
+            addError(errors, "invalid_character_trait", path, "캐릭터 특징이 테이블이 아닙니다.")
+            return
+        end
+        checkAllowedKeys(trait, {
+            id = true,
+            name = true,
+            description = true,
+        }, path, errors)
+        if not isAsciiId(trait.id) then
+            addError(errors, "invalid_trait_id", path .. ".id", "특징 ID가 올바르지 않습니다.")
+        elseif seenTraits[trait.id] then
+            addError(errors, "duplicate_trait", path .. ".id", "같은 특징을 중복 표시할 수 없습니다.")
+        else
+            seenTraits[trait.id] = true
+        end
+        if type(trait.name) ~= "string" or trait.name == "" then
+            addError(errors, "invalid_trait_name", path .. ".name", "특징 이름이 필요합니다.")
+        end
+        if type(trait.description) ~= "string" or trait.description == "" then
+            addError(errors, "invalid_trait_description", path .. ".description", "특징 설명이 필요합니다.")
+        end
+    end
+
+    local function validateCharacterOfferItem(character, path, expectedSlot, seenCharacters, errors)
+        if type(character) ~= "table" then
+            addError(errors, "invalid_character_offer", path, "캐릭터 제안이 테이블이 아닙니다.")
+            return
+        end
+        checkAllowedKeys(character, {
+            slot = true,
+            characterId = true,
+            name = true,
+            age = true,
+            occupation = true,
+            appearanceSummary = true,
+            startingResistance = true,
+            startingMood = true,
+            baseDrawCount = true,
+            maxHandSize = true,
+            traits = true,
+        }, path, errors)
+        if character.slot ~= expectedSlot then
+            addError(errors, "invalid_character_slot", path .. ".slot", "캐릭터 슬롯은 배열 순서와 같아야 합니다.")
+        end
+        if not isAsciiId(character.characterId) then
+            addError(errors, "invalid_character_id", path .. ".characterId", "캐릭터 ID가 올바르지 않습니다.")
+        elseif seenCharacters[character.characterId] then
+            addError(errors, "duplicate_offer_character", path .. ".characterId", "같은 캐릭터가 한 제안에 중복되었습니다.")
+        else
+            seenCharacters[character.characterId] = true
+        end
+        if type(character.name) ~= "string" or character.name == "" then
+            addError(errors, "invalid_character_name", path .. ".name", "캐릭터 이름이 필요합니다.")
+        end
+        if not isInteger(character.age, 1) then
+            addError(errors, "invalid_character_age", path .. ".age", "캐릭터 나이는 1 이상의 정수여야 합니다.")
+        end
+        if type(character.occupation) ~= "string" or character.occupation == "" then
+            addError(errors, "invalid_character_occupation", path .. ".occupation", "캐릭터 직업이 필요합니다.")
+        end
+        if type(character.appearanceSummary) ~= "string" or character.appearanceSummary == "" then
+            addError(errors, "invalid_appearance_summary", path .. ".appearanceSummary", "공개 외형 요약이 필요합니다.")
+        end
+        if not isFinite(character.startingResistance) or character.startingResistance <= 0 then
+            addError(errors, "invalid_starting_resistance", path .. ".startingResistance", "시작 저항은 양수의 유한한 숫자여야 합니다.")
+        end
+        if type(character.startingMood) ~= "table" then
+            addError(errors, "invalid_starting_mood", path .. ".startingMood", "시작 무드가 테이블이 아닙니다.")
+        else
+            checkAllowedKeys(character.startingMood, { id = true, label = true }, path .. ".startingMood", errors)
+            if not isAsciiId(character.startingMood.id) then
+                addError(errors, "invalid_mood_id", path .. ".startingMood.id", "시작 무드 ID가 올바르지 않습니다.")
+            end
+            if type(character.startingMood.label) ~= "string" or character.startingMood.label == "" then
+                addError(errors, "invalid_mood_label", path .. ".startingMood.label", "시작 무드 표시명이 필요합니다.")
+            end
+        end
+        if not isInteger(character.baseDrawCount, 1) then
+            addError(errors, "invalid_base_draw_count", path .. ".baseDrawCount", "기본 드로우 수는 1 이상의 정수여야 합니다.")
+        end
+        if not isInteger(character.maxHandSize, 1) then
+            addError(errors, "invalid_max_hand_size", path .. ".maxHandSize", "최대 손패는 1 이상의 정수여야 합니다.")
+        elseif isInteger(character.baseDrawCount, 1) and character.baseDrawCount > character.maxHandSize then
+            addError(errors, "draw_exceeds_hand_limit", path .. ".baseDrawCount", "기본 드로우 수는 최대 손패보다 클 수 없습니다.")
+        end
+
+        local traitCount = getArrayLength(character.traits, path .. ".traits", errors)
+        if traitCount ~= nil then
+            local seenTraits = {}
+            for index = 1, traitCount do
+                validateCharacterTrait(
+                    character.traits[index],
+                    path .. ".traits[" .. index .. "]",
+                    seenTraits,
+                    errors
+                )
+            end
+        end
+    end
+
     local function validateGameSetupView(view)
         local errors = {}
         validateJsonSafe(view, "$", errors)
@@ -435,6 +655,8 @@
             progress = true,
             deck = true,
             offer = true,
+            characterOffer = true,
+            selectedCharacter = true,
         }, "$", errors)
         if view.schemaVersion ~= SCHEMA_VERSION then
             addError(errors, "unsupported_schema", "$.schemaVersion", "지원하지 않는 gameSetupView 스키마입니다.")
@@ -442,12 +664,15 @@
         if view.kind ~= "gameSetupView" then
             addError(errors, "unexpected_kind", "$.kind", "View 종류가 gameSetupView가 아닙니다.")
         end
-        if view.phase ~= "deckDraft" and view.phase ~= "deckComplete" then
-            addError(errors, "invalid_phase", "$.phase", "초기 덱 구성 단계가 올바르지 않습니다.")
+        if view.phase ~= "deckDraft"
+            and view.phase ~= "deckComplete"
+            and view.phase ~= "characterSelect"
+            and view.phase ~= "battleReady" then
+            addError(errors, "invalid_phase", "$.phase", "게임 준비 단계가 올바르지 않습니다.")
         end
         if type(view.locked) ~= "boolean" then
             addError(errors, "invalid_locked", "$.locked", "locked는 불리언이어야 합니다.")
-        elseif (view.phase == "deckComplete") ~= view.locked then
+        elseif (view.phase == "deckComplete" or view.phase == "battleReady") ~= view.locked then
             addError(errors, "locked_phase_mismatch", "$.locked", "완료 단계와 잠금 상태가 일치하지 않습니다.")
         end
 
@@ -468,7 +693,7 @@
             if view.progress.totalRounds ~= TOTAL_ROUNDS then
                 addError(errors, "invalid_total_rounds", "$.progress.totalRounds", "초기 덱 드래프트는 10회여야 합니다.")
             end
-            local expectedRound = view.phase == "deckComplete"
+            local expectedRound = view.phase ~= "deckDraft"
                 and TOTAL_ROUNDS
                 or (isInteger(selectedCount, 0, TOTAL_ROUNDS - 1) and selectedCount + 1 or nil)
             if expectedRound == nil or view.progress.currentRound ~= expectedRound then
@@ -482,8 +707,8 @@
             end
             if view.phase == "deckDraft" and selectedCount == TOTAL_ROUNDS then
                 addError(errors, "draft_count_mismatch", "$.progress.selectedCount", "진행 중인 드래프트는 아직 10장을 선택할 수 없습니다.")
-            elseif view.phase == "deckComplete" and selectedCount ~= TOTAL_ROUNDS then
-                addError(errors, "complete_count_mismatch", "$.progress.selectedCount", "완료된 드래프트는 정확히 10장을 선택해야 합니다.")
+            elseif view.phase ~= "deckDraft" and selectedCount ~= TOTAL_ROUNDS then
+                addError(errors, "complete_count_mismatch", "$.progress.selectedCount", "캐릭터 선택 이후에는 초기 덱이 정확히 10장이어야 합니다.")
             end
         end
 
@@ -560,7 +785,53 @@
                 end
             end
         elseif view.offer ~= nil then
-            addError(errors, "unexpected_offer", "$.offer", "완료된 드래프트에는 카드 제안이 없어야 합니다.")
+            addError(errors, "unexpected_offer", "$.offer", "카드 드래프트 이후에는 카드 제안이 없어야 합니다.")
+        end
+
+        if view.phase == "characterSelect" then
+            if type(view.characterOffer) ~= "table" then
+                addError(errors, "missing_character_offer", "$.characterOffer", "캐릭터 선택 단계에는 세 명의 제안이 필요합니다.")
+            else
+                checkAllowedKeys(view.characterOffer, { interactionToken = true, characters = true }, "$.characterOffer", errors)
+                if type(view.characterOffer.interactionToken) ~= "string"
+                    or view.characterOffer.interactionToken == "" then
+                    addError(errors, "invalid_interaction_token", "$.characterOffer.interactionToken", "캐릭터 선택 상호작용 토큰이 필요합니다.")
+                end
+                local characterCount = getArrayLength(view.characterOffer.characters, "$.characterOffer.characters", errors)
+                if characterCount ~= nil then
+                    if characterCount ~= CHARACTER_OFFER_SIZE then
+                        addError(errors, "invalid_character_offer_size", "$.characterOffer.characters", "캐릭터 제안은 정확히 3명이어야 합니다.")
+                    end
+                    local seenCharacters = {}
+                    for index = 1, characterCount do
+                        validateCharacterOfferItem(
+                            view.characterOffer.characters[index],
+                            "$.characterOffer.characters[" .. index .. "]",
+                            index,
+                            seenCharacters,
+                            errors
+                        )
+                    end
+                end
+            end
+        elseif view.characterOffer ~= nil then
+            addError(errors, "unexpected_character_offer", "$.characterOffer", "캐릭터 선택 단계 밖에는 캐릭터 제안이 없어야 합니다.")
+        end
+
+        if view.phase == "battleReady" then
+            if type(view.selectedCharacter) ~= "table" then
+                addError(errors, "missing_selected_character", "$.selectedCharacter", "전투 준비 상태에는 선택한 캐릭터가 필요합니다.")
+            else
+                checkAllowedKeys(view.selectedCharacter, { characterId = true, name = true }, "$.selectedCharacter", errors)
+                if not isAsciiId(view.selectedCharacter.characterId) then
+                    addError(errors, "invalid_character_id", "$.selectedCharacter.characterId", "선택한 캐릭터 ID가 올바르지 않습니다.")
+                end
+                if type(view.selectedCharacter.name) ~= "string" or view.selectedCharacter.name == "" then
+                    addError(errors, "invalid_character_name", "$.selectedCharacter.name", "선택한 캐릭터 이름이 필요합니다.")
+                end
+            end
+        elseif view.selectedCharacter ~= nil then
+            addError(errors, "unexpected_selected_character", "$.selectedCharacter", "전투 준비 전에는 선택 결과를 표시할 수 없습니다.")
         end
 
         if #errors > 0 then
@@ -595,10 +866,13 @@
         local data = normalizeStaticData(staticData)
         if type(data) ~= "table"
             or type(data.cards) ~= "table"
+            or type(data.characters) ~= "table"
+            or type(data.traits) ~= "table"
             or type(data.registry) ~= "table"
             or type(data.registry.actionTags) ~= "table"
-            or type(data.registry.mechanisms) ~= "table" then
-            addError(errors, "missing_static_data", "$.staticData", "gameSetupView 생성에는 검증된 카드와 태그 데이터가 필요합니다.")
+            or type(data.registry.mechanisms) ~= "table"
+            or type(data.registry.moods) ~= "table" then
+            addError(errors, "missing_static_data", "$.staticData", "gameSetupView 생성에는 검증된 카드·캐릭터·태그·무드 데이터가 필요합니다.")
             return failure(errors)
         end
 
@@ -634,11 +908,11 @@
             schemaVersion = SCHEMA_VERSION,
             kind = "gameSetupView",
             phase = canonicalState.phase,
-            locked = canonicalState.phase == "deckComplete",
+            locked = canonicalState.phase == "deckComplete" or canonicalState.phase == "battleReady",
             progress = {
                 selectedCount = selectedCount,
                 totalRounds = TOTAL_ROUNDS,
-                currentRound = canonicalState.phase == "deckComplete" and TOTAL_ROUNDS or selectedCount + 1,
+                currentRound = canonicalState.phase ~= "deckDraft" and TOTAL_ROUNDS or selectedCount + 1,
                 remainingRounds = TOTAL_ROUNDS - selectedCount,
             },
             deck = {
@@ -660,6 +934,31 @@
                 interactionToken = canonicalState.offer.interactionToken,
                 cards = offerCards,
             }
+        elseif canonicalState.phase == "characterSelect" then
+            local characters = {}
+            for slot, characterId in ipairs(canonicalState.characterOffer.characterIds) do
+                local characterView = buildCharacterOfferItem(slot, characterId, data, errors)
+                if characterView then
+                    characters[#characters + 1] = characterView
+                end
+            end
+            view.characterOffer = {
+                interactionToken = canonicalState.characterOffer.interactionToken,
+                characters = characters,
+            }
+        elseif canonicalState.phase == "battleReady" then
+            local selectedCharacter = data.characters[canonicalState.selectedCharacterId]
+            if type(selectedCharacter) ~= "table"
+                or selectedCharacter.id ~= canonicalState.selectedCharacterId
+                or type(selectedCharacter.name) ~= "string"
+                or selectedCharacter.name == "" then
+                addError(errors, "missing_selected_character", "$.state.selectedCharacterId", "선택한 캐릭터 공개 정보를 찾을 수 없습니다.")
+            else
+                view.selectedCharacter = {
+                    characterId = selectedCharacter.id,
+                    name = selectedCharacter.name,
+                }
+            end
         end
 
         if #errors > 0 then

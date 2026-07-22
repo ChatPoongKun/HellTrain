@@ -1,0 +1,509 @@
+<style>
+.setup-character-select {
+--select-bg: #070a0f;
+--select-panel: rgba(14, 20, 29, 0.96);
+--select-panel-soft: rgba(22, 30, 42, 0.82);
+--select-line: rgba(148, 163, 184, 0.2);
+--select-line-strong: rgba(148, 163, 184, 0.38);
+--select-text: #edf4fb;
+--select-muted: #9baaba;
+--select-cyan: #46d9ef;
+--select-cyan-soft: rgba(70, 217, 239, 0.13);
+--select-rose: #fb7185;
+--select-amber: #f5c451;
+position: relative;
+width: min(100%, 820px);
+margin: 14px auto 0;
+overflow: hidden;
+color: var(--select-text);
+border: 1px solid var(--select-line);
+border-radius: 20px;
+background:
+radial-gradient(circle at 50% -12%, rgba(70, 217, 239, 0.15), transparent 44%),
+linear-gradient(180deg, #111823 0%, var(--select-bg) 100%);
+box-shadow: 0 24px 60px rgba(0, 0, 0, 0.38), inset 0 1px rgba(255, 255, 255, 0.035);
+font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+line-height: 1.5;
+isolation: isolate;
+}
+
+.setup-character-select,
+.setup-character-select * {
+box-sizing: border-box;
+}
+
+.setup-character-select::before {
+position: absolute;
+inset: 0;
+z-index: -1;
+pointer-events: none;
+content: "";
+opacity: 0.25;
+background-image:
+linear-gradient(rgba(255, 255, 255, 0.024) 1px, transparent 1px),
+linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+background-size: 30px 30px;
+mask-image: linear-gradient(to bottom, black, transparent 88%);
+}
+
+.setup-character-select .character-shell {
+padding: clamp(14px, 3.5vw, 26px);
+}
+
+.setup-character-select .character-header {
+display: flex;
+align-items: end;
+justify-content: space-between;
+gap: 18px;
+padding-bottom: 15px;
+border-bottom: 1px solid var(--select-line);
+}
+
+.setup-character-select .character-kicker,
+.setup-character-select .character-stat-label {
+color: var(--select-cyan);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 10px;
+font-weight: 800;
+letter-spacing: 0.11em;
+line-height: 1.25;
+text-transform: uppercase;
+}
+
+.setup-character-select .character-title {
+margin: 4px 0 0;
+color: #fff;
+font-size: clamp(21px, 4.5vw, 31px);
+font-weight: 900;
+letter-spacing: -0.045em;
+line-height: 1.15;
+}
+
+.setup-character-select .character-subtitle {
+margin: 7px 0 0;
+color: var(--select-muted);
+font-size: 12px;
+}
+
+.setup-character-select .character-instruction {
+flex: 0 0 auto;
+max-width: 190px;
+color: var(--select-muted);
+font-size: 10px;
+text-align: right;
+}
+
+.setup-character-select .character-none,
+.setup-character-select .character-choice-state {
+position: absolute;
+width: 1px;
+height: 1px;
+margin: -1px;
+overflow: hidden;
+clip: rect(0 0 0 0);
+clip-path: inset(50%);
+white-space: nowrap;
+}
+
+.setup-character-select .character-grid {
+display: grid;
+grid-template-columns: repeat(3, minmax(0, 1fr));
+gap: 10px;
+margin-top: 16px;
+}
+
+.setup-character-select .character-slot {
+position: relative;
+min-width: 0;
+}
+
+.setup-character-select .character-card {
+display: flex;
+min-height: 250px;
+padding: 14px;
+cursor: pointer;
+border: 1px solid var(--select-line);
+border-radius: 15px;
+background:
+linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 45%),
+var(--select-panel-soft);
+box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
+transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.setup-character-select .character-card-inner {
+display: flex;
+width: 100%;
+min-width: 0;
+flex-direction: column;
+}
+
+.setup-character-select .character-card:hover {
+border-color: var(--select-line-strong);
+transform: translateY(-2px);
+}
+
+.setup-character-select .character-choice-state:focus-visible + .character-card {
+outline: 3px solid rgba(70, 217, 239, 0.48);
+outline-offset: 3px;
+}
+
+.setup-character-select .character-choice-state:checked + .character-card {
+border-color: rgba(70, 217, 239, 0.7);
+background:
+linear-gradient(145deg, rgba(70, 217, 239, 0.12), transparent 48%),
+rgba(16, 27, 38, 0.97);
+box-shadow: 0 0 0 1px rgba(70, 217, 239, 0.14), 0 15px 34px rgba(0, 0, 0, 0.25);
+}
+
+.setup-character-select .character-slot-head {
+display: flex;
+align-items: start;
+justify-content: space-between;
+gap: 10px;
+}
+
+.setup-character-select .character-index {
+display: inline-grid;
+width: 29px;
+height: 29px;
+place-items: center;
+flex: 0 0 auto;
+color: var(--select-cyan);
+border: 1px solid rgba(70, 217, 239, 0.28);
+border-radius: 9px;
+background: var(--select-cyan-soft);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 12px;
+font-weight: 900;
+}
+
+.setup-character-select .character-mood {
+display: inline-flex;
+align-items: center;
+gap: 5px;
+padding: 4px 8px;
+color: #ffd978;
+border: 1px solid rgba(245, 196, 81, 0.28);
+border-radius: 999px;
+background: rgba(245, 196, 81, 0.09);
+font-size: 10px;
+font-weight: 800;
+}
+
+.setup-character-select .character-name {
+margin: 17px 0 0;
+color: #fff;
+font-size: clamp(20px, 3.7vw, 27px);
+font-weight: 900;
+letter-spacing: -0.04em;
+line-height: 1.1;
+overflow-wrap: anywhere;
+}
+
+.setup-character-select .character-meta {
+margin-top: 5px;
+color: var(--select-muted);
+font-size: 11px;
+}
+
+.setup-character-select .character-summary {
+display: -webkit-box;
+margin: 13px 0 0;
+overflow: hidden;
+color: #c8d4df;
+font-size: 11px;
+-webkit-box-orient: vertical;
+-webkit-line-clamp: 3;
+}
+
+.setup-character-select .character-stats {
+display: grid;
+grid-template-columns: repeat(3, minmax(0, 1fr));
+gap: 6px;
+margin-top: auto;
+padding-top: 15px;
+}
+
+.setup-character-select .character-stat {
+min-width: 0;
+padding: 8px 5px;
+border: 1px solid var(--select-line);
+border-radius: 9px;
+background: rgba(2, 6, 12, 0.45);
+text-align: center;
+}
+
+.setup-character-select .character-stat-label {
+display: block;
+color: var(--select-muted);
+font-size: 8px;
+letter-spacing: 0.05em;
+}
+
+.setup-character-select .character-stat strong {
+display: block;
+margin-top: 2px;
+color: #fff;
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 15px;
+}
+
+.setup-character-select .character-details {
+display: grid;
+grid-template-rows: 0fr;
+opacity: 0;
+transition: grid-template-rows 180ms ease, opacity 180ms ease;
+}
+
+.setup-character-select .character-details-inner {
+min-height: 0;
+overflow: hidden;
+}
+
+.setup-character-select .character-choice-state:checked + .character-card .character-details {
+grid-template-rows: 1fr;
+opacity: 1;
+}
+
+.setup-character-select .character-traits {
+display: flex;
+flex-direction: column;
+gap: 6px;
+margin-top: 13px;
+padding-top: 12px;
+border-top: 1px solid var(--select-line);
+}
+
+.setup-character-select .character-trait {
+display: block;
+padding: 8px 9px;
+border: 1px solid rgba(251, 113, 133, 0.2);
+border-radius: 9px;
+background: rgba(251, 113, 133, 0.07);
+}
+
+.setup-character-select .character-trait strong {
+display: block;
+color: #ffd3da;
+font-size: 11px;
+}
+
+.setup-character-select .character-trait span {
+display: block;
+margin-top: 2px;
+color: var(--select-muted);
+font-size: 10px;
+}
+
+.setup-character-select .character-confirm {
+display: none;
+width: 100%;
+margin-top: 8px;
+padding: 11px 12px;
+cursor: pointer;
+color: #031116;
+border: 0;
+border-radius: 11px;
+background: linear-gradient(135deg, #77e8f7, var(--select-cyan));
+box-shadow: 0 9px 22px rgba(70, 217, 239, 0.16);
+font: inherit;
+font-size: 11px;
+font-weight: 900;
+}
+
+.setup-character-select .character-choice-state:checked ~ .character-confirm {
+display: block;
+}
+
+.setup-character-select .character-confirm:hover {
+filter: brightness(1.06);
+}
+
+.setup-character-select .character-confirm:focus-visible {
+outline: 3px solid rgba(70, 217, 239, 0.48);
+outline-offset: 3px;
+}
+
+.setup-character-select .character-complete,
+.setup-character-select .character-fallback {
+padding: clamp(28px, 7vw, 52px) clamp(18px, 5vw, 34px);
+text-align: center;
+}
+
+.setup-character-select .character-complete-mark {
+display: grid;
+width: 58px;
+height: 58px;
+margin: 0 auto 14px;
+place-items: center;
+color: var(--select-cyan);
+border: 1px solid rgba(70, 217, 239, 0.38);
+border-radius: 50%;
+background: var(--select-cyan-soft);
+font-size: 24px;
+font-weight: 900;
+}
+
+.setup-character-select .character-complete-title,
+.setup-character-select .character-fallback-title {
+margin: 0;
+color: #fff;
+font-size: clamp(20px, 4.5vw, 28px);
+font-weight: 900;
+letter-spacing: -0.04em;
+}
+
+.setup-character-select .character-complete-copy,
+.setup-character-select .character-fallback-copy {
+margin: 9px auto 0;
+max-width: 520px;
+color: var(--select-muted);
+font-size: 12px;
+}
+
+.setup-character-select .character-ready-chip {
+display: inline-flex;
+margin-top: 15px;
+padding: 6px 10px;
+color: var(--select-cyan);
+border: 1px solid rgba(70, 217, 239, 0.26);
+border-radius: 999px;
+background: var(--select-cyan-soft);
+font-size: 10px;
+font-weight: 850;
+}
+
+@media (max-width: 680px) {
+.setup-character-select .character-grid {
+grid-template-columns: 1fr;
+}
+
+.setup-character-select .character-card {
+min-height: 0;
+}
+
+.setup-character-select .character-header {
+align-items: start;
+flex-direction: column;
+}
+
+.setup-character-select .character-instruction {
+max-width: none;
+text-align: left;
+}
+}
+
+@media (max-width: 400px) {
+.setup-character-select {
+border-right: 0;
+border-left: 0;
+border-radius: 0;
+}
+}
+
+@media (prefers-reduced-motion: reduce) {
+.setup-character-select *,
+.setup-character-select *::before,
+.setup-character-select *::after {
+scroll-behavior: auto !important;
+transition-duration: 0.01ms !important;
+animation-duration: 0.01ms !important;
+animation-iteration-count: 1 !important;
+}
+}
+</style>
+
+{{settempvar::setup_character_view::{{getvar::gameSetupView}}}}
+
+{{#when::keep::{{dictelement::{{tempvar::setup_character_view}}::kind}}::is::gameSetupView}}
+{{#when::keep::{{dictelement::{{tempvar::setup_character_view}}::phase}}::is::characterSelect}}
+{{settempvar::setup_character_offer::{{dictelement::{{tempvar::setup_character_view}}::characterOffer}}}}
+<section class="setup-character-select" aria-label="전투 대상 캐릭터 선택">
+<div class="character-shell">
+<header class="character-header">
+<div>
+<div class="character-kicker">INFINITE HELLTRAIN · TARGET SELECT</div>
+<h2 class="character-title">이번 전투의 상대를 고르세요</h2>
+<p class="character-subtitle">공개된 능력과 특징을 비교한 뒤 세 명 중 한 명을 선택합니다.</p>
+</div>
+<p class="character-instruction">첫 클릭: 상세 확인 · 열린 카드 아래 버튼: 선택 확정</p>
+</header>
+
+<input class="character-none" type="radio" name="setup-character-choice" id="setup-character-none" checked aria-hidden="true">
+<div class="character-grid" role="list" aria-label="제안된 캐릭터 세 명">
+{{#each::keep {{dictelement::{{tempvar::setup_character_offer}}::characters}} as setup_character_item}}
+{{settempvar::setup_character_mood::{{dictelement::{{slot::setup_character_item}}::startingMood}}}}
+<article class="character-slot" role="listitem">
+<input
+class="character-choice-state"
+type="radio"
+name="setup-character-choice"
+id="setup-character-{{dictelement::{{slot::setup_character_item}}::slot}}"
+aria-label="{{dictelement::{{slot::setup_character_item}}::name}} 상세 보기"
+>
+<label class="character-card" for="setup-character-{{dictelement::{{slot::setup_character_item}}::slot}}">
+<span class="character-card-inner">
+<span class="character-slot-head">
+<span class="character-index" aria-label="후보 {{dictelement::{{slot::setup_character_item}}::slot}}">{{dictelement::{{slot::setup_character_item}}::slot}}</span>
+<span class="character-mood">시작 무드 · {{dictelement::{{tempvar::setup_character_mood}}::label}}</span>
+</span>
+<span class="character-name">{{dictelement::{{slot::setup_character_item}}::name}}</span>
+<span class="character-meta">{{dictelement::{{slot::setup_character_item}}::age}}세 · {{dictelement::{{slot::setup_character_item}}::occupation}}</span>
+<span class="character-summary">{{dictelement::{{slot::setup_character_item}}::appearanceSummary}}</span>
+
+<span class="character-details">
+<span class="character-details-inner">
+<span class="character-traits" aria-label="공개 특징">
+{{#each::keep {{dictelement::{{slot::setup_character_item}}::traits}} as setup_character_trait}}
+<span class="character-trait">
+<strong>{{dictelement::{{slot::setup_character_trait}}::name}}</strong>
+<span>{{dictelement::{{slot::setup_character_trait}}::description}}</span>
+</span>
+{{/each}}
+</span>
+</span>
+</span>
+
+<span class="character-stats" aria-label="전투 시작 수치">
+<span class="character-stat"><span class="character-stat-label">저항</span><strong>{{dictelement::{{slot::setup_character_item}}::startingResistance}}</strong></span>
+<span class="character-stat"><span class="character-stat-label">드로우</span><strong>{{dictelement::{{slot::setup_character_item}}::baseDrawCount}}</strong></span>
+<span class="character-stat"><span class="character-stat-label">손패 상한</span><strong>{{dictelement::{{slot::setup_character_item}}::maxHandSize}}</strong></span>
+</span>
+</span>
+</label>
+<button
+class="character-confirm"
+type="button"
+risu-btn="init|chooseCharacter|{{dictelement::{{slot::setup_character_item}}::characterId}}|{{dictelement::{{tempvar::setup_character_offer}}::interactionToken}}"
+aria-label="{{dictelement::{{slot::setup_character_item}}::name}}을 전투 상대로 확정"
+>이 캐릭터를 선택 · 클릭해 확정</button>
+</article>
+{{/each}}
+</div>
+</div>
+</section>
+{{/when}}
+
+{{#when::keep::{{dictelement::{{tempvar::setup_character_view}}::phase}}::is::battleReady}}
+{{settempvar::setup_selected_character::{{dictelement::{{tempvar::setup_character_view}}::selectedCharacter}}}}
+<section class="setup-character-select" aria-label="전투 준비 완료">
+<div class="character-complete" aria-live="polite">
+<div class="character-complete-mark" aria-hidden="true">✓</div>
+<h2 class="character-complete-title">{{dictelement::{{tempvar::setup_selected_character}}::name}} 선택 완료</h2>
+<p class="character-complete-copy">초기 덱과 전투 상대가 확정되었습니다. 전투 상태를 준비하고 있습니다.</p>
+<span class="character-ready-chip">BATTLE READY</span>
+</div>
+</section>
+{{/when}}
+{{/when}}
+
+{{#when::keep::{{dictelement::{{tempvar::setup_character_view}}::kind}}::isnot::gameSetupView}}
+<section class="setup-character-select" aria-label="캐릭터 선택 데이터 대기">
+<div class="character-fallback" aria-live="polite">
+<div class="character-kicker">TARGET SELECT</div>
+<h2 class="character-fallback-title">캐릭터 데이터를 기다리는 중</h2>
+<p class="character-fallback-copy">유효한 gameSetupView가 게시되면 세 명의 전투 대상이 이곳에 표시됩니다.</p>
+</div>
+</section>
+{{/when}}
