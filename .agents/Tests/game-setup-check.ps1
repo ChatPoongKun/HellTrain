@@ -274,6 +274,148 @@ assert(canonical(completeStale.state) == completeSnapshot and canonical(state) =
 assert(completeStale.state ~= state and completeStale.state.selectedCardIds ~= state.selectedCardIds,
     "tenth choice stale result aliases the completed input")
 
+local characterSelect = assertOk("begin character selection", runScript(
+    "game-setup-check",
+    "gameSetup",
+    "beginCharacterSelect",
+    state,
+    staticData
+))
+assert(characterSelect.applied == true
+        and characterSelect.stale == false
+        and characterSelect.state.phase == "characterSelect",
+    "deckComplete did not advance to characterSelect")
+local characterState = characterSelect.state
+local candidateIds = characterState.characterOffer.characterIds
+assert(#candidateIds == 3
+        and candidateIds[1] ~= candidateIds[2]
+        and candidateIds[1] ~= candidateIds[3]
+        and candidateIds[2] ~= candidateIds[3],
+    "character offer must contain three distinct candidates")
+assert(characterState.offer == nil
+        and characterState.selectedCharacterId == nil
+        and characterState.battleSpec == nil,
+    "characterSelect retained card or battle result fields")
+assertOk("validate character selection", runScript(
+    "game-setup-check", "gameSetup", "validate", characterState, staticData
+))
+
+local characterSnapshot = canonical(characterState)
+local staleCharacter = assertOk("stale character token", runScript(
+    "game-setup-check",
+    "gameSetup",
+    "chooseCharacter",
+    characterState,
+    {
+        characterId = candidateIds[1],
+        interactionToken = "game-setup-character-v1:1:1:1",
+    },
+    staticData
+))
+assert(staleCharacter.applied == false
+        and staleCharacter.stale == true
+        and canonical(staleCharacter.state) == characterSnapshot,
+    "old character token was not an immutable stale no-op")
+
+local unofferedCharacter
+for characterId in pairs(staticData.characters) do
+    if not contains(candidateIds, characterId) then
+        unofferedCharacter = characterId
+        break
+    end
+end
+assert(unofferedCharacter, "unoffered character fixture missing")
+assertFailed("unoffered character", runScript(
+    "game-setup-check",
+    "gameSetup",
+    "chooseCharacter",
+    characterState,
+    {
+        characterId = unofferedCharacter,
+        interactionToken = characterState.characterOffer.interactionToken,
+    },
+    staticData
+))
+
+local expectedBattleSeed = ((((spec.seed - 1) % 2147483646) + 104729) % 2147483646) + 1
+for slot, characterId in ipairs(candidateIds) do
+    local ready = assertOk("choose character " .. slot, runScript(
+        "game-setup-check",
+        "gameSetup",
+        "chooseCharacter",
+        characterState,
+        {
+            characterId = characterId,
+            interactionToken = characterState.characterOffer.interactionToken,
+        },
+        staticData
+    ))
+    assert(ready.applied == true
+            and ready.stale == false
+            and ready.state.phase == "battleReady"
+            and ready.state.selectedCharacterId == characterId,
+        "offered character did not produce battleReady")
+    local battleSpec = ready.state.battleSpec
+    assert(battleSpec.battleId == "battle-" .. spec.setupId
+            and battleSpec.seed == expectedBattleSeed
+            and battleSpec.environmentId == "uncrowded"
+            and battleSpec.turnLimit == 10,
+        "battleReady did not derive the exact four-field battleSpec")
+    assertOk("validate battleReady " .. slot, runScript(
+        "game-setup-check", "gameSetup", "validate", ready.state, staticData
+    ))
+
+    local readySnapshot = canonical(ready.state)
+    local readyStale = assertOk("battleReady character double click " .. slot, runScript(
+        "game-setup-check",
+        "gameSetup",
+        "chooseCharacter",
+        ready.state,
+        {
+            characterId = characterId,
+            interactionToken = characterState.characterOffer.interactionToken,
+        },
+        staticData
+    ))
+    assert(readyStale.applied == false
+            and readyStale.stale == true
+            and canonical(readyStale.state) == readySnapshot,
+        "battleReady character double click changed the completed setup")
+
+    local tamperedSpec = clone(ready.state)
+    tamperedSpec.battleSpec.seed = tamperedSpec.battleSpec.seed + 1
+    assertFailed("tampered battleSpec " .. slot, runScript(
+        "game-setup-check", "gameSetup", "validate", tamperedSpec, staticData
+    ))
+end
+
+local tamperedCharacterOffer = clone(characterState)
+tamperedCharacterOffer.characterOffer.characterIds[1], tamperedCharacterOffer.characterOffer.characterIds[2] =
+    tamperedCharacterOffer.characterOffer.characterIds[2], tamperedCharacterOffer.characterOffer.characterIds[1]
+assertFailed("tampered character offer", runScript(
+    "game-setup-check", "gameSetup", "validate", tamperedCharacterOffer, staticData
+))
+local tamperedCharacterRng = clone(characterState)
+tamperedCharacterRng.rng.cursor = tamperedCharacterRng.rng.cursor + 1
+assertFailed("tampered character rng", runScript(
+    "game-setup-check", "gameSetup", "validate", tamperedCharacterRng, staticData
+))
+
+local twoCharacters = clone(staticData)
+local keptCharacters = 0
+for _, characterId in ipairs((function()
+    local ids = {}
+    for id in pairs(twoCharacters.characters) do ids[#ids + 1] = id end
+    table.sort(ids)
+    return ids
+end)()) do
+    keptCharacters = keptCharacters + 1
+    if keptCharacters > 2 then twoCharacters.characters[characterId] = nil end
+end
+assertFailed("insufficient character pool", runScript(
+    "game-setup-check", "gameSetup", "beginCharacterSelect", state, twoCharacters
+))
+
 local function runTraceAgain()
     local current = assertOk("trace restart", runScript("game-setup-check", "gameSetup", "start", spec, staticData)).state
     local replay = {}

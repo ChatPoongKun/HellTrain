@@ -5,7 +5,8 @@
 `System/battleController.lua`는 순수 전투 모듈과 RisuAI 호스트 저장소·대화·View 게시 경계를 연결하는 어댑터다. 컨트롤러는 전투 규칙을 다시 판정하지 않고 다음 모듈의 성공 결과만 조정한다.
 
 - `staticData.loadAll`
-- `battleBootstrap.verticalSlice`
+- `gameSetup.validate`
+- `battleBootstrap.fromSetup`, `battleBootstrap.verticalSlice`
 - `turnInitializer.prepareTurn`
 - `turnDraft.applyInteraction`, `turnDraft.inspect`, `turnDraft.project`, `turnDraft.validate`
 - `battleRuntime.preparePending`, `battleRuntime.reusePending`, `battleRuntime.commitPending`
@@ -150,6 +151,8 @@ phase 의미는 다음과 같다.
 
 게시 뒤에는 `getChatVar("battleView")`가 반환한 wire와 encoder 결과가 정확히 같은지 항상 검사한다. hook·명시적 `publishCurrentView`처럼 버튼 밖에서 게시하면 확인 뒤 `refreshGameUi`의 대상 `reloadChat(-1)`을 사용하고 불가능할 때만 `reloadDisplay`로 복구한다. `registerCard`/`cancelCard`/`clickCard`는 RisuAI button host가 클릭 message를 자동 remount하므로 수동 reload를 중복하지 않는다. 저장되지 않은 View에는 controller reload를 요청하지 않는다.
 
+전투 UI body도 같은 현재 View에 결합한다. `battleView` wire의 write-read 검증이 끝난 뒤에만 CBS를 평가하는 `battleui.html`을 로드하고, 그 결과를 동적 UI body `🔯🔯🔯`에 쓴 뒤 다시 읽어 exact-equal을 확인한다. setup의 캐릭터 확정 버튼에서 호출되는 `startFromSetup`은 button host remount를 사용하므로 이 게시에서 refresh를 억제한다. 훅과 명시적 게시 경로는 검증 뒤 기존 refresh 규칙을 따른다.
+
 채팅의 제거·추가도 `getFullChat`으로 다시 읽어 길이, 기존 prefix와 마지막 메시지를 확인한다. RisuAI 채팅 index는 0부터 시작하므로 Lua 배열의 마지막 항목은 `removeChat(triggerId, #chat - 1)`로 제거한다.
 
 자동 복구 삭제는 반드시 `recoveringCleanup`을 먼저 write-read 검증한 뒤 시작한다. filler 또는 미관측 응답을 한 항목 지울 때마다 길이가 정확히 1 줄었고 나머지 모든 메시지가 구조적으로 그대로인지 다시 읽어 검사한다. 삭제 도중 오류·권한 거부·조용한 쓰기 유실이 발생하면 cleanup 영수증을 지우지 않으므로 다음 `onStart`가 이미 끝난 단계부터 재개한다. 영수증과 현재 채팅이 다르면 어떤 메시지도 추가로 삭제하지 않는다.
@@ -204,6 +207,42 @@ prefix가 달라졌거나 마커 위치·문구가 다르거나, 캐릭터 응�
 RisuAI는 공개 마커만 남은 상태에서 앞선 HTTP 요청이 실패했는지 아직 실행 중인지 구별할 request ID를 Lua에 제공하지 않는다. 또한 이 구조는 사용자가 마커에서 Continue를 누른 경우와도 구별할 수 없다. 따라서 전투 중 Continue·자동 계속을 사용하지 않고, 생성 중에는 새 전송이 직렬화된다는 전제를 실제 웹 통합 검사에서 확인해야 한다.
 
 ## 6. Action 계약
+
+### `startFromSetup(setupState)`
+
+일반 게임 시작의 내부 인계 action이다. 전달받은 전체 설정 상태를 복제한 뒤 `gameSetup.validate`로 처음부터 재생하고, 입력이 canonical `battleReady`와 exact-equal일 때만 진행한다. 여기서 다음 전투 사양을 꺼내 `battleBootstrap.fromSetup`에 전달한다.
+
+```lua
+{
+    battleId = setupState.battleSpec.battleId,
+    seed = setupState.battleSpec.seed,
+    playerCardIds = setupState.selectedCardIds,
+    characterId = setupState.selectedCharacterId,
+    environmentId = setupState.battleSpec.environmentId,
+    turnLimit = setupState.battleSpec.turnLimit,
+}
+```
+
+새 전투는 bootstrap의 pre-initializer 상태에 `<battleId>-turn-001`을 사용해 `turnInitializer.prepareTurn`을 정확히 한 번 적용한다. authority와 draft가 모두 만들어진 뒤 다음 다섯 키를 순서대로 write-read 검증한다.
+
+```text
+battleRuntimeV1.authority
+→ battleRuntimeV1.draft
+→ battleRuntimeV1.pending = nil
+→ battleRuntimeV1.lastCommittedPending = nil
+→ battleRuntimeV1.activeRequest = nil
+```
+
+그 뒤 `battleView`를 게시·재읽기하고, 그 View로 CBS 평가한 `battleui.html`을 동적 UI body에 게시·재읽기한다. 두 게시가 끝나기 전에는 성공을 반환하지 않는다.
+
+재호출은 다음처럼 보수적으로 처리한다.
+
+- 다른 `battleId`의 authority가 있으면 기존 전투를 덮어쓰지 않고 `battle_runtime_conflict`로 실패한다.
+- 같은 `battleId`라도 RNG seed, 환경, 턴 제한, 선택 캐릭터 또는 `player-001`부터 이어지는 초기 플레이어 카드 순서가 setup과 다르면 `battle_setup_conflict`로 실패한다.
+- 결합이 같은 정상 진행 전투는 authority, draft, pending과 생성 binding을 초기화하지 않는다. 현재 상태에서 View/UI만 다시 게시하고 `applied = false`, `reused = true`를 반환한다.
+- 새 시작 중 authority 또는 draft 쓰기만 끝난 부분 상태는 setup에서 결정적으로 다시 만든 초기 값과 각 non-nil 항목이 exact-equal일 때만 나머지를 채운다. 다르면 `unsafe_partial_battle_runtime`으로 실패한다.
+
+이 action은 `gameSetupController`만 호출하는 내부 경계이며 `main.lua` 버튼 allowlist나 HTML route에 직접 노출하지 않는다.
 
 ### `startVerticalSlice(battleId, seed)`
 
@@ -333,6 +372,8 @@ authority가 active이고 pending이 있으면 pending context, 없으면 draft 
 `.agents/Tests/battle-controller-check.ps1`은 실제 순수 모듈을 함께 불러와 두 개의 독립 Lua 프로세스에서 다음을 검사한다.
 
 - 명시적 ID·시드 bootstrap, 첫 턴 초기화와 선택 View 게시
+- canonical `battleReady`의 setup 결합 bootstrap, 첫 전투 UI 게시와 동일 전투 재호출 보존
+- 다른 battle ID·seed·환경·턴 제한·캐릭터·초기 카드 순서 충돌 차단과 exact 부분 저장 복구
 - legacy 카드 focus·등록 호환, 명시 register/cancel과 draft 저장
 - 명령당 atomic draft 전이 1회와 저장 View 재검증 1회만 수행되는 호출 계약
 - 클릭 뒤 View 게시 실패, 구 interaction token 재호출의 전이 비적용·표시 복구와 token 회전

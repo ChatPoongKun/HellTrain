@@ -31,6 +31,7 @@ local modules = {
     cardZones = loadLore("System/cardZones.lua"),
     effectEngine = loadLore("System/effectEngine.lua"),
     staticData = loadLore("System/staticData.lua"),
+    gameSetup = loadLore("System/gameSetup.lua"),
     stateSchema = loadLore("System/stateSchema.lua"),
     triggerPipeline = loadLore("System/triggerPipeline.lua"),
     characterSelector = loadLore("System/characterSelector.lua"),
@@ -70,12 +71,20 @@ local lorePaths = {
     ["HanJenny.db"] = "Char/HanJenny.db",
     ["SeoMiryeong.db"] = "Char/SeoMiryeong.db",
     ["SisterAgnes.db"] = "Char/SisterAgnes.db",
+    ["battleui.html"] = "html/battleui.html",
 }
 
 function getLoreBooks(triggerId, name)
     local path = lorePaths[name]
     if not path then return {} end
     return { { content = readFile(path) } }
+end
+function loadLores(triggerId, name)
+    local content = ""
+    for _, lore in ipairs(getLoreBooks(triggerId, name)) do
+        content = content .. lore.content
+    end
+    return content ~= "" and content or nil
 end
 
 local function clone(value, active)
@@ -170,6 +179,7 @@ local DRAFT = "battleRuntimeV1.draft"
 local PENDING = "battleRuntimeV1.pending"
 local LAST = "battleRuntimeV1.lastCommittedPending"
 local ACTIVE = "battleRuntimeV1.activeRequest"
+local UI_BODY = string.char(240, 159, 148, 175):rep(3)
 
 local states = {}
 local stateWriteCount = 0
@@ -836,7 +846,166 @@ local signature = canonical({
     prompt = secondPrepared.publicMarker,
     markerCount = markerCount(firstMarker) + markerCount(secondPrepared.publicMarker),
 })
-print("BATTLE_CONTROLLER|hash=" .. stableHash(signature) .. "|scenarios=46")
+
+local function makeBattleReady(setupId, seed, firstCardSlot, characterSlot)
+    local staticData = assertOk("load setup static data",
+        runScript("controller-check", "staticData", "loadAll")).data
+    local setup = assertOk("start setup", runScript(
+        "controller-check",
+        "gameSetup",
+        "start",
+        { setupId = setupId, seed = seed },
+        staticData
+    )).state
+    while setup.phase == "deckDraft" do
+        local slot = setup.offer.round == 1 and (firstCardSlot or 1) or 1
+        setup = assertOk("choose setup card", runScript(
+            "controller-check",
+            "gameSetup",
+            "choose",
+            setup,
+            {
+                cardId = setup.offer.cardIds[slot],
+                interactionToken = setup.offer.interactionToken,
+            },
+            staticData
+        )).state
+    end
+    setup = assertOk("begin setup character selection", runScript(
+        "controller-check",
+        "gameSetup",
+        "beginCharacterSelect",
+        setup,
+        staticData
+    )).state
+    return assertOk("choose setup character", runScript(
+        "controller-check",
+        "gameSetup",
+        "chooseCharacter",
+        setup,
+        {
+            characterId = setup.characterOffer.characterIds[characterSlot or 1],
+            interactionToken = setup.characterOffer.interactionToken,
+        },
+        staticData
+    )).state
+end
+
+-- Real setup handoff: first turn creation, progressed reuse, exact setup
+-- binding, safe partial-write recovery, and UI failure recovery.
+states = {}
+chatVars = {}
+stateWriteCount = 0
+reloadDisplayCount = 0
+failNextStateWrite = nil
+failStateWriteOnOccurrence = nil
+failNextChatVarWrite = nil
+local setupReady = makeBattleReady("handoff-99001", 99001, 1, 1)
+local setupStart = assertOk("start from setup", controller("startFromSetup", setupReady))
+assert(setupStart.applied == true
+        and setupStart.reused == false
+        and setupStart.recovered == false
+        and setupStart.view.phase == "selecting",
+    "startFromSetup did not create the first selecting turn")
+assert(type(states[AUTHORITY]) == "table" and type(states[DRAFT]) == "table"
+        and states[PENDING] == nil and states[LAST] == nil and states[ACTIVE] == nil,
+    "startFromSetup did not publish the five-key initial runtime bundle")
+assert(chatVars[UI_BODY] == readFile("html/battleui.html") and reloadDisplayCount == 0,
+    "setup handoff did not publish battleui after the View without manual refresh")
+
+local setupInstanceId = assert(setupStart.view.hand.items[1].instanceId)
+local progressed = assertOk("progress setup battle", controller(
+    "registerCard",
+    setupInstanceId,
+    setupStart.view.interactionToken
+))
+assert(#progressed.draft.registeredCardInstanceIds == 1,
+    "setup battle did not accept a normal first-turn card registration")
+local progressedSnapshot = canonical({
+    authority = states[AUTHORITY],
+    draft = states[DRAFT],
+    pending = states[PENDING],
+    last = states[LAST],
+    active = states[ACTIVE],
+})
+local writesBeforeReuse = stateWriteCount
+local reusedSetup = assertOk("reuse progressed setup battle", controller("startFromSetup", setupReady))
+assert(reusedSetup.applied == false and reusedSetup.reused == true and reusedSetup.recovered == false,
+    "same setup did not reuse the progressed battle")
+assert(stateWriteCount == writesBeforeReuse and canonical({
+        authority = states[AUTHORITY],
+        draft = states[DRAFT],
+        pending = states[PENDING],
+        last = states[LAST],
+        active = states[ACTIVE],
+    }) == progressedSnapshot,
+    "same setup retry reset or rewrote progressed battle state")
+
+local conflictingCharacter = makeBattleReady("handoff-99001", 99001, 1, 2)
+local chatBeforeConflict = canonical(chatVars)
+assertFails("same battle id different character", controller(
+    "startFromSetup",
+    conflictingCharacter
+), "battle_setup_conflict")
+assert(stateWriteCount == writesBeforeReuse and canonical(chatVars) == chatBeforeConflict,
+    "character conflict wrote state or UI")
+
+local conflictingDeck = makeBattleReady("handoff-99001", 99001, 2, 1)
+assertFails("same battle id different deck", controller(
+    "startFromSetup",
+    conflictingDeck
+), "battle_setup_conflict")
+assert(stateWriteCount == writesBeforeReuse,
+    "deck conflict wrote battle state")
+
+local otherSetup = makeBattleReady("handoff-99002", 99002, 1, 1)
+assertFails("different battle runtime", controller(
+    "startFromSetup",
+    otherSetup
+), "battle_runtime_conflict")
+assert(stateWriteCount == writesBeforeReuse,
+    "different battle conflict overwrote the active runtime")
+
+states = {}
+chatVars = {}
+stateWriteCount = 0
+local initialForPartial = assertOk("seed partial setup runtime", controller(
+    "startFromSetup",
+    setupReady
+))
+local authorityOnly = clone(states[AUTHORITY])
+states = { [AUTHORITY] = authorityOnly }
+local recoveredPartial = assertOk("recover authority-only setup runtime", controller(
+    "startFromSetup",
+    setupReady
+))
+assert(recoveredPartial.applied == true
+        and recoveredPartial.reused == false
+        and recoveredPartial.recovered == true
+        and canonical(states[AUTHORITY]) == canonical(authorityOnly)
+        and type(states[DRAFT]) == "table",
+    "authority-only setup runtime was not completed from the exact deterministic state")
+
+states = {}
+chatVars = {}
+stateWriteCount = 0
+failNextChatVarWrite = UI_BODY
+assertFails("dropped setup battle UI", controller(
+    "startFromSetup",
+    setupReady
+), "ui_write_not_persisted")
+assert(type(states[AUTHORITY]) == "table" and type(states[DRAFT]) == "table",
+    "UI publication failure discarded the initialized setup battle")
+local recoveredUi = assertOk("recover setup battle UI", controller(
+    "startFromSetup",
+    setupReady
+))
+assert(recoveredUi.applied == false
+        and recoveredUi.reused == true
+        and chatVars[UI_BODY] == readFile("html/battleui.html"),
+    "setup battle UI retry did not reuse runtime and finish publication")
+
+print("BATTLE_CONTROLLER|hash=" .. stableHash(signature) .. "|scenarios=54")
 '@
 
 Push-Location $projectRoot
@@ -858,7 +1027,7 @@ try {
     if (-not ($firstText -ceq $secondText)) {
         throw "Separate Lua processes produced different battle controller results.`nFIRST:`n$firstText`nSECOND:`n$secondText"
     }
-    if ($firstText -notmatch '^BATTLE_CONTROLLER\|hash=\d{10}\|scenarios=46$') {
+    if ($firstText -notmatch '^BATTLE_CONTROLLER\|hash=\d{10}\|scenarios=54$') {
         throw "Unexpected battle controller determinism vector: $firstText"
     }
 

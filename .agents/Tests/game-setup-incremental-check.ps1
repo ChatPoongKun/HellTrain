@@ -125,6 +125,29 @@ local function buildToken(setupId, round, rng, selectedCardIds, offerCardIds)
     return "game-setup-draft-v1:" .. tostring(#canonicalToken) .. ":" .. tostring(hashA) .. ":" .. tostring(hashB)
 end
 
+local function buildCharacterToken(setupId, rng, characterIds)
+    local parts = {
+        "setupId=", tostring(#setupId), ":", setupId,
+        "|cursor=", tostring(rng.cursor),
+        "|characters=", tostring(#characterIds), ":",
+    }
+    for _, characterId in ipairs(characterIds) do
+        parts[#parts + 1] = tostring(#characterId)
+        parts[#parts + 1] = ":"
+        parts[#parts + 1] = characterId
+        parts[#parts + 1] = ";"
+    end
+    local canonicalToken = table.concat(parts)
+    local hashA = 0
+    local hashB = 0
+    for index = 1, #canonicalToken do
+        local byte = string.byte(canonicalToken, index)
+        hashA = (hashA * 131 + byte) % 2147483647
+        hashB = (hashB * 137 + byte) % 2147483629
+    end
+    return "game-setup-character-v1:" .. tostring(#canonicalToken) .. ":" .. tostring(hashA) .. ":" .. tostring(hashB)
+end
+
 -- Pre-optimization reference: rebuild every offer from seed and selection history.
 local function legacyReplay(setupId, seed, selectedCardIds, pool)
     local counts = {}
@@ -183,6 +206,11 @@ for cardId, card in pairs(staticData.cards) do
     if card.owner == "player" then pool[#pool + 1] = cardId end
 end
 table.sort(pool)
+local characterPool = {}
+for characterId in pairs(staticData.characters) do
+    characterPool[#characterPool + 1] = characterId
+end
+table.sort(characterPool)
 
 local seeds = { 1, 2, 3, 7, 42, 12345, 2147483646 }
 for index = 1, 64 do
@@ -238,6 +266,96 @@ for seedIndex, seed in ipairs(seeds) do
         transitions = transitions + 1
     end
     assert(#selections == 10 and state.offer == nil, "property trace did not complete")
+
+    local referenceCandidates = copyArray(characterPool)
+    local expectedCharacterIds = {}
+    local expectedCharacterRng = { seed = state.rng.seed, cursor = state.rng.cursor }
+    for pick = 1, 3 do
+        local roll = modules.deterministicRng(
+            "character-reference",
+            "nextInteger",
+            expectedCharacterRng,
+            1,
+            #referenceCandidates
+        )
+        assert(roll.ok == true, "character reference RNG failed")
+        expectedCharacterIds[pick] = referenceCandidates[roll.value]
+        table.remove(referenceCandidates, roll.value)
+        expectedCharacterRng = roll.rng
+    end
+
+    rngCalls = 0
+    local characterSelect = runScript(
+        "incremental-check",
+        "gameSetup",
+        "beginCharacterSelect",
+        state,
+        staticData
+    )
+    assert(characterSelect.ok == true
+            and characterSelect.applied == true
+            and characterSelect.stale == false,
+        "characterSelect transition failed for seed " .. tostring(seed))
+    assert(rngCalls == 11,
+        "characterSelect must replay ten deck offers and batch one character offer")
+    assert(canonical(characterSelect.state.characterOffer.characterIds) == canonical(expectedCharacterIds)
+            and canonical(characterSelect.state.rng) == canonical(expectedCharacterRng)
+            and characterSelect.state.characterOffer.interactionToken
+                == buildCharacterToken(setupId, expectedCharacterRng, expectedCharacterIds),
+        "character offer/RNG/token differs from the independent reference")
+
+    rngCalls = 0
+    local characterValidated = runScript(
+        "incremental-check",
+        "gameSetup",
+        "validate",
+        characterSelect.state,
+        staticData
+    )
+    assert(characterValidated.ok == true
+            and canonical(characterValidated.state) == canonical(characterSelect.state)
+            and rngCalls == 11,
+        "characterSelect full replay validation changed")
+
+    local characterSlot = ((seedIndex * 13 + seed) % 3) + 1
+    rngCalls = 0
+    local battleReady = runScript(
+        "incremental-check",
+        "gameSetup",
+        "chooseCharacter",
+        characterSelect.state,
+        {
+            characterId = expectedCharacterIds[characterSlot],
+            interactionToken = characterSelect.state.characterOffer.interactionToken,
+        },
+        staticData
+    )
+    assert(battleReady.ok == true
+            and battleReady.applied == true
+            and battleReady.stale == false
+            and battleReady.state.phase == "battleReady"
+            and battleReady.state.selectedCharacterId == expectedCharacterIds[characterSlot]
+            and rngCalls == 11,
+        "character choice failed deterministic full replay")
+    local expectedBattleSeed = ((((seed - 1) % 2147483646) + 104729) % 2147483646) + 1
+    assert(battleReady.state.battleSpec.seed == expectedBattleSeed
+            and battleReady.state.battleSpec.battleId == "battle-" .. setupId
+            and battleReady.state.battleSpec.environmentId == "uncrowded"
+            and battleReady.state.battleSpec.turnLimit == 10,
+        "battleSpec differs from its deterministic domain-separated reference")
+    rngCalls = 0
+    local readyValidated = runScript(
+        "incremental-check",
+        "gameSetup",
+        "validate",
+        battleReady.state,
+        staticData
+    )
+    assert(readyValidated.ok == true
+            and canonical(readyValidated.state) == canonical(battleReady.state)
+            and rngCalls == 11,
+        "battleReady full replay validation changed")
+    transitions = transitions + 2
     traces = traces + 1
 end
 

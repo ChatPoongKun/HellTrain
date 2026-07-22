@@ -38,6 +38,51 @@ local modules = {
     viewBuilder = loadLore("System/viewBuilder.lua"),
     gameSetupView = loadLore("System/gameSetupView.lua"),
     dataBridge = loadLore("System/dataBridge.lua"),
+    battleController = function(triggerId, action, setupState)
+        if action ~= "startFromSetup" then
+            return {
+                ok = false,
+                schemaVersion = 1,
+                errors = { { code = "unknown_action", path = "$.action", message = "unexpected battle action" } },
+            }
+        end
+        local authorityKey = "battleRuntimeV1.authority"
+        local existing = getState(triggerId, authorityKey)
+        local reused = existing ~= nil
+        if not reused then
+            setState(triggerId, authorityKey, {
+                kind = "battleState",
+                battleId = setupState.battleSpec.battleId,
+                turnNumber = 1,
+                status = "active",
+            })
+            setState(triggerId, "battleRuntimeV1.draft", { kind = "turnDraft", turnNumber = 1 })
+            setState(triggerId, "battleRuntimeV1.pending", nil)
+            setState(triggerId, "battleRuntimeV1.lastCommittedPending", nil)
+            setState(triggerId, "battleRuntimeV1.activeRequest", nil)
+        end
+        local view = {
+            schemaVersion = 1,
+            kind = "battleView",
+            battleId = setupState.battleSpec.battleId,
+            turnNumber = 1,
+            phase = "selecting",
+        }
+        setChatVar(triggerId, "battleView", "mock-battle-view:" .. setupState.battleSpec.battleId)
+        setChatVar(triggerId, string.char(240, 159, 148, 175):rep(3), "mock-battle-ui:" .. setupState.battleSpec.battleId)
+        return {
+            ok = true,
+            schemaVersion = 1,
+            errors = {},
+            applied = not reused,
+            reused = reused,
+            recovered = false,
+            battleId = setupState.battleSpec.battleId,
+            setupId = setupState.setupId,
+            turnNumber = 1,
+            view = view,
+        }
+    end,
     gameSetupController = loadLore("System/gameSetupController.lua"),
 }
 
@@ -62,6 +107,7 @@ local lorePaths = {
     ["SisterAgnes.db"] = "Char/SisterAgnes.db",
     ["sideBar.html"] = "html/sideBar.html",
     ["cardDraft.html"] = "html/cardDraft.html",
+    ["characterSelect.html"] = "html/characterSelect.html",
 }
 local loreContentTransform
 local loreLoadCounts = {}
@@ -165,6 +211,7 @@ local cbsCalls = 0
 local cbsValue = "12345"
 local cbsThrows = false
 local dropStateWrite = false
+local authorityReadReplacement
 local dropChatKey
 local dropReadyValue
 local lastAlert
@@ -179,6 +226,13 @@ function setState(triggerId, key, value)
 end
 function getState(triggerId, key)
     record("get-state:" .. key)
+    if key == AUTHORITY and type(authorityReadReplacement) == "table" then
+        authorityReadReplacement.remaining = authorityReadReplacement.remaining - 1
+        if authorityReadReplacement.remaining == 0 then
+            states[key] = clone(authorityReadReplacement.value)
+            authorityReadReplacement = nil
+        end
+    end
     return clone(states[key])
 end
 function setChatVar(triggerId, key, value)
@@ -226,6 +280,7 @@ local function reset(seed)
     cbsValue = seed or "12345"
     cbsThrows = false
     dropStateWrite = false
+    authorityReadReplacement = nil
     dropChatKey = nil
     dropReadyValue = nil
     lastAlert = nil
@@ -468,7 +523,8 @@ assert(moduleCalls.gameSetup == 1 and moduleCalls.gameSetupView == 1 and moduleC
     "stale recovery repeated authority validation or View replay")
 assertWriteOrder("stale double click", publishOnlyOrder)
 
--- Finish all ten rounds through the controller, preserving the setup seed.
+-- Finish all ten rounds. The tenth choice skips persistent deckComplete and
+-- publishes the deterministic three-character selection directly.
 local finalCard
 local finalToken
 while states[AUTHORITY].phase == "deckDraft" do
@@ -479,9 +535,18 @@ while states[AUTHORITY].phase == "deckDraft" do
         controller("choose", finalCard, finalToken))
     assert(report.applied == true and report.stale == false, "draft round was not applied")
 end
-assert(states[AUTHORITY].phase == "deckComplete" and #states[AUTHORITY].selectedCardIds == 10,
-    "controller did not persist a ten-card completed deck")
-assert(states[AUTHORITY].offer == nil, "completed setup retained an offer")
+assert(states[AUTHORITY].phase == "characterSelect" and #states[AUTHORITY].selectedCardIds == 10,
+    "controller did not move the completed deck directly to characterSelect")
+assert(states[AUTHORITY].offer == nil and type(states[AUTHORITY].characterOffer) == "table",
+    "character selection retained a card offer or omitted its character offer")
+local offeredCharacters = states[AUTHORITY].characterOffer.characterIds
+assert(#offeredCharacters == 3
+        and offeredCharacters[1] ~= offeredCharacters[2]
+        and offeredCharacters[1] ~= offeredCharacters[3]
+        and offeredCharacters[2] ~= offeredCharacters[3],
+    "character selection did not contain three distinct candidates")
+assert(chatVars[UI] == readFile("html/characterSelect.html"),
+    "tenth choice did not replace the draft body with characterSelect.html")
 assert(cbsCalls == 1, "ten-round draft consumed another setup seed")
 local completedSnapshot = canonical(states[AUTHORITY])
 local completedWrites = stateWrites
@@ -490,12 +555,99 @@ local finalStale = assertOk("tenth choice double click", controller("choose", fi
 assert(finalStale.applied == false and finalStale.stale == true,
     "tenth choice double click was not a successful stale no-op")
 assert(canonical(states[AUTHORITY]) == completedSnapshot and stateWrites == completedWrites,
-    "tenth choice double click rewrote completed authority")
+    "tenth choice double click rewrote characterSelect authority")
 assertWriteOrder("tenth choice double click", publishOnlyOrder)
-local completed = assertOk("restart completed setup", controller("start"))
-assert(completed.view.phase == "deckComplete" and completed.view.offer == nil and completed.view.deck.count == 10,
-    "completed setup did not recover as a deckComplete View")
-assert(cbsCalls == 1, "completed setup recovery consumed another setup seed")
+local completed = assertOk("restart character selection", controller("start"))
+assert(completed.view.phase == "characterSelect"
+        and completed.view.characterOffer ~= nil
+        and completed.view.deck.count == 10,
+    "completed deck did not recover as the same characterSelect View")
+assert(cbsCalls == 1, "character selection recovery consumed another setup seed")
+
+-- Character confirmation durably stores battleReady before starting the
+-- battle runtime. Repeated routes and start recovery must reuse, never reset.
+local characterId = offeredCharacters[1]
+local characterToken = states[AUTHORITY].characterOffer.interactionToken
+local selected = assertOk(
+    "choose character",
+    controller("chooseCharacter", characterId, characterToken)
+)
+assert(selected.applied == true and selected.stale == false,
+    "valid character choice was not applied")
+assert(states[AUTHORITY].phase == "battleReady"
+        and states[AUTHORITY].selectedCharacterId == characterId,
+    "character choice did not persist battleReady authority")
+assert(selected.view.phase == "battleReady"
+        and selected.battleView.phase == "selecting"
+        and selected.battle.applied == true
+        and selected.battle.reused == false,
+    "character choice did not hand off to the first selecting battle View")
+assert(type(states["battleRuntimeV1.authority"]) == "table"
+        and type(states["battleRuntimeV1.draft"]) == "table",
+    "character choice did not create the first battle authority and draft")
+assert(chatVars[UI] == "mock-battle-ui:" .. states[AUTHORITY].battleSpec.battleId,
+    "battle handoff did not replace the character UI body")
+assert(cbsCalls == 1, "character choice consumed another setup seed")
+
+local battleReadySnapshot = canonical(states[AUTHORITY])
+local runtimeSnapshot = canonical(states["battleRuntimeV1.authority"])
+local writesAfterBattleStart = stateWrites
+local repeatedCharacter = assertOk(
+    "character double click",
+    controller("chooseCharacter", characterId, characterToken)
+)
+assert(repeatedCharacter.applied == false
+        and repeatedCharacter.stale == true
+        and repeatedCharacter.battle.reused == true,
+    "character double click was not a stale setup no-op with battle reuse")
+assert(canonical(states[AUTHORITY]) == battleReadySnapshot
+        and canonical(states["battleRuntimeV1.authority"]) == runtimeSnapshot
+        and stateWrites == writesAfterBattleStart,
+    "character double click rewrote setup or battle authority")
+
+local resumedBattle = assertOk("restart battleReady", controller("start"))
+assert(resumedBattle.applied == false
+        and resumedBattle.stale == false
+        and resumedBattle.battle.reused == true,
+    "start did not idempotently resume the battleReady handoff")
+assert(canonical(states[AUTHORITY]) == battleReadySnapshot
+        and canonical(states["battleRuntimeV1.authority"]) == runtimeSnapshot,
+    "battleReady recovery changed persistent authority")
+
+-- Optimistic authority check rejects a competing valid transition that lands
+-- after the command read but before its write.
+reset("13579")
+assertOk("concurrency fixture start", controller("start"))
+local concurrentBase = clone(states[AUTHORITY])
+local concurrentWinner = assertOk("concurrency winner fixture", modules.gameSetup(
+    "game-setup-controller-check",
+    "choose",
+    concurrentBase,
+    {
+        cardId = concurrentBase.offer.cardIds[2],
+        interactionToken = concurrentBase.offer.interactionToken,
+    },
+    assertOk("concurrency static fixture", modules.staticData(
+        "game-setup-controller-check",
+        "loadAll"
+    )).data
+)).state
+local writesBeforeConflict = stateWrites
+authorityReadReplacement = { remaining = 2, value = concurrentWinner }
+local concurrentLoser = assertFailed(
+    "concurrent setup transition",
+    controller(
+        "choose",
+        concurrentBase.offer.cardIds[1],
+        concurrentBase.offer.interactionToken
+    ),
+    "authority_concurrent_change"
+)
+assert(stateWrites == writesBeforeConflict
+        and canonical(states[AUTHORITY]) == canonical(concurrentWinner),
+    "concurrent loser overwrote the winning authority transition")
+assert(chatVars[READY] == "ready",
+    "known concurrent conflict disturbed the already published ready UI")
 
 -- Authority may be committed before a later publication failure. Restart must reuse it.
 reset("24680")

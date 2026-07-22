@@ -161,6 +161,10 @@ local function assertNoPrivateFields(label, value)
         "selectedCardIds",
         "rng",
         "seed",
+        "battleSpec",
+        "privateProfile",
+        "PRIVATE_CHARACTER_CANARY",
+        "characterIntent",
         "NARRATION_CANARY",
         "PROTOTYPE_CANARY",
         "FUNCTION_CANARY",
@@ -282,6 +286,9 @@ hostileStatic.cards[riskyCardId].description = riskyText .. " ::tag[contact]::"
 hostileStatic.cards[riskyCardId].narration = "NARRATION_CANARY"
 hostileStatic.cards[riskyCardId].prototype = "PROTOTYPE_CANARY"
 hostileStatic.cards[riskyCardId].resolver = function() return "FUNCTION_CANARY" end
+for _, character in pairs(hostileStatic.characters) do
+    character.privateProfile.viewLeakCanary = "PRIVATE_CHARACTER_CANARY"
+end
 
 local authoritySnapshot = canonical(fixtureState)
 local hostileStaticSnapshot = canonical(hostileStatic)
@@ -573,6 +580,105 @@ assertOk(
     runScript("game-setup-view-check", "dataBridge", "encode", "gameSetupView", completeView)
 )
 assertNoPrivateFields("complete View", completeView)
+
+local characterState = assertOk(
+    "begin character selection",
+    runScript(
+        "game-setup-view-check",
+        "gameSetup",
+        "beginCharacterSelect",
+        completeState,
+        hostileStatic
+    )
+).state
+local characterView = assertOk(
+    "character selection View build",
+    runScript("game-setup-view-check", "gameSetupView", "build", characterState, hostileStatic)
+).view
+assert(characterView.phase == "characterSelect"
+        and characterView.locked == false
+        and characterView.offer == nil
+        and type(characterView.characterOffer) == "table"
+        and #characterView.characterOffer.characters == 3,
+    "characterSelect View shape changed")
+local seenCharacters = {}
+for slot, candidate in ipairs(characterView.characterOffer.characters) do
+    local sourceId = characterState.characterOffer.characterIds[slot]
+    local source = hostileStatic.characters[sourceId]
+    assert(candidate.slot == slot
+            and candidate.characterId == sourceId
+            and candidate.name == source.name
+            and candidate.age == source.publicProfile.age
+            and candidate.occupation == source.publicProfile.occupation
+            and type(candidate.appearanceSummary) == "string"
+            and candidate.appearanceSummary ~= ""
+            and candidate.startingResistance == source.battle.startingResistance
+            and candidate.startingMood.id == source.battle.startingMood
+            and candidate.baseDrawCount == source.battle.baseDrawCount
+            and candidate.maxHandSize == source.battle.maxHandSize,
+        "character candidate projection differs from public source data")
+    assert(not seenCharacters[candidate.characterId], "character View duplicated a candidate")
+    seenCharacters[candidate.characterId] = true
+    assert(#candidate.traits == #source.battle.traitIds,
+        "character View omitted or invented a public trait")
+    for traitIndex, trait in ipairs(candidate.traits) do
+        local sourceTrait = hostileStatic.traits[source.battle.traitIds[traitIndex]]
+        assert(sourceTrait.visibility == "public"
+                and trait.id == sourceTrait.id
+                and trait.name == sourceTrait.name
+                and trait.description == sourceTrait.description,
+            "character View trait is not the allowlisted public trait")
+    end
+end
+assert(characterView.characterOffer.interactionToken
+        == characterState.characterOffer.interactionToken,
+    "character View changed the current interaction token")
+assertNoPrivateFields("characterSelect View", characterView)
+assertOk("characterSelect View validate", runScript(
+    "game-setup-view-check", "gameSetupView", "validate", characterView
+))
+assertOk("characterSelect bridge encode", runScript(
+    "game-setup-view-check", "dataBridge", "encode", "gameSetupView", characterView
+))
+
+local readyState = assertOk(
+    "choose character for View",
+    runScript(
+        "game-setup-view-check",
+        "gameSetup",
+        "chooseCharacter",
+        characterState,
+        {
+            characterId = characterState.characterOffer.characterIds[1],
+            interactionToken = characterState.characterOffer.interactionToken,
+        },
+        hostileStatic
+    )
+).state
+local readyView = assertOk(
+    "battleReady View build",
+    runScript("game-setup-view-check", "gameSetupView", "build", readyState, hostileStatic)
+).view
+assert(readyView.phase == "battleReady"
+        and readyView.locked == true
+        and readyView.offer == nil
+        and readyView.characterOffer == nil
+        and readyView.selectedCharacter.characterId == readyState.selectedCharacterId
+        and readyView.selectedCharacter.name
+            == hostileStatic.characters[readyState.selectedCharacterId].name,
+    "battleReady View did not expose only the minimal selected character receipt")
+assertNoPrivateFields("battleReady View", readyView)
+assertOk("battleReady View validate", runScript(
+    "game-setup-view-check", "gameSetupView", "validate", readyView
+))
+
+local leakedCharacterView = clone(characterView)
+leakedCharacterView.characterOffer.characters[1].privateProfile = {
+    secret = "PRIVATE_CHARACTER_CANARY",
+}
+assertFailed("reject private character View field", runScript(
+    "game-setup-view-check", "gameSetupView", "validate", leakedCharacterView
+))
 
 local wirePath = os.getenv("RISU_GAME_SETUP_VIEW_WIRE_PATH")
 assert(type(wirePath) == "string" and wirePath ~= "", "wire output path missing")

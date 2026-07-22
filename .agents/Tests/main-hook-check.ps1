@@ -279,13 +279,24 @@ local cancelCall = lastCall("cancelCard")
 assert(cancelCall.arguments[1] == "card-002" and cancelCall.arguments[2] == "draftv1-cancel",
     "cancel route did not preserve instanceId/token")
 
+onButtonClick("main-hook-check", "init|chooseCharacter|yoo_jiyoung|game-setup-character-v1:1:2:3")
+local characterCall = assert(calls[#calls], "missing character selection controller call")
+assert(characterCall.triggerId == "main-hook-check"
+        and characterCall.script == "init"
+        and characterCall.action == "chooseCharacter"
+        and characterCall.arguments[1] == "yoo_jiyoung"
+        and characterCall.arguments[2] == "game-setup-character-v1:1:2:3",
+    "character selection route did not preserve characterId/token")
+
 local callsBeforeDenied = #calls
 onButtonClick("main-hook-check", "dataBridge|_publishCanonical|battleView|forged")
 assert(#calls == callsBeforeDenied, "button dispatcher exposed an internal module route")
 onButtonClick("main-hook-check", "init|start|unexpected")
 assert(#calls == callsBeforeDenied, "button dispatcher accepted an invalid start argument count")
+onButtonClick("main-hook-check", "init|chooseCharacter|yoo_jiyoung")
+assert(#calls == callsBeforeDenied, "button dispatcher accepted an invalid chooseCharacter argument count")
 
-hostPrint("MAIN_HOOK|scenarios=26")
+hostPrint("MAIN_HOOK|scenarios=27")
 '@
 
 Push-Location $projectRoot
@@ -304,7 +315,7 @@ try {
     if (-not ($firstText -ceq $secondText)) {
         throw "Separate Lua processes produced different main hook results.`nFIRST:`n$firstText`nSECOND:`n$secondText"
     }
-    if ($firstText -notmatch '^MAIN_HOOK\|scenarios=26$') {
+    if ($firstText -notmatch '^MAIN_HOOK\|scenarios=27$') {
         throw "Unexpected main hook vector: $firstText"
     }
     Write-Output 'main-hook-check: ok'
