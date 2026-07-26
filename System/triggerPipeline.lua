@@ -426,6 +426,7 @@
                 cardInstanceId = planState.cardInstanceId,
                 side = planState.side,
                 revealed = planState.revealed,
+                slotIndex = planState.slotIndex,
             }
             if planState.remainingTurns ~= nil then
                 context.plan.remainingTurns = planState.remainingTurns
@@ -518,8 +519,26 @@
 
         for _, planSide in ipairs({ "player", "character" }) do
             local ownerState = snapshot[planSide]
-            local slot = type(ownerState) == "table" and ownerState.planSlot or nil
-            if type(slot) == "table" and slot.occupied == true then
+            local slots = type(ownerState) == "table" and ownerState.planSlots or nil
+            if not isDenseArray(slots) then
+                return nil, {
+                    makeError(
+                        "invalid_plan_slots",
+                        "$.working.state." .. planSide .. ".planSlots",
+                        "계획 슬롯 목록이 올바르지 않습니다."
+                    ),
+                }
+            end
+            for slotIndex, slot in ipairs(slots) do
+                if type(slot) ~= "table" or slot.occupied ~= true then
+                    return nil, {
+                        makeError(
+                            "invalid_plan_slot",
+                            "$.working.state." .. planSide .. ".planSlots[" .. slotIndex .. "]",
+                            "점유 계획 슬롯이 올바르지 않습니다."
+                        ),
+                    }
+                end
                 local card = staticData.cards[slot.cardId]
                 local planData = type(card) == "table"
                     and type(card.mechanismData) == "table"
@@ -536,6 +555,7 @@
                     cardId = slot.cardId,
                     cardInstanceId = slot.cardInstanceId,
                     revealed = slot.revealed == true,
+                    slotIndex = slotIndex,
                 }
                 if slot.remainingTurns ~= nil then
                     planState.remainingTurns = slot.remainingTurns
@@ -547,7 +567,7 @@
                     "plan",
                     slot.cardId,
                     planSide,
-                    1,
+                    slotIndex,
                     planData,
                     planState,
                     path
@@ -555,14 +575,6 @@
                 if not added then
                     return nil, addErrors
                 end
-            elseif slot ~= nil and type(slot) ~= "table" then
-                return nil, {
-                    makeError(
-                        "invalid_plan_slot",
-                        "$.working.state." .. planSide .. ".planSlot",
-                        "계획 슬롯이 올바르지 않습니다."
-                    ),
-                }
             end
         end
 
@@ -785,10 +797,10 @@
                     })
                 end
 
-                local beforePlanSlot = nil
+                local beforePlanSlots = nil
                 if candidate.kind == "plan" then
-                    beforePlanSlot, cloneError = cloneData(
-                        state[candidate.side].planSlot,
+                    beforePlanSlots, cloneError = cloneData(
+                        state[candidate.side].planSlots,
                         "$.plan.before"
                     )
                     if cloneError then
@@ -824,15 +836,16 @@
                         "cardZones",
                         "consumePlanCharge",
                         state,
-                        candidate.side
+                        candidate.side,
+                        candidate.planState.cardInstanceId
                     )
                     if zoneErrors then
                         return failure(zoneErrors)
                     end
                     state = zoneReport.state
-                    local afterPlanSlot
-                    afterPlanSlot, cloneError = cloneData(
-                        state[candidate.side].planSlot,
+                    local afterPlanSlots
+                    afterPlanSlots, cloneError = cloneData(
+                        state[candidate.side].planSlots,
                         "$.plan.after"
                     )
                     if cloneError then
@@ -848,9 +861,9 @@
                     end
                     appendRecord(records, "plan_changed", candidate, {
                         action = "triggered",
-                        before = beforePlanSlot,
-                        after = afterPlanSlot,
-                        discarded = afterPlanSlot.occupied ~= true,
+                        before = beforePlanSlots,
+                        after = afterPlanSlots,
+                        discarded = #movedInstanceIds > 0,
                         movedInstanceIds = movedInstanceIds,
                     })
                 end

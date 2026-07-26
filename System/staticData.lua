@@ -1,5 +1,6 @@
 (function()
     local STATIC_CACHE_MAX_ENTRIES = 4
+    local MAX_PLAN_CAPACITY = 16
     local DIAGNOSTIC_SCOPE = "helltrain.staticData"
     local STATIC_BASE_LORE_ORDER = {
         "GameRegistry.db",
@@ -353,6 +354,18 @@
         return isFiniteNonNegative(value)
             and value >= 1
             and value % 1 == 0
+    end
+
+    local function isFiniteInteger(value)
+        return type(value) == "number"
+            and value == value
+            and value ~= math.huge
+            and value ~= -math.huge
+            and value % 1 == 0
+    end
+
+    local function isPlanCapacity(value)
+        return isPositiveInteger(value) and value <= MAX_PLAN_CAPACITY
     end
 
     local function isAsciiId(value)
@@ -1094,7 +1107,62 @@
                     addError(errors, "invalid_rules", path .. ".rules", "특징 규칙 문장이 비어 있습니다.")
                 end
                 if trait.modifiers ~= nil then
-                    addError(errors, "unsupported_modifiers", path .. ".modifiers", "현재 특징 수치 보정은 지원하지 않습니다.")
+                    local modifiersPath = path .. ".modifiers"
+                    if not isArray(trait.modifiers) then
+                        addError(errors, "invalid_trait_modifiers", modifiersPath, "특징 보정은 연속 배열이어야 합니다.")
+                    else
+                        for index, modifier in ipairs(trait.modifiers) do
+                            local modifierPath = modifiersPath .. "[" .. index .. "]"
+                            if type(modifier) ~= "table" then
+                                addError(
+                                    errors,
+                                    "invalid_trait_modifier",
+                                    modifierPath,
+                                    "특징 보정 항목은 객체여야 합니다."
+                                )
+                            else
+                                local allowed = {
+                                    stat = true,
+                                    operation = true,
+                                    amount = true,
+                                }
+                                for field in pairs(modifier) do
+                                    if not allowed[field] then
+                                        addError(
+                                            errors,
+                                            "unknown_trait_modifier_field",
+                                            modifierPath .. "." .. tostring(field),
+                                            "특징 보정에 허용되지 않은 필드가 있습니다."
+                                        )
+                                    end
+                                end
+                                if modifier.stat ~= "planCapacity" then
+                                    addError(
+                                        errors,
+                                        "unsupported_trait_modifier_stat",
+                                        modifierPath .. ".stat",
+                                        "현재 특징 보정은 planCapacity만 지원합니다."
+                                    )
+                                end
+                                if modifier.operation ~= "add" then
+                                    addError(
+                                        errors,
+                                        "unsupported_trait_modifier_operation",
+                                        modifierPath .. ".operation",
+                                        "planCapacity 특징 보정은 add 연산만 지원합니다."
+                                    )
+                                end
+                                if not isFiniteInteger(modifier.amount) then
+                                    addError(
+                                        errors,
+                                        "invalid_trait_modifier_amount",
+                                        modifierPath .. ".amount",
+                                        "planCapacity 특징 보정량은 유한한 정수여야 합니다."
+                                    )
+                                end
+                            end
+                        end
+                    end
                 end
             end
         end
@@ -1187,6 +1255,9 @@
                     if not isPositiveInteger(battle.maxHandSize) then
                         addError(errors, "invalid_hand_size", path .. ".battle.maxHandSize", "최대 손패는 1 이상의 정수여야 합니다.")
                     end
+                    if not isPlanCapacity(battle.planCapacity) then
+                        addError(errors, "invalid_plan_capacity", path .. ".battle.planCapacity", "기본 계획 용량은 1 이상 16 이하의 정수여야 합니다.")
+                    end
                     if isPositiveInteger(battle.baseDrawCount)
                         and isPositiveInteger(battle.maxHandSize)
                         and battle.baseDrawCount > battle.maxHandSize then
@@ -1201,11 +1272,30 @@
                     if not isArray(battle.traitIds) then
                         addError(errors, "invalid_trait_ids", path .. ".battle.traitIds", "특징 ID 목록이 배열이 아닙니다.")
                     else
+                        local effectivePlanCapacity = battle.planCapacity
                         for index, traitId in ipairs(battle.traitIds) do
                             local trait = traits[traitId]
                             if not trait or trait.owner ~= "character" then
                                 addError(errors, "unknown_character_trait", path .. ".battle.traitIds[" .. index .. "]", "캐릭터 특징을 찾을 수 없습니다.")
+                            elseif isFiniteInteger(effectivePlanCapacity) and isArray(trait.modifiers) then
+                                for _, modifier in ipairs(trait.modifiers) do
+                                    if type(modifier) == "table"
+                                        and modifier.stat == "planCapacity"
+                                        and modifier.operation == "add"
+                                        and isFiniteInteger(modifier.amount) then
+                                        effectivePlanCapacity = effectivePlanCapacity + modifier.amount
+                                    end
+                                end
                             end
+                        end
+                        if isPlanCapacity(battle.planCapacity)
+                            and not isPlanCapacity(effectivePlanCapacity) then
+                            addError(
+                                errors,
+                                "invalid_effective_plan_capacity",
+                                path .. ".battle.planCapacity",
+                                "기본 계획 용량과 특징 보정의 합은 1 이상 16 이하여야 합니다."
+                            )
                         end
                     end
 

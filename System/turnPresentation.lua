@@ -1,5 +1,6 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
+    local MAX_PLAN_SLOTS = 16
 
     local VALID_MODES = {
         pass = true,
@@ -472,17 +473,21 @@
                 reasonCode = true,
                 identityKnown = true,
                 cardId = true,
+                slotIndex = true,
             }, payloadPath)
             if keyError then return nil, keyError end
             if not isSide(payload.side)
                 or payload.reasonCode ~= "insight"
                 or payload.identityKnown ~= true
-                or payload.cardId == nil then
+                or payload.cardId == nil
+                or not isInteger(payload.slotIndex, 1)
+                or payload.slotIndex > MAX_PLAN_SLOTS then
                 return nil, makeError("invalid_trigger_suppression", payloadPath, "공개 억제 사건이 알려진 계획과 일치하지 않습니다.")
             end
             local cardName, _, cardError = lookupCardName(staticData, payload.cardId, payload.side, payloadPath .. ".cardId", true)
             if cardError then return nil, cardError end
-            return summary(index, event.type, sideLabel(payload.side) .. "의 계획 ‘" .. cardName .. "’ 발동이 간파로 억제되었습니다."), nil
+            return summary(index, event.type, sideLabel(payload.side) .. "의 " .. tostring(payload.slotIndex)
+                .. "번 계획 ‘" .. cardName .. "’ 발동이 간파로 억제되었습니다."), nil
         elseif event.type == "plan_changed" then
             local keyError = checkAllowedKeys(payload, {
                 side = true,
@@ -490,12 +495,15 @@
                 identityKnown = true,
                 cardId = true,
                 remainingTurns = true,
+                slotIndex = true,
             }, payloadPath)
             if keyError then return nil, keyError end
             local validActions = { placed = true, triggered = true, replaced = true, expired = true }
             if not isSide(payload.side)
                 or validActions[payload.action] ~= true
                 or type(payload.identityKnown) ~= "boolean"
+                or not isInteger(payload.slotIndex, 1)
+                or payload.slotIndex > MAX_PLAN_SLOTS
                 or (payload.remainingTurns ~= nil and not isInteger(payload.remainingTurns, 0))
                 or (payload.identityKnown == true) ~= (payload.cardId ~= nil)
                 or (payload.side == "player" and payload.identityKnown ~= true)
@@ -514,9 +522,9 @@
             if payload.identityKnown then
                 local cardName, _, cardError = lookupCardName(staticData, payload.cardId, payload.side, payloadPath .. ".cardId", true)
                 if cardError then return nil, cardError end
-                identityText = "계획 ‘" .. cardName .. "’을(를) "
+                identityText = tostring(payload.slotIndex) .. "번 계획 ‘" .. cardName .. "’을(를) "
             else
-                identityText = "정체가 드러나지 않은 계획을 "
+                identityText = tostring(payload.slotIndex) .. "번 슬롯의 정체가 드러나지 않은 계획을 "
             end
             local text = sideLabel(payload.side) .. "가 " .. identityText .. actionTexts[payload.action]
             if payload.remainingTurns ~= nil then

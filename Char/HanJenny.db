@@ -46,6 +46,7 @@ return {
                 startingMood = "ignore",
                 baseDrawCount = 4,
                 maxHandSize = 5,
+                planCapacity = 1,
                 traitIds = { "teasing_facade" },
                 deck = {
                     "jenny_slip_away_laughing",

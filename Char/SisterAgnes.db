@@ -46,6 +46,7 @@ return {
                 startingMood = "suspicion",
                 baseDrawCount = 3,
                 maxHandSize = 5,
+                planCapacity = 1,
                 traitIds = { "vow_of_chastity" },
                 deck = {
                     "agnes_cover_with_sleeves",

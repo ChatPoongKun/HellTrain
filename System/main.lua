@@ -190,7 +190,7 @@ end
 -- warm path는 이 명시적 계약 덕분에 이벤트 사이에서 getLoreBooks/CBS bridge를
 -- 생략한다. 개발 중에는 setRunScriptCacheDevelopmentMode(true)를 사용하면 매
 -- 이벤트의 첫 모듈 호출에서 source를 다시 확인한다.
-RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION or "runtime-bundle-904154f5ffdcaa0d"
+RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION or "runtime-bundle-a55f8f583d0e3f57"
 RUNTIME_CACHE_DEVELOPMENT_BYPASS = RUNTIME_CACHE_DEVELOPMENT_BYPASS == true
 
 local RUN_SCRIPT_SOURCE_CACHE_MAX_ENTRIES = 64

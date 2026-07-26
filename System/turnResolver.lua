@@ -700,8 +700,8 @@
                 if planData.charges ~= nil then
                     planSpec.charges = planData.charges
                 end
-                local beforePlanSlot, slotError = cloneData(
-                    working.state[card.owner].planSlot,
+                local beforePlanSlots, slotError = cloneData(
+                    working.state[card.owner].planSlots,
                     "$.plan.before"
                 )
                 if slotError then
@@ -719,9 +719,9 @@
                     return false, zoneErrors
                 end
                 working.state = zoneReport.state
-                local afterPlanSlot
-                afterPlanSlot, slotError = cloneData(
-                    working.state[card.owner].planSlot,
+                local afterPlanSlots
+                afterPlanSlots, slotError = cloneData(
+                    working.state[card.owner].planSlots,
                     "$.plan.after"
                 )
                 if slotError then
@@ -734,8 +734,8 @@
                     {
                         action = "placed",
                         instanceId = instance.instanceId,
-                        before = beforePlanSlot,
-                        after = afterPlanSlot,
+                        before = beforePlanSlots,
+                        after = afterPlanSlots,
                         planSpec = planSpec,
                         movedInstanceIds = zoneReport.movedInstanceIds or {},
                     },
@@ -1277,13 +1277,13 @@
         end
 
         local function cleanupSnapshot(state)
-            local playerPlan, playerPlanError = cloneData(state.player.planSlot, "$.cleanup.playerPlan")
+            local playerPlans, playerPlanError = cloneData(state.player.planSlots, "$.cleanup.playerPlans")
             if playerPlanError then
                 return nil, playerPlanError
             end
-            local characterPlan, characterPlanError = cloneData(
-                state.character.planSlot,
-                "$.cleanup.characterPlan"
+            local characterPlans, characterPlanError = cloneData(
+                state.character.planSlots,
+                "$.cleanup.characterPlans"
             )
             if characterPlanError then
                 return nil, characterPlanError
@@ -1294,13 +1294,13 @@
                     used = orderedZoneIds(state, "player", "used"),
                     hand = orderedZoneIds(state, "player", "hand"),
                     discard = orderedZoneIds(state, "player", "discard"),
-                    planSlot = playerPlan,
+                    planSlots = playerPlans,
                 },
                 character = {
                     used = orderedZoneIds(state, "character", "used"),
                     hand = orderedZoneIds(state, "character", "hand"),
                     discard = orderedZoneIds(state, "character", "discard"),
-                    planSlot = characterPlan,
+                    planSlots = characterPlans,
                 },
             }, nil
         end

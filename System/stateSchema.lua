@@ -1,6 +1,7 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
     local MAX_SAFE_INTEGER = 9007199254740991
+    local MAX_PLAN_CAPACITY = 16
     local FINGERPRINT_ALGORITHM = "canonical_poly131_137_receipt_v2"
     local DRAFT_FINGERPRINT_ALGORITHM = "canonical_poly131_137_v1"
     local PENDING_INTEGRITY_ALGORITHM = "canonical_poly131_137_pending_v1"
@@ -499,11 +500,6 @@
         end
 
         local occupied = slot.occupied
-        if occupied == false then
-            checkAllowedKeys(slot, { occupied = true }, path, errors)
-            return
-        end
-
         checkAllowedKeys(slot, {
             occupied = true,
             cardInstanceId = true,
@@ -516,7 +512,7 @@
         }, path, errors)
 
         if occupied ~= true then
-            addError(errors, "invalid_plan_occupied", path .. ".occupied", "occupied는 불리언이어야 합니다.")
+            addError(errors, "invalid_plan_occupied", path .. ".occupied", "planSlots에는 occupied = true인 점유 슬롯만 저장할 수 있습니다.")
             return
         end
         if not isRuntimeId(slot.cardInstanceId) then
@@ -597,6 +593,117 @@
                     path .. ".durationIncludesPlacementTurn",
                     "계획 슬롯의 배치 턴 포함 정책이 정적 카드 정의와 다릅니다."
                 )
+            end
+
+            local initialDurationTurns = type(planData) == "table" and planData.durationTurns or nil
+            if initialDurationTurns ~= nil and slot.remainingTurns == nil then
+                addError(
+                    errors,
+                    "plan_remaining_turns_missing",
+                    path .. ".remainingTurns",
+                    "정적 카드 정의에 지속시간이 있는 활성 계획에는 remainingTurns가 필요합니다."
+                )
+            elseif slot.remainingTurns ~= nil then
+                if initialDurationTurns == nil then
+                    addError(
+                        errors,
+                        "plan_remaining_turns_undefined",
+                        path .. ".remainingTurns",
+                        "정적 카드 정의에 지속시간이 없는 계획은 remainingTurns를 가질 수 없습니다."
+                    )
+                elseif isInteger(slot.remainingTurns, 1)
+                    and isInteger(initialDurationTurns, 1)
+                    and slot.remainingTurns > initialDurationTurns then
+                    addError(
+                        errors,
+                        "plan_remaining_turns_exceeded",
+                        path .. ".remainingTurns",
+                        "계획의 남은 지속시간은 정적 카드 정의의 초기 지속시간을 초과할 수 없습니다."
+                    )
+                end
+            end
+
+            local initialCharges = type(planData) == "table" and planData.charges or nil
+            if initialCharges ~= nil and slot.remainingCharges == nil then
+                addError(
+                    errors,
+                    "plan_remaining_charges_missing",
+                    path .. ".remainingCharges",
+                    "정적 카드 정의에 충전이 있는 활성 계획에는 remainingCharges가 필요합니다."
+                )
+            elseif slot.remainingCharges ~= nil then
+                if initialCharges == nil then
+                    addError(
+                        errors,
+                        "plan_remaining_charges_undefined",
+                        path .. ".remainingCharges",
+                        "정적 카드 정의에 충전이 없는 계획은 remainingCharges를 가질 수 없습니다."
+                    )
+                elseif isInteger(slot.remainingCharges, 1)
+                    and isInteger(initialCharges, 1)
+                    and slot.remainingCharges > initialCharges then
+                    addError(
+                        errors,
+                        "plan_remaining_charges_exceeded",
+                        path .. ".remainingCharges",
+                        "계획의 남은 충전은 정적 카드 정의의 초기 충전을 초과할 수 없습니다."
+                    )
+                end
+            end
+        end
+    end
+
+    local function validatePlanSlots(
+        slots,
+        capacity,
+        side,
+        path,
+        errors,
+        instances,
+        staticData,
+        currentTurn
+    )
+        local capacityPath = "$." .. side .. ".planCapacity"
+        local capacityValid = isSafeInteger(capacity, 1) and capacity <= MAX_PLAN_CAPACITY
+        if not capacityValid then
+            addError(errors, "invalid_plan_capacity", capacityPath, "계획 용량은 1 이상 16 이하의 정수여야 합니다.")
+        end
+
+        local slotCount = getArrayLength(slots, path, errors)
+        if slotCount == nil then
+            return
+        end
+        if capacityValid and slotCount > capacity then
+            addError(errors, "plan_capacity_exceeded", path, "점유 계획 수가 계획 용량을 초과했습니다.")
+        end
+
+        local seenInstanceIds = {}
+        for index = 1, slotCount do
+            local slot = slots[index]
+            local slotPath = path .. "[" .. index .. "]"
+            validatePlanSlot(slot, side, slotPath, errors, instances, staticData, currentTurn)
+            if type(slot) == "table" and isRuntimeId(slot.cardInstanceId) then
+                if seenInstanceIds[slot.cardInstanceId] then
+                    addError(
+                        errors,
+                        "duplicate_plan_slot",
+                        slotPath .. ".cardInstanceId",
+                        "같은 계획 카드 인스턴스를 둘 이상의 슬롯에 저장할 수 없습니다."
+                    )
+                else
+                    seenInstanceIds[slot.cardInstanceId] = true
+                end
+
+                local instance = instances[slot.cardInstanceId]
+                if instance and instance.owner == side and instance.zone == "plan"
+                    and instance.position ~= index then
+                    addError(
+                        errors,
+                        "plan_position_mismatch",
+                        slotPath .. ".cardInstanceId",
+                        "plan 영역 position은 planSlots 배열 인덱스와 일치해야 합니다."
+                    )
+                end
             end
         end
     end
@@ -1935,7 +2042,8 @@
                 baseDrawCount = true,
                 maxHandSize = true,
                 perkIds = true,
-                planSlot = true,
+                planCapacity = true,
+                planSlots = true,
             }, "$.player", errors)
             if not isFinite(state.player.stealth) then
                 addError(errors, "invalid_stealth", "$.player.stealth", "은폐는 유한한 숫자여야 합니다.")
@@ -1965,7 +2073,8 @@
                 traitIds = true,
                 baseDrawCount = true,
                 maxHandSize = true,
-                planSlot = true,
+                planCapacity = true,
+                planSlots = true,
             }, "$.character", errors)
             if not isAsciiId(state.character.characterId) then
                 addError(errors, "invalid_character_id", "$.character.characterId", "캐릭터 ID가 올바르지 않습니다.")
@@ -2100,16 +2209,35 @@
         end
 
         if type(state.player) == "table" then
-            validatePlanSlot(state.player.planSlot, "player", "$.player.planSlot", errors, instances, staticData, state.turnNumber)
+            validatePlanSlots(
+                state.player.planSlots,
+                state.player.planCapacity,
+                "player",
+                "$.player.planSlots",
+                errors,
+                instances,
+                staticData,
+                state.turnNumber
+            )
         end
         if type(state.character) == "table" then
-            validatePlanSlot(state.character.planSlot, "character", "$.character.planSlot", errors, instances, staticData, state.turnNumber)
+            validatePlanSlots(
+                state.character.planSlots,
+                state.character.planCapacity,
+                "character",
+                "$.character.planSlots",
+                errors,
+                instances,
+                staticData,
+                state.turnNumber
+            )
         end
 
         for instanceId, instance in pairs(instances) do
             if instance.zone == "plan" and VALID_OWNER[instance.owner] then
                 local ownerState = instance.owner == "player" and state.player or state.character
-                local slot = type(ownerState) == "table" and ownerState.planSlot or nil
+                local slots = type(ownerState) == "table" and ownerState.planSlots or nil
+                local slot = type(slots) == "table" and slots[instance.position] or nil
                 if type(slot) ~= "table"
                     or slot.occupied ~= true
                     or slot.cardInstanceId ~= instanceId then

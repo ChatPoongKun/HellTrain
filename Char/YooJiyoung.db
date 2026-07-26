@@ -43,6 +43,7 @@ return {
                 startingMood = "ignore",
                 baseDrawCount = 3,
                 maxHandSize = 5,
+                planCapacity = 1,
                 traitIds = { "reserved" },
                 deck = {
                     "close_collar",

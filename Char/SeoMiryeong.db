@@ -46,6 +46,7 @@ return {
                 startingMood = "suspicion",
                 baseDrawCount = 3,
                 maxHandSize = 5,
+                planCapacity = 1,
                 traitIds = { "worldly_composure" },
                 deck = {
                     "miryeong_draw_cardigan_closed",

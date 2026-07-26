@@ -1,5 +1,6 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
+    local MAX_PLAN_CAPACITY = 16
 
     local VALID_OWNER = {
         player = true,
@@ -58,6 +59,10 @@
         return isFinite(value)
             and value % 1 == 0
             and (minimum == nil or value >= minimum)
+    end
+
+    local function isPlanCapacity(value)
+        return isInteger(value, 1) and value <= MAX_PLAN_CAPACITY
     end
 
     local function cloneFailure(code, path, message)
@@ -379,6 +384,27 @@
         return #collectZone(state, owner, zone) + 1
     end
 
+    local function denseArrayLength(value)
+        if type(value) ~= "table" or getmetatable(value) ~= nil then
+            return nil
+        end
+        local count = 0
+        local maximum = 0
+        for key in pairs(value) do
+            if not isInteger(key, 1) then
+                return nil
+            end
+            count = count + 1
+            if key > maximum then
+                maximum = key
+            end
+        end
+        if count ~= maximum then
+            return nil
+        end
+        return maximum
+    end
+
     local function validatePositionContinuity(state, rootPath)
         rootPath = rootPath or "$"
         local errors = {}
@@ -429,85 +455,133 @@
             if type(ownerState) ~= "table" then
                 table.insert(errors, makeError("missing_owner_state", sidePath, "소유자 전투 상태가 없습니다."))
             else
-                local slot = ownerState.planSlot
-                local slotPath = sidePath .. ".planSlot"
-                if type(slot) ~= "table" then
-                    table.insert(errors, makeError("invalid_plan_slot", slotPath, "계획 슬롯이 테이블이 아닙니다."))
+                local slots = ownerState.planSlots
+                local slotsPath = sidePath .. ".planSlots"
+                local slotCount = denseArrayLength(slots)
+                local planInstances = collectZone(state, side, "plan")
+                if not isPlanCapacity(ownerState.planCapacity) then
+                    table.insert(errors, makeError(
+                        "invalid_plan_capacity",
+                        sidePath .. ".planCapacity",
+                        "계획 용량은 1 이상 16 이하의 정수여야 합니다."
+                    ))
+                end
+                if slotCount == nil then
+                    table.insert(errors, makeError(
+                        "invalid_plan_slots",
+                        slotsPath,
+                        "planSlots는 점유 계획만 담는 1부터 이어지는 배열이어야 합니다."
+                    ))
                 else
-                    local planInstances = collectZone(state, side, "plan")
-                    if slot.occupied == false then
-                        if #planInstances > 0 then
-                            table.insert(errors, makeError(
-                                "orphan_plan_instance",
-                                rootPath .. ".cardInstances",
-                                "빈 계획 슬롯에 연결되지 않은 plan 카드가 있습니다: " .. side
-                            ))
-                        end
-                    elseif slot.occupied == true then
-                        local instance = findInstance(state, slot.cardInstanceId)
-                        if not instance then
-                            table.insert(errors, makeError("missing_plan_instance", slotPath .. ".cardInstanceId", "계획 카드 인스턴스를 찾을 수 없습니다."))
-                        else
-                            if instance.owner ~= side then
-                                table.insert(errors, makeError("plan_owner_mismatch", slotPath .. ".cardInstanceId", "계획 슬롯과 카드 소유자가 다릅니다."))
-                            end
-                            if instance.zone ~= "plan" then
-                                table.insert(errors, makeError("plan_zone_mismatch", slotPath .. ".cardInstanceId", "계획 카드의 zone이 plan이 아닙니다."))
-                            end
-                            if instance.cardId ~= slot.cardId then
-                                table.insert(errors, makeError("plan_card_mismatch", slotPath .. ".cardId", "계획 슬롯과 카드 인스턴스의 cardId가 다릅니다."))
-                            end
-                        end
-                        if #planInstances ~= 1
-                            or not planInstances[1]
-                            or planInstances[1].instance.instanceId ~= slot.cardInstanceId then
-                            table.insert(errors, makeError(
-                                "plan_link_mismatch",
-                                rootPath .. ".cardInstances",
-                                "plan 영역과 계획 슬롯이 양방향으로 일치하지 않습니다: " .. side
-                            ))
-                        end
-                        if not isInteger(slot.placedTurn, 1) then
-                            table.insert(errors, makeError("invalid_placed_turn", slotPath .. ".placedTurn", "계획 배치 턴은 1 이상의 정수여야 합니다."))
-                        elseif isInteger(state.turnNumber, 1) and slot.placedTurn > state.turnNumber then
-                            table.insert(errors, makeError("future_placed_turn", slotPath .. ".placedTurn", "계획 배치 턴은 현재 턴보다 클 수 없습니다."))
-                        end
-                        if slot.revealed ~= true and slot.revealed ~= false then
-                            table.insert(errors, makeError("invalid_revealed", slotPath .. ".revealed", "revealed는 불리언이어야 합니다."))
-                        end
-                        if slot.durationIncludesPlacementTurn ~= nil
-                            and type(slot.durationIncludesPlacementTurn) ~= "boolean" then
-                            table.insert(errors, makeError(
-                                "invalid_plan_duration_policy",
-                                slotPath .. ".durationIncludesPlacementTurn",
-                                "배치 턴 포함 여부는 불리언이어야 합니다."
-                            ))
-                        elseif slot.durationIncludesPlacementTurn == true and slot.remainingTurns == nil then
-                            table.insert(errors, makeError(
-                                "plan_duration_policy_requires_duration",
-                                slotPath .. ".durationIncludesPlacementTurn",
-                                "배치 턴을 포함하는 계획에는 남은 지속시간이 필요합니다."
-                            ))
-                        end
+                    if isPlanCapacity(ownerState.planCapacity) and slotCount > ownerState.planCapacity then
+                        table.insert(errors, makeError(
+                            "plan_capacity_exceeded",
+                            slotsPath,
+                            "점유 계획 수가 계획 용량을 초과했습니다."
+                        ))
+                    end
+                    if #planInstances ~= slotCount then
+                        table.insert(errors, makeError(
+                            "plan_link_mismatch",
+                            rootPath .. ".cardInstances",
+                            "plan 영역과 planSlots 수가 일치하지 않습니다: " .. side
+                        ))
+                    end
 
-                        local hasLifetime = false
-                        if slot.remainingTurns ~= nil then
-                            hasLifetime = true
-                            if not isInteger(slot.remainingTurns, 1) then
-                                table.insert(errors, makeError("invalid_remaining_turns", slotPath .. ".remainingTurns", "점유된 계획의 남은 지속시간은 양의 정수여야 합니다."))
+                    local seenInstanceIds = {}
+                    for index = 1, slotCount do
+                        local slot = slots[index]
+                        local slotPath = slotsPath .. "[" .. index .. "]"
+                        if type(slot) ~= "table" or getmetatable(slot) ~= nil then
+                            table.insert(errors, makeError("invalid_plan_slot", slotPath, "계획 슬롯이 일반 테이블이 아닙니다."))
+                        elseif slot.occupied ~= true then
+                            table.insert(errors, makeError(
+                                "invalid_plan_occupied",
+                                slotPath .. ".occupied",
+                                "planSlots에는 occupied = true인 점유 슬롯만 저장할 수 있습니다."
+                            ))
+                        else
+                            if type(slot.cardInstanceId) == "string" and slot.cardInstanceId ~= "" then
+                                if seenInstanceIds[slot.cardInstanceId] then
+                                    table.insert(errors, makeError(
+                                        "duplicate_plan_slot",
+                                        slotPath .. ".cardInstanceId",
+                                        "같은 계획 카드 인스턴스가 planSlots에 중복되었습니다."
+                                    ))
+                                else
+                                    seenInstanceIds[slot.cardInstanceId] = true
+                                end
+                            end
+
+                            local instance = findInstance(state, slot.cardInstanceId)
+                            if not instance then
+                                table.insert(errors, makeError("missing_plan_instance", slotPath .. ".cardInstanceId", "계획 카드 인스턴스를 찾을 수 없습니다."))
+                            else
+                                if instance.owner ~= side then
+                                    table.insert(errors, makeError("plan_owner_mismatch", slotPath .. ".cardInstanceId", "계획 슬롯과 카드 소유자가 다릅니다."))
+                                end
+                                if instance.zone ~= "plan" then
+                                    table.insert(errors, makeError("plan_zone_mismatch", slotPath .. ".cardInstanceId", "계획 카드의 zone이 plan이 아닙니다."))
+                                end
+                                if instance.cardId ~= slot.cardId then
+                                    table.insert(errors, makeError("plan_card_mismatch", slotPath .. ".cardId", "계획 슬롯과 카드 인스턴스의 cardId가 다릅니다."))
+                                end
+                                if instance.position ~= index then
+                                    table.insert(errors, makeError(
+                                        "plan_position_mismatch",
+                                        slotPath .. ".cardInstanceId",
+                                        "plan 영역 position은 planSlots 배열 인덱스와 일치해야 합니다."
+                                    ))
+                                end
+                            end
+                            if not planInstances[index]
+                                or planInstances[index].instance.instanceId ~= slot.cardInstanceId then
+                                table.insert(errors, makeError(
+                                    "plan_link_mismatch",
+                                    rootPath .. ".cardInstances",
+                                    "plan 영역 순서와 planSlots 배열 순서가 일치하지 않습니다: " .. side
+                                ))
+                            end
+                            if not isInteger(slot.placedTurn, 1) then
+                                table.insert(errors, makeError("invalid_placed_turn", slotPath .. ".placedTurn", "계획 배치 턴은 1 이상의 정수여야 합니다."))
+                            elseif isInteger(state.turnNumber, 1) and slot.placedTurn > state.turnNumber then
+                                table.insert(errors, makeError("future_placed_turn", slotPath .. ".placedTurn", "계획 배치 턴은 현재 턴보다 클 수 없습니다."))
+                            end
+                            if slot.revealed ~= true and slot.revealed ~= false then
+                                table.insert(errors, makeError("invalid_revealed", slotPath .. ".revealed", "revealed는 불리언이어야 합니다."))
+                            end
+                            if slot.durationIncludesPlacementTurn ~= nil
+                                and type(slot.durationIncludesPlacementTurn) ~= "boolean" then
+                                table.insert(errors, makeError(
+                                    "invalid_plan_duration_policy",
+                                    slotPath .. ".durationIncludesPlacementTurn",
+                                    "배치 턴 포함 여부는 불리언이어야 합니다."
+                                ))
+                            elseif slot.durationIncludesPlacementTurn == true and slot.remainingTurns == nil then
+                                table.insert(errors, makeError(
+                                    "plan_duration_policy_requires_duration",
+                                    slotPath .. ".durationIncludesPlacementTurn",
+                                    "배치 턴을 포함하는 계획에는 남은 지속시간이 필요합니다."
+                                ))
+                            end
+
+                            local hasLifetime = false
+                            if slot.remainingTurns ~= nil then
+                                hasLifetime = true
+                                if not isInteger(slot.remainingTurns, 1) then
+                                    table.insert(errors, makeError("invalid_remaining_turns", slotPath .. ".remainingTurns", "점유된 계획의 남은 지속시간은 양의 정수여야 합니다."))
+                                end
+                            end
+                            if slot.remainingCharges ~= nil then
+                                hasLifetime = true
+                                if not isInteger(slot.remainingCharges, 1) then
+                                    table.insert(errors, makeError("invalid_remaining_charges", slotPath .. ".remainingCharges", "점유된 계획의 남은 충전은 양의 정수여야 합니다."))
+                                end
+                            end
+                            if not hasLifetime then
+                                table.insert(errors, makeError("missing_plan_lifetime", slotPath, "점유된 계획에는 지속시간이나 충전이 필요합니다."))
                             end
                         end
-                        if slot.remainingCharges ~= nil then
-                            hasLifetime = true
-                            if not isInteger(slot.remainingCharges, 1) then
-                                table.insert(errors, makeError("invalid_remaining_charges", slotPath .. ".remainingCharges", "점유된 계획의 남은 충전은 양의 정수여야 합니다."))
-                            end
-                        end
-                        if not hasLifetime then
-                            table.insert(errors, makeError("missing_plan_lifetime", slotPath, "점유된 계획에는 지속시간이나 충전이 필요합니다."))
-                        end
-                    else
-                        table.insert(errors, makeError("invalid_plan_occupied", slotPath .. ".occupied", "occupied는 불리언이어야 합니다."))
                     end
                 end
             end
@@ -521,14 +595,34 @@
         end
     end
 
-    local function discardOccupiedPlan(state, side)
+    local function syncPlanPositions(state, side)
         local ownerState = state[side]
-        local slot = ownerState.planSlot
+        for index, slot in ipairs(ownerState.planSlots) do
+            local instance = findInstance(state, slot.cardInstanceId)
+            if instance then
+                instance.position = index
+            end
+        end
+    end
+
+    local function discardPlanAt(state, side, slotIndex)
+        local ownerState = state[side]
+        local slot = ownerState.planSlots[slotIndex]
         local instance = findInstance(state, slot.cardInstanceId)
         instance.zone = "discard"
         instance.position = nextPosition(state, side, "discard")
-        ownerState.planSlot = { occupied = false }
+        table.remove(ownerState.planSlots, slotIndex)
+        syncPlanPositions(state, side)
         return instance.instanceId
+    end
+
+    local function findPlanSlotIndex(state, side, instanceId)
+        for index, slot in ipairs(state[side].planSlots) do
+            if slot.cardInstanceId == instanceId then
+                return index
+            end
+        end
+        return nil
     end
 
     local function appendNestedErrors(errors, nested)
@@ -924,12 +1018,12 @@
 
         local movedInstanceIds = {}
         local ownerState = nextState[side]
-        if ownerState.planSlot.occupied == true then
-            table.insert(movedInstanceIds, discardOccupiedPlan(nextState, side))
+        if #ownerState.planSlots >= ownerState.planCapacity then
+            table.insert(movedInstanceIds, discardPlanAt(nextState, side, 1))
         end
 
         instance.zone = "plan"
-        instance.position = 1
+        instance.position = #ownerState.planSlots + 1
         local slot = {
             occupied = true,
             cardInstanceId = instance.instanceId,
@@ -944,7 +1038,7 @@
         if normalizedSpec.charges ~= nil then
             slot.remainingCharges = normalizedSpec.charges
         end
-        ownerState.planSlot = slot
+        table.insert(ownerState.planSlots, slot)
         table.insert(movedInstanceIds, instance.instanceId)
 
         normalizeAll(nextState)
@@ -955,10 +1049,17 @@
         return success(nextState, movedInstanceIds, {})
     end
 
-    local function consumePlanCharge(state, side)
+    local function consumePlanCharge(state, side, instanceId)
+        local errors = {}
         local sideError = validateOwner(side, "$.side")
         if sideError then
-            return failure({ sideError })
+            table.insert(errors, sideError)
+        end
+        if instanceId ~= nil and (type(instanceId) ~= "string" or instanceId == "") then
+            table.insert(errors, makeError("invalid_instance_id", "$.instanceId", "계획 카드 인스턴스 ID가 올바르지 않습니다."))
+        end
+        if #errors > 0 then
+            return failure(errors)
         end
 
         local nextState, stateErrors = prepareState(state)
@@ -971,18 +1072,78 @@
             return failure(planErrors)
         end
 
-        local slot = nextState[side].planSlot
-        if slot.occupied ~= true then
-            return failure({ makeError("empty_plan_slot", "$." .. side .. ".planSlot", "발동할 계획이 없습니다.") })
+        local slots = nextState[side].planSlots
+        local slotIndex
+        if instanceId == nil then
+            if #slots == 0 then
+                return failure({ makeError("empty_plan_slots", "$." .. side .. ".planSlots", "발동할 계획이 없습니다.") })
+            end
+            if #slots > 1 then
+                return failure({ makeError(
+                    "ambiguous_plan_slot",
+                    "$.instanceId",
+                    "점유 계획이 둘 이상이면 소비할 카드 인스턴스 ID를 지정해야 합니다."
+                ) })
+            end
+            slotIndex = 1
+            instanceId = slots[1].cardInstanceId
+        else
+            slotIndex = findPlanSlotIndex(nextState, side, instanceId)
+            if slotIndex == nil then
+                return failure({ makeError(
+                    "plan_instance_not_found",
+                    "$.instanceId",
+                    "해당 진영의 점유 계획에서 카드 인스턴스를 찾을 수 없습니다."
+                ) })
+            end
         end
 
+        local slot = slots[slotIndex]
         slot.revealed = true
         local movedInstanceIds = {}
         if slot.remainingCharges ~= nil then
             slot.remainingCharges = slot.remainingCharges - 1
             if slot.remainingCharges == 0 then
-                table.insert(movedInstanceIds, discardOccupiedPlan(nextState, side))
+                table.insert(movedInstanceIds, discardPlanAt(nextState, side, slotIndex))
             end
+        end
+
+        normalizeAll(nextState)
+        local outputErrors = validatePlanLinks(nextState, "$")
+        if #outputErrors > 0 then
+            return failure(outputErrors)
+        end
+        return success(nextState, movedInstanceIds, {})
+    end
+
+    local function setPlanCapacity(state, side, capacity)
+        local errors = {}
+        local sideError = validateOwner(side, "$.side")
+        if sideError then
+            table.insert(errors, sideError)
+        end
+        if not isPlanCapacity(capacity) then
+            table.insert(errors, makeError(
+                "invalid_plan_capacity",
+                "$.capacity",
+                "계획 용량은 1 이상 16 이하의 정수여야 합니다."
+            ))
+        end
+        if #errors > 0 then
+            return failure(errors)
+        end
+
+        local nextState, stateErrors = prepareState(state)
+        if stateErrors then
+            return failure(stateErrors)
+        end
+        normalizeAll(nextState)
+
+        local ownerState = nextState[side]
+        ownerState.planCapacity = capacity
+        local movedInstanceIds = {}
+        while #ownerState.planSlots > capacity do
+            table.insert(movedInstanceIds, discardPlanAt(nextState, side, 1))
         end
 
         normalizeAll(nextState)
@@ -1029,16 +1190,25 @@
         nextState.turnStartReceipt = nil
 
         for _, side in ipairs({ "player", "character" }) do
-            local slot = nextState[side].planSlot
-            if slot.occupied == true
-                and slot.remainingTurns ~= nil
-                and (slot.placedTurn < nextState.turnNumber
-                    or slot.durationIncludesPlacementTurn == true) then
-                slot.remainingTurns = slot.remainingTurns - 1
+            local survivors = {}
+            for _, slot in ipairs(nextState[side].planSlots) do
+                if slot.remainingTurns ~= nil
+                    and (slot.placedTurn < nextState.turnNumber
+                        or slot.durationIncludesPlacementTurn == true) then
+                    slot.remainingTurns = slot.remainingTurns - 1
+                end
+
                 if slot.remainingTurns == 0 then
-                    table.insert(movedInstanceIds, discardOccupiedPlan(nextState, side))
+                    local instance = findInstance(nextState, slot.cardInstanceId)
+                    instance.zone = "discard"
+                    instance.position = nextPosition(nextState, side, "discard")
+                    table.insert(movedInstanceIds, instance.instanceId)
+                else
+                    table.insert(survivors, slot)
                 end
             end
+            nextState[side].planSlots = survivors
+            syncPlanPositions(nextState, side)
         end
 
         normalizeAll(nextState)
@@ -1130,6 +1300,7 @@
         moveToRemoved = moveToRemoved,
         placePlan = placePlan,
         consumePlanCharge = consumePlanCharge,
+        setPlanCapacity = setPlanCapacity,
         endTurnCleanup = endTurnCleanup,
         validateConservation = validateConservation,
     }

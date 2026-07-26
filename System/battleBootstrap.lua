@@ -1,6 +1,8 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
     local MAX_SAFE_INTEGER = 9007199254740991
+    local MAX_PLAN_CAPACITY = 16
+    local DEFAULT_PLAYER_PLAN_CAPACITY = 1
 
     local PLAYER_CARD_IDS = {
         "subtle_approach",
@@ -72,6 +74,10 @@
             and (minimum == nil or value >= minimum)
     end
 
+    local function isPlanCapacity(value)
+        return isSafeInteger(value, 1) and value <= MAX_PLAN_CAPACITY
+    end
+
     local function isRuntimeId(value)
         return type(value) == "string"
             and string.match(value, "^[A-Za-z0-9][A-Za-z0-9_-]*$") ~= nil
@@ -108,6 +114,102 @@
             copy[index] = value[index]
         end
         return copy
+    end
+
+    local function effectiveCharacterPlanCapacity(characterId, battle, staticData)
+        local capacityPath = "$.staticData.characters." .. characterId .. ".battle.planCapacity"
+        if not isPlanCapacity(type(battle) == "table" and battle.planCapacity or nil) then
+            return nil, makeError(
+                "invalid_plan_capacity",
+                capacityPath,
+                "캐릭터 기본 계획 용량은 1 이상 16 이하의 정수여야 합니다."
+            )
+        end
+        if getArrayLength(battle.traitIds) == nil then
+            return nil, makeError(
+                "invalid_character_traits",
+                "$.staticData.characters." .. characterId .. ".battle.traitIds",
+                "캐릭터 특징 ID 목록이 연속 배열이 아닙니다."
+            )
+        end
+
+        local traits = type(staticData) == "table" and staticData.traits or nil
+        if type(traits) ~= "table" or getmetatable(traits) ~= nil then
+            return nil, makeError(
+                "invalid_static_traits",
+                "$.staticData.traits",
+                "계획 용량 특징 보정을 계산할 전체 특징 컬렉션이 필요합니다."
+            )
+        end
+
+        local capacity = battle.planCapacity
+        for traitIndex, traitId in ipairs(battle.traitIds) do
+            local trait = traits[traitId]
+            if type(trait) ~= "table" then
+                return nil, makeError(
+                    "unknown_character_trait",
+                    "$.staticData.characters." .. characterId .. ".battle.traitIds[" .. traitIndex .. "]",
+                    "계획 용량을 계산할 캐릭터 특징을 찾을 수 없습니다."
+                )
+            end
+            if trait.modifiers ~= nil then
+                local modifierCount = getArrayLength(trait.modifiers)
+                if modifierCount == nil then
+                    return nil, makeError(
+                        "invalid_trait_modifiers",
+                        "$.staticData.traits." .. tostring(traitId) .. ".modifiers",
+                        "특징 보정은 연속 배열이어야 합니다."
+                    )
+                end
+                for modifierIndex = 1, modifierCount do
+                    local modifier = trait.modifiers[modifierIndex]
+                    local modifierPath = "$.staticData.traits." .. tostring(traitId)
+                        .. ".modifiers[" .. modifierIndex .. "]"
+                    if type(modifier) ~= "table" or getmetatable(modifier) ~= nil then
+                        return nil, makeError(
+                            "invalid_trait_plan_capacity_modifier",
+                            modifierPath,
+                            "계획 용량 특징 보정은 메타테이블 없는 객체여야 합니다."
+                        )
+                    end
+                    for field in pairs(modifier) do
+                        if field ~= "stat" and field ~= "operation" and field ~= "amount" then
+                            return nil, makeError(
+                                "unknown_trait_modifier_field",
+                                modifierPath .. "." .. tostring(field),
+                                "계획 용량 특징 보정에 허용되지 않은 필드가 있습니다."
+                            )
+                        end
+                    end
+                    if modifier.stat ~= "planCapacity"
+                        or modifier.operation ~= "add"
+                        or not isSafeInteger(modifier.amount) then
+                        return nil, makeError(
+                            "invalid_trait_plan_capacity_modifier",
+                            modifierPath,
+                            "계획 용량 특징 보정은 planCapacity/add/정수 amount 형식이어야 합니다."
+                        )
+                    end
+                    capacity = capacity + modifier.amount
+                    if not isSafeInteger(capacity) then
+                        return nil, makeError(
+                            "invalid_effective_plan_capacity",
+                            capacityPath,
+                            "계획 용량 특징 보정 합계가 안전한 정수 범위를 벗어났습니다."
+                        )
+                    end
+                end
+            end
+        end
+
+        if not isPlanCapacity(capacity) then
+            return nil, makeError(
+                "invalid_effective_plan_capacity",
+                capacityPath,
+                "캐릭터 기본 계획 용량과 특징 보정의 합은 1 이상 16 이하여야 합니다."
+            )
+        end
+        return capacity, nil
     end
 
     local function copyErrors(report)
@@ -453,6 +555,14 @@
             return failure({ characterError })
         end
         local characterBattle = characterDefinition.battle
+        local characterPlanCapacity, planCapacityError = effectiveCharacterPlanCapacity(
+            CHARACTER_ID,
+            characterBattle,
+            staticData
+        )
+        if planCapacityError then
+            return failure({ planCapacityError })
+        end
 
         local cardInstances = makeInstances(PLAYER_CARD_IDS, "player")
         local characterInstances = makeInstances(CHARACTER_CARD_IDS, "character")
@@ -475,7 +585,8 @@
                 baseDrawCount = 3,
                 maxHandSize = 5,
                 perkIds = {},
-                planSlot = { occupied = false },
+                planCapacity = DEFAULT_PLAYER_PLAN_CAPACITY,
+                planSlots = {},
             },
             character = {
                 characterId = CHARACTER_ID,
@@ -484,7 +595,8 @@
                 traitIds = copyArray(characterBattle.traitIds),
                 baseDrawCount = characterBattle.baseDrawCount,
                 maxHandSize = characterBattle.maxHandSize,
-                planSlot = { occupied = false },
+                planCapacity = characterPlanCapacity,
+                planSlots = {},
             },
             cardInstances = cardInstances,
             selection = {
@@ -578,6 +690,14 @@
         if #definitionErrors > 0 then
             return failure(definitionErrors)
         end
+        local characterPlanCapacity, planCapacityError = effectiveCharacterPlanCapacity(
+            normalized.characterId,
+            characterBattle,
+            staticData
+        )
+        if planCapacityError then
+            return failure({ planCapacityError })
+        end
 
         local cardInstances = makeInstances(normalized.playerCardIds, "player")
         local characterInstances = makeInstances(characterBattle.deck, "character")
@@ -600,7 +720,8 @@
                 baseDrawCount = 3,
                 maxHandSize = 5,
                 perkIds = {},
-                planSlot = { occupied = false },
+                planCapacity = DEFAULT_PLAYER_PLAN_CAPACITY,
+                planSlots = {},
             },
             character = {
                 characterId = normalized.characterId,
@@ -609,7 +730,8 @@
                 traitIds = copyArray(characterBattle.traitIds),
                 baseDrawCount = characterBattle.baseDrawCount,
                 maxHandSize = characterBattle.maxHandSize,
-                planSlot = { occupied = false },
+                planCapacity = characterPlanCapacity,
+                planSlots = {},
             },
             cardInstances = cardInstances,
             selection = {

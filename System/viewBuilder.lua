@@ -88,6 +88,7 @@
 
     return function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
+    local MAX_PLAN_CAPACITY = 16
 
     local function addError(errors, code, path, message)
         table.insert(errors, {
@@ -128,6 +129,10 @@
         return isFinite(value)
             and value % 1 == 0
             and (minimum == nil or value >= minimum)
+    end
+
+    local function isPlanCapacity(value)
+        return isInteger(value, 1) and value <= MAX_PLAN_CAPACITY
     end
 
     local function isAsciiId(value)
@@ -471,17 +476,11 @@
         return built
     end
 
-    local function buildPlanView(slot, owner, cards, registry, path, errors)
-        if type(slot) ~= "table" or slot.occupied ~= true then
-            return {
-                status = "empty",
-                hasDuration = false,
-            }
-        end
-
+    local function buildPlanView(slot, slotIndex, owner, cards, registry, path, errors)
         local hasDuration = slot.remainingTurns ~= nil
         local hidden = owner == "character" and slot.revealed ~= true
         local view = {
+            slotIndex = slotIndex,
             status = hidden and "hidden" or "revealed",
             hasDuration = hasDuration,
         }
@@ -492,6 +491,42 @@
             view.card = buildSafeCardSummary(cards[slot.cardId], registry, path .. ".card", errors)
         end
         return view
+    end
+
+    local function buildPlanViews(ownerState, owner, cards, registry, path, errors)
+        local capacity = ownerState.planCapacity
+        local slots = ownerState.planSlots
+        local views = {}
+        if not isPlanCapacity(capacity) then
+            addError(
+                errors,
+                "invalid_plan_capacity",
+                "$." .. owner .. ".planCapacity",
+                "계획 용량은 1 이상 " .. MAX_PLAN_CAPACITY .. " 이하의 정수여야 합니다."
+            )
+            return views
+        end
+        for slotIndex = 1, capacity do
+            local slot = slots[slotIndex]
+            if slot == nil then
+                views[slotIndex] = {
+                    slotIndex = slotIndex,
+                    status = "empty",
+                    hasDuration = false,
+                }
+            else
+                views[slotIndex] = buildPlanView(
+                    slot,
+                    slotIndex,
+                    owner,
+                    cards,
+                    registry,
+                    path .. "[" .. slotIndex .. "]",
+                    errors
+                )
+            end
+        end
+        return views
     end
 
     local function buildMoodView(state, data, errors)
@@ -965,7 +1000,15 @@
             },
             player = {
                 stealth = displayState.player.stealth,
-                plan = buildPlanView(displayState.player.planSlot, "player", data.cards, data.registry, "$.player.plan", errors),
+                planCapacity = displayState.player.planCapacity,
+                plans = buildPlanViews(
+                    displayState.player,
+                    "player",
+                    data.cards,
+                    data.registry,
+                    "$.player.plans",
+                    errors
+                ),
             },
             character = {
                 id = characterDefinition.id,
@@ -975,7 +1018,15 @@
                 mood = buildMoodView(displayState, data, errors),
                 publicAction = publicAction,
                 traits = buildTraitViews(displayState, data, errors),
-                plan = buildPlanView(displayState.character.planSlot, "character", data.cards, data.registry, "$.character.plan", errors),
+                planCapacity = displayState.character.planCapacity,
+                plans = buildPlanViews(
+                    displayState.character,
+                    "character",
+                    data.cards,
+                    data.registry,
+                    "$.character.plans",
+                    errors
+                ),
             },
             hand = {
                 count = #handItems,
@@ -1112,18 +1163,22 @@
             return
         end
         checkAllowedKeys(value, {
+            slotIndex = true,
             status = true,
             hasDuration = true,
             remainingTurns = true,
             card = true,
         }, path, errors)
+        if not isInteger(value.slotIndex, 1) then
+            addError(errors, "invalid_plan_slot_index", path .. ".slotIndex", "계획 슬롯 번호가 올바르지 않습니다.")
+        end
         if value.status ~= "empty" and value.status ~= "hidden" and value.status ~= "revealed" then
             addError(errors, "invalid_plan_status", path .. ".status", "계획 공개 상태가 올바르지 않습니다.")
         end
         if value.hasDuration ~= true and value.hasDuration ~= false then
             addError(errors, "invalid_plan_duration_flag", path .. ".hasDuration", "hasDuration은 불리언이어야 합니다.")
         elseif value.hasDuration then
-            if not isInteger(value.remainingTurns, 0) then
+            if not isInteger(value.remainingTurns, 1) then
                 addError(errors, "invalid_remaining_turns", path .. ".remainingTurns", "남은 지속 턴이 올바르지 않습니다.")
             end
         elseif value.remainingTurns ~= nil then
@@ -1137,6 +1192,36 @@
         end
         if value.status == "empty" and value.hasDuration ~= false then
             addError(errors, "empty_plan_duration", path .. ".hasDuration", "빈 계획에는 지속시간이 없습니다.")
+        end
+    end
+
+    local function validatePlanViews(value, capacity, path, errors, allowHidden)
+        local length = getArrayLength(value, path, errors)
+        if length == nil then
+            return
+        end
+        if isPlanCapacity(capacity) and length ~= capacity then
+            addError(errors, "plan_capacity_mismatch", path, "계획 View 배열 길이가 계획 용량과 다릅니다.")
+        end
+
+        local emptyStarted = false
+        for index = 1, length do
+            local plan = value[index]
+            local planPath = path .. "[" .. index .. "]"
+            validatePlanView(plan, planPath, errors)
+            if type(plan) == "table" then
+                if plan.slotIndex ~= index then
+                    addError(errors, "plan_slot_index_mismatch", planPath .. ".slotIndex", "계획 배열 순서와 슬롯 번호가 다릅니다.")
+                end
+                if plan.status == "empty" then
+                    emptyStarted = true
+                elseif emptyStarted then
+                    addError(errors, "plan_slot_order_mismatch", planPath .. ".status", "활성 계획은 빈 계획 슬롯보다 앞에 있어야 합니다.")
+                end
+                if plan.status == "hidden" and not allowHidden then
+                    addError(errors, "hidden_player_plan", planPath .. ".status", "플레이어 자신의 계획은 숨김 상태로 표시할 수 없습니다.")
+                end
+            end
         end
     end
 
@@ -1294,11 +1379,23 @@
         if type(view.player) ~= "table" then
             addError(errors, "invalid_player", "$.player", "player가 테이블이 아닙니다.")
         else
-            checkAllowedKeys(view.player, { stealth = true, plan = true }, "$.player", errors)
+            checkAllowedKeys(view.player, {
+                stealth = true,
+                planCapacity = true,
+                plans = true,
+            }, "$.player", errors)
             if not isFinite(view.player.stealth) then
                 addError(errors, "invalid_stealth", "$.player.stealth", "은폐 표시값이 올바르지 않습니다.")
             end
-            validatePlanView(view.player.plan, "$.player.plan", errors)
+            if not isPlanCapacity(view.player.planCapacity) then
+                addError(
+                    errors,
+                    "invalid_plan_capacity",
+                    "$.player.planCapacity",
+                    "플레이어 계획 용량은 1 이상 " .. MAX_PLAN_CAPACITY .. " 이하의 정수여야 합니다."
+                )
+            end
+            validatePlanViews(view.player.plans, view.player.planCapacity, "$.player.plans", errors, false)
         end
 
         if type(view.character) ~= "table" then
@@ -1312,7 +1409,8 @@
                 mood = true,
                 publicAction = true,
                 traits = true,
-                plan = true,
+                planCapacity = true,
+                plans = true,
             }, "$.character", errors)
             if not isAsciiId(view.character.id) or type(view.character.name) ~= "string" then
                 addError(errors, "invalid_character_value", "$.character", "캐릭터 표시 값이 올바르지 않습니다.")
@@ -1373,7 +1471,15 @@
                     end
                 end
             end
-            validatePlanView(view.character.plan, "$.character.plan", errors)
+            if not isPlanCapacity(view.character.planCapacity) then
+                addError(
+                    errors,
+                    "invalid_plan_capacity",
+                    "$.character.planCapacity",
+                    "캐릭터 계획 용량은 1 이상 " .. MAX_PLAN_CAPACITY .. " 이하의 정수여야 합니다."
+                )
+            end
+            validatePlanViews(view.character.plans, view.character.planCapacity, "$.character.plans", errors, true)
         end
 
         if type(view.hand) ~= "table" then

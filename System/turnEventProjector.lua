@@ -1,6 +1,7 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
     local MAX_SAFE_INTEGER = 9007199254740991
+    local MAX_PLAN_SLOTS = 16
 
     local KNOWN_EVENT_TYPES = {
         turn_start = true,
@@ -88,6 +89,13 @@
         skip_actions = true,
         add_mood_token = true,
         force_mood = true,
+    }
+
+    local CATEGORY_ORDER = {
+        plan = 1,
+        trait = 2,
+        perk = 3,
+        environment = 4,
     }
 
     local function makeError(code, path, message)
@@ -304,13 +312,13 @@
                 used = orderedZoneIds(state, "player", "used"),
                 hand = orderedZoneIds(state, "player", "hand"),
                 discard = orderedZoneIds(state, "player", "discard"),
-                planSlot = state.player.planSlot,
+                planSlots = state.player.planSlots,
             },
             character = {
                 used = orderedZoneIds(state, "character", "used"),
                 hand = orderedZoneIds(state, "character", "hand"),
                 discard = orderedZoneIds(state, "character", "discard"),
-                planSlot = state.character.planSlot,
+                planSlots = state.character.planSlots,
             },
         }
     end
@@ -320,9 +328,9 @@
         local moved = {}
         for _, side in ipairs({ "player", "character" }) do
             local sideBefore = before[side]
-            local planCopy, planError = cloneData(sideBefore.planSlot, "$.turnResolution.events.cleanup.planSlot", {})
+            local planCopy, planError = cloneData(sideBefore.planSlots, "$.turnResolution.events.cleanup.planSlots", {})
             if planError then return nil, nil, planError end
-            local sideAfter = { used = {}, hand = {}, discard = {}, planSlot = planCopy }
+            local sideAfter = { used = {}, hand = {}, discard = {}, planSlots = planCopy }
             expected[side] = sideAfter
             for _, instanceId in ipairs(sideBefore.discard) do sideAfter.discard[#sideAfter.discard + 1] = instanceId end
             for _, zone in ipairs({ "used", "hand" }) do
@@ -333,19 +341,22 @@
             end
         end
         for _, side in ipairs({ "player", "character" }) do
-            local slot = expected[side].planSlot
-            if slot.occupied == true
-                and slot.remainingTurns ~= nil
-                and (slot.placedTurn < resolvedTurnNumber
-                    or slot.durationIncludesPlacementTurn == true) then
-                slot.remainingTurns = slot.remainingTurns - 1
+            local retained = {}
+            for _, slot in ipairs(expected[side].planSlots) do
+                if slot.remainingTurns ~= nil
+                    and (slot.placedTurn < resolvedTurnNumber
+                        or slot.durationIncludesPlacementTurn == true) then
+                    slot.remainingTurns = slot.remainingTurns - 1
+                end
                 if slot.remainingTurns == 0 then
                     local instanceId = slot.cardInstanceId
-                    expected[side].planSlot = { occupied = false }
                     expected[side].discard[#expected[side].discard + 1] = instanceId
                     moved[#moved + 1] = instanceId
+                else
+                    retained[#retained + 1] = slot
                 end
             end
+            expected[side].planSlots = retained
         end
         return expected, moved, nil
     end
@@ -460,14 +471,6 @@
         if #errors > 0 then
             return nil, errors[1]
         end
-        if slot.occupied == false then
-            for key in pairs(slot) do
-                if key ~= "occupied" then
-                    return nil, makeError("occupied_false_has_data", path, "빈 계획 슬롯에는 부가 데이터가 있을 수 없습니다.")
-                end
-            end
-            return true, nil
-        end
         if slot.occupied ~= true
             or not isRuntimeId(slot.cardInstanceId)
             or not isAsciiId(slot.cardId)
@@ -498,6 +501,38 @@
         end
         if slot.remainingCharges ~= nil and not isInteger(slot.remainingCharges, 1) then
             return nil, makeError("invalid_plan_charges", path .. ".remainingCharges", "계획 남은 충전이 올바르지 않습니다.")
+        end
+        return true, nil
+    end
+
+    local function validatePlanSlotsSnapshot(slots, path, capacity)
+        if not isDenseArray(slots) then
+            return nil, makeError("invalid_plan_slots", path, "계획 슬롯 목록이 연속 배열이 아닙니다.")
+        end
+        if #slots > MAX_PLAN_SLOTS then
+            return nil, makeError(
+                "plan_slot_limit_exceeded",
+                path,
+                "계획 슬롯 목록이 지원 상한을 초과했습니다."
+            )
+        end
+        if capacity ~= nil and #slots > capacity then
+            return nil, makeError(
+                "plan_capacity_exceeded",
+                path,
+                "계획 슬롯 목록이 해당 진영의 계획 용량을 초과했습니다."
+            )
+        end
+        local seen = {}
+        for index, slot in ipairs(slots) do
+            local _, slotError = validatePlanSlotSnapshot(slot, path .. "[" .. index .. "]")
+            if slotError then
+                return nil, slotError
+            end
+            if seen[slot.cardInstanceId] then
+                return nil, makeError("duplicate_plan_instance", path .. "[" .. index .. "].cardInstanceId", "계획 슬롯 인스턴스가 중복되었습니다.")
+            end
+            seen[slot.cardInstanceId] = true
         end
         return true, nil
     end
@@ -546,7 +581,7 @@
         return true, nil
     end
 
-    local function validateCleanupSnapshot(snapshot, path)
+    local function validateCleanupSnapshot(snapshot, path, capacities)
         if type(snapshot) ~= "table" or getmetatable(snapshot) ~= nil then
             return nil, makeError("invalid_cleanup_snapshot", path, "턴 정리 스냅숏이 일반 객체가 아닙니다.")
         end
@@ -562,7 +597,7 @@
                 return nil, makeError("invalid_cleanup_side", sidePath, "턴 정리 진영 스냅숏이 일반 객체가 아닙니다.")
             end
             errors = {}
-            checkAllowedKeys(value, { used = true, hand = true, discard = true, planSlot = true }, sidePath, errors)
+            checkAllowedKeys(value, { used = true, hand = true, discard = true, planSlots = true }, sidePath, errors)
             if #errors > 0 then
                 return nil, errors[1]
             end
@@ -572,7 +607,12 @@
                     return nil, idError
                 end
             end
-            local _, slotError = validatePlanSlotSnapshot(value.planSlot, sidePath .. ".planSlot")
+            local capacity = type(capacities) == "table" and capacities[side] or nil
+            local _, slotError = validatePlanSlotsSnapshot(
+                value.planSlots,
+                sidePath .. ".planSlots",
+                capacity
+            )
             if slotError then
                 return nil, slotError
             end
@@ -686,6 +726,21 @@
             end
             if resolutionCopy.afterState.lastCommittedTurnId ~= resolutionCopy.turnId then
                 errors[#errors + 1] = makeError("after_turn_not_committed", "$.turnResolution.afterState.lastCommittedTurnId", "afterState가 해결 turnId를 확정하지 않았습니다.")
+            end
+            for _, side in ipairs({ "player", "character" }) do
+                local beforeOwner = type(beforeState[side]) == "table" and beforeState[side] or nil
+                local afterOwner = type(resolutionCopy.afterState[side]) == "table"
+                    and resolutionCopy.afterState[side]
+                    or nil
+                if beforeOwner ~= nil
+                    and afterOwner ~= nil
+                    and afterOwner.planCapacity ~= beforeOwner.planCapacity then
+                    errors[#errors + 1] = makeError(
+                        "plan_capacity_changed",
+                        "$.turnResolution.afterState." .. side .. ".planCapacity",
+                        "v1 턴 해결은 계획 용량을 변경할 수 없습니다."
+                    )
+                end
             end
         end
 
@@ -872,11 +927,37 @@
         return output, nil
     end
 
-    local function planSlotIdentity(slot)
-        if type(slot) == "table" and slot.occupied == true and isAsciiId(slot.cardId) then
-            return slot.cardId
+    local function findPlanSlot(slots, instanceId)
+        if not isDenseArray(slots) or not isRuntimeId(instanceId) then
+            return nil, nil
         end
-        return nil
+        for index, slot in ipairs(slots) do
+            if type(slot) == "table" and slot.cardInstanceId == instanceId then
+                return slot, index
+            end
+        end
+        return nil, nil
+    end
+
+    local function planKnown(side, slot)
+        return side == "player"
+            or (type(slot) == "table" and slot.occupied == true and slot.revealed == true)
+    end
+
+    local function sideRank(side, actingSide)
+        if actingSide ~= nil and side == actingSide then
+            return 1
+        end
+        if actingSide ~= nil and isSide(side) then
+            return 2
+        end
+        if actingSide == nil and side == "player" then
+            return 1
+        end
+        if actingSide == nil and side == "character" then
+            return 2
+        end
+        return 3
     end
 
     local function projectTurn(beforeStateInput, staticInput, resolutionInput)
@@ -901,7 +982,7 @@
 
         local startReceipt = beforeState.turnStartReceipt
         local startBaseline = type(startReceipt) == "table" and startReceipt.baseline or nil
-        local function initialPlanSlot(side)
+        local function initialPlanSlots(side)
             for _, receiptEvent in ipairs(type(startReceipt) == "table" and startReceipt.events or {}) do
                 local receiptSide = receiptEvent.side
                     or (type(receiptEvent.source) == "table" and receiptEvent.source.side or nil)
@@ -911,24 +992,25 @@
                     return receiptEvent.payload.before
                 end
             end
-            return beforeState[side].planSlot
+            return beforeState[side].planSlots
         end
         local trackers = {
             player = {
-                slot = initialPlanSlot("player"),
-                cardId = nil,
-                known = true,
+                slots = initialPlanSlots("player"),
             },
             character = {
-                slot = initialPlanSlot("character"),
-                cardId = nil,
-                known = false,
+                slots = initialPlanSlots("character"),
             },
         }
         for _, side in ipairs({ "player", "character" }) do
-            trackers[side].cardId = planSlotIdentity(trackers[side].slot)
-            trackers[side].known = side == "player"
-                or (type(trackers[side].slot) == "table" and trackers[side].slot.revealed == true)
+            local _, initialSlotsError = validatePlanSlotsSnapshot(
+                trackers[side].slots,
+                "$.beforeState.turnStartReceipt.events.planSlots." .. side,
+                beforeState[side].planCapacity
+            )
+            if initialSlotsError then
+                return failure({ initialSlotsError })
+            end
         end
         local startingStealth = type(startBaseline) == "table" and startBaseline.stealth or beforeState.player.stealth
         local startingResistance = type(startBaseline) == "table" and startBaseline.resistance or beforeState.character.resistance
@@ -976,6 +1058,7 @@
         local pendingPlanMeanings = {}
         local triggerInputs = {}
         local seenTriggerBatches = {}
+        local seenTriggerOrder = {}
         local expectedCharacterIntent = beforeState.characterIntent
         local expectedCharacterSelected = #expectedCharacterIntent.cardInstanceIds > 0
         local expectedCharacterActionTag = expectedCharacterIntent.publicActionTag
@@ -1040,8 +1123,8 @@
                     context = makeTriggerContext(eventType, phase, currentCard),
                     eventId = eventId,
                     plans = {
-                        player = trackers.player.slot,
-                        character = trackers.character.slot,
+                        player = trackers.player.slots,
+                        character = trackers.character.slots,
                     },
                 }
             end
@@ -1143,7 +1226,7 @@
             return false
         end
 
-        local function replayTrigger(kind, definition, inputRecord, planSlot, planSide, path)
+        local function replayTrigger(kind, definition, inputRecord, planSlot, planSide, planSlotIndex, path)
             local context, contextError = cloneData(inputRecord.context, path .. ".context", {})
             if contextError then return nil, nil, contextError end
             if kind == "plan" then
@@ -1155,6 +1238,7 @@
                     cardInstanceId = planSlot.cardInstanceId,
                     side = planSide,
                     revealed = planSlot.revealed == true,
+                    slotIndex = planSlotIndex,
                 }
                 if planSlot.remainingTurns ~= nil then context.plan.remainingTurns = planSlot.remainingTurns end
                 if planSlot.remainingCharges ~= nil then context.plan.remainingCharges = planSlot.remainingCharges end
@@ -1225,7 +1309,20 @@
 
         local function collectExpectedTriggerBatches()
             local expected = {}
-            local function addCandidate(inputKey, inputRecord, kind, sourceId, side, instanceId, spec, planSlot)
+            local matchedByInput = {}
+            local nextOrdinalByInput = {}
+            local function addCandidate(
+                inputKey,
+                inputRecord,
+                kind,
+                sourceId,
+                side,
+                instanceId,
+                declarationIndex,
+                spec,
+                planSlot,
+                planSlotIndex
+            )
                 local context, contextError = cloneData(inputRecord.context, "$.triggerReplay.context", {})
                 if contextError then return nil, contextError end
                 if planSlot ~= nil then
@@ -1234,6 +1331,7 @@
                         cardInstanceId = planSlot.cardInstanceId,
                         side = side,
                         revealed = planSlot.revealed == true,
+                        slotIndex = planSlotIndex,
                     }
                     if planSlot.remainingTurns ~= nil then context.plan.remainingTurns = planSlot.remainingTurns end
                     if planSlot.remainingCharges ~= nil then context.plan.remainingCharges = planSlot.remainingCharges end
@@ -1255,14 +1353,29 @@
                         return nil, makeError("ambiguous_trigger_definition", "$.staticData", "같은 입력과 source에서 둘 이상의 트리거 정의가 일치합니다.")
                     end
                     expected[key] = true
+                    local nextOrdinal = (nextOrdinalByInput[inputKey] or 0) + 1
+                    nextOrdinalByInput[inputKey] = nextOrdinal
+                    matchedByInput[inputKey] = matchedByInput[inputKey] or {
+                        actingSide = inputRecord.event.side,
+                        candidates = {},
+                    }
+                    local candidates = matchedByInput[inputKey].candidates
+                    candidates[#candidates + 1] = {
+                        key = key,
+                        categoryOrder = CATEGORY_ORDER[kind],
+                        side = side,
+                        sourceId = sourceId,
+                        declarationIndex = declarationIndex or 1,
+                        ordinal = nextOrdinal,
+                    }
                 end
                 return true, nil
             end
 
             for inputKey, inputRecord in pairs(triggerInputs) do
                 for _, side in ipairs({ "player", "character" }) do
-                    local slot = inputRecord.plans[side]
-                    if type(slot) == "table" and slot.occupied == true then
+                    local slots = inputRecord.plans[side]
+                    for slotIndex, slot in ipairs(slots) do
                         local card = staticData.cards[slot.cardId]
                         local plan = type(card) == "table"
                             and type(card.mechanismData) == "table"
@@ -1278,15 +1391,17 @@
                             slot.cardId,
                             side,
                             slot.cardInstanceId,
+                            slotIndex,
                             plan,
-                            slot
+                            slot,
+                            slotIndex
                         )
                         if not ok then return nil, candidateError end
                     end
                 end
                 for _, traitId in ipairs(beforeState.character.traitIds) do
                     local trait = staticData.traits[traitId]
-                    for _, spec in ipairs(type(trait) == "table" and trait.triggers or {}) do
+                    for declarationIndex, spec in ipairs(type(trait) == "table" and trait.triggers or {}) do
                         local ok, candidateError = addCandidate(
                             inputKey,
                             inputRecord,
@@ -1294,6 +1409,7 @@
                             traitId,
                             trait.owner,
                             nil,
+                            declarationIndex,
                             spec,
                             nil
                         )
@@ -1302,7 +1418,7 @@
                 end
                 for _, perkId in ipairs(beforeState.player.perkIds) do
                     local perk = staticData.perks[perkId]
-                    for _, spec in ipairs(type(perk) == "table" and perk.triggers or {}) do
+                    for declarationIndex, spec in ipairs(type(perk) == "table" and perk.triggers or {}) do
                         local ok, candidateError = addCandidate(
                             inputKey,
                             inputRecord,
@@ -1310,6 +1426,7 @@
                             perkId,
                             perk.owner or "player",
                             nil,
+                            declarationIndex,
                             spec,
                             nil
                         )
@@ -1317,7 +1434,7 @@
                     end
                 end
                 local environment = staticData.environments[beforeState.environmentId]
-                for _, spec in ipairs(type(environment) == "table" and environment.triggers or {}) do
+                for declarationIndex, spec in ipairs(type(environment) == "table" and environment.triggers or {}) do
                     local ok, candidateError = addCandidate(
                         inputKey,
                         inputRecord,
@@ -1325,18 +1442,44 @@
                         beforeState.environmentId,
                         nil,
                         nil,
+                        declarationIndex,
                         spec,
                         nil
                     )
                     if not ok then return nil, candidateError end
                 end
             end
-            return expected, nil
+            local orders = {}
+            for inputKey, batch in pairs(matchedByInput) do
+                table.sort(batch.candidates, function(left, right)
+                    if left.categoryOrder ~= right.categoryOrder then
+                        return left.categoryOrder < right.categoryOrder
+                    end
+                    local leftSide = sideRank(left.side, batch.actingSide)
+                    local rightSide = sideRank(right.side, batch.actingSide)
+                    if leftSide ~= rightSide then
+                        return leftSide < rightSide
+                    end
+                    if left.sourceId ~= right.sourceId then
+                        return left.sourceId < right.sourceId
+                    end
+                    if left.declarationIndex ~= right.declarationIndex then
+                        return left.declarationIndex < right.declarationIndex
+                    end
+                    return left.ordinal < right.ordinal
+                end)
+                orders[inputKey] = {}
+                for index, candidate in ipairs(batch.candidates) do
+                    orders[inputKey][index] = candidate.key
+                end
+            end
+            return expected, orders, nil
         end
 
         local function planKey(event)
             local source = event.source
             return tostring(event.side or source.side or "")
+                .. "|" .. tostring(source.kind or "")
                 .. "|" .. tostring(source.instanceId or "")
                 .. "|" .. tostring(source.id or "")
         end
@@ -1383,12 +1526,16 @@
             return payload, nil
         end
 
-        local function emitPlan(side, actionName, cardId, identityKnown, remainingTurns, narrationKey, narrationRequired)
+        local function emitPlan(side, actionName, cardId, identityKnown, remainingTurns, slotIndex, narrationKey, narrationRequired)
             local publicPayload = {
                 side = side,
                 action = actionName,
                 identityKnown = identityKnown == true,
+                slotIndex = slotIndex,
             }
+            if not isInteger(slotIndex, 1) or slotIndex > MAX_PLAN_SLOTS then
+                return nil, makeError("invalid_plan_slot_index", "$.plan.slotIndex", "계획 슬롯 순번이 올바르지 않습니다.")
+            end
             local card = nil
             if identityKnown == true and cardId ~= nil then
                 local lookupErrors = {}
@@ -1490,8 +1637,8 @@
                     and type(startReceipt.transient) == "table"
                     and startReceipt.transient.forcedMoodRequests
                     or {}
-                if not dataEqual(trackers.player.slot, beforeState.player.planSlot)
-                    or not dataEqual(trackers.character.slot, beforeState.character.planSlot)
+                if not dataEqual(trackers.player.slots, beforeState.player.planSlots)
+                    or not dataEqual(trackers.character.slots, beforeState.character.planSlots)
                     or trackedStealth ~= beforeState.player.stealth
                     or trackedResistance ~= beforeState.character.resistance
                     or trackedMood ~= beforeState.character.mood
@@ -1737,7 +1884,14 @@
                         cause = payload.cause,
                     }
                     if event.source.kind == "plan" and pendingPlanSlots[key] == nil then
-                        pendingPlanSlots[key] = trackers[event.source.side].slot
+                        local pendingSlot, pendingSlotIndex = findPlanSlot(
+                            trackers[event.source.side].slots,
+                            event.source.instanceId
+                        )
+                        pendingPlanSlots[key] = {
+                            slot = pendingSlot,
+                            slotIndex = pendingSlotIndex,
+                        }
                     end
                 else
                     local ok, emitError = emitEffect(effect)
@@ -1889,7 +2043,8 @@
                     and type(planCard.mechanismData) == "table"
                     and planCard.mechanismData.plan
                     or nil
-                local trackedSlot = trackers[side] and trackers[side].slot or nil
+                local trackedSlots = trackers[side] and trackers[side].slots or nil
+                local trackedSlot, trackedSlotIndex = findPlanSlot(trackedSlots, event.source.instanceId)
                 local expectedHidden = type(trackedSlot) == "table"
                     and trackedSlot.occupied == true
                     and trackedSlot.revealed ~= true
@@ -1902,6 +2057,13 @@
                         payload.inputEventType
                     )
                     inputRecord = triggerInputs[inputKeyValue]
+                end
+                local inputPlanSlot, inputPlanSlotIndex = nil, nil
+                if inputRecord ~= nil and type(inputRecord.plans) == "table" then
+                    inputPlanSlot, inputPlanSlotIndex = findPlanSlot(
+                        inputRecord.plans[side],
+                        event.source.instanceId
+                    )
                 end
                 local _, sideError = requireSideSource(event, path, side)
                 if #lookupErrors > 0
@@ -1920,10 +2082,10 @@
                     or not isAsciiId(payload.reasonCode)
                     or payload.reasonCode ~= "insight"
                     or type(payload.hidden) ~= "boolean"
-                    or trackers[side].cardId ~= event.source.id
                     or type(trackedSlot) ~= "table"
                     or trackedSlot.occupied ~= true
-                    or event.source.instanceId ~= trackedSlot.cardInstanceId
+                    or trackedSlot.cardId ~= event.source.id
+                    or inputPlanSlot == nil
                     or payload.hidden ~= expectedHidden then
                     return failure(#lookupErrors > 0 and lookupErrors or {
                         sideError or makeError("invalid_trigger_suppression", path, "억제 사건의 계획 source 또는 payload가 올바르지 않습니다."),
@@ -1936,16 +2098,17 @@
                 )
                 if suppressionContextError then return failure({ suppressionContextError }) end
                 suppressionContext.plan = {
-                    cardId = trackedSlot.cardId,
-                    cardInstanceId = trackedSlot.cardInstanceId,
+                    cardId = inputPlanSlot.cardId,
+                    cardInstanceId = inputPlanSlot.cardInstanceId,
                     side = side,
-                    revealed = trackedSlot.revealed == true,
+                    revealed = inputPlanSlot.revealed == true,
+                    slotIndex = inputPlanSlotIndex,
                 }
-                if trackedSlot.remainingTurns ~= nil then
-                    suppressionContext.plan.remainingTurns = trackedSlot.remainingTurns
+                if inputPlanSlot.remainingTurns ~= nil then
+                    suppressionContext.plan.remainingTurns = inputPlanSlot.remainingTurns
                 end
-                if trackedSlot.remainingCharges ~= nil then
-                    suppressionContext.plan.remainingCharges = trackedSlot.remainingCharges
+                if inputPlanSlot.remainingCharges ~= nil then
+                    suppressionContext.plan.remainingCharges = inputPlanSlot.remainingCharges
                 end
                 local suppressionCondition, suppressionCallError = callModule(
                     "effectEngine",
@@ -1967,18 +2130,21 @@
                     return failure({ makeError("duplicate_trigger_batch", path, "같은 입력과 source의 트리거 batch가 중복되었습니다.") })
                 end
                 seenTriggerBatches[suppressionBatchKey] = true
+                seenTriggerOrder[inputKeyValue] = seenTriggerOrder[inputKeyValue] or {}
+                seenTriggerOrder[inputKeyValue][#seenTriggerOrder[inputKeyValue] + 1] = suppressionBatchKey
                 if payload.hidden == true then
                     -- A hidden suppression leaves no public or LLM trace and does not reveal the plan.
                 elseif payload.hidden == false then
-                    local known = side == "player" or trackers[side].known == true
+                    local known = planKnown(side, trackedSlot)
                     if known ~= true
-                        or (trackers[side].cardId ~= nil and trackers[side].cardId ~= event.source.id) then
+                        or trackedSlot.cardId ~= event.source.id then
                         return failure({ makeError("suppression_visibility_mismatch", path, "공개 억제 계획의 알려진 정체가 source와 다릅니다.") })
                     end
                     local publicPayload = {
                         side = side,
                         reasonCode = payload.reasonCode,
                         identityKnown = known,
+                        slotIndex = trackedSlotIndex,
                     }
                     if known then
                         publicPayload.cardId = event.source.id
@@ -2042,12 +2208,26 @@
                 end
                 local key = planKey(event)
                 local records = pendingTriggerEffects[key] or {}
+                local pendingPlan = pendingPlanSlots[key]
+                local replayPlanSlot, replayPlanSlotIndex = nil, nil
+                if event.source.kind == "plan" then
+                    replayPlanSlot, replayPlanSlotIndex = findPlanSlot(
+                        inputRecord.plans[event.source.side],
+                        event.source.instanceId
+                    )
+                    if type(pendingPlan) ~= "table"
+                        or type(pendingPlan.slot) ~= "table"
+                        or pendingPlan.slot.cardInstanceId ~= event.source.instanceId then
+                        return failure({ makeError("missing_plan_context", path, "계획 트리거 재현에 필요한 인스턴스 문맥이 없습니다.") })
+                    end
+                end
                 local commands, _, replayError = replayTrigger(
                     event.source.kind,
                     definition,
                     inputRecord,
-                    pendingPlanSlots[key],
+                    replayPlanSlot,
                     event.source.side,
+                    replayPlanSlotIndex,
                     path
                 )
                 if replayError then return failure({ replayError }) end
@@ -2069,6 +2249,8 @@
                 pendingPlanMeanings[key] = nil
                 pendingPlanSlots[key] = nil
                 seenTriggerBatches[resolvedBatchKey] = true
+                seenTriggerOrder[inputKeyValue] = seenTriggerOrder[inputKeyValue] or {}
+                seenTriggerOrder[inputKeyValue][#seenTriggerOrder[inputKeyValue] + 1] = resolvedBatchKey
                 -- Internal audit event; intentionally omitted.
             elseif event.type == "plan_changed" then
                 local side = event.side or event.source.side
@@ -2076,28 +2258,45 @@
                 if sideError then
                     return failure({ makeError("invalid_plan_side", path .. ".side", "계획 사건 side가 올바르지 않습니다.") })
                 end
-                local beforeSlot = payload.before
-                local afterSlot = payload.after
-                local _, beforeSlotError = validatePlanSlotSnapshot(beforeSlot, path .. ".payload.before")
-                local _, afterSlotError = validatePlanSlotSnapshot(afterSlot, path .. ".payload.after")
+                local beforeSlots = payload.before
+                local afterSlots = payload.after
+                local capacity = beforeState[side].planCapacity
+                local _, beforeSlotError = validatePlanSlotsSnapshot(
+                    beforeSlots,
+                    path .. ".payload.before",
+                    capacity
+                )
+                local _, afterSlotError = validatePlanSlotsSnapshot(
+                    afterSlots,
+                    path .. ".payload.after",
+                    capacity
+                )
                 local _, movedIdsError = validateIdArray(payload.movedInstanceIds, path .. ".payload.movedInstanceIds")
                 if beforeSlotError or afterSlotError or movedIdsError then
                     return failure({ beforeSlotError or afterSlotError or movedIdsError })
                 end
-                if not dataEqual(beforeSlot, trackers[side].slot) then
+                if not dataEqual(beforeSlots, trackers[side].slots) then
                     return failure({ makeError("plan_before_mismatch", path .. ".payload.before", "계획 사건 before가 앞선 계획 상태와 다릅니다.") })
                 end
-                local cardId = event.source.id or planSlotIdentity(afterSlot) or planSlotIdentity(beforeSlot)
+                local cardId = event.source.id
                 if payload.action == "triggered" then
                     local lookupErrors = {}
                     local card = findCard(staticData, cardId, side, path .. ".source.id", lookupErrors)
-                    local expectedAfter, expectedAfterError = cloneData(beforeSlot, path .. ".payload.before", {})
+                    local beforeSlot, beforeIndex = findPlanSlot(beforeSlots, event.source.instanceId)
+                    local expectedAfter, expectedAfterError = cloneData(beforeSlots, path .. ".payload.before", {})
                     if expectedAfterError then return failure({ expectedAfterError }) end
-                    expectedAfter.revealed = true
-                    if expectedAfter.remainingCharges ~= nil then
-                        expectedAfter.remainingCharges = expectedAfter.remainingCharges - 1
-                        if expectedAfter.remainingCharges == 0 then expectedAfter = { occupied = false } end
+                    local expectedSlot = beforeIndex and expectedAfter[beforeIndex] or nil
+                    if expectedSlot ~= nil then
+                        expectedSlot.revealed = true
+                        if expectedSlot.remainingCharges ~= nil then
+                            expectedSlot.remainingCharges = expectedSlot.remainingCharges - 1
+                            if expectedSlot.remainingCharges == 0 then
+                                table.remove(expectedAfter, beforeIndex)
+                            end
+                        end
                     end
+                    local afterSlot, afterIndex = findPlanSlot(afterSlots, event.source.instanceId)
+                    local discarded = afterSlot == nil
                     if #lookupErrors > 0
                         or event.source.kind ~= "plan"
                         or not hasMechanism(card, "plan")
@@ -2107,35 +2306,42 @@
                         or payload.instanceId ~= nil
                         or type(payload.discarded) ~= "boolean"
                         or payload.planSpec ~= nil
-                        or planSlotIdentity(beforeSlot) ~= cardId
-                        or event.source.instanceId ~= beforeSlot.cardInstanceId
-                        or not dataEqual(afterSlot, expectedAfter)
-                        or (planSlotIdentity(afterSlot) ~= nil and planSlotIdentity(afterSlot) ~= cardId)
-                        or (afterSlot.occupied == true
-                            and (afterSlot.cardInstanceId ~= beforeSlot.cardInstanceId
-                                or afterSlot.revealed ~= true))
+                        or beforeSlot == nil
+                        or beforeSlot.cardId ~= cardId
+                        or not dataEqual(afterSlots, expectedAfter)
+                        or (afterSlot ~= nil
+                            and (afterSlot.cardId ~= cardId
+                                or afterSlot.revealed ~= true
+                                or afterIndex ~= beforeIndex))
                         or (payload.discarded == true
                             and not arraysEqual(payload.movedInstanceIds, { beforeSlot.cardInstanceId }))
                         or (payload.discarded == false and #payload.movedInstanceIds ~= 0)
-                        or payload.discarded ~= (afterSlot.occupied ~= true) then
+                        or payload.discarded ~= discarded then
                         return failure(#lookupErrors > 0 and lookupErrors or {
                             makeError("invalid_plan_trigger", path, "계획 발동 사건이 source·슬롯과 일치하지 않습니다."),
                         })
                     end
                     local key = planKey(event)
-                    if pendingPlanSlots[key] == nil then pendingPlanSlots[key] = beforeSlot end
-                    local remainingTurns = type(afterSlot) == "table" and afterSlot.occupied == true and afterSlot.remainingTurns or nil
-                    local ok, planError = emitPlan(side, "triggered", card.id, true, remainingTurns, "planTriggered", true)
+                    if pendingPlanSlots[key] == nil then
+                        pendingPlanSlots[key] = { slot = beforeSlot, slotIndex = beforeIndex }
+                    end
+                    local remainingTurns = afterSlot and afterSlot.remainingTurns or nil
+                    local ok, planError = emitPlan(
+                        side,
+                        "triggered",
+                        card.id,
+                        true,
+                        remainingTurns,
+                        beforeIndex,
+                        "planTriggered",
+                        true
+                    )
                     if not ok then
                         return failure({ planError })
                     end
-                    trackers[side] = {
-                        slot = afterSlot,
-                        cardId = planSlotIdentity(afterSlot),
-                        known = type(afterSlot) == "table" and afterSlot.occupied == true,
-                    }
+                    trackers[side].slots = afterSlots
                     if postCleanupSnapshot ~= nil then
-                        postCleanupSnapshot[side].planSlot = afterSlot
+                        postCleanupSnapshot[side].planSlots = afterSlots
                         if payload.discarded == true then
                             postCleanupSnapshot[side].discard[#postCleanupSnapshot[side].discard + 1] = beforeSlot.cardInstanceId
                         end
@@ -2154,12 +2360,60 @@
                     local expectedIncludesPlacementTurn = type(placedPlanData) == "table"
                         and placedPlanData.durationIncludesPlacementTurn == true
                     local _, planSpecError = validatePlanSpecSnapshot(payload.planSpec, path .. ".payload.planSpec")
-                    local expectedMovedIds = { payload.instanceId }
-                    if beforeSlot.occupied == true then
-                        expectedMovedIds = { beforeSlot.cardInstanceId, payload.instanceId }
+                    local planSpec = type(payload.planSpec) == "table" and payload.planSpec or {}
+                    local expectedPlanSpec = nil
+                    if type(placedPlanData) == "table" then
+                        expectedPlanSpec = {
+                            revealed = false,
+                        }
+                        if placedPlanData.durationTurns ~= nil then
+                            expectedPlanSpec.durationTurns = placedPlanData.durationTurns
+                        end
+                        if placedPlanData.durationIncludesPlacementTurn ~= nil then
+                            expectedPlanSpec.durationIncludesPlacementTurn =
+                                placedPlanData.durationIncludesPlacementTurn
+                        end
+                        if placedPlanData.charges ~= nil then
+                            expectedPlanSpec.charges = placedPlanData.charges
+                        end
                     end
+                    local planSpecStaticError = expectedPlanSpec ~= nil
+                        and not dataEqual(planSpec, expectedPlanSpec)
+                        and makeError(
+                            "plan_spec_static_mismatch",
+                            path .. ".payload.planSpec",
+                            "계획 배치 명세가 정적 카드 계획 정의와 다릅니다."
+                        )
+                        or nil
+                    local capacity = type(beforeState[side]) == "table" and beforeState[side].planCapacity or nil
+                    local expectedAfter, expectedAfterError = cloneData(beforeSlots, path .. ".payload.before", {})
+                    if expectedAfterError then return failure({ expectedAfterError }) end
+                    local replacedSlot = nil
+                    if isInteger(capacity, 1) and #expectedAfter >= capacity then
+                        replacedSlot = table.remove(expectedAfter, 1)
+                    end
+                    local expectedPlacedSlot = {
+                        occupied = true,
+                        cardInstanceId = payload.instanceId,
+                        cardId = cardId,
+                        placedTurn = resolution.turnNumber,
+                        durationIncludesPlacementTurn = planSpec.durationIncludesPlacementTurn == true,
+                        revealed = planSpec.revealed,
+                    }
+                    if planSpec.durationTurns ~= nil then
+                        expectedPlacedSlot.remainingTurns = planSpec.durationTurns
+                    end
+                    if planSpec.charges ~= nil then
+                        expectedPlacedSlot.remainingCharges = planSpec.charges
+                    end
+                    expectedAfter[#expectedAfter + 1] = expectedPlacedSlot
+                    local expectedMovedIds = replacedSlot ~= nil
+                        and { replacedSlot.cardInstanceId, payload.instanceId }
+                        or { payload.instanceId }
+                    local afterSlot, afterIndex = findPlanSlot(afterSlots, payload.instanceId)
                     if #lookupErrors > 0
                         or planSpecError
+                        or planSpecStaticError
                         or event.source.kind ~= "card"
                         or not hasMechanism(placedCard, "plan")
                         or event.phase ~= side .. "_card"
@@ -2169,33 +2423,30 @@
                         or not isRuntimeId(payload.instanceId)
                         or payload.instanceId ~= event.source.instanceId
                         or payload.discarded ~= nil
-                        or planSlotIdentity(afterSlot) ~= cardId
-                        or afterSlot.cardInstanceId ~= payload.instanceId
-                        or afterSlot.placedTurn ~= resolution.turnNumber
-                        or afterSlot.remainingTurns ~= payload.planSpec.durationTurns
-                        or (afterSlot.durationIncludesPlacementTurn == true)
-                            ~= (payload.planSpec.durationIncludesPlacementTurn == true)
-                        or (payload.planSpec.durationIncludesPlacementTurn == true)
+                        or not isInteger(capacity, 1)
+                        or #beforeSlots > capacity
+                        or not dataEqual(afterSlots, expectedAfter)
+                        or afterSlot == nil
+                        or afterIndex ~= #afterSlots
+                        or (planSpec.durationIncludesPlacementTurn == true)
                             ~= expectedIncludesPlacementTurn
-                        or afterSlot.remainingCharges ~= payload.planSpec.charges
-                        or (side == "character" and payload.planSpec.revealed ~= false)
-                        or afterSlot.revealed ~= payload.planSpec.revealed
+                        or (side == "character" and planSpec.revealed ~= false)
                         or not arraysEqual(payload.movedInstanceIds, expectedMovedIds) then
                         return failure(#lookupErrors > 0 and lookupErrors or {
-                            planSpecError or makeError("invalid_plan_placement", path, "계획 배치 사건이 카드·슬롯과 일치하지 않습니다."),
+                            planSpecError
+                                or planSpecStaticError
+                                or makeError("invalid_plan_placement", path, "계획 배치 사건이 카드·슬롯과 일치하지 않습니다."),
                         })
                     end
-                    local previousCardId = planSlotIdentity(beforeSlot)
-                    if previousCardId ~= nil then
-                        local previousKnown = side == "player"
-                            or (type(beforeSlot) == "table" and beforeSlot.revealed == true)
-                            or (trackers[side].cardId == previousCardId and trackers[side].known == true)
+                    if replacedSlot ~= nil then
+                        local previousKnown = planKnown(side, replacedSlot)
                         local replaced, replaceError = emitPlan(
                             side,
                             "replaced",
-                            previousCardId,
+                            replacedSlot.cardId,
                             previousKnown,
                             nil,
+                            1,
                             previousKnown and "planExpired" or nil,
                             false
                         )
@@ -2203,23 +2454,23 @@
                             return failure({ replaceError })
                         end
                     end
-                    local newCardId = planSlotIdentity(afterSlot) or cardId
-                    local newKnown = side == "player"
-                        or (type(afterSlot) == "table" and afterSlot.revealed == true)
-                    local remainingTurns = type(afterSlot) == "table" and afterSlot.remainingTurns or nil
+                    local newCardId = afterSlot.cardId
+                    local newKnown = planKnown(side, afterSlot)
+                    local remainingTurns = afterSlot.remainingTurns
                     local placed, placeError = emitPlan(
                         side,
                         "placed",
                         newCardId,
                         newKnown,
                         remainingTurns,
+                        afterIndex,
                         newKnown and "planPlaced" or nil,
                         true
                     )
                     if not placed then
                         return failure({ placeError })
                     end
-                    trackers[side] = { slot = afterSlot, cardId = newCardId, known = newKnown }
+                    trackers[side].slots = afterSlots
                 else
                     return failure({ makeError("unknown_plan_action", path .. ".payload.action", "지원하지 않는 plan_changed action입니다.") })
                 end
@@ -2421,8 +2672,20 @@
                 end
             elseif event.type == "turn_cleanup" then
                 local _, sourceError = requireSource(event, path, "system", "card_zones")
-                local _, beforeError = validateCleanupSnapshot(payload.before, path .. ".payload.before")
-                local _, afterError = validateCleanupSnapshot(payload.after, path .. ".payload.after")
+                local capacities = {
+                    player = beforeState.player.planCapacity,
+                    character = beforeState.character.planCapacity,
+                }
+                local _, beforeError = validateCleanupSnapshot(
+                    payload.before,
+                    path .. ".payload.before",
+                    capacities
+                )
+                local _, afterError = validateCleanupSnapshot(
+                    payload.after,
+                    path .. ".payload.after",
+                    capacities
+                )
                 local _, movedError = validateIdArray(payload.movedInstanceIds, path .. ".payload.movedInstanceIds")
                 local expectedAfter, expectedMoved, transitionError
                 if beforeError == nil and afterError == nil then
@@ -2450,8 +2713,8 @@
                         and payload.after.turnNumber ~= resolution.turnNumber)
                     or not dataEqual(payload.after, expectedAfter)
                     or not arraysEqual(payload.movedInstanceIds, expectedMoved)
-                    or not dataEqual(payload.before.player.planSlot, trackers.player.slot)
-                    or not dataEqual(payload.before.character.planSlot, trackers.character.slot)
+                    or not dataEqual(payload.before.player.planSlots, trackers.player.slots)
+                    or not dataEqual(payload.before.character.planSlots, trackers.character.slots)
                     or trackedStealth ~= resolution.afterState.player.stealth
                     or trackedResistance ~= resolution.afterState.character.resistance
                     or trackedMood ~= resolution.afterState.character.mood
@@ -2464,38 +2727,34 @@
                 trackedHandCount.player = 0
                 trackedHandCount.character = 0
                 for _, side in ipairs({ "player", "character" }) do
-                    local beforeSlot = type(payload.before) == "table"
+                    local beforeSlots = type(payload.before) == "table"
                         and type(payload.before[side]) == "table"
-                        and payload.before[side].planSlot
-                        or nil
-                    local afterSlot = type(payload.after) == "table"
+                        and payload.before[side].planSlots
+                        or {}
+                    local afterSlots = type(payload.after) == "table"
                         and type(payload.after[side]) == "table"
-                        and payload.after[side].planSlot
-                        or nil
-                    local expiredCardId = planSlotIdentity(beforeSlot)
-                    if expiredCardId ~= nil and planSlotIdentity(afterSlot) == nil then
-                        local known = side == "player"
-                            or (type(beforeSlot) == "table" and beforeSlot.revealed == true)
-                            or (trackers[side].cardId == expiredCardId and trackers[side].known == true)
-                        local expired, expireError = emitPlan(
-                            side,
-                            "expired",
-                            expiredCardId,
-                            known,
-                            nil,
-                            known and "planExpired" or nil,
-                            false
-                        )
-                        if not expired then
-                            return failure({ expireError })
+                        and payload.after[side].planSlots
+                        or {}
+                    for beforeIndex, beforeSlot in ipairs(beforeSlots) do
+                        local afterSlot = findPlanSlot(afterSlots, beforeSlot.cardInstanceId)
+                        if afterSlot == nil then
+                            local known = planKnown(side, beforeSlot)
+                            local expired, expireError = emitPlan(
+                                side,
+                                "expired",
+                                beforeSlot.cardId,
+                                known,
+                                nil,
+                                beforeIndex,
+                                known and "planExpired" or nil,
+                                false
+                            )
+                            if not expired then
+                                return failure({ expireError })
+                            end
                         end
                     end
-                    trackers[side] = {
-                        slot = afterSlot,
-                        cardId = planSlotIdentity(afterSlot),
-                        known = side == "player"
-                            or (type(afterSlot) == "table" and afterSlot.revealed == true),
-                    }
+                    trackers[side].slots = afterSlots
                 end
                 emit(publicResult, "turn_ended", { turnNumber = payload.resolvedTurnNumber })
             elseif event.type == "session_end" then
@@ -2555,8 +2814,14 @@
         for _ in pairs(pendingPlanMeanings) do
             return failure({ makeError("unmatched_plan_meaning", "$.turnResolution.events", "trigger_resolved와 짝이 없는 계획 발동 사건이 있습니다.") })
         end
-        local expectedTriggerBatches, expectedTriggerError = collectExpectedTriggerBatches()
+        local expectedTriggerBatches, expectedTriggerOrder, expectedTriggerError = collectExpectedTriggerBatches()
         if expectedTriggerError then return failure({ expectedTriggerError }) end
+        if expectedTriggerBatches == nil then
+            return failure({
+                expectedTriggerOrder
+                    or makeError("trigger_replay_failed", "$.turnResolution.events", "예상 트리거 batch를 재구성하지 못했습니다."),
+            })
+        end
         for key in pairs(expectedTriggerBatches) do
             if seenTriggerBatches[key] ~= true then
                 return failure({ makeError("missing_trigger_batch", "$.turnResolution.events", "조건을 만족한 트리거 batch가 사건 로그에 없습니다.") })
@@ -2567,11 +2832,22 @@
                 return failure({ makeError("unexpected_trigger_batch", "$.turnResolution.events", "조건과 일치하지 않는 트리거 batch가 사건 로그에 있습니다.") })
             end
         end
+        for inputKey, expectedOrder in pairs(expectedTriggerOrder) do
+            local seenOrder = seenTriggerOrder[inputKey] or {}
+            if not arraysEqual(seenOrder, expectedOrder) then
+                return failure({ makeError("trigger_batch_order_mismatch", "$.turnResolution.events", "트리거 batch 순서가 snapshot 정렬 규칙과 다릅니다.") })
+            end
+        end
+        for inputKey, seenOrder in pairs(seenTriggerOrder) do
+            if expectedTriggerOrder[inputKey] == nil and #seenOrder > 0 then
+                return failure({ makeError("unexpected_trigger_batch_order", "$.turnResolution.events", "예상 입력에 없는 트리거 batch 순서가 기록되었습니다.") })
+            end
+        end
         local finalCleanupSnapshot = cleanupSnapshotFromState(resolution.afterState)
         if postCleanupSnapshot == nil
             or not dataEqual(postCleanupSnapshot, finalCleanupSnapshot)
-            or not dataEqual(trackers.player.slot, resolution.afterState.player.planSlot)
-            or not dataEqual(trackers.character.slot, resolution.afterState.character.planSlot) then
+            or not dataEqual(trackers.player.slots, resolution.afterState.player.planSlots)
+            or not dataEqual(trackers.character.slots, resolution.afterState.character.planSlots) then
             return failure({ makeError("final_state_event_mismatch", "$.turnResolution.events", "사건 재생 결과가 최종 상태와 다릅니다.") })
         end
 

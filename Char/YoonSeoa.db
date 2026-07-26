@@ -46,6 +46,7 @@ return {
                 startingMood = "rejection",
                 baseDrawCount = 3,
                 maxHandSize = 5,
+                planCapacity = 1,
                 traitIds = { "iron_composure" },
                 deck = {
                     "seoa_document_bag_guard",
