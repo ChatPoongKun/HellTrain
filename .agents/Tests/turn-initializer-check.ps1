@@ -279,8 +279,9 @@ assert(canonical(initialized.receipt.characterSelection) == canonical(initialize
 assert(initialized.receipt.baseline.stealth == 30, "baseline stealth mismatch")
 assert(initialized.receipt.baseline.resistance == 30, "baseline resistance mismatch")
 assert(initialized.receipt.baseline.mood == "ignore", "baseline mood mismatch")
-assert(initialized.receipt.transient.moodLock.mood == "ignore", "turn-start mood lock was not preserved")
-assert(initialized.receipt.transient.moodLock["until"] == "turn_end", "mood lock lifetime mismatch")
+assert(initialized.receipt.baseline.moodTokens.ignore == 0, "baseline mood tokens mismatch")
+assert(initialized.state.character.moodTokens.ignore == 1, "turn-start ignore token was not preserved")
+assert(#initialized.receipt.transient.forcedMoodRequests == 0, "turn-start plan queued an unexpected force request")
 assert(initialized.state.player.planSlot.occupied == false, "triggered player plan remained occupied")
 assertIds("triggered player plan discard", zoneIds(initialized.state, "player", "discard"), { "player-plan-001" })
 assertIds("player draw", initialized.draws.player.drawnInstanceIds, {
@@ -497,7 +498,8 @@ local revealResult = assertOk("action tag reveal pipeline", runScript(
     { turnId = "initializer-battle-turn-002" }
 ))
 assert(revealResult.receipt.transient.skipRemaining.player == true, "reveal transient was not preserved")
-assert(revealResult.receipt.transient.moodLock.mood == "ignore", "turn-start transient was lost before reveal")
+assert(#revealResult.receipt.transient.forcedMoodRequests == 0, "turn-start force requests changed before reveal")
+assert(revealResult.state.character.moodTokens.ignore == 1, "turn-start mood token was lost before reveal")
 local revealInputEvent
 local revealEffect
 for _, event in ipairs(revealResult.receipt.events) do

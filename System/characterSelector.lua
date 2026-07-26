@@ -315,23 +315,29 @@
         local stealthDelta = 0
         for index, command in ipairs(commands) do
             local commandPath = path .. "[" .. index .. "]"
-            local operation = type(command) == "table" and SCORE_OPERATIONS[command.op] or nil
-            if not operation then
-                return nil, makeError(
-                    "unsupported_character_score_op",
-                    commandPath .. ".op",
-                    "캐릭터 선택 점수로 해석할 수 없는 효과 작업입니다: " .. tostring(type(command) == "table" and command.op or nil)
-                )
-            end
-            if not isFinite(command.amount) or command.amount < 0 then
-                return nil, makeError("invalid_character_score_amount", commandPath .. ".amount", "선택 점수 효과 수치가 올바르지 않습니다.")
-            end
-            local field = TOTAL_FIELD[command.op]
-            totals[field] = totals[field] + command.amount
-            scoreDelta = scoreDelta + operation.scoreDirection * command.amount
-            stealthDelta = stealthDelta + operation.stealthDirection * command.amount
-            if not isFinite(totals[field]) or not isFinite(scoreDelta) or not isFinite(stealthDelta) then
-                return nil, makeError("non_finite_character_score", commandPath, "캐릭터 선택 점수가 유한한 범위를 벗어났습니다.")
+            local isMoodCommand = type(command) == "table"
+                and (command.op == "add_mood_token" or command.op == "force_mood")
+            if isMoodCommand then
+                -- 무드 효과는 선택 확률을 왜곡하지 않고 실제 턴 해결에서 판정한다.
+            else
+                local operation = type(command) == "table" and SCORE_OPERATIONS[command.op] or nil
+                if not operation then
+                    return nil, makeError(
+                        "unsupported_character_score_op",
+                        commandPath .. ".op",
+                        "캐릭터 선택 점수로 해석할 수 없는 효과 작업입니다: " .. tostring(type(command) == "table" and command.op or nil)
+                    )
+                end
+                if not isFinite(command.amount) or command.amount < 0 then
+                    return nil, makeError("invalid_character_score_amount", commandPath .. ".amount", "선택 점수 효과 수치가 올바르지 않습니다.")
+                end
+                local field = TOTAL_FIELD[command.op]
+                totals[field] = totals[field] + command.amount
+                scoreDelta = scoreDelta + operation.scoreDirection * command.amount
+                stealthDelta = stealthDelta + operation.stealthDirection * command.amount
+                if not isFinite(totals[field]) or not isFinite(scoreDelta) or not isFinite(stealthDelta) then
+                    return nil, makeError("non_finite_character_score", commandPath, "캐릭터 선택 점수가 유한한 범위를 벗어났습니다.")
+                end
             end
         end
         return {

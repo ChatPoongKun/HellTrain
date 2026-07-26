@@ -502,39 +502,18 @@
             mood = { id = moodId, label = moodId, order = 0 }
         end
 
-        local boundaries = { 5, 4, 4, 5 }
-        local order = mood.order
-        local rejectionThreshold = isInteger(order, 1) and order > 1 and boundaries[order - 1] or nil
-        local complianceThreshold = isInteger(order, 1) and order < 5 and boundaries[order] or nil
-
-        for _, traitId in ipairs(state.character.traitIds) do
-            local trait = data.traits[traitId]
-            for _, modifier in ipairs(type(trait) == "table" and trait.modifiers or {}) do
-                if modifier.timing == "moodPerformanceThreshold"
-                    and modifier.operation == "add"
-                    and isFinite(modifier.amount) then
-                    if modifier.direction == "rejection" and rejectionThreshold ~= nil then
-                        rejectionThreshold = rejectionThreshold + modifier.amount
-                    elseif modifier.direction == "compliance" and complianceThreshold ~= nil then
-                        complianceThreshold = complianceThreshold + modifier.amount
-                    end
-                end
-            end
+        local tokens = {}
+        local stateTokens = type(state.character.moodTokens) == "table" and state.character.moodTokens or {}
+        for registeredMoodId in pairs(data.registry.moods) do
+            tokens[registeredMoodId] = stateTokens[registeredMoodId] or 0
         end
 
-        local view = {
+        return {
             id = moodId,
             label = mood.label,
-            hasThresholdToRejection = rejectionThreshold ~= nil,
-            hasThresholdToCompliance = complianceThreshold ~= nil,
+            tokenThreshold = 3,
+            tokens = tokens,
         }
-        if rejectionThreshold ~= nil then
-            view.thresholdToRejection = rejectionThreshold
-        end
-        if complianceThreshold ~= nil then
-            view.thresholdToCompliance = complianceThreshold
-        end
-        return view
     end
 
     local function buildTraitViews(state, data, errors)
@@ -1349,23 +1328,19 @@
                 checkAllowedKeys(mood, {
                     id = true,
                     label = true,
-                    hasThresholdToRejection = true,
-                    thresholdToRejection = true,
-                    hasThresholdToCompliance = true,
-                    thresholdToCompliance = true,
+                    tokenThreshold = true,
+                    tokens = true,
                 }, "$.character.mood", errors)
                 if not isAsciiId(mood.id) or type(mood.label) ~= "string" then
                     addError(errors, "invalid_mood_value", "$.character.mood", "무드 표시 값이 올바르지 않습니다.")
                 end
-                for _, direction in ipairs({ "Rejection", "Compliance" }) do
-                    local flag = mood["hasThresholdTo" .. direction]
-                    local threshold = mood["thresholdTo" .. direction]
-                    if flag ~= true and flag ~= false then
-                        addError(errors, "invalid_mood_threshold_flag", "$.character.mood", "무드 경계 존재 값은 불리언이어야 합니다.")
-                    elseif flag and (not isFinite(threshold) or threshold < 0) then
-                        addError(errors, "invalid_mood_threshold", "$.character.mood", "무드 경계가 올바르지 않습니다.")
-                    elseif not flag and threshold ~= nil then
-                        addError(errors, "unexpected_mood_threshold", "$.character.mood", "존재하지 않는 방향의 무드 경계를 표시할 수 없습니다.")
+                if mood.tokenThreshold ~= 3 or type(mood.tokens) ~= "table" then
+                    addError(errors, "invalid_mood_tokens", "$.character.mood", "무드 토큰 표시값이 올바르지 않습니다.")
+                else
+                    for _, moodId in ipairs({ "rejection", "suspicion", "ignore", "confusion", "compliance" }) do
+                        if not isInteger(mood.tokens[moodId], 0) then
+                            addError(errors, "invalid_mood_token_count", "$.character.mood.tokens." .. moodId, "무드 토큰 표시값은 0 이상의 정수여야 합니다.")
+                        end
                     end
                 end
             end

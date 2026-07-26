@@ -137,7 +137,7 @@ local function failReport(label, report)
     for _, item in ipairs(type(report) == "table" and report.errors or {}) do
         messages[#messages + 1] = tostring(item.code) .. " at " .. tostring(item.path) .. ": " .. tostring(item.message)
     end
-    error(label .. " failed\n" .. table.concat(messages, "\n"))
+    error(label .. " failed: " .. table.concat(messages, " | "))
 end
 
 local function assertOk(label, report)
@@ -526,56 +526,55 @@ assert(removedCard.side == "player" and removedCard.cardId == "hypnotic_whisper"
 local skippedActions = onlyEvent("skipped character actions", removeProjection.publicResult, "actions_stopped").event.payload
 assert(skippedActions.side == "character" and skippedActions.count == 1, "skip summary changed")
 
--- shift_mood accepts the effect-engine contract's zero boundary. It is public
--- as a validated no-op and omitted from the LLM event stream.
-local zeroShiftData = clone(staticData)
-zeroShiftData.cards.hypnotic_whisper.resolve = function(context)
+-- Mood-token effects are validated and projected to both public and LLM streams.
+local tokenEffectData = clone(staticData)
+tokenEffectData.cards.hypnotic_whisper.resolve = function(context)
     return {
         {
-            op = "shift_mood",
+            op = "add_mood_token",
             target = "character",
-            amount = 0,
+            mood = "confusion",
+            amount = 1,
             cause = "cardEffect",
         },
     }
 end
-local zeroShiftBefore, zeroShiftResolution = runTurn(
-    "zero mood shift",
+local tokenEffectBefore, tokenEffectResolution = runTurn(
+    "mood token effect",
     makeState({
-        battleId = "projector-zero-shift",
+        battleId = "projector-mood-token",
         cards = {
-            makeCard("zero-shift-whisper", "hypnotic_whisper", "player", "hand", 1),
+            makeCard("token-whisper", "hypnotic_whisper", "player", "hand", 1),
         },
     }),
-    { "zero-shift-whisper" },
-    zeroShiftData
+    { "token-whisper" },
+    tokenEffectData
 )
-local zeroShiftProjection = project(
-    "zero mood shift projector",
-    zeroShiftBefore,
-    zeroShiftResolution,
-    zeroShiftData
+local tokenEffectProjection = project(
+    "mood token effect projector",
+    tokenEffectBefore,
+    tokenEffectResolution,
+    tokenEffectData
 )
-local zeroShiftEffect = onlyEvent("zero mood public effect", zeroShiftProjection.publicResult, "effect_applied", function(item)
-    return item.payload.op == "shift_mood"
+local tokenEffect = onlyEvent("mood token public effect", tokenEffectProjection.publicResult, "effect_applied", function(item)
+    return item.payload.op == "add_mood_token"
 end).event.payload
-assert(zeroShiftEffect.amount == 0 and zeroShiftEffect.changed == false,
-    "zero shift was not preserved as a public no-op")
-assert(#matchingEvents(zeroShiftProjection.llmEvent, "effect_applied", function(item)
-    return item.payload.op == "shift_mood"
-end) == 0, "zero shift reached the LLM")
-local forgedZeroShift = clone(zeroShiftResolution)
-for _, event in ipairs(forgedZeroShift.events) do
-    if event.type == "effect_applied" and event.payload.op == "shift_mood" then
-        event.payload.after = "confusion"
-        event.payload.changed = true
+assert(tokenEffect.mood == "confusion" and tokenEffect.amount == 1 and tokenEffect.changed == true,
+    "mood token effect was not preserved")
+assert(#matchingEvents(tokenEffectProjection.llmEvent, "effect_applied", function(item)
+    return item.payload.op == "add_mood_token"
+end) == 1, "mood token effect did not reach the LLM")
+local forgedTokenEffect = clone(tokenEffectResolution)
+for _, event in ipairs(forgedTokenEffect.events) do
+    if event.type == "effect_applied" and event.payload.op == "add_mood_token" then
+        event.payload.after = event.payload.after + 1
         break
     end
 end
 assertFails(
-    "forged zero mood shift result",
-    runScript("turn-event-projector-check", "turnEventProjector", "projectTurn", zeroShiftBefore, zeroShiftData, forgedZeroShift),
-    "effect_result_mismatch"
+    "forged mood token result",
+    runScript("turn-event-projector-check", "turnEventProjector", "projectTurn", tokenEffectBefore, tokenEffectData, forgedTokenEffect),
+    "invalid_effect_payload"
 )
 
 local drawEffectData = clone(staticData)
@@ -1039,10 +1038,10 @@ local playerPlanProjectionTwo = project(
 local receiptPlan = onlyEvent("receipt player plan", playerPlanProjectionTwo.publicResult, "plan_changed", function(item)
     return item.payload.action == "triggered" and item.payload.side == "player"
 end)
-local receiptLock = onlyEvent("receipt plan lock", playerPlanProjectionTwo.publicResult, "effect_applied", function(item)
-    return item.payload.op == "lock_mood"
+local receiptToken = onlyEvent("receipt plan token", playerPlanProjectionTwo.publicResult, "effect_applied", function(item)
+    return item.payload.op == "add_mood_token"
 end)
-assert(receiptPlan.event.payload.cardId == "subtle_approach" and receiptPlan.index < receiptLock.index,
+assert(receiptPlan.event.payload.cardId == "subtle_approach" and receiptPlan.index < receiptToken.index,
     "turn-start receipt plan meaning/effect order changed")
 
 -- turn_start callbacks run before character selection. The initialized
@@ -1136,8 +1135,6 @@ for _, event in ipairs(forgedTriggerAmount.events) do
         event.payload.after = event.payload.after - 1
     elseif shiftedStealth and event.type == "outcome_latched" then
         event.payload.stealth = event.payload.stealth - 1
-    elseif shiftedStealth and event.type == "mood_evaluated" then
-        event.payload.performance = event.payload.performance - 1
     end
 end
 assert(shiftedStealth, "trigger amount fixture needs an environment effect")
@@ -1174,8 +1171,6 @@ for _, event in ipairs(omittedTrigger.events) do
             event.payload.after = event.payload.after + 1
         elseif omittedBatch and event.type == "outcome_latched" then
             event.payload.stealth = event.payload.stealth + 1
-        elseif omittedBatch and event.type == "mood_evaluated" then
-            event.payload.performance = event.payload.performance + 1
         end
         keptEvents[#keptEvents + 1] = event
     end
@@ -1243,8 +1238,6 @@ for index = characterDeclarationIndex + 3, #forgedTriggerSide.events do
         event.payload.after = event.payload.after - 1
     elseif event.type == "outcome_latched" then
         event.payload.stealth = event.payload.stealth - 1
-    elseif event.type == "mood_evaluated" then
-        event.payload.performance = event.payload.performance - 1
     end
 end
 forgedTriggerSide.afterState.player.stealth = forgedTriggerSide.afterState.player.stealth - 1
@@ -1258,16 +1251,16 @@ assertFails(
     "trigger_condition_mismatch"
 )
 
-local forgedPerformance = clone(normalResolution)
-for _, event in ipairs(forgedPerformance.events) do
+local forgedMoodTokens = clone(normalResolution)
+for _, event in ipairs(forgedMoodTokens.events) do
     if event.type == "mood_evaluated" then
-        event.payload.performance = event.payload.performance + 1
+        event.payload.tokensAfter.ignore = event.payload.tokensAfter.ignore + 1
         break
     end
 end
 assertFails(
-    "forged mood performance",
-    runScript("turn-event-projector-check", "turnEventProjector", "projectTurn", normalBefore, staticData, forgedPerformance),
+    "forged mood token evaluation",
+    runScript("turn-event-projector-check", "turnEventProjector", "projectTurn", normalBefore, staticData, forgedMoodTokens),
     "invalid_mood_evaluation"
 )
 

@@ -39,9 +39,7 @@ local working = {
     transient = {
         skipRemaining = receipt and receipt.transient.skipRemaining
             or { player = false, character = false },
-        moodLock = receipt and receipt.transient.moodLock or nil,
-        moodLockApplied = receipt and receipt.transient.moodLock ~= nil or false,
-        directMoodChanged = receipt and receipt.transient.directMoodChanged or false,
+        forcedMoodRequests = receipt and receipt.transient.forcedMoodRequests or {},
         halted = false,
         haltReason = nil,
     },
@@ -52,7 +50,7 @@ local working = {
 }
 ```
 
-`receipt.events`는 `turn_start` phase의 연속 사건 배열이어야 하며 `turnId-event-001..n`을 이미 점유한다. 해결기가 만드는 첫 사건은 `n + 1`부터 이어진다. `moodLockApplied`는 외부 저장 필드가 아니라 `receipt.transient.moodLock`의 존재에서 파생하는 내부 표시다.
+`receipt.events`는 `turn_start` phase의 연속 사건 배열이어야 하며 `turnId-event-001..n`을 이미 점유한다. 해결기가 만드는 첫 사건은 `n + 1`부터 이어진다. `forcedMoodRequests`는 턴 시작 트리거에서 발생한 강제 변경 요청을 카드 해결 단계로 인계한다.
 
 플레이어 카드는 `projection.selectedCardInstanceIds` 순서로 먼저 해결한다. 그 다음 `working.state.characterIntent.cardInstanceIds` 순서로 캐릭터 카드를 해결한다. 자동으로 발동한 계획, 특징, 퍽과 환경은 카드 사용이 아니므로 별도의 `card_declared` 또는 `card_resolved` 입력 사건을 만들지 않으며 다른 계획을 재귀적으로 발동시키지 않는다.
 
@@ -67,7 +65,7 @@ local working = {
 - 사용 가능한 카드의 비용을 먼저 지불한 뒤 `card_declared` 입력 사건을 만든다.
 - 은폐와 저항에는 회복 상한을 두지 않는다. 회복 결과가 시작값보다 커져도 그대로 유지한다.
 - 기본 저항 피해와 효과 명령의 양은 유한한 0 이상 수다. `draw_cards`의 수량은 양의 정수다.
-- 현재 지원하는 선언형 무드 성과 보정은 `reserved` 특징의 `moodPerformanceThreshold`뿐이다. 비용·피해의 일반 가산, 배율과 반올림 파이프라인은 실제 콘텐츠가 생길 때 확정한다.
+- 특징의 일반 수치 보정은 현재 지원하지 않는다. 비용·피해의 일반 가산, 배율과 반올림 파이프라인은 실제 보정 콘텐츠가 생길 때 확정한다.
 - 지원하지 않는 비어 있지 않은 수치 보정 목록을 발견하면 임의 해석하지 않고 전체 해결을 구조화 오류로 거부한다. 현재 `stateSchema`가 권위 상태와 projection의 비어 있지 않은 `temporaryModifiers`를 먼저 거부하며, 해결기도 이 경계를 다시 확인한다.
 - 캐릭터 카드의 `base.stealthCost`와 `base.resistanceDamage`는 버전 1에서 모두 0이어야 한다. 이 두 수치의 캐릭터 측 의미가 승인되기 전에는 비영(非零) 값을 임의 해석하지 않는다.
 
@@ -109,20 +107,16 @@ projection 전체나 이미 해결한 접두 구간을 되돌리지 않는다. �
 
 앞 효과의 드로우가 손패 빈자리를 먼저 채운 뒤 여러 등록 카드를 복원하면 내부 working state에서만 손패가 일시적으로 상한을 넘을 수 있다. 이 예외는 `selection.playerCardInstanceIds`에 여전히 등록되어 있고 실제로 손패에 복원된 카드 수가 초과분을 덮는다는 구조 영수증으로만 허용한다. 새 드로우나 임의 카드 삽입에 이 예외를 사용할 수 없으며, 같은 해결의 구조 정리에서 모두 버려 최종 저장 상태는 반드시 상한을 다시 만족한다.
 
-## 6. 효과 명령과 무드 잠금
+## 6. 효과 명령과 무드 요청
 
 콜백 반환값은 상태에 적용하기 전에 전체 배열과 모든 명령을 먼저 검증한다. 명령은 DB 배열 순서대로 적용하며 각 실제 변화와 no-op 여부를 사건으로 남길 수 있어야 한다.
 
 - `damage_resistance`, `recover_resistance`, `lose_stealth`, `recover_stealth`는 상한 없이 정확한 양을 적용한다.
 - `draw_cards`는 `cardZones.draw`를 사용해 최대 손패의 빈자리까지만 뽑고 같은 RNG를 전진시킨다.
 - `skip_actions`는 지정 진영의 아직 선언하지 않은 행동만 중단한다.
-- `shift_mood`의 v1 `amount`는 0 이상의 정수이며 레지스트리 무드 순서에서 순응 방향으로 이동하고 양끝에서 clamp한다. 직접 거절 방향 이동 명령은 방향 필드 또는 signed amount 계약을 따로 승인한 뒤 추가한다.
-- `set_mood`는 등록된 무드로 직접 설정한다.
-- `lock_mood`는 현재 무드가 명령의 `mood`와 같을 때 그 무드를 `until = "turn_end"`까지 고정한다. 무드를 직접 이동시키지는 않는다.
-
-활성 무드 잠금은 이후의 `shift_mood`, `set_mood`와 공통 무드 판정을 모두 막는다. 실제로 활성화된 잠금은 그 턴의 공통 무드 판정을 항상 억제한다.
-
-직접 `shift_mood`가 양끝에서 clamp되어 실제 위치가 바뀌지 않았거나 `set_mood`가 현재 무드와 같다면 그 명령만으로 `directMoodChanged`를 세우지 않는다. 반대로 실제 한 단계 이상 바뀌면 `directMoodChanged = true`가 되어 해당 턴의 공통 무드 판정을 생략한다. 잠금에 막힌 직접 명령도 직접 변경으로 세지 않지만 활성 잠금 자체가 공통 판정을 억제한다.
+- `add_mood_token`은 등록된 `mood`에 1 이상의 정수 `amount`를 즉시 누적한다.
+- `force_mood`는 등록된 목표 `mood`를 `forcedMoodRequests`에 추가한다. 명령 실행 시점에는 현재 무드를 변경하지 않는다.
+- 모든 무드 변경과 토큰 소비는 9절의 턴 종료 판정 한 곳에서만 수행한다.
 
 ## 7. 트리거 snapshot과 고정 순서
 
@@ -181,32 +175,17 @@ character.resistance > 0 and player.stealth <= 0 → defeat
 
 버전 1의 `session_end` 트리거는 종료 기록용으로만 실행하며 gameplay 효과 명령을 반환할 수 없다. 명령이 하나라도 있으면 `unsupported_session_end_commands` 오류로 전체 결과를 거부한다. 빈 명령을 반환한 계획이 해당 사건에 정상 반응했다면 기존 계획 발동 규칙에 따라 공개·충전 소비가 일어날 수 있지만 latch된 승패와 gameplay 수치는 바뀌지 않는다.
 
-## 9. 공통 무드 성과
+## 9. 턴 종료 무드 판정
 
-승패가 latch되지 않고 활성 무드 잠금과 실제 직접 무드 변경이 없을 때만 턴 전체에서 한 번 계산한다.
+무드 판정은 승패 상태와 관계없이 해결한 모든 턴의 끝에서 정확히 한 번 실행한다.
 
-```text
-resistancePerformance = startingResistance - endingResistance
-stealthSpent          = max(0, startingStealth - endingStealth)
-moodPerformance       = resistancePerformance - stealthSpent
-```
+1. 강제 변경 요청이 정확히 1개면 토큰을 건드리지 않고 그 목표 무드로 결정한다.
+2. 강제 변경 요청이 2개 이상이면 요청을 모두 상쇄하고 토큰 판정으로 진행한다.
+3. 토큰이 3개 이상인 무드 중 단독 최다가 있으면 그 무드로 결정하고 해당 토큰만 0으로 만든다.
+4. 3개 이상인 최다 무드가 둘 이상이면 동률인 무드의 토큰을 각각 1개 차감하고 현재 무드를 유지한다.
+5. 3개 이상인 무드가 없으면 무드와 토큰을 유지한다.
 
-`endingStealth`와 `endingResistance`는 플레이어·캐릭터 카드, 환경, 계획, 특징과 퍽의 gameplay 효과가 끝난 시점의 실제 값이다. 회복은 같은 턴의 감소를 상쇄하지만 `stealthSpent`를 음수로 만들지 않는다.
-
-`turnStartReceipt`가 있으면 `startingStealth`와 `startingResistance`는 initializer 효과가 적용되기 전 `receipt.baseline`에서 가져온다. 따라서 `turn_start`에서 발생한 수치 변화도 그 턴의 성과에 정확히 포함된다. 영수증이 없는 하위 호환 경로에서만 권위 상태의 현재 수치를 시작값으로 사용한다. initializer에서 실제 직접 무드 변경이 있었다면 `receipt.transient.directMoodChanged`, 활성 잠금이 생겼다면 `receipt.transient.moodLock`이 공통 판정 억제 사유를 인계한다.
-
-무드 순서는 다음과 같다.
-
-```text
-rejection ←5→ suspicion ←4→ ignore ←4→ confusion ←5→ compliance
-```
-
-- 현재 무드에서 순응 방향 다음 칸의 기준 이상이면 순응 방향으로 한 단계 이동한다.
-- 거절 방향 기준의 음수 이하이면 거절 방향으로 한 단계 이동한다.
-- 공통 판정은 한 턴에 최대 한 단계이며 초과 성과를 이월하지 않는다.
-- `reserved` 특징은 순응 방향 기준에만 1을 더한다. 따라서 유지영의 순응 방향 기준은 `6-5-5-6`, 거절 방향 기준은 그대로 `5-4-4-5`다.
-- 결과가 latch된 턴, 활성 `lock_mood`, 실제로 이동한 `shift_mood`와 실제로 값을 바꾼 `set_mood`가 있는 턴은 공통 판정을 생략한다.
-- 양끝 no-op shift와 같은 무드 set만 있었던 턴은 다른 억제 사유가 없다면 공통 판정을 수행한다.
+`mood_evaluated` 사건은 `forcedCount`, `forceCancelled`, `resolution`, 판정 전후 토큰과 선택적 `targetMood` 또는 `tiedMoods`를 기록한다.
 
 ## 10. `turnResolution` 버전 1
 
@@ -237,8 +216,9 @@ rejection ←5→ suspicion ←4→ ignore ←4→ confusion ←5→ compliance
         endingResistance = 23,
         resistancePerformance = 7,
         stealthSpent = 4,
-        moodPerformance = 3,
-        commonMoodApplied = false,
+        moodChanged = false,
+        moodResolution = "none",
+        forcedMoodCount = 0,
     },
     afterState = battleStateSnapshot,
 }
@@ -316,11 +296,10 @@ rejection ←5→ suspicion ←4→ ignore ←4→ confusion ←5→ compliance
 - 은폐 4에서 눈치보기 뒤 제압이 사용할 수 없어 제압만 복원되는 경우
 - 플레이어 카드 전부 해결 후 캐릭터 카드가 실행되거나 `skip_actions`로 생략되는 경우
 - 카드 post-trigger 뒤 중간 승패, 동시 0의 승리 우선과 남은 행동 중단
-- 마지막 허용 턴의 완전한 카드 해결 뒤 제한 턴 패배와 공통 무드 생략
-- shift/set no-op, 실제 직접 변경과 무드 잠금의 서로 다른 공통 무드 처리
+- 마지막 허용 턴의 완전한 카드 해결 뒤 제한 턴 패배와 무드 판정
+- 단독 최다 토큰, 최다 동률 차감, 단일 강제 변경과 다중 강제 변경 상쇄
 - `turnStartReceipt`의 turnId/turnNumber, authority fingerprint, 드로우 RNG, 캐릭터 의도 불일치와 사건 ID 위변조 거부
-- 영수증 사건 보존과 후속 event ordinal 연속성, baseline 성과, skip/directMoodChanged/moodLock 인계 및 정리 후 제거
-- 기본 `5-4-4-5`, 유지영 순응 방향 `6-5-5-6`과 거절 방향 불변
+- 영수증 사건 보존과 후속 event ordinal 연속성, baseline 토큰, skip/forcedMoodRequests 인계 및 정리 후 제거
 - 모든 카드 영역 보존, 연속 position, 0 수명 계획 부재와 입력 불변성
 - 같은 입력을 별도 Lua 프로세스에서 반복했을 때 afterState와 사건 로그의 동일성
 

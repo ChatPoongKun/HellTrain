@@ -91,15 +91,11 @@ turnStartReceipt = {
         stealth = 30,
         resistance = 30,
         mood = "ignore",
+        moodTokens = { rejection = 0, suspicion = 0, ignore = 0, confusion = 0, compliance = 0 },
     },
     transient = {
         skipRemaining = { player = false, character = false },
-        directMoodChanged = false,
-        moodLock = {
-            mood = "ignore",
-            ["until"] = "turn_end",
-            cause = "plan",
-        },
+        forcedMoodRequests = {},
     },
     authorityFingerprint = {
         algorithm = "canonical_poly131_137_receipt_v2",
@@ -132,7 +128,7 @@ turnStartReceipt = {
 }
 ```
 
-`moodLock`은 실제로 존재할 때만 저장한다. `moodLockApplied` 같은 계산 가능한 실행기 표식은 저장하지 않고 해결기가 `moodLock` 존재 여부에서 파생한다.
+`forcedMoodRequests`는 항상 연속 배열로 저장하며, 턴 시작 트리거에서 발생한 요청을 해결기에 그대로 인계한다.
 
 `draws`와 `characterSelection`은 재시도·감사용 비공개 자료다. `characterSelection`의 선택 ID·태그는 실제 `state.characterIntent`, 캐릭터 손패와 정적 카드 정의에 정확히 결합된다. 플레이어 드로우 뒤 RNG와 캐릭터 드로우 전 RNG, 캐릭터 드로우 뒤 RNG와 선택 전 RNG가 각각 같아야 한다. 선택 뒤 행동 태그 공개 트리거가 별도 드로우로 RNG를 더 소비할 수 있으므로 선택 영수증의 `rngAfter`를 최종 상태 RNG와 같다고 가정하지 않는다.
 
@@ -146,7 +142,7 @@ initializer는 먼저 `authorityFingerprint`가 없는 receipt를 권위 상태�
 
 `turnDraft`는 receipt를 포함한 권위 상태 전체를 fingerprint한다. 초기화 뒤 receipt, 캐릭터 의도, RNG 또는 손패를 바꾸면 기존 projection은 stale로 거부된다.
 
-해결기는 receipt의 사건을 최종 턴 사건 앞부분으로 이어 붙이고, baseline으로 무드 성과를 계산하며, transient를 카드 해결에 인계한다. `endTurnCleanup`은 구조 정리 중 receipt를 제거한다.
+해결기는 receipt의 사건을 최종 턴 사건 앞부분으로 이어 붙이고, baseline 무드 토큰과 transient 강제 요청을 카드 해결에 인계한다. `endTurnCleanup`은 구조 정리 중 receipt를 제거한다.
 
 ## 6. 명시적으로 지원하지 않는 경계
 

@@ -481,7 +481,7 @@ try {
         throw "Separate Lua processes produced different fromSetup bootstrap results.`nFIRST:`n$firstText`nSECOND:`n$secondText"
     }
 
-    $expectedVector = 'BATTLE_BOOTSTRAP_FROM_SETUP|hash=1726705382|player=player-003,player-007,player-009,player-010,player-002,player-006,player-004,player-005,player-008,player-001|character=character-003,character-001,character-002,character-004|cursor=12'
+    $expectedVector = 'BATTLE_BOOTSTRAP_FROM_SETUP|hash=1087358466|player=player-003,player-007,player-009,player-010,player-002,player-006,player-004,player-005,player-008,player-001|character=character-003,character-001,character-002,character-004|cursor=12'
     if ($firstText -cne $expectedVector) {
         throw "Unexpected fromSetup bootstrap determinism vector: $firstText"
     }

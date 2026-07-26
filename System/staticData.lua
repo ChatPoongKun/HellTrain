@@ -1093,20 +1093,8 @@
                 if not isArray(trait.rules) or #trait.rules == 0 then
                     addError(errors, "invalid_rules", path .. ".rules", "특징 규칙 문장이 비어 있습니다.")
                 end
-                if not isArray(trait.modifiers) or #trait.modifiers == 0 then
-                    addError(errors, "invalid_modifiers", path .. ".modifiers", "특징 보정 목록이 비어 있습니다.")
-                else
-                    for index, modifier in ipairs(trait.modifiers) do
-                        local modifierPath = path .. ".modifiers[" .. index .. "]"
-                        if type(modifier) ~= "table"
-                            or modifier.timing ~= "moodPerformanceThreshold"
-                            or modifier.operation ~= "add"
-                            or modifier.direction ~= "compliance"
-                            or not isFiniteNonNegative(modifier.amount)
-                            or modifier.amount == 0 then
-                            addError(errors, "invalid_modifier", modifierPath, "지원하지 않는 특징 보정입니다.")
-                        end
-                    end
+                if trait.modifiers ~= nil then
+                    addError(errors, "unsupported_modifiers", path .. ".modifiers", "현재 특징 수치 보정은 지원하지 않습니다.")
                 end
             end
         end

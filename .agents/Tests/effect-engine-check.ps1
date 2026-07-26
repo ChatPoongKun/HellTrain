@@ -338,9 +338,8 @@ local allCommands = {
     { op = "recover_stealth", target = "player", amount = 4, cause = "test" },
     { op = "draw_cards", target = "player", amount = 1, cause = "test" },
     { op = "skip_actions", target = "character", scope = "remainingTurn", cause = "test" },
-    { op = "shift_mood", target = "character", amount = 1, cause = "test" },
-    { op = "set_mood", target = "character", mood = "suspicion", cause = "test" },
-    { op = "lock_mood", target = "character", mood = "suspicion", ["until"] = "turn_end", cause = "test" },
+    { op = "add_mood_token", target = "character", mood = "ignore", amount = 2, cause = "test" },
+    { op = "force_mood", target = "character", mood = "suspicion", cause = "test" },
 }
 local validated = assertOk("validate all commands", call("validateCommands", staticData, allCommands))
 assert(#validated.commands == #allCommands)
@@ -352,11 +351,11 @@ assert(canonical(working) == workingSnapshot, "applyCommands changed caller work
 assert(canonical(allCommands) == commandSnapshot, "applyCommands changed caller commands")
 assert(applied.state.character.resistance == 9)
 assert(applied.state.player.stealth == 13)
-assert(applied.state.character.mood == "suspicion")
+assert(applied.state.character.mood == "ignore")
+assert(applied.state.character.moodTokens.ignore == 2)
 assert(applied.transient.skipRemaining.character == true)
-assert(applied.transient.directMoodChanged == true)
-assert(applied.transient.moodLockApplied == true)
-assert(applied.transient.moodLock.mood == "suspicion")
+assert(#applied.transient.forcedMoodRequests == 1)
+assert(applied.transient.forcedMoodRequests[1].mood == "suspicion")
 assert(#applied.applied[5].drawnInstanceIds == 1 and applied.applied[5].drawnInstanceIds[1] == "player-deck-1")
 assert(#applied.applied[5].before.deckInstanceIds == 1
     and applied.applied[5].before.deckInstanceIds[1] == "player-deck-1")
@@ -368,33 +367,21 @@ assert(applied.applied[5].before.rng.seed == applied.applied[5].after.rng.seed)
 assert(applied.applied[5].before.rng.cursor == applied.applied[5].after.rng.cursor)
 assert(applied.state.rng.cursor == working.state.rng.cursor, "non-shuffle draw consumed RNG")
 
-local lockCommands = {
-    { op = "lock_mood", target = "character", mood = "ignore", ["until"] = "turn_end", cause = "test" },
-    { op = "shift_mood", target = "character", amount = 1, cause = "test" },
-    { op = "set_mood", target = "character", mood = "compliance", cause = "test" },
+local accumulated = assertOk(
+    "accumulate mood tokens",
+    call("applyCommands", staticData, { state = applied.state, transient = applied.transient }, {
+        { op = "add_mood_token", target = "character", mood = "ignore", amount = 1, cause = "test" },
+    })
+)
+assert(accumulated.state.character.moodTokens.ignore == 3)
+
+local multipleForces = {
+    { op = "force_mood", target = "character", mood = "rejection", cause = "test" },
+    { op = "force_mood", target = "character", mood = "compliance", cause = "test" },
 }
-local locked = assertOk("lock blocks direct mood", call("applyCommands", staticData, { state = fixture(), transient = {} }, lockCommands))
-assert(locked.state.character.mood == "ignore")
-assert(locked.transient.moodLockApplied == true and locked.transient.directMoodChanged ~= true)
-assert(locked.applied[2].blocked == true and locked.applied[3].blocked == true)
-
-local complianceState = fixture()
-complianceState.character.mood = "compliance"
-local clamped = assertOk(
-    "clamped edge shift",
-    call("applyCommands", staticData, { state = complianceState, transient = {} }, {
-        { op = "shift_mood", target = "character", amount = 1, cause = "test" },
-    })
-)
-assert(clamped.state.character.mood == "compliance" and clamped.transient.directMoodChanged ~= true)
-
-local sameSet = assertOk(
-    "set current mood",
-    call("applyCommands", staticData, { state = fixture(), transient = {} }, {
-        { op = "set_mood", target = "character", mood = "ignore", cause = "test" },
-    })
-)
-assert(sameSet.transient.directMoodChanged ~= true and sameSet.applied[1].changed == false)
+local forced = assertOk("collect multiple forces", call("applyCommands", staticData, { state = fixture(), transient = {} }, multipleForces))
+assert(forced.state.character.mood == "ignore")
+assert(#forced.transient.forcedMoodRequests == 2)
 
 assertOk("nil modifiers", call("validateModifiers", nil))
 assertOk("empty modifiers", call("validateModifiers", {}))
@@ -410,9 +397,9 @@ local invalidCases = {
     { "wrong target", { { op = "lose_stealth", target = "character", amount = 1, cause = "test" } }, "invalid_command_target" },
     { "negative amount", { { op = "damage_resistance", target = "character", amount = -1, cause = "test" } }, "invalid_command_amount" },
     { "zero draw", { { op = "draw_cards", target = "player", amount = 0, cause = "test" } }, "invalid_command_amount" },
-    { "fractional mood shift", { { op = "shift_mood", target = "character", amount = 0.5, cause = "test" } }, "invalid_command_amount" },
-    { "unknown mood", { { op = "set_mood", target = "character", mood = "missing", cause = "test" } }, "unknown_mood" },
-    { "wrong lock end", { { op = "lock_mood", target = "character", mood = "ignore", ["until"] = "session_end", cause = "test" } }, "invalid_command_until" },
+    { "zero mood tokens", { { op = "add_mood_token", target = "character", mood = "ignore", amount = 0, cause = "test" } }, "invalid_command_amount" },
+    { "fractional mood tokens", { { op = "add_mood_token", target = "character", mood = "ignore", amount = 0.5, cause = "test" } }, "invalid_command_amount" },
+    { "unknown mood", { { op = "force_mood", target = "character", mood = "missing", cause = "test" } }, "unknown_mood" },
     { "unexpected field", { { op = "lose_stealth", target = "player", amount = 1, cause = "test", extra = true } }, "unexpected_command_field" },
     { "unknown op", { { op = "missing_op", target = "player", cause = "test" } }, "unknown_effect_op" },
 }
@@ -428,16 +415,17 @@ assertHasError(
     "unsupported_effect_op"
 )
 
-local wrongLock = fixture()
-local wrongLockSnapshot = canonical(wrongLock)
+local corruptTokens = fixture()
+corruptTokens.character.moodTokens = { ignore = -1 }
+local corruptTokensSnapshot = canonical(corruptTokens)
 assertHasError(
-    "lock mood mismatch",
-    call("applyCommands", staticData, { state = wrongLock, transient = {} }, {
-        { op = "lock_mood", target = "character", mood = "suspicion", ["until"] = "turn_end", cause = "test" },
+    "invalid existing mood token count",
+    call("applyCommands", staticData, { state = corruptTokens, transient = {} }, {
+        { op = "add_mood_token", target = "character", mood = "ignore", amount = 1, cause = "test" },
     }),
-    "mood_lock_mismatch"
+    "invalid_mood_token_count"
 )
-assert(canonical(wrongLock) == wrongLockSnapshot, "failed apply changed input state")
+assert(canonical(corruptTokens) == corruptTokensSnapshot, "failed apply changed input state")
 
 local callbackFailures = {
     bad_error = {
@@ -466,8 +454,8 @@ print(
         .. "|resistance=" .. tostring(applied.state.character.resistance)
         .. "|mood=" .. applied.state.character.mood
         .. "|draw=" .. table.concat(applied.applied[5].drawnInstanceIds, ",")
-        .. "|locked=" .. locked.state.character.mood
-        .. "|clamped=" .. clamped.state.character.mood
+        .. "|tokens=" .. tostring(accumulated.state.character.moodTokens.ignore)
+        .. "|forces=" .. tostring(#forced.transient.forcedMoodRequests)
 )
 '@
 
@@ -487,7 +475,7 @@ try {
     if (-not ($firstText -ceq $secondText)) {
         throw "별도 Lua 프로세스가 서로 다른 effectEngine 결과를 만들었습니다.`nFIRST:`n$firstText`nSECOND:`n$secondText"
     }
-    if ($firstText -cne 'VECTOR|stealth=13|resistance=9|mood=suspicion|draw=player-deck-1|locked=ignore|clamped=compliance') {
+    if ($firstText -cne 'VECTOR|stealth=13|resistance=9|mood=ignore|draw=player-deck-1|tokens=3|forces=2') {
         throw "effectEngine 결정성 표식이 예상과 다릅니다: $firstText"
     }
     Write-Output 'effect-engine-check: ok'

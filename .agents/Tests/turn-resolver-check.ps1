@@ -255,6 +255,13 @@ local function makeState(options, data)
             characterId = "yoo_jiyoung",
             resistance = options.resistance or 30,
             mood = options.mood or "ignore",
+            moodTokens = clone(options.moodTokens or {
+                rejection = 0,
+                suspicion = 0,
+                ignore = 0,
+                confusion = 0,
+                compliance = 0,
+            }),
             traitIds = options.traitIds == nil and { "reserved" } or clone(options.traitIds),
             baseDrawCount = 3,
             maxHandSize = 5,
@@ -563,8 +570,8 @@ local function assertMetrics(label, resolution, expected)
 end
 
 -- A turn-start receipt is the authoritative handoff from initialization. Its
--- events remain at the head of the final log, its baseline drives performance,
--- and its transient mood lock survives until the resolver's mood checkpoint.
+-- events remain at the head of the final log and queued force requests survive
+-- until the resolver's single mood checkpoint.
 local receiptTurnId = "resolver-receipt-turn-001"
 local receiptState = makeState({
     battleId = "resolver-receipt",
@@ -573,11 +580,15 @@ local receiptState = makeState({
     traitIds = {},
 })
 receiptState = attachTurnStartReceipt(receiptState, receiptTurnId, {
-    baseline = { stealth = 32, resistance = 36, mood = "ignore" },
+    baseline = {
+        stealth = 32,
+        resistance = 36,
+        mood = "ignore",
+        moodTokens = { rejection = 0, suspicion = 0, ignore = 0, confusion = 0, compliance = 0 },
+    },
     transient = {
         skipRemaining = { player = false, character = false },
-        directMoodChanged = false,
-        moodLock = { mood = "ignore", ["until"] = "turn_end", cause = "plan" },
+        forcedMoodRequests = { { mood = "ignore", cause = "plan" } },
     },
 })
 local receiptProjection = makeProjection("turn-start receipt", receiptState, {})
@@ -640,14 +651,16 @@ assertMetrics("receipt baseline", receiptResolution, {
     endingResistance = 30,
     resistancePerformance = 6,
     stealthSpent = 2,
-    moodPerformance = 4,
-    commonMoodApplied = false,
+    moodChanged = false,
+    moodResolution = "forced",
+    forcedMoodCount = 1,
 })
-assert(receiptResolution.afterState.character.mood == "ignore", "receipt mood lock did not survive handoff")
-local receiptMood = onlyEvent("receipt mood lock", receiptResolution, "mood_evaluated")
-assert(receiptMood.payload.reasonCode == "mood_locked", "receipt mood lock reason changed")
+assert(receiptResolution.afterState.character.mood == "ignore", "receipt force request did not survive handoff")
+local receiptMood = onlyEvent("receipt forced mood", receiptResolution, "mood_evaluated")
+assert(receiptMood.payload.resolution == "forced" and receiptMood.payload.forcedCount == 1,
+    "receipt force request was not resolved")
 
--- Skip and direct-mood flags are also resolver inputs, not effects to replay.
+-- Skip and force requests are also resolver inputs, not effects to replay.
 local receiptSkipTurnId = "resolver-receipt-skip-turn-001"
 local receiptSkipState = makeState({
     battleId = "resolver-receipt-skip",
@@ -658,7 +671,7 @@ local receiptSkipState = makeState({
 receiptSkipState = attachTurnStartReceipt(receiptSkipState, receiptSkipTurnId, {
     transient = {
         skipRemaining = { player = false, character = true },
-        directMoodChanged = true,
+        forcedMoodRequests = { { mood = "confusion", cause = "test" } },
     },
 })
 local receiptSkipProjection = makeProjection("receipt transient flags", receiptSkipState, {})
@@ -681,9 +694,10 @@ assert(receiptSkippedCharacter.payload.reasonCode == "skip_actions", "receipt sk
 assertIds("receipt skipped character ids", receiptSkippedCharacter.payload.unresolvedInstanceIds, {
     "receipt-warning",
 })
-local receiptDirectMood = onlyEvent("receipt direct mood", receiptSkipResolution, "mood_evaluated")
-assert(receiptDirectMood.payload.reasonCode == "direct_mood_changed",
-    "receipt directMoodChanged flag was not handed off")
+local receiptForcedMood = onlyEvent("receipt forced mood", receiptSkipResolution, "mood_evaluated")
+assert(receiptForcedMood.payload.resolution == "forced"
+        and receiptSkipResolution.afterState.character.mood == "confusion",
+    "receipt force request was not handed off")
 assert(findCard(receiptSkipResolution.afterState, "receipt-warning").zone == "discard",
     "receipt-skipped character card was not cleaned up")
 
@@ -715,8 +729,9 @@ assertMetrics("trigger order", orderResolution, {
     endingResistance = 27,
     resistancePerformance = 3,
     stealthSpent = 4,
-    moodPerformance = -1,
-    commonMoodApplied = false,
+    moodChanged = false,
+    moodResolution = "none",
+    forcedMoodCount = 0,
 })
 assertIds("trigger order player discard", zoneIds(orderResolution.afterState, "player", "discard"), {
     "order-brush", "order-unused-p",
@@ -756,16 +771,15 @@ assertIds("trigger order cleanup moved ids", orderCleanup.payload.movedInstanceI
     "order-brush", "order-unused-p", "order-unused-c",
 })
 
--- Test-only trigger content makes category order observable: each lane sets a
--- different mood, so only plan -> trait -> perk -> environment can end at
--- rejection. The perk lane is reserved by the runtime even though production
--- perk content is not loaded yet.
+-- Test-only trigger content queues one force in every category. The queue order
+-- remains observable in effect receipts, while four force requests cancel at
+-- the end-of-turn mood checkpoint.
 local categoryData = clone(staticData)
-local function setMoodTrigger(mood, cause)
+local function forceMoodTrigger(mood, cause)
     return function(context, event)
         return {
             {
-                op = "set_mood",
+                op = "force_mood",
                 target = "character",
                 mood = mood,
                 cause = cause,
@@ -773,12 +787,12 @@ local function setMoodTrigger(mood, cause)
         }
     end
 end
-categoryData.cards.silent_glare.mechanismData.plan.resolve = setMoodTrigger("suspicion", "fixture_plan")
+categoryData.cards.silent_glare.mechanismData.plan.resolve = forceMoodTrigger("suspicion", "fixture_plan")
 categoryData.traits.reserved.triggers = {
     {
         event = "card_declared",
         side = "player",
-        resolve = setMoodTrigger("confusion", "fixture_trait"),
+        resolve = forceMoodTrigger("confusion", "fixture_trait"),
     },
 }
 categoryData.perks = {
@@ -789,7 +803,7 @@ categoryData.perks = {
             {
                 event = "card_declared",
                 side = "player",
-                resolve = setMoodTrigger("compliance", "fixture_perk"),
+                resolve = forceMoodTrigger("compliance", "fixture_perk"),
             },
         },
     },
@@ -798,7 +812,7 @@ categoryData.environments.uncrowded.triggers = {
     {
         event = "card_declared",
         side = "player",
-        resolve = setMoodTrigger("rejection", "fixture_environment"),
+        resolve = forceMoodTrigger("rejection", "fixture_environment"),
     },
 }
 local categoryState = makeState({
@@ -829,10 +843,11 @@ assertTriggerSequence("all trigger categories", categoryResolution, {
     { type = "trigger_resolved", kind = "perk", id = "fixture_perk" },
     { type = "trigger_resolved", kind = "environment", id = "uncrowded" },
 })
-assert(categoryResolution.afterState.character.mood == "rejection",
-    "noncommutative category fixture did not preserve plan -> trait -> perk -> environment")
-assert(categoryResolution.metrics.commonMoodApplied == false,
-    "direct trigger mood changes unexpectedly allowed common mood")
+assert(categoryResolution.afterState.character.mood == "ignore",
+    "four force requests were not cancelled")
+assert(categoryResolution.metrics.forcedMoodCount == 4
+        and categoryResolution.metrics.moodResolution == "none",
+    "cancelled category force requests were not reported")
 
 -- Invalid declarative filters must reach the effect-engine validator. They
 -- cannot be silently discarded as ordinary nonmatches by resolver prefiltering.
@@ -1204,7 +1219,7 @@ assert(simultaneousResolution.afterState.player.stealth == 0, "simultaneous stea
 assert(simultaneousResolution.afterState.character.resistance == 0, "simultaneous resistance changed")
 assertCardEventIds("victory stopped character", simultaneousResolution, "card_declared", { "accidental_brush" })
 assert(simultaneousResolution.afterState.character.mood == "ignore", "ended battle applied common mood")
-assert(simultaneousResolution.metrics.commonMoodApplied == false, "ended battle reported common mood")
+assert(simultaneousResolution.metrics.moodChanged == false, "ended battle unexpectedly changed mood")
 local outcomeStoppedCharacter = onlyEvent(
     "outcome stopped character",
     simultaneousResolution,
@@ -1259,7 +1274,7 @@ assert(lastTurnResolution.afterState.status == "defeat", "last turn with resista
 assert(lastTurnResolution.afterState.turnNumber == 3, "last-turn defeat changed its resolved turn number")
 assert(lastTurnResolution.afterState.character.resistance == 30, "last turn did not finish character recovery")
 assert(lastTurnResolution.afterState.character.mood == "ignore", "last-turn defeat applied common mood")
-assert(lastTurnResolution.metrics.commonMoodApplied == false, "last-turn defeat reported common mood")
+assert(lastTurnResolution.metrics.moodChanged == false, "last-turn defeat unexpectedly changed mood")
 
 -- Post-resolution triggers run before the card outcome checkpoint. Once the
 -- post trigger defeats the player, turn_end is skipped, cleanup still runs,
@@ -1435,81 +1450,63 @@ assert(canonical(invalidSessionState) == invalidSessionStateSnapshot,
 assert(canonical(invalidSessionProjection) == invalidSessionProjectionSnapshot,
     "session_end command rejection mutated projection")
 
--- Reserved changes only compliance-direction thresholds. A -4 performance at
--- ignore therefore still moves one step toward rejection.
-local commonState = makeState({
-    battleId = "resolver-common",
-    cards = {
-        makeCard("common-corner", "turn_to_corner", "character", "hand", 1),
-    },
-    intentIds = { "common-corner" },
-})
-local commonProjection = makeProjection("common mood", commonState, {})
-local commonResolution = resolve("common mood", commonState, commonProjection, "resolver-common-turn-001")
-assert(commonResolution.afterState.character.resistance == 34, "common mood recovery changed")
-assert(commonResolution.afterState.character.mood == "suspicion", "-4 common performance did not move toward rejection")
-assertMetrics("common mood", commonResolution, {
-    resistancePerformance = -4,
-    stealthSpent = 0,
-    moodPerformance = -4,
-    commonMoodApplied = true,
-})
-
--- Neutralizing only the environment isolates the current pin's exact P=4. The
--- base ignore->confusion threshold accepts it, while Yoo's reserved +1 rejects it.
+-- Token rules are resolved once at turn end. Test-only card effects isolate
+-- unique leaders, ties, single force priority, and multi-force cancellation.
 local neutralData = clone(staticData)
 neutralData.environments.uncrowded.triggers = {}
-local reservedThresholdState = makeState({
-    battleId = "resolver-reserved-threshold",
-    cards = {
-        makeCard("reserved-pin", "pin_down", "player", "hand", 1),
-    },
+neutralData.cards.pin_down.resolve = function()
+    return {
+        { op = "add_mood_token", target = "character", mood = "suspicion", amount = 1, cause = "cardEffect" },
+    }
+end
+local uniqueState = makeState({
+    battleId = "resolver-token-unique",
+    moodTokens = { rejection = 0, suspicion = 2, ignore = 0, confusion = 1, compliance = 0 },
+    cards = { makeCard("unique-pin", "pin_down", "player", "hand", 1) },
 }, neutralData)
-local reservedThresholdProjection = makeProjection(
-    "reserved compliance threshold",
-    reservedThresholdState,
-    { "reserved-pin" },
+local uniqueResolution = resolve(
+    "unique mood token leader",
+    uniqueState,
+    makeProjection("unique mood token leader", uniqueState, { "unique-pin" }, neutralData),
+    "resolver-token-unique-turn-001",
     neutralData
 )
-local reservedThresholdResolution = resolve(
-    "reserved compliance threshold",
-    reservedThresholdState,
-    reservedThresholdProjection,
-    "resolver-reserved-threshold-turn-001",
-    neutralData
-)
-assert(reservedThresholdResolution.metrics.moodPerformance == 4, "reserved threshold fixture is not exact P=4")
-assert(reservedThresholdResolution.afterState.character.mood == "ignore", "reserved failed to raise compliance threshold")
-assert(reservedThresholdResolution.metrics.commonMoodApplied == false, "reserved threshold unexpectedly moved mood")
+assert(uniqueResolution.afterState.character.mood == "suspicion", "unique token leader did not set mood")
+assert(uniqueResolution.afterState.character.moodTokens.suspicion == 0, "winning mood tokens were not reset")
+assert(uniqueResolution.afterState.character.moodTokens.confusion == 1, "non-winning tokens changed")
+assert(uniqueResolution.metrics.moodResolution == "token" and uniqueResolution.metrics.moodChanged == true)
 
-local plainThresholdState = makeState({
-    battleId = "resolver-plain-threshold",
-    traitIds = {},
-    cards = {
-        makeCard("plain-pin", "pin_down", "player", "hand", 1),
-    },
-}, neutralData)
-local plainThresholdProjection = makeProjection(
-    "plain compliance threshold",
-    plainThresholdState,
-    { "plain-pin" },
-    neutralData
+local tieData = clone(neutralData)
+tieData.cards.pin_down.resolve = function()
+    return {
+        { op = "add_mood_token", target = "character", mood = "suspicion", amount = 1, cause = "cardEffect" },
+        { op = "add_mood_token", target = "character", mood = "confusion", amount = 1, cause = "cardEffect" },
+    }
+end
+local tieState = makeState({
+    battleId = "resolver-token-tie",
+    moodTokens = { rejection = 1, suspicion = 2, ignore = 0, confusion = 2, compliance = 0 },
+    cards = { makeCard("tie-pin", "pin_down", "player", "hand", 1) },
+}, tieData)
+local tieResolution = resolve(
+    "tied mood tokens",
+    tieState,
+    makeProjection("tied mood tokens", tieState, { "tie-pin" }, tieData),
+    "resolver-token-tie-turn-001",
+    tieData
 )
-local plainThresholdResolution = resolve(
-    "plain compliance threshold",
-    plainThresholdState,
-    plainThresholdProjection,
-    "resolver-plain-threshold-turn-001",
-    neutralData
-)
-assert(plainThresholdResolution.metrics.moodPerformance == 4, "plain threshold fixture is not exact P=4")
-assert(plainThresholdResolution.afterState.character.mood == "confusion", "base P=4 did not move toward compliance")
-assert(plainThresholdResolution.metrics.commonMoodApplied == true, "base threshold movement was not reported")
+assert(tieResolution.afterState.character.mood == "ignore", "token tie changed mood")
+assert(tieResolution.afterState.character.moodTokens.suspicion == 2
+        and tieResolution.afterState.character.moodTokens.confusion == 2,
+    "tied leaders were not each reduced by one")
+assert(tieResolution.afterState.character.moodTokens.rejection == 1, "non-leading token was reduced")
+assert(tieResolution.metrics.moodResolution == "tie" and tieResolution.metrics.moodChanged == false)
 
--- A real direct shift suppresses common mood, skips the character, and remove
--- moves the card out of the active cycle.
+-- One force request takes priority without consuming tokens. Hypnotic whisper
+-- also skips the character and moves itself to removed.
 local directState = makeState({
     battleId = "resolver-direct",
+    moodTokens = { rejection = 0, suspicion = 3, ignore = 0, confusion = 0, compliance = 0 },
     cards = {
         makeCard("direct-hypnotic", "hypnotic_whisper", "player", "hand", 1),
         makeCard("direct-warning", "quiet_warning", "character", "hand", 1),
@@ -1518,8 +1515,11 @@ local directState = makeState({
 })
 local directProjection = makeProjection("direct mood", directState, { "direct-hypnotic" })
 local directResolution = resolve("direct mood", directState, directProjection, "resolver-direct-turn-001")
-assert(directResolution.afterState.character.mood == "confusion", "direct mood shift was not applied")
-assert(directResolution.metrics.commonMoodApplied == false, "actual direct shift allowed common mood")
+assert(directResolution.afterState.character.mood == "compliance", "single forced mood was not applied")
+assert(directResolution.afterState.character.moodTokens.suspicion == 3, "forced mood consumed tokens")
+assert(directResolution.metrics.moodResolution == "forced"
+        and directResolution.metrics.forcedMoodCount == 1,
+    "single force resolution was not reported")
 assert(findCard(directResolution.afterState, "direct-hypnotic").zone == "removed", "remove card returned to discard")
 assertCardEventIds("direct skip character", directResolution, "card_declared", { "hypnotic_whisper" })
 assert(findCard(directResolution.afterState, "direct-warning").zone == "discard", "skipped character card was not cleaned up")
@@ -1534,72 +1534,30 @@ local skippedCharacter = onlyEvent(
 assert(skippedCharacter.payload.reasonCode == "skip_actions", "direct skip reason changed")
 assertIds("direct skip unresolved ids", skippedCharacter.payload.unresolvedInstanceIds, { "direct-warning" })
 
--- At the compliance edge, shift +1 causes no actual movement. It must not by
--- itself suppress the later -5 common result. Cost 1 is a fixture-only numeric
--- change; all callbacks and trigger definitions remain the current DB versions.
-local edgeData = clone(staticData)
-edgeData.cards.hypnotic_whisper.base.stealthCost = 1
-local edgeState = makeState({
-    battleId = "resolver-direct-edge",
-    mood = "compliance",
-    cards = {
-        makeCard("edge-hypnotic", "hypnotic_whisper", "player", "hand", 1),
-        makeCard("edge-glare", "silent_glare", "character", "plan", 1),
-    },
-    characterPlan = planSlot("edge-glare", "silent_glare", 1, 1, 1),
-}, edgeData)
-local edgeProjection = makeProjection("direct edge", edgeState, { "edge-hypnotic" }, edgeData)
-local edgeResolution = resolve(
-    "direct edge",
-    edgeState,
-    edgeProjection,
-    "resolver-direct-edge-turn-001",
-    edgeData
-)
-assert(edgeResolution.metrics.moodPerformance == -5, "direct edge fixture is not exact P=-5")
-assert(edgeResolution.afterState.character.mood == "confusion", "clamped direct shift incorrectly suppressed common mood")
-assert(edgeResolution.metrics.commonMoodApplied == true, "edge common movement was not reported")
-
--- A lock applied during this resolver call always suppresses common mood. The
--- fixture keeps the current pin and lock command contracts, but adds a resolve
--- callback because the real subtle_approach lock belongs to the earlier turn
--- initializer and cannot be reconstructed after a projection has been made.
-local lockData = clone(neutralData)
-lockData.cards.pin_down.resolve = function(context)
+local cancelledData = clone(neutralData)
+cancelledData.cards.pin_down.resolve = function()
     return {
-        {
-            op = "lock_mood",
-            target = "character",
-            mood = "ignore",
-            ["until"] = "turn_end",
-            cause = "cardEffect",
-        },
-        {
-            op = "shift_mood",
-            target = "character",
-            amount = 1,
-            cause = "cardEffect",
-        },
+        { op = "force_mood", target = "character", mood = "rejection", cause = "cardEffect" },
+        { op = "force_mood", target = "character", mood = "compliance", cause = "cardEffect" },
     }
 end
-local lockState = makeState({
-    battleId = "resolver-lock",
-    traitIds = {},
-    cards = {
-        makeCard("lock-pin", "pin_down", "player", "hand", 1),
-    },
-}, lockData)
-local lockProjection = makeProjection("mood lock", lockState, { "lock-pin" }, lockData)
-local lockResolution = resolve(
-    "mood lock",
-    lockState,
-    lockProjection,
-    "resolver-lock-turn-001",
-    lockData
+local cancelledState = makeState({
+    battleId = "resolver-force-cancelled",
+    moodTokens = { rejection = 0, suspicion = 3, ignore = 0, confusion = 0, compliance = 0 },
+    cards = { makeCard("cancelled-pin", "pin_down", "player", "hand", 1) },
+}, cancelledData)
+local cancelledResolution = resolve(
+    "cancelled forces use tokens",
+    cancelledState,
+    makeProjection("cancelled forces use tokens", cancelledState, { "cancelled-pin" }, cancelledData),
+    "resolver-force-cancelled-turn-001",
+    cancelledData
 )
-assert(lockResolution.metrics.moodPerformance == 4, "lock fixture is not exact P=4")
-assert(lockResolution.afterState.character.mood == "ignore", "lock failed to block direct or common mood")
-assert(lockResolution.metrics.commonMoodApplied == false, "locked turn reported common mood")
+assert(cancelledResolution.afterState.character.mood == "suspicion", "cancelled forces did not fall back to tokens")
+assert(cancelledResolution.afterState.character.moodTokens.suspicion == 0, "fallback token winner was not reset")
+assert(cancelledResolution.metrics.forcedMoodCount == 2
+        and cancelledResolution.metrics.moodResolution == "token",
+    "force cancellation and token fallback were not reported")
 
 -- A character plan card moves from hand to the plan slot and survives the
 -- structural end-turn cleanup with its declared lifetime intact.
@@ -1703,12 +1661,10 @@ print(
         .. "|late-stealth=" .. tostring(lateResolution.afterState.player.stealth)
         .. "|simultaneous=" .. simultaneousResolution.afterState.status
         .. "|last=" .. lastTurnResolution.afterState.status
-        .. "|common=" .. commonResolution.afterState.character.mood
-        .. "|reserved=" .. reservedThresholdResolution.afterState.character.mood
-        .. "|plain=" .. plainThresholdResolution.afterState.character.mood
+        .. "|unique=" .. uniqueResolution.afterState.character.mood
+        .. "|tie=" .. tieResolution.afterState.character.mood
         .. "|direct=" .. directResolution.afterState.character.mood
-        .. "|edge=" .. edgeResolution.afterState.character.mood
-        .. "|lock=" .. lockResolution.afterState.character.mood
+        .. "|cancelled=" .. cancelledResolution.afterState.character.mood
         .. "|resolution=" .. deterministicResolutionHash
 )
 '@
@@ -1732,7 +1688,7 @@ try {
     if (-not ($firstText -ceq $secondText)) {
         throw "Separate Lua processes produced different turnResolver results.`nFIRST:`n$firstText`nSECOND:`n$secondText"
     }
-    $expectedVectorPrefix = 'VECTOR|order=plan:silent_glare,environment:uncrowded|insight-stealth=26|late-stealth=1|simultaneous=victory|last=defeat|common=suspicion|reserved=ignore|plain=confusion|direct=confusion|edge=confusion|lock=ignore|resolution='
+    $expectedVectorPrefix = 'VECTOR|order=plan:silent_glare,environment:uncrowded|insight-stealth=26|late-stealth=1|simultaneous=victory|last=defeat|unique=suspicion|tie=ignore|direct=compliance|cancelled=suspicion|resolution='
     if (-not $firstText.StartsWith($expectedVectorPrefix) -or $firstText -notmatch '\|resolution=\d{10}$') {
         throw "Unexpected turnResolver determinism vector: $firstText"
     }

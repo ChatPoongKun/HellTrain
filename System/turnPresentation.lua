@@ -45,13 +45,6 @@
         turn_limit = true,
     }
 
-    local MOOD_NO_CHANGE_REASONS = {
-        battle_ended = "전투가 종료됨",
-        mood_locked = "무드가 고정됨",
-        direct_mood_changed = "이미 무드가 직접 변경됨",
-        threshold_not_met = "기준치에 도달하지 못함",
-    }
-
     local function makeError(code, path, message)
         return {
             code = code,
@@ -335,63 +328,13 @@
                 return sideLabel(payload.target) .. "의 이번 턴 남은 행동이 생략됩니다.", nil
             end
             return sideLabel(payload.target) .. "의 남은 행동은 이미 생략된 상태입니다.", nil
-        elseif payload.op == "shift_mood" or payload.op == "set_mood" then
-            local allowed = {
-                op = true,
-                target = true,
-                changed = true,
-                before = true,
-                after = true,
-                blocked = true,
-            }
-            if payload.op == "shift_mood" then allowed.amount = true else allowed.mood = true end
-            local keyError = checkAllowedKeys(payload, allowed, path)
-            if keyError then return nil, keyError end
-            local beforeMood, beforeError = lookupMood(staticData, payload.before, path .. ".before")
-            local afterMood, afterError = lookupMood(staticData, payload.after, path .. ".after")
-            if beforeError or afterError then return nil, beforeError or afterError end
-            if payload.target ~= "character"
-                or type(payload.changed) ~= "boolean"
-                or (payload.blocked ~= nil and payload.blocked ~= true)
-                or payload.changed ~= (payload.blocked ~= true and payload.before ~= payload.after) then
-                return nil, makeError("invalid_effect_payload", path, "무드 변화 표시값이 서로 일치하지 않습니다.")
-            end
-            if payload.op == "set_mood" then
-                local mood, moodError = lookupMood(staticData, payload.mood, path .. ".mood")
-                if moodError then return nil, moodError end
-                if payload.blocked ~= true and payload.after ~= payload.mood then
-                    return nil, makeError("invalid_effect_result", path .. ".after", "설정 무드와 결과가 다릅니다.")
-                end
-            elseif not isInteger(payload.amount, 0) then
-                return nil, makeError("invalid_effect_amount", path .. ".amount", "무드 이동량이 올바르지 않습니다.")
-            elseif payload.blocked ~= true then
-                local maximumOrder = beforeMood.order
-                for _, mood in pairs(staticData.registry.moods) do
-                    if type(mood) == "table" and isInteger(mood.order, 1) then
-                        maximumOrder = math.max(maximumOrder, mood.order)
-                    end
-                end
-                local expectedOrder = math.min(maximumOrder, beforeMood.order + payload.amount)
-                if afterMood.order ~= expectedOrder then
-                    return nil, makeError("invalid_effect_result", path .. ".after", "무드 이동량과 결과가 다릅니다.")
-                end
-            end
-            if payload.blocked == true then
-                if payload.before ~= payload.after then
-                    return nil, makeError("invalid_blocked_effect", path, "차단된 무드 효과가 무드를 바꾸었습니다.")
-                end
-                return "무드 변경이 고정 효과에 막혔습니다. (" .. beforeMood.label .. ")", nil
-            elseif payload.changed then
-                return "무드가 " .. beforeMood.label .. "에서 " .. afterMood.label .. "(으)로 변경되었습니다.", nil
-            end
-            return "무드는 " .. beforeMood.label .. " 상태를 유지했습니다.", nil
-        elseif payload.op == "lock_mood" then
+        elseif payload.op == "add_mood_token" then
             local keyError = checkAllowedKeys(payload, {
                 op = true,
                 target = true,
                 changed = true,
                 mood = true,
-                ["until"] = true,
+                amount = true,
                 before = true,
                 after = true,
             }, path)
@@ -399,17 +342,33 @@
             local mood, moodError = lookupMood(staticData, payload.mood, path .. ".mood")
             if moodError then return nil, moodError end
             if payload.target ~= "character"
-                or type(payload.changed) ~= "boolean"
-                or payload["until"] ~= "turn_end"
-                or type(payload.before) ~= "boolean"
-                or payload.after ~= true
-                or payload.changed ~= (payload.before ~= true) then
-                return nil, makeError("invalid_effect_payload", path, "무드 고정 표시값이 서로 일치하지 않습니다.")
+                or payload.changed ~= true
+                or not isInteger(payload.amount, 1)
+                or not isInteger(payload.before, 0)
+                or payload.after ~= payload.before + payload.amount then
+                return nil, makeError("invalid_effect_payload", path, "무드 토큰 표시값이 서로 일치하지 않습니다.")
             end
-            if payload.changed then
-                return "무드가 이번 턴 종료까지 " .. mood.label .. "(으)로 고정되었습니다.", nil
+            return mood.label .. " 토큰을 " .. numberText(payload.amount) .. "개 생성했습니다. ("
+                .. numberText(payload.before) .. " → " .. numberText(payload.after) .. ")", nil
+        elseif payload.op == "force_mood" then
+            local keyError = checkAllowedKeys(payload, {
+                op = true,
+                target = true,
+                changed = true,
+                mood = true,
+                before = true,
+                after = true,
+            }, path)
+            if keyError then return nil, keyError end
+            local mood, moodError = lookupMood(staticData, payload.mood, path .. ".mood")
+            if moodError then return nil, moodError end
+            if payload.target ~= "character"
+                or payload.changed ~= true
+                or not isInteger(payload.before, 0)
+                or payload.after ~= payload.before + 1 then
+                return nil, makeError("invalid_effect_payload", path, "무드 강제 변경 요청 표시값이 서로 일치하지 않습니다.")
             end
-            return "무드는 이미 " .. mood.label .. "(으)로 고정된 상태입니다.", nil
+            return "턴 종료 시 " .. mood.label .. "(으)로 강제 변경하는 효과가 발생했습니다.", nil
         end
         return nil, makeError("unsupported_effect_op", path .. ".op", "공개 표시를 지원하지 않는 효과입니다.")
     end
@@ -611,44 +570,58 @@
                 .. numberText(payload.stealth) .. ", 저항 " .. numberText(payload.resistance) .. ")"), nil
         elseif event.type == "mood_evaluated" then
             local keyError = checkAllowedKeys(payload, {
-                performance = true,
                 before = true,
                 after = true,
                 applied = true,
-                direction = true,
-                threshold = true,
-                reasonCode = true,
+                forcedCount = true,
+                forceCancelled = true,
+                resolution = true,
+                targetMood = true,
+                tiedMoods = true,
+                tokensBefore = true,
+                tokensAfter = true,
             }, payloadPath)
             if keyError then return nil, keyError end
             local beforeMood, beforeError = lookupMood(staticData, payload.before, payloadPath .. ".before")
             local afterMood, afterError = lookupMood(staticData, payload.after, payloadPath .. ".after")
             if beforeError or afterError then return nil, beforeError or afterError end
-            if not isFinite(payload.performance) or type(payload.applied) ~= "boolean" then
+            if type(payload.applied) ~= "boolean"
+                or not isInteger(payload.forcedCount, 0)
+                or type(payload.forceCancelled) ~= "boolean"
+                or payload.forceCancelled ~= (payload.forcedCount >= 2)
+                or type(payload.tokensBefore) ~= "table"
+                or type(payload.tokensAfter) ~= "table" then
                 return nil, makeError("invalid_mood_evaluation", payloadPath, "무드 평가 공개값이 올바르지 않습니다.")
             end
-            if payload.applied then
-                if (payload.direction ~= "compliance" and payload.direction ~= "rejection")
-                    or not isFinite(payload.threshold)
-                    or payload.threshold < 0
-                    or payload.reasonCode ~= nil
-                    or payload.before == payload.after
-                    or (payload.direction == "compliance" and afterMood.order <= beforeMood.order)
-                    or (payload.direction == "rejection" and afterMood.order >= beforeMood.order) then
-                    return nil, makeError("invalid_mood_evaluation", payloadPath, "적용된 무드 평가의 필드가 서로 모순됩니다.")
+            local cancelled = payload.forceCancelled and "강제 변경 효과 " .. payload.forcedCount .. "건은 상쇄되었습니다. " or ""
+            if payload.resolution == "forced" then
+                if payload.forcedCount ~= 1 or payload.forceCancelled or payload.targetMood ~= payload.after then
+                    return nil, makeError("invalid_mood_evaluation", payloadPath, "강제 무드 평가의 필드가 서로 모순됩니다.")
                 end
-                return summary(index, event.type, "턴 성과 " .. numberText(payload.performance) .. "로 무드가 "
-                    .. beforeMood.label .. "에서 " .. afterMood.label .. "(으)로 이동했습니다. (기준 "
-                    .. numberText(payload.threshold) .. ")"), nil
+                return summary(index, event.type, "강제 변경 효과로 무드가 "
+                    .. beforeMood.label .. "에서 " .. afterMood.label .. "(으)로 결정되었습니다. 토큰은 차감하지 않습니다."), nil
+            elseif payload.resolution == "token" then
+                local targetMood, targetError = lookupMood(staticData, payload.targetMood, payloadPath .. ".targetMood")
+                if targetError then return nil, targetError end
+                return summary(index, event.type, cancelled .. targetMood.label
+                    .. " 토큰이 단독 최다여서 무드를 " .. afterMood.label .. "(으)로 결정하고 해당 토큰을 0으로 만들었습니다."), nil
+            elseif payload.resolution == "tie" then
+                if type(payload.tiedMoods) ~= "table" or #payload.tiedMoods < 2 or payload.before ~= payload.after then
+                    return nil, makeError("invalid_mood_evaluation", payloadPath, "동률 무드 평가의 필드가 서로 모순됩니다.")
+                end
+                local labels = {}
+                for tieIndex, moodId in ipairs(payload.tiedMoods) do
+                    local mood, moodError = lookupMood(staticData, moodId, payloadPath .. ".tiedMoods[" .. tieIndex .. "]")
+                    if moodError then return nil, moodError end
+                    labels[#labels + 1] = mood.label
+                end
+                return summary(index, event.type, cancelled .. table.concat(labels, ", ")
+                    .. " 토큰이 최다 동률이어서 각각 1개 차감하고 무드를 유지했습니다."), nil
+            elseif payload.resolution ~= "none" or payload.before ~= payload.after then
+                return nil, makeError("invalid_mood_evaluation", payloadPath, "무드 유지 평가의 필드가 서로 모순됩니다.")
             end
-            local reason = MOOD_NO_CHANGE_REASONS[payload.reasonCode]
-            if payload.before ~= payload.after
-                or payload.direction ~= nil
-                or payload.threshold ~= nil
-                or reason == nil then
-                return nil, makeError("invalid_mood_evaluation", payloadPath, "미적용 무드 평가의 필드가 서로 모순됩니다.")
-            end
-            return summary(index, event.type, "턴 성과 " .. numberText(payload.performance) .. ", 무드 "
-                .. beforeMood.label .. " 유지 (" .. reason .. ")."), nil
+            return summary(index, event.type, cancelled .. "3개 이상인 최다 무드 토큰이 없어 "
+                .. beforeMood.label .. " 무드를 유지했습니다."), nil
         elseif event.type == "turn_ended" then
             local keyError = checkAllowedKeys(payload, { turnNumber = true }, payloadPath)
             if keyError then return nil, keyError end

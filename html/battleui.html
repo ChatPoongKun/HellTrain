@@ -1685,7 +1685,7 @@ data-mood-id="{{dictelement::{{tempvar::bv_mood}}::id}}">
 <article class="mood-console">
 <div class="mood-heading">
 <div><div class="resource-label">상대 무드</div><div class="mood-name">{{dictelement::{{tempvar::bv_mood}}::label}}</div></div>
-<div class="mood-hint">턴 종료 시 성과가 경계를 넘으면<br>최대 한 단계 이동</div>
+<div class="mood-hint">턴 종료 시 3개 이상인<br>단독 최다 토큰 무드로 변경</div>
 </div>
 <div class="mood-scale" aria-label="거절에서 순응까지의 무드 단계">
 <span class="mood-node mood-rejection">거절</span>
@@ -1695,8 +1695,11 @@ data-mood-id="{{dictelement::{{tempvar::bv_mood}}::id}}">
 <span class="mood-node mood-compliance">순응</span>
 </div>
 <div class="mood-thresholds">
-{{#when::keep::{{dictelement::{{tempvar::bv_mood}}::hasThresholdToRejection}}::is::true}}<span class="mood-threshold">거절 방향 <strong>{{dictelement::{{tempvar::bv_mood}}::thresholdToRejection}}</strong></span>{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv_mood}}::hasThresholdToCompliance}}::is::true}}<span class="mood-threshold">순응 방향 <strong>{{dictelement::{{tempvar::bv_mood}}::thresholdToCompliance}}</strong></span>{{/when}}
+<span class="mood-threshold">거절 <strong>{{dictelement::{{dictelement::{{tempvar::bv_mood}}::tokens}}::rejection}}</strong></span>
+<span class="mood-threshold">의심 <strong>{{dictelement::{{dictelement::{{tempvar::bv_mood}}::tokens}}::suspicion}}</strong></span>
+<span class="mood-threshold">무시 <strong>{{dictelement::{{dictelement::{{tempvar::bv_mood}}::tokens}}::ignore}}</strong></span>
+<span class="mood-threshold">혼란 <strong>{{dictelement::{{dictelement::{{tempvar::bv_mood}}::tokens}}::confusion}}</strong></span>
+<span class="mood-threshold">순응 <strong>{{dictelement::{{dictelement::{{tempvar::bv_mood}}::tokens}}::compliance}}</strong></span>
 </div>
 </article>
 <article class="resource-card resistance-card">

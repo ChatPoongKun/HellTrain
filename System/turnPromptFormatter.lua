@@ -195,12 +195,10 @@
             allowed = { op = true, target = true, changed = true, requested = true, drawnCount = true }
         elseif op == "skip_actions" then
             allowed = { op = true, target = true, changed = true, scope = true, before = true, after = true }
-        elseif op == "shift_mood" then
-            allowed = { op = true, target = true, changed = true, amount = true, before = true, after = true, blocked = true }
-        elseif op == "set_mood" then
-            allowed = { op = true, target = true, changed = true, mood = true, before = true, after = true, blocked = true }
-        elseif op == "lock_mood" then
-            allowed = { op = true, target = true, changed = true, mood = true, ["until"] = true, before = true, after = true }
+        elseif op == "add_mood_token" then
+            allowed = { op = true, target = true, changed = true, mood = true, amount = true, before = true, after = true }
+        elseif op == "force_mood" then
+            allowed = { op = true, target = true, changed = true, mood = true, before = true, after = true }
         else
             return nil, makeError("unsupported_effect_op", path .. ".op", "지원하지 않는 LLM 효과 작업입니다.")
         end
@@ -212,8 +210,8 @@
         if not isSide(payload.target) or type(payload.changed) ~= "boolean" then
             return nil, makeError("invalid_effect", path, "효과 대상 또는 changed가 올바르지 않습니다.")
         end
-        if payload.changed ~= true and payload.blocked ~= true then
-            return nil, makeError("non_narrative_effect", path, "LLM 사건에는 변화하거나 차단된 효과만 들어갈 수 있습니다.")
+        if payload.changed ~= true then
+            return nil, makeError("non_narrative_effect", path, "LLM 사건에는 실제 효과가 있는 작업만 들어갈 수 있습니다.")
         end
 
         local safe = {
@@ -267,53 +265,32 @@
             safe.scope = payload.scope
             safe.before = false
             safe.after = true
-        elseif op == "shift_mood" or op == "set_mood" then
-            local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
-            if payload.target ~= "character"
-                or type(moods) ~= "table"
-                or type(moods[payload.before]) ~= "table"
-                or type(moods[payload.after]) ~= "table" then
-                return nil, makeError("invalid_effect", path, "무드 효과 값이 올바르지 않습니다.")
-            end
-            if payload.blocked ~= nil and payload.blocked ~= true then
-                return nil, makeError("invalid_effect", path .. ".blocked", "blocked는 true일 때만 존재할 수 있습니다.")
-            end
-            if payload.blocked == true then
-                if payload.changed ~= false or payload.before ~= payload.after then
-                    return nil, makeError("effect_result_mismatch", path, "차단된 무드 효과가 상태를 바꿨습니다.")
-                end
-                safe.blocked = true
-            elseif payload.changed ~= true or payload.before == payload.after then
-                return nil, makeError("effect_result_mismatch", path, "LLM 무드 효과가 실제 변화를 나타내지 않습니다.")
-            end
-            safe.before = payload.before
-            safe.after = payload.after
-            if op == "shift_mood" then
-                if not isInteger(payload.amount, 0) then
-                    return nil, makeError("invalid_effect", path .. ".amount", "무드 이동량이 올바르지 않습니다.")
-                end
-                safe.amount = payload.amount
-            else
-                if type(moods[payload.mood]) ~= "table" then
-                    return nil, makeError("invalid_effect", path .. ".mood", "설정 무드가 등록되지 않았습니다.")
-                end
-                safe.mood = payload.mood
-            end
-        else
+        elseif op == "add_mood_token" then
             local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
             if payload.target ~= "character"
                 or type(moods) ~= "table"
                 or type(moods[payload.mood]) ~= "table"
-                or payload["until"] ~= "turn_end"
-                or payload.before ~= false
-                or payload.after ~= true
-                or payload.changed ~= true then
-                return nil, makeError("invalid_effect", path, "무드 고정 효과 값이 올바르지 않습니다.")
+                or not isInteger(payload.amount, 1)
+                or not isInteger(payload.before, 0)
+                or payload.after ~= payload.before + payload.amount then
+                return nil, makeError("invalid_effect", path, "무드 토큰 효과 값이 올바르지 않습니다.")
             end
             safe.mood = payload.mood
-            safe["until"] = payload["until"]
-            safe.before = false
-            safe.after = true
+            safe.amount = payload.amount
+            safe.before = payload.before
+            safe.after = payload.after
+        elseif op == "force_mood" then
+            local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
+            if payload.target ~= "character"
+                or type(moods) ~= "table"
+                or type(moods[payload.mood]) ~= "table"
+                or not isInteger(payload.before, 0)
+                or payload.after ~= payload.before + 1 then
+                return nil, makeError("invalid_effect", path, "무드 강제 변경 요청 값이 올바르지 않습니다.")
+            end
+            safe.mood = payload.mood
+            safe.before = payload.before
+            safe.after = payload.after
         end
         return safe, nil
     end
@@ -462,17 +439,17 @@
             end
             return { status = payload.status, reasonCode = payload.reasonCode }, nil
         elseif eventType == "mood_changed" then
-            local keyError = checkAllowedKeys(payload, { before = true, after = true, direction = true }, path)
+            local keyError = checkAllowedKeys(payload, { before = true, after = true, resolution = true }, path)
             if keyError then return nil, keyError end
             local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
             if type(moods) ~= "table"
                 or type(moods[payload.before]) ~= "table"
                 or type(moods[payload.after]) ~= "table"
-                or (payload.direction ~= "compliance" and payload.direction ~= "rejection")
+                or (payload.resolution ~= "forced" and payload.resolution ~= "token")
                 or payload.before == payload.after then
                 return nil, makeError("invalid_mood_change", path, "무드 변화 사건이 올바르지 않습니다.")
             end
-            return { before = payload.before, after = payload.after, direction = payload.direction }, nil
+            return { before = payload.before, after = payload.after, resolution = payload.resolution }, nil
         elseif eventType == "session_ended" then
             local keyError = checkAllowedKeys(payload, { status = true }, path)
             if keyError then return nil, keyError end

@@ -278,10 +278,10 @@ for _, mood in ipairs({ "rejection", "suspicion", "ignore", "confusion" }) do
     )
     assert(#noncomplianceLine.commands == 1,
         "cross the line noncompliance command count changed for " .. mood)
-    assert(noncomplianceLine.commands[1].op == "set_mood"
+    assert(noncomplianceLine.commands[1].op == "force_mood"
         and noncomplianceLine.commands[1].target == "character"
         and noncomplianceLine.commands[1].mood == "rejection",
-        "cross the line must set rejection before its mood effect")
+        "cross the line must queue a forced rejection")
 end
 local rejectionLineMood = evaluate(
     "cross the line rejection lock mood effect",
@@ -290,12 +290,8 @@ local rejectionLineMood = evaluate(
     "rejection",
     { mood = "rejection", player = { stealth = 30 }, character = { resistance = 30 } }
 )
-assert(#rejectionLineMood.commands == 1
-    and rejectionLineMood.commands[1].op == "lock_mood"
-    and rejectionLineMood.commands[1].target == "character"
-    and rejectionLineMood.commands[1].mood == "rejection"
-    and rejectionLineMood.commands[1]["until"] == "turn_end",
-    "cross the line turn-end rejection lock changed")
+assert(#rejectionLineMood.commands == 0,
+    "cross the line rejection mood gained a legacy lock effect")
 
 local function makeCard(instanceId, cardId, owner, zone, position)
     return {
@@ -518,10 +514,11 @@ for _, event in ipairs(lineRejection.events) do
     if event.type == "mood_evaluated" then moodEvaluation = event end
 end
 assert(type(moodEvaluation) == "table"
-    and moodEvaluation.payload.reasonCode == "mood_locked"
-    and moodEvaluation.payload.before == "rejection"
+    and moodEvaluation.payload.resolution == "forced"
+    and moodEvaluation.payload.forcedCount == 1
+    and moodEvaluation.payload.before == "ignore"
     and moodEvaluation.payload.after == "rejection",
-    "cross the line did not hold rejection through turn-end mood evaluation")
+    "cross the line did not force rejection at turn-end mood evaluation")
 
 print(
     "VECTOR"

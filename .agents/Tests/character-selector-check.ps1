@@ -388,10 +388,10 @@ assertHasError("protected card resolve", call(fixture(), throwingStatic), "card_
 local moodStatic = clone(staticData)
 moodStatic.cards.close_collar.moodEffects = {
     ignore = function()
-        return { { op = "set_mood", target = "character", mood = "rejection", cause = "test" } }
+        return { { op = "force_mood", target = "character", mood = "rejection", cause = "test" } }
     end,
 }
-assertHasError("unsupported mood score op", call(fixture(), moodStatic), "unsupported_character_score_op")
+assertOk("mood command scores neutrally", call(fixture(), moodStatic))
 
 local mismatchedPlanStatic = clone(staticData)
 mismatchedPlanStatic.cards.silent_glare.mechanismData.plan.selectionAssumption.event.side = "character"

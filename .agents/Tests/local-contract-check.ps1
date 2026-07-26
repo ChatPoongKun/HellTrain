@@ -647,18 +647,20 @@ receiptState.turnStartReceipt = {
         stealth = 30,
         resistance = 30,
         mood = "ignore",
+        moodTokens = {
+            rejection = 0,
+            suspicion = 0,
+            ignore = 0,
+            confusion = 0,
+            compliance = 0,
+        },
     },
     transient = {
         skipRemaining = {
             player = false,
             character = false,
         },
-        directMoodChanged = false,
-        moodLock = {
-            mood = "ignore",
-            ["until"] = "turn_end",
-            cause = "plan",
-        },
+        forcedMoodRequests = {},
     },
     events = {
         {
@@ -916,31 +918,35 @@ assertError(
     "$.turnStartReceipt.transient.skipRemaining.character"
 )
 
-local badDirectMoodReceipt = clone(receiptState)
-badDirectMoodReceipt.turnStartReceipt.transient.directMoodChanged = 0
+local badForcedMoodReceipt = clone(receiptState)
+badForcedMoodReceipt.turnStartReceipt.transient.forcedMoodRequests = "none"
 assertError(
-    "turnStartReceipt invalid direct mood flag",
-    runScript("test", "stateSchema", "validateBattleState", badDirectMoodReceipt, staticData),
-    "invalid_direct_mood_flag",
-    "$.turnStartReceipt.transient.directMoodChanged"
+    "turnStartReceipt invalid force requests",
+    runScript("test", "stateSchema", "validateBattleState", badForcedMoodReceipt, staticData),
+    "expected_table",
+    "$.turnStartReceipt.transient.forcedMoodRequests"
 )
 
-local unknownLockMood = clone(receiptState)
-unknownLockMood.turnStartReceipt.transient.moodLock.mood = "missing_mood"
+local unknownForcedMood = clone(receiptState)
+unknownForcedMood.turnStartReceipt.transient.forcedMoodRequests = {
+    { mood = "missing_mood", cause = "plan" },
+}
 assertError(
-    "turnStartReceipt unknown lock mood",
-    runScript("test", "stateSchema", "validateBattleState", unknownLockMood, staticData),
+    "turnStartReceipt unknown forced mood",
+    runScript("test", "stateSchema", "validateBattleState", unknownForcedMood, staticData),
     "unknown_mood",
-    "$.turnStartReceipt.transient.moodLock.mood"
+    "$.turnStartReceipt.transient.forcedMoodRequests[1].mood"
 )
 
-local badLockUntil = clone(receiptState)
-badLockUntil.turnStartReceipt.transient.moodLock["until"] = "session_end"
+local badForcedCause = clone(receiptState)
+badForcedCause.turnStartReceipt.transient.forcedMoodRequests = {
+    { mood = "ignore", cause = "not valid" },
+}
 assertError(
-    "turnStartReceipt invalid lock until",
-    runScript("test", "stateSchema", "validateBattleState", badLockUntil, staticData),
-    "invalid_mood_lock_until",
-    "$.turnStartReceipt.transient.moodLock.until"
+    "turnStartReceipt invalid forced cause",
+    runScript("test", "stateSchema", "validateBattleState", badForcedCause, staticData),
+    "invalid_forced_mood_cause",
+    "$.turnStartReceipt.transient.forcedMoodRequests[1].cause"
 )
 
 local badEventSequence = clone(receiptState)
@@ -1353,8 +1359,8 @@ assert(view.hand.items[3].instanceId == "player-003")
 assert(view.selection.canSubmit == true)
 assert(view.selection.mode == "action")
 assert(view.hand.items[1].origin == "hand")
-assert(view.character.mood.thresholdToCompliance == 5, "reserved must add 1 to compliance threshold")
-assert(view.character.mood.thresholdToRejection == 4)
+assert(view.character.mood.tokenThreshold == 3)
+assert(view.character.mood.tokens.ignore == 0 and view.character.mood.tokens.compliance == 0)
 assert(view.character.publicAction.tag.id == "vigilance")
 assert(view.character.plan.status == "hidden")
 assert(view.character.plan.card == nil)

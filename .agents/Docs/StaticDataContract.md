@@ -32,21 +32,10 @@ v1은 플레이어 `chain` 카드의 `draw_cards`만 허용한다. 각 효과에
 특징은 다음 필드를 사용한다.
 
 ```text
-id, owner, name, visibility, description, rules, modifiers
+id, owner, name, visibility, description, rules
 ```
 
-`modifiers`는 상태를 직접 변경하지 않는 선언형 보정 목록이다. 유지영의 `reserved` 특징은 다음 보정을 사용한다.
-
-```lua
-{
-    timing = "moodPerformanceThreshold",
-    operation = "add",
-    direction = "compliance",
-    amount = 1,
-}
-```
-
-기본 무드 경계 `5-4-4-5`에서 순응 방향으로 이동할 때만 요구 성과를 1 높인다. 따라서 유지영에게 적용되는 순응 방향 경계는 `6-5-5-6`이다. 거절 방향 경계는 바꾸지 않는다.
+현재 특징은 공개 정보와 규칙 문장을 제공하며 일반 수치 `modifiers`는 지원하지 않는다. 특징이 무드에 개입해야 할 때는 공통 효과 명령인 `add_mood_token` 또는 `force_mood`를 반환하는 트리거 계약을 사용한다.
 
 ## 5. 환경
 

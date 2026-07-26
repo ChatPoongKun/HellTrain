@@ -119,8 +119,7 @@ return {
         recover_stealth = { id = "recover_stealth" },
         draw_cards = { id = "draw_cards" },
         skip_actions = { id = "skip_actions" },
-        shift_mood = { id = "shift_mood" },
-        set_mood = { id = "set_mood" },
-        lock_mood = { id = "lock_mood" },
+        add_mood_token = { id = "add_mood_token" },
+        force_mood = { id = "force_mood" },
     },
 }

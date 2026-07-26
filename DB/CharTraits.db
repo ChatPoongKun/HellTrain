@@ -7,17 +7,9 @@ return {
             owner = "character",
             name = "소극적",
             visibility = "public",
-            description = "순응 방향으로 무드가 이동하려면 평소보다 1 높은 무드 성과가 필요합니다.",
+            description = "감정을 쉽게 드러내지 않고 상대의 접근에 소극적으로 반응합니다.",
             rules = {
-                "순응 방향 무드 이동에 필요한 무드 성과 기준이 1 증가합니다.",
-            },
-            modifiers = {
-                {
-                    timing = "moodPerformanceThreshold",
-                    operation = "add",
-                    direction = "compliance",
-                    amount = 1,
-                },
+                "별도의 전투 수치 보정이 없습니다.",
             },
         },
 
@@ -28,15 +20,7 @@ return {
             visibility = "public",
             description = "감정이 흔들리는 모습을 약점으로 여기며 평정심을 완강하게 유지합니다.",
             rules = {
-                "순응 방향 무드 이동에 필요한 무드 성과 기준이 2 증가합니다.",
-            },
-            modifiers = {
-                {
-                    timing = "moodPerformanceThreshold",
-                    operation = "add",
-                    direction = "compliance",
-                    amount = 2,
-                },
+                "별도의 전투 수치 보정이 없습니다.",
             },
         },
 
@@ -47,15 +31,7 @@ return {
             visibility = "public",
             description = "당황스러운 순간에도 장난과 도발로 주도권을 되찾으려 합니다.",
             rules = {
-                "순응 방향 무드 이동에 필요한 무드 성과 기준이 1 증가합니다.",
-            },
-            modifiers = {
-                {
-                    timing = "moodPerformanceThreshold",
-                    operation = "add",
-                    direction = "compliance",
-                    amount = 1,
-                },
+                "별도의 전투 수치 보정이 없습니다.",
             },
         },
 
@@ -66,15 +42,7 @@ return {
             visibility = "public",
             description = "상대의 의도를 서둘러 드러내지 않고 차분하게 상황의 속도를 조절합니다.",
             rules = {
-                "순응 방향 무드 이동에 필요한 무드 성과 기준이 1 증가합니다.",
-            },
-            modifiers = {
-                {
-                    timing = "moodPerformanceThreshold",
-                    operation = "add",
-                    direction = "compliance",
-                    amount = 1,
-                },
+                "별도의 전투 수치 보정이 없습니다.",
             },
         },
 
@@ -85,15 +53,7 @@ return {
             visibility = "public",
             description = "굳은 신앙과 정결의 서원으로 마음이 흔들리는 것을 강하게 억누릅니다.",
             rules = {
-                "순응 방향 무드 이동에 필요한 무드 성과 기준이 2 증가합니다.",
-            },
-            modifiers = {
-                {
-                    timing = "moodPerformanceThreshold",
-                    operation = "add",
-                    direction = "compliance",
-                    amount = 2,
-                },
+                "별도의 전투 수치 보정이 없습니다.",
             },
         },
     },

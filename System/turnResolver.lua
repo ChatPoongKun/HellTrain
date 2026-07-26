@@ -1,6 +1,5 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
-    local MOOD_BOUNDARIES = { 5, 4, 4, 5 }
 
     local function makeError(code, path, message)
         return {
@@ -341,8 +340,7 @@
         local nextResolutionOrdinal = 1
         local transientSeed = {
             skipRemaining = { player = false, character = false },
-            directMoodChanged = false,
-            moodLockApplied = false,
+            forcedMoodRequests = {},
             halted = false,
         }
         if turnStartReceipt ~= nil then
@@ -354,11 +352,7 @@
                 return failure({ receiptTransientError })
             end
             transientSeed.skipRemaining = receiptTransient.skipRemaining
-            transientSeed.directMoodChanged = receiptTransient.directMoodChanged
-            if receiptTransient.moodLock ~= nil then
-                transientSeed.moodLock = receiptTransient.moodLock
-                transientSeed.moodLockApplied = true
-            end
+            transientSeed.forcedMoodRequests = receiptTransient.forcedMoodRequests
         end
         local working = {
             state = workingState,
@@ -1146,8 +1140,6 @@
         local endingResistance = working.state.character.resistance
         local resistancePerformance = startValues.resistance - endingResistance
         local stealthSpent = math.max(0, startValues.stealth - endingStealth)
-        local moodPerformance = resistancePerformance - stealthSpent
-        local commonMoodApplied = false
 
         local function moodOrder()
             local order = {}
@@ -1174,85 +1166,83 @@
         if moodOrderError then
             return failure({ moodOrderError })
         end
-        local currentMoodIndex = nil
-        for index, moodId in ipairs(order) do
-            if moodId == working.state.character.mood then
-                currentMoodIndex = index
-                break
+        local tokenCounts = working.state.character.moodTokens
+        if tokenCounts == nil then
+            tokenCounts = {}
+            working.state.character.moodTokens = tokenCounts
+        elseif type(tokenCounts) ~= "table" then
+            return failure({ makeError("invalid_mood_tokens", "$.character.moodTokens", "무드 토큰이 객체가 아닙니다.") })
+        end
+        local tokensBefore = {}
+        for _, moodId in ipairs(order) do
+            local count = tokenCounts[moodId] or 0
+            if not isInteger(count, 0) then
+                return failure({ makeError("invalid_mood_token_count", "$.character.moodTokens." .. moodId, "무드 토큰 수는 0 이상의 정수여야 합니다.") })
             end
+            tokenCounts[moodId] = count
+            tokensBefore[moodId] = count
         end
-        if currentMoodIndex == nil or #order ~= #MOOD_BOUNDARIES + 1 then
-            return failure({ makeError("invalid_mood_registry", "$.staticData.registry.moods", "v1 무드 경계 수와 순서가 일치하지 않습니다.") })
+        local forcedRequests = working.transient.forcedMoodRequests or {}
+        if not isDenseArray(forcedRequests) then
+            return failure({ makeError("invalid_forced_mood_requests", "$.transient.forcedMoodRequests", "무드 강제 변경 요청이 연속 배열이 아닙니다.") })
         end
-
-        local complianceAdjustment = 0
-        for _, traitId in ipairs(working.state.character.traitIds or {}) do
-            local trait = staticData.traits[traitId]
-            for index, modifier in ipairs(type(trait) == "table" and type(trait.modifiers) == "table" and trait.modifiers or {}) do
-                if modifier.timing ~= "moodPerformanceThreshold"
-                    or modifier.operation ~= "add"
-                    or modifier.direction ~= "compliance"
-                    or not isFinite(modifier.amount)
-                    or modifier.amount <= 0 then
-                    return failure({
-                        makeError(
-                            "unsupported_trait_modifier",
-                            "$.staticData.traits." .. tostring(traitId) .. ".modifiers[" .. index .. "]",
-                            "지원하지 않는 특징 보정입니다."
-                        ),
-                    })
-                end
-                complianceAdjustment = complianceAdjustment + modifier.amount
-            end
-        end
-
         local moodPayload = {
-            performance = moodPerformance,
             before = working.state.character.mood,
             after = working.state.character.mood,
             applied = false,
+            forcedCount = #forcedRequests,
+            forceCancelled = #forcedRequests >= 2,
+            tokensBefore = tokensBefore,
         }
-        if working.state.status ~= "active" then
-            moodPayload.reasonCode = "battle_ended"
-        elseif working.transient.moodLockApplied == true or working.transient.moodLock ~= nil then
-            moodPayload.reasonCode = "mood_locked"
-        elseif working.transient.directMoodChanged == true then
-            moodPayload.reasonCode = "direct_mood_changed"
+        if #forcedRequests == 1 then
+            local targetMood = forcedRequests[1].mood
+            if type(staticData.registry.moods[targetMood]) ~= "table" then
+                return failure({ makeError("unknown_mood", "$.transient.forcedMoodRequests[1].mood", "등록되지 않은 강제 변경 무드입니다.") })
+            end
+            working.state.character.mood = targetMood
+            moodPayload.after = targetMood
+            moodPayload.applied = moodPayload.before ~= targetMood
+            moodPayload.resolution = "forced"
+            moodPayload.targetMood = targetMood
         else
-            local nextIndex = currentMoodIndex
-            local direction = nil
-            local threshold = nil
-            if currentMoodIndex < #order then
-                local complianceThreshold = MOOD_BOUNDARIES[currentMoodIndex] + complianceAdjustment
-                if moodPerformance >= complianceThreshold then
-                    nextIndex = currentMoodIndex + 1
-                    direction = "compliance"
-                    threshold = complianceThreshold
+            local maximum = 0
+            local leaders = {}
+            for _, moodId in ipairs(order) do
+                local count = tokenCounts[moodId]
+                if count > maximum then
+                    maximum = count
+                    leaders = { moodId }
+                elseif count == maximum then
+                    leaders[#leaders + 1] = moodId
                 end
             end
-            if direction == nil and currentMoodIndex > 1 then
-                local rejectionThreshold = MOOD_BOUNDARIES[currentMoodIndex - 1]
-                if moodPerformance <= -rejectionThreshold then
-                    nextIndex = currentMoodIndex - 1
-                    direction = "rejection"
-                    threshold = rejectionThreshold
-                end
-            end
-            if nextIndex ~= currentMoodIndex then
-                working.state.character.mood = order[nextIndex]
-                commonMoodApplied = true
-                moodPayload.after = working.state.character.mood
-                moodPayload.applied = true
-                moodPayload.direction = direction
-                moodPayload.threshold = threshold
+            if maximum < 3 then
+                moodPayload.resolution = "none"
+            elseif #leaders == 1 then
+                local targetMood = leaders[1]
+                tokenCounts[targetMood] = 0
+                working.state.character.mood = targetMood
+                moodPayload.after = targetMood
+                moodPayload.applied = moodPayload.before ~= targetMood
+                moodPayload.resolution = "token"
+                moodPayload.targetMood = targetMood
             else
-                moodPayload.reasonCode = "threshold_not_met"
+                for _, moodId in ipairs(leaders) do
+                    tokenCounts[moodId] = tokenCounts[moodId] - 1
+                end
+                moodPayload.resolution = "tie"
+                moodPayload.tiedMoods = leaders
             end
         end
+        local tokensAfter = {}
+        for _, moodId in ipairs(order) do
+            tokensAfter[moodId] = tokenCounts[moodId]
+        end
+        moodPayload.tokensAfter = tokensAfter
         appendEvent(
             "mood_evaluated",
             "turn_end",
-            source("system", "mood_performance"),
+            source("system", "mood_tokens"),
             moodPayload,
             nil,
             "character",
@@ -1443,8 +1433,9 @@
                 endingResistance = endingResistance,
                 resistancePerformance = resistancePerformance,
                 stealthSpent = stealthSpent,
-                moodPerformance = moodPerformance,
-                commonMoodApplied = commonMoodApplied,
+                moodChanged = moodPayload.applied,
+                moodResolution = moodPayload.resolution,
+                forcedMoodCount = moodPayload.forcedCount,
             },
             afterState = afterState,
         })

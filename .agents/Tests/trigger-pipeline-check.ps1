@@ -291,8 +291,11 @@ local start = assertOk(
 assert(start.state.player.planSlot.occupied == true, "charged plan was discarded early")
 assert(start.state.player.planSlot.revealed == true, "triggered plan was not revealed")
 assert(start.state.player.planSlot.remainingCharges == 1, "plan charge was not consumed")
-assert(start.transient.moodLock ~= nil and start.transient.moodLock.mood == "ignore",
-    "production turn_start plan did not apply its mood lock")
+assert(start.state.character.moodTokens.ignore == 1,
+    "production turn_start plan did not create its ignore token")
+assert(type(start.transient.forcedMoodRequests) ~= "table"
+        or #start.transient.forcedMoodRequests == 0,
+    "production turn_start plan unexpectedly queued a force request")
 local startChange = onlyRecord(start.records, "plan_changed", "plan")
 assert(startChange.payload.discarded == false, "charged plan receipt reported discard")
 

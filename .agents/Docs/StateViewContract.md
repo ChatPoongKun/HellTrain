@@ -203,6 +203,7 @@ turnStartReceipt = {
         stealth = 30,
         resistance = 30,
         mood = "ignore",
+        moodTokens = { rejection = 0, suspicion = 0, ignore = 0, confusion = 0, compliance = 0 },
     },
 
     transient = {
@@ -210,14 +211,7 @@ turnStartReceipt = {
             player = false,
             character = false,
         },
-        directMoodChanged = false,
-
-        -- 실제 lock_mood가 적용되었을 때만 존재
-        moodLock = {
-            mood = "ignore",
-            ["until"] = "turn_end",
-            cause = "plan",
-        },
+        forcedMoodRequests = {},
     },
 
     events = {
@@ -251,8 +245,8 @@ turnStartReceipt = {
 - 선택 영수증에 카드가 있으면 현재 `characterIntent`는 그 인스턴스와 공개 태그 한 장에 정확히 일치하며, 인스턴스·카드 ID·정적 카드의 `actionTag`도 서로 일치해야 한다. 치명 우선에 따른 `weightedPoolInstanceIds`, 점수 기반 `weightOffset`·후보 가중치와 고정 시드 `draw`도 서로 재계산 가능해야 한다. 패스 영수증은 후보·가중 풀·선택 필드를 갖지 않고 `characterIntent`도 비어 있어야 한다. 선택/패스 선택 필드를 섞은 모순된 영수증은 거부한다.
 - `characterSelection.rngAfter`는 선택 직후 RNG다. 그 뒤 `action_tag_revealed` 트리거가 카드 드로우나 재섞기로 RNG를 더 소비할 수 있으므로 최종 `battleState.rng`와 같다고 강제하지 않는다. 최종 RNG를 포함한 전체 권위 상태는 `authorityFingerprint`가 별도로 묶는다.
 - persisted receipt 검증은 `selectionContext`로 모든 후보의 정적 효과를 `effectEngine`에서 재평가하고 `deterministicRng.nextInteger`로 roll과 `rngAfter` 전체를 재생한다. 공개 태그 트리거가 수치·무드·손패를 바꿨다면 해당 `effect_applied` 기록을 역산해 선택 시점을 복원한다.
-- `baseline`은 `turn_start` 명령을 적용하기 전의 은폐·저항·무드다. 후속 resolver는 이 값을 턴 전체 성과의 시작점으로 사용한다.
-- `transient`에는 `skipRemaining`, `directMoodChanged`와 선택적 `moodLock`만 둔다. 잠금 무드는 레지스트리에 있어야 하며 v1 종료점은 `turn_end`뿐이다.
+- `baseline`은 `turn_start` 명령을 적용하기 전의 은폐·저항·무드와 무드 토큰이다.
+- `transient`에는 `skipRemaining`과 `forcedMoodRequests`만 둔다. 각 강제 요청은 등록된 `mood`와 `lower_snake_case` `cause`를 가진다.
 - `events`는 `sequence = 1..n`인 연속 배열이다. `eventId`는 `turnId-event-%03d`, `phase`는 모두 `turn_start`이며 `type`, `source.kind`, `source.id`, 선택적 `cause.kind`는 `lower_snake_case`다.
 - `draws`와 `characterSelection`은 같은 턴 재호출의 판정·재현을 위한 비공개 감사 자료다. 일반 사건 payload나 `battleView`·LLM 입력에 그대로 복사하지 않는다. 공개 가능한 캐릭터 선택 정보는 별도 projection의 `publicActionTag`뿐이다.
 - `turnDraft`는 receipt를 포함한 권위 상태 전체를 fingerprint한다. `turnResolver`는 receipt의 사건·baseline·transient를 이어받고, 해결을 마치면 receipt를 제거한 뒤 다음 턴 또는 종료 상태를 저장한다.

@@ -277,9 +277,8 @@
         recover_stealth = true,
         draw_cards = true,
         skip_actions = true,
-        shift_mood = true,
-        set_mood = true,
-        lock_mood = true,
+        add_mood_token = true,
+        force_mood = true,
     }
 
     local RESOURCE_COMMANDS = {
@@ -543,41 +542,31 @@
                         addError(errors, "invalid_command_scope", path .. ".scope", "v1 행동 생략 범위는 remainingTurn이어야 합니다.")
                     end
                     output.scope = command.scope
-                elseif command.op == "shift_mood" then
+                elseif command.op == "add_mood_token" then
                     common.amount = true
+                    common.mood = true
                     checkCommandKeys(command, common, path, errors)
                     if command.target ~= "character" then
-                        addError(errors, "invalid_command_target", path .. ".target", "무드 이동 대상은 character여야 합니다.")
+                        addError(errors, "invalid_command_target", path .. ".target", "무드 토큰 대상은 character여야 합니다.")
                     end
-                    if not isInteger(command.amount, 0) then
-                        addError(errors, "invalid_command_amount", path .. ".amount", "무드 이동 수치는 0 이상의 정수여야 합니다.")
+                    if not isInteger(command.amount, 1) then
+                        addError(errors, "invalid_command_amount", path .. ".amount", "무드 토큰 수는 1 이상의 정수여야 합니다.")
+                    end
+                    if type(command.mood) ~= "string" or not normalizedStaticData.registry.moods[command.mood] then
+                        addError(errors, "unknown_mood", path .. ".mood", "등록되지 않은 무드입니다.")
                     end
                     output.amount = command.amount
-                elseif command.op == "set_mood" then
+                    output.mood = command.mood
+                elseif command.op == "force_mood" then
                     common.mood = true
                     checkCommandKeys(command, common, path, errors)
                     if command.target ~= "character" then
-                        addError(errors, "invalid_command_target", path .. ".target", "무드 설정 대상은 character여야 합니다.")
+                        addError(errors, "invalid_command_target", path .. ".target", "무드 강제 변경 대상은 character여야 합니다.")
                     end
                     if type(command.mood) ~= "string" or not normalizedStaticData.registry.moods[command.mood] then
                         addError(errors, "unknown_mood", path .. ".mood", "등록되지 않은 무드입니다.")
                     end
                     output.mood = command.mood
-                elseif command.op == "lock_mood" then
-                    common.mood = true
-                    common["until"] = true
-                    checkCommandKeys(command, common, path, errors)
-                    if command.target ~= "character" then
-                        addError(errors, "invalid_command_target", path .. ".target", "무드 고정 대상은 character여야 합니다.")
-                    end
-                    if type(command.mood) ~= "string" or not normalizedStaticData.registry.moods[command.mood] then
-                        addError(errors, "unknown_mood", path .. ".mood", "등록되지 않은 무드입니다.")
-                    end
-                    if command["until"] ~= "turn_end" then
-                        addError(errors, "invalid_command_until", path .. ".until", "v1 무드 고정 종료점은 turn_end여야 합니다.")
-                    end
-                    output.mood = command.mood
-                    output["until"] = command["until"]
                 elseif registered and not SUPPORTED_COMMANDS[command.op] then
                     checkCommandKeys(command, common, path, errors)
                 elseif not registered then
@@ -902,39 +891,6 @@
         return evaluated
     end
 
-    local function moodOrder(staticData)
-        local byOrder = {}
-        local count = 0
-        for moodId, mood in pairs(staticData.registry.moods) do
-            if type(mood) ~= "table" or mood.id ~= moodId or not isInteger(mood.order, 1) then
-                return nil, makeError("invalid_mood_registry", "$.staticData.registry.moods", "무드 순서 레지스트리가 올바르지 않습니다.")
-            end
-            if byOrder[mood.order] ~= nil then
-                return nil, makeError("invalid_mood_registry", "$.staticData.registry.moods", "무드 순서가 중복되었습니다.")
-            end
-            byOrder[mood.order] = moodId
-            count = count + 1
-        end
-        if count == 0 then
-            return nil, makeError("invalid_mood_registry", "$.staticData.registry.moods", "무드 레지스트리가 비어 있습니다.")
-        end
-        for index = 1, count do
-            if byOrder[index] == nil then
-                return nil, makeError("invalid_mood_registry", "$.staticData.registry.moods", "무드 순서는 1부터 이어져야 합니다.")
-            end
-        end
-        return byOrder, nil
-    end
-
-    local function findMoodIndex(order, moodId)
-        for index, currentId in ipairs(order) do
-            if currentId == moodId then
-                return index
-            end
-        end
-        return nil
-    end
-
     local function callCardZones(action, ...)
         if type(runScript) ~= "function" then
             return nil, {
@@ -1034,10 +990,6 @@
             return failure({ cloneError })
         end
 
-        local order, orderError = moodOrder(normalizedStaticData)
-        if orderError then
-            return failure({ orderError })
-        end
         local applied = {}
         for index, command in ipairs(commandReport.commands) do
             local entry = {
@@ -1097,63 +1049,64 @@
                 entry.before = before
                 entry.after = true
                 entry.changed = not before
-            elseif command.op == "shift_mood" or command.op == "set_mood" then
-                if type(state.character) ~= "table" or type(state.character.mood) ~= "string" then
+            elseif command.op == "add_mood_token" then
+                if type(state.character) ~= "table" then
                     return failure({
-                        makeError("invalid_mood_state", "$.working.state.character.mood", "현재 무드가 없습니다."),
+                        makeError("invalid_mood_state", "$.working.state.character", "캐릭터 무드 상태가 없습니다."),
                     })
                 end
-                local currentIndex = findMoodIndex(order, state.character.mood)
-                if not currentIndex then
+                if state.character.moodTokens == nil then
+                    state.character.moodTokens = {}
+                end
+                if type(state.character.moodTokens) ~= "table" then
                     return failure({
-                        makeError("unknown_current_mood", "$.working.state.character.mood", "현재 무드가 레지스트리에 없습니다."),
+                        makeError("invalid_mood_tokens", "$.working.state.character.moodTokens", "무드 토큰 상태가 테이블이 아닙니다."),
                     })
                 end
-                entry.before = state.character.mood
-                if command.op == "shift_mood" then
-                    entry.amount = command.amount
-                else
-                    entry.mood = command.mood
-                end
-                if transient.moodLock ~= nil then
-                    entry.after = state.character.mood
-                    entry.blocked = true
-                else
-                    local nextMood
-                    if command.op == "shift_mood" then
-                        local nextIndex = math.min(#order, currentIndex + command.amount)
-                        nextMood = order[nextIndex]
-                    else
-                        nextMood = command.mood
-                    end
-                    state.character.mood = nextMood
-                    entry.after = nextMood
-                    entry.changed = entry.before ~= entry.after
-                    if entry.changed then
-                        transient.directMoodChanged = true
+                for moodId in pairs(normalizedStaticData.registry.moods) do
+                    local count = state.character.moodTokens[moodId]
+                    if count == nil then
+                        state.character.moodTokens[moodId] = 0
+                    elseif not isInteger(count, 0) then
+                        return failure({
+                            makeError("invalid_mood_token_count", "$.working.state.character.moodTokens." .. moodId, "무드 토큰 수가 0 이상의 정수가 아닙니다."),
+                        })
                     end
                 end
-            elseif command.op == "lock_mood" then
-                if type(state.character) ~= "table" or state.character.mood ~= command.mood then
+                local before = state.character.moodTokens[command.mood] or 0
+                if not isInteger(before, 0) then
                     return failure({
-                        makeError(
-                            "mood_lock_mismatch",
-                            "$.commands[" .. index .. "].mood",
-                            "고정하려는 무드가 현재 무드와 일치하지 않습니다."
-                        ),
+                        makeError("invalid_mood_token_count", "$.working.state.character.moodTokens." .. command.mood, "무드 토큰 수가 0 이상의 정수가 아닙니다."),
+                    })
+                end
+                local after = before + command.amount
+                if after > 9007199254740991 then
+                    return failure({
+                        makeError("mood_token_overflow", "$.commands[" .. index .. "].amount", "무드 토큰 수가 안전한 정수 범위를 벗어났습니다."),
                     })
                 end
                 entry.mood = command.mood
-                entry["until"] = command["until"]
-                entry.before = transient.moodLock ~= nil
-                transient.moodLock = {
+                entry.amount = command.amount
+                entry.before = before
+                entry.after = after
+                entry.changed = true
+                state.character.moodTokens[command.mood] = after
+            elseif command.op == "force_mood" then
+                if transient.forcedMoodRequests == nil then
+                    transient.forcedMoodRequests = {}
+                elseif not isDenseArray(transient.forcedMoodRequests) then
+                    return failure({
+                        makeError("invalid_forced_mood_requests", "$.working.transient.forcedMoodRequests", "무드 강제 변경 요청이 연속 배열이 아닙니다."),
+                    })
+                end
+                entry.mood = command.mood
+                entry.before = #transient.forcedMoodRequests
+                transient.forcedMoodRequests[#transient.forcedMoodRequests + 1] = {
                     mood = command.mood,
-                    ["until"] = command["until"],
                     cause = command.cause,
                 }
-                transient.moodLockApplied = true
-                entry.after = true
-                entry.changed = not entry.before
+                entry.after = #transient.forcedMoodRequests
+                entry.changed = true
             end
             applied[index] = entry
         end

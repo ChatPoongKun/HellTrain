@@ -1102,10 +1102,6 @@
                         and payload.target == "character"
                         and isFinite(payload.before) then
                         characterResistance = payload.before
-                    elseif (payload.op == "shift_mood" or payload.op == "set_mood")
-                        and payload.target == "character"
-                        and type(payload.before) == "string" then
-                        characterMood = payload.before
                     elseif payload.op == "draw_cards" and payload.target == "player" then
                         local drawnCount = type(payload.drawnInstanceIds) == "table" and #payload.drawnInstanceIds or 0
                         playerHandCount = playerHandCount - drawnCount
@@ -1761,6 +1757,7 @@
                 stealth = true,
                 resistance = true,
                 mood = true,
+                moodTokens = true,
             }, path .. ".baseline", errors)
             if not isFinite(baseline.stealth) then
                 addError(errors, "invalid_receipt_baseline", path .. ".baseline.stealth", "baseline 은폐가 유한한 숫자가 아닙니다.")
@@ -1776,6 +1773,21 @@
                     addError(errors, "unknown_mood", path .. ".baseline.mood", "baseline 무드가 레지스트리에 없습니다.")
                 end
             end
+            if type(baseline.moodTokens) ~= "table" then
+                addError(errors, "invalid_receipt_baseline", path .. ".baseline.moodTokens", "baseline 무드 토큰이 객체가 아닙니다.")
+            elseif referencesValidated then
+                local moods = staticData.registry.moods
+                for moodId in pairs(moods) do
+                    if not isSafeInteger(baseline.moodTokens[moodId], 0) then
+                        addError(errors, "invalid_mood_token_count", path .. ".baseline.moodTokens." .. moodId, "무드 토큰 수는 0 이상의 안전한 정수여야 합니다.")
+                    end
+                end
+                for moodId in pairs(baseline.moodTokens) do
+                    if not moods[moodId] then
+                        addError(errors, "unknown_mood", path .. ".baseline.moodTokens." .. tostring(moodId), "등록되지 않은 무드의 토큰입니다.")
+                    end
+                end
+            end
         end
 
         local transient = receipt.transient
@@ -1784,8 +1796,7 @@
         else
             checkAllowedKeys(transient, {
                 skipRemaining = true,
-                directMoodChanged = true,
-                moodLock = true,
+                forcedMoodRequests = true,
             }, path .. ".transient", errors)
 
             local skipRemaining = transient.skipRemaining
@@ -1803,34 +1814,30 @@
                 end
             end
 
-            if transient.directMoodChanged ~= true and transient.directMoodChanged ~= false then
-                addError(errors, "invalid_direct_mood_flag", path .. ".transient.directMoodChanged", "directMoodChanged는 불리언이어야 합니다.")
-            end
-
-            if transient.moodLock ~= nil then
-                local moodLock = transient.moodLock
-                local moodLockPath = path .. ".transient.moodLock"
-                if type(moodLock) ~= "table" then
-                    addError(errors, "invalid_mood_lock", moodLockPath, "moodLock이 객체가 아닙니다.")
-                else
-                    checkAllowedKeys(moodLock, {
-                        mood = true,
-                        ["until"] = true,
-                        cause = true,
-                    }, moodLockPath, errors)
-                    if not isAsciiId(moodLock.mood) then
-                        addError(errors, "invalid_mood_lock", moodLockPath .. ".mood", "moodLock 무드 ID가 올바르지 않습니다.")
-                    elseif referencesValidated then
-                        local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
-                        if type(moods) ~= "table" or not moods[moodLock.mood] then
-                            addError(errors, "unknown_mood", moodLockPath .. ".mood", "moodLock 무드가 레지스트리에 없습니다.")
+            local forcedRequestCount = getArrayLength(
+                transient.forcedMoodRequests,
+                path .. ".transient.forcedMoodRequests",
+                errors
+            )
+            if forcedRequestCount then
+                for index = 1, forcedRequestCount do
+                    local request = transient.forcedMoodRequests[index]
+                    local requestPath = path .. ".transient.forcedMoodRequests[" .. index .. "]"
+                    if type(request) ~= "table" then
+                        addError(errors, "invalid_forced_mood_request", requestPath, "무드 강제 변경 요청이 객체가 아닙니다.")
+                    else
+                        checkAllowedKeys(request, {
+                            mood = true,
+                            cause = true,
+                        }, requestPath, errors)
+                        if not isAsciiId(request.mood) then
+                            addError(errors, "invalid_forced_mood_request", requestPath .. ".mood", "강제 변경 무드 ID가 올바르지 않습니다.")
+                        elseif referencesValidated and not staticData.registry.moods[request.mood] then
+                            addError(errors, "unknown_mood", requestPath .. ".mood", "강제 변경 무드가 레지스트리에 없습니다.")
                         end
-                    end
-                    if moodLock["until"] ~= "turn_end" then
-                        addError(errors, "invalid_mood_lock_until", moodLockPath .. ".until", "v1 moodLock 종료점은 turn_end여야 합니다.")
-                    end
-                    if not isAsciiId(moodLock.cause) then
-                        addError(errors, "invalid_mood_lock_cause", moodLockPath .. ".cause", "moodLock cause는 lower_snake_case여야 합니다.")
+                        if not isAsciiId(request.cause) then
+                            addError(errors, "invalid_forced_mood_cause", requestPath .. ".cause", "강제 변경 cause는 lower_snake_case여야 합니다.")
+                        end
                     end
                 end
             end
@@ -1954,6 +1961,7 @@
                 characterId = true,
                 resistance = true,
                 mood = true,
+                moodTokens = true,
                 traitIds = true,
                 baseDrawCount = true,
                 maxHandSize = true,
@@ -1967,6 +1975,23 @@
             end
             if not isAsciiId(state.character.mood) then
                 addError(errors, "invalid_mood", "$.character.mood", "무드 ID가 올바르지 않습니다.")
+            end
+            if state.character.moodTokens ~= nil then
+                if type(state.character.moodTokens) ~= "table" then
+                    addError(errors, "invalid_mood_tokens", "$.character.moodTokens", "무드 토큰이 객체가 아닙니다.")
+                elseif referencesValidated then
+                    local moods = staticData.registry.moods
+                    for moodId in pairs(moods) do
+                        if not isSafeInteger(state.character.moodTokens[moodId], 0) then
+                            addError(errors, "invalid_mood_token_count", "$.character.moodTokens." .. moodId, "무드 토큰 수는 0 이상의 안전한 정수여야 합니다.")
+                        end
+                    end
+                    for moodId in pairs(state.character.moodTokens) do
+                        if not moods[moodId] then
+                            addError(errors, "unknown_mood", "$.character.moodTokens." .. tostring(moodId), "등록되지 않은 무드의 토큰입니다.")
+                        end
+                    end
+                end
             end
             if not isInteger(state.character.baseDrawCount, 1) then
                 addError(errors, "invalid_base_draw_count", "$.character.baseDrawCount", "기본 드로우 수는 1 이상의 정수여야 합니다.")
@@ -2789,6 +2814,16 @@
             local value = cloneJson(options)
             value.schemaVersion = SCHEMA_VERSION
             value.kind = "battleState"
+            local normalizedStaticData = normalizeStaticData(staticData)
+            if type(value.character) == "table" and value.character.moodTokens == nil
+                and type(normalizedStaticData) == "table"
+                and type(normalizedStaticData.registry) == "table"
+                and type(normalizedStaticData.registry.moods) == "table" then
+                value.character.moodTokens = {}
+                for moodId in pairs(normalizedStaticData.registry.moods) do
+                    value.character.moodTokens[moodId] = 0
+                end
+            end
             return value
         end)
 

@@ -14,7 +14,7 @@ return {
                 resistanceDamage = 0,
             },
             rules = {
-                "다음 턴 시작 무드가 무시라면 그 턴 동안 무드를 고정합니다.",
+                "다음 턴 시작 무드가 무시라면 무시 토큰을 1개 생성합니다.",
             },
             mechanismData = {
                 plan = {
@@ -27,10 +27,10 @@ return {
                     resolve = function(context, event)
                         return {
                             {
-                                op = "lock_mood",
+                                op = "add_mood_token",
                                 target = "character",
                                 mood = "ignore",
-                                ["until"] = "turn_end",
+                                amount = 1,
                                 cause = "plan",
                             },
                         }
@@ -42,7 +42,7 @@ return {
                     actorAction = "상대의 움직임을 관찰하며 다음 기회를 준비한다.",
                 },
                 planTriggered = {
-                    actorAction = "미리 살핀 반응을 바탕으로 분위기가 흔들리지 않게 행동한다.",
+                    actorAction = "미리 살핀 반응을 바탕으로 무시하는 분위기를 굳힌다.",
                 },
             },
             prototype = true,
@@ -188,7 +188,7 @@ return {
             },
             rules = {
                 "캐릭터는 이번 턴 남은 카드 행동을 수행하지 않습니다.",
-                "무드를 순응 방향으로 한 단계 직접 이동합니다.",
+                "턴 종료 시 무드를 순응으로 강제 변경합니다.",
                 "사용 후 이번 세션에서 ::tag[remove]::됩니다.",
             },
             resolve = function(context)
@@ -200,9 +200,9 @@ return {
                         cause = "cardEffect",
                     },
                     {
-                        op = "shift_mood",
+                        op = "force_mood",
                         target = "character",
-                        amount = 1,
+                        mood = "compliance",
                         cause = "cardEffect",
                     },
                 }
@@ -332,7 +332,7 @@ return {
             },
             rules = {
                 "순응 무드라면 저항을 추가로 5 낮춥니다.",
-                "순응 무드가 아니라면 무드를 거절로 직접 설정하고 턴 종료까지 고정합니다.",
+                "순응 무드가 아니라면 턴 종료 시 무드를 거절로 강제 변경합니다.",
                 "사용 후 이번 세션에서 ::tag[remove]::됩니다.",
             },
             resolve = function(context)
@@ -342,7 +342,7 @@ return {
 
                 return {
                     {
-                        op = "set_mood",
+                        op = "force_mood",
                         target = "character",
                         mood = "rejection",
                         cause = "cardEffect",
@@ -356,17 +356,6 @@ return {
                             op = "damage_resistance",
                             target = "character",
                             amount = 5,
-                            cause = "moodEffect",
-                        },
-                    }
-                end,
-                rejection = function(context)
-                    return {
-                        {
-                            op = "lock_mood",
-                            target = "character",
-                            mood = "rejection",
-                            ["until"] = "turn_end",
                             cause = "moodEffect",
                         },
                     }

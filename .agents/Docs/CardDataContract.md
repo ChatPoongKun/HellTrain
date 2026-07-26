@@ -326,9 +326,8 @@ end
 | `recover_stealth` | `amount` | 은폐 회복 |
 | `draw_cards` | `amount` | 선택 단계 또는 해결 시 대상 덱에서 현재 턴 손패로 드로우. 최대 손패의 빈자리까지만 적용 |
 | `skip_actions` | `scope` | 이번 턴 대상의 남은 카드 행동 생략 |
-| `shift_mood` | `amount` | 현재 무드를 지정 단계만큼 직접 이동 |
-| `set_mood` | `mood` | 무드를 특정 단계로 직접 설정 |
-| `lock_mood` | `mood`, `until` | 조건이 맞는 동안 무드 변경 방지 |
+| `add_mood_token` | `mood`, `amount` | 등록된 특정 무드의 토큰을 누적 |
+| `force_mood` | `mood` | 턴 종료 판정에 목표 무드 강제 변경을 요청 |
 
 기본 은폐 비용과 기본 저항 피해는 `base`에서 엔진이 효과 사건으로 만든다. 카드 함수가 같은 기본 효과를 다시 반환하지 않는다.
 
@@ -361,7 +360,7 @@ end
 
 엔진은 카드 한 장의 해결마다 고유한 해결 ID를 만들고 그 카드가 직접 만든 효과 사건에 같은 원본 해결 ID를 붙인다. `insight`는 이 원본 해결 ID를 가진 사건 때문에 발동할 상대 계획에만 적용한다. 드로우한 카드를 나중에 별도로 사용하거나 다른 카드가 독립적으로 만든 사건은 새로운 해결이므로 억제 범위에 포함하지 않는다.
 
-카드의 `shift_mood` 또는 `set_mood`가 실제 무드 값을 바꾸면 해당 턴의 공통 무드 성과 판정을 생략한다. 양끝 clamp와 같은 무드 `set` 같은 no-op은 그 자체로 생략 사유가 아니다. `lock_mood`가 활성화되면 직접 변경과 공통 판정을 모두 막고 그 턴의 공통 판정을 항상 생략한다. 전체 해결 순서는 `TurnResolutionContract.md`를 따른다.
+`add_mood_token`과 `force_mood`는 카드 해결 중 무드를 즉시 변경하지 않는다. 모든 요청은 턴 종료의 단일 무드 판정에서 함께 처리하며, 강제 요청이 둘 이상이면 서로 상쇄한 뒤 토큰을 판정한다. 전체 해결 순서는 `TurnResolutionContract.md`를 따른다.
 
 ## 9. 계획 계약
 
@@ -382,10 +381,10 @@ mechanismData = {
         resolve = function(context, event)
             return {
                 {
-                    op = "lock_mood",
+                    op = "add_mood_token",
                     target = "character",
                     mood = "ignore",
-                    ["until"] = "turn_end",
+                    amount = 1,
                     cause = "plan",
                 },
             }
@@ -475,10 +474,10 @@ return {
                     resolve = function(context, event)
                         return {
                             {
-                                op = "lock_mood",
+                                op = "add_mood_token",
                                 target = "character",
                                 mood = "ignore",
-                                ["until"] = "turn_end",
+                                amount = 1,
                                 cause = "plan",
                             },
                         }
@@ -647,9 +646,9 @@ return {
                         cause = "cardEffect",
                     },
                     {
-                        op = "shift_mood",
+                        op = "force_mood",
                         target = "character",
-                        amount = 1,
+                        mood = "compliance",
                         cause = "cardEffect",
                     },
                 }
@@ -789,7 +788,7 @@ return {
 
                 return {
                     {
-                        op = "set_mood",
+                        op = "force_mood",
                         target = "character",
                         mood = "rejection",
                         cause = "cardEffect",
@@ -810,10 +809,10 @@ return {
                 rejection = function(context)
                     return {
                         {
-                            op = "lock_mood",
+                            op = "add_mood_token",
                             target = "character",
                             mood = "rejection",
-                            ["until"] = "turn_end",
+                            amount = 1,
                             cause = "moodEffect",
                         },
                     }

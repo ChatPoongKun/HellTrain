@@ -1,7 +1,6 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
     local MAX_SAFE_INTEGER = 9007199254740991
-    local MOOD_BOUNDARIES = { 5, 4, 4, 5 }
 
     local KNOWN_EVENT_TYPES = {
         turn_start = true,
@@ -39,9 +38,7 @@
             after = true,
             drawnInstanceIds = true,
             scope = true,
-            blocked = true,
             mood = true,
-            ["until"] = true,
         },
         trigger_suppressed = { inputEventType = true, reasonCode = true, hidden = true },
         trigger_resolved = { inputEventType = true, commandCount = true },
@@ -66,13 +63,16 @@
         card_zone_changed = { instanceId = true, origin = true, destination = true },
         outcome_latched = { status = true, reasonCode = true, stealth = true, resistance = true },
         mood_evaluated = {
-            performance = true,
             before = true,
             after = true,
             applied = true,
-            direction = true,
-            threshold = true,
-            reasonCode = true,
+            forcedCount = true,
+            forceCancelled = true,
+            resolution = true,
+            targetMood = true,
+            tiedMoods = true,
+            tokensBefore = true,
+            tokensAfter = true,
         },
         turn_cleanup = { before = true, after = true, movedInstanceIds = true, resolvedTurnNumber = true },
         session_end = { status = true },
@@ -86,9 +86,8 @@
         recover_stealth = true,
         draw_cards = true,
         skip_actions = true,
-        shift_mood = true,
-        set_mood = true,
-        lock_mood = true,
+        add_mood_token = true,
+        force_mood = true,
     }
 
     local function makeError(code, path, message)
@@ -837,74 +836,35 @@
             if payload.changed ~= (not payload.before) then
                 return nil, makeError("effect_change_mismatch", path .. ".changed", "행동 생략 효과의 changed가 before와 다릅니다.")
             end
-        elseif op == "shift_mood" or op == "set_mood" then
+        elseif op == "add_mood_token" then
             if payload.target ~= "character" then
-                return nil, makeError("effect_target_mismatch", path .. ".target", "무드 효과 대상은 character여야 합니다.")
+                return nil, makeError("effect_target_mismatch", path .. ".target", "무드 토큰 대상은 character여야 합니다.")
             end
-            if not isAsciiId(payload.before) or not isAsciiId(payload.after)
-                or type(moods) ~= "table"
-                or type(moods[payload.before]) ~= "table"
-                or type(moods[payload.after]) ~= "table" then
-                return nil, makeError("invalid_effect_payload", path, "무드 효과 before/after가 올바르지 않습니다.")
-            end
-            output.before = payload.before
-            output.after = payload.after
-            if op == "shift_mood" then
-                if not isInteger(payload.amount, 0) then
-                    return nil, makeError("invalid_effect_payload", path .. ".amount", "무드 이동량이 정수가 아닙니다.")
-                end
-                output.amount = payload.amount
-            else
-                if not isAsciiId(payload.mood) then
-                    return nil, makeError("invalid_effect_payload", path .. ".mood", "설정 무드가 올바르지 않습니다.")
-                end
-                output.mood = payload.mood
-            end
-            if payload.blocked ~= nil then
-                if payload.blocked ~= true then
-                    return nil, makeError("invalid_effect_payload", path .. ".blocked", "blocked는 true일 때만 존재할 수 있습니다.")
-                end
-                output.blocked = true
-            end
-            local expectedAfter = payload.before
-            if payload.blocked ~= true then
-                if op == "set_mood" then
-                    expectedAfter = payload.mood
-                else
-                    local beforeOrder = moods[payload.before].order
-                    local maximumOrder = beforeOrder
-                    for _, mood in pairs(moods) do
-                        if isInteger(mood.order, 1) then maximumOrder = math.max(maximumOrder, mood.order) end
-                    end
-                    local wantedOrder = math.min(maximumOrder, beforeOrder + payload.amount)
-                    for moodId, mood in pairs(moods) do
-                        if mood.order == wantedOrder then expectedAfter = moodId break end
-                    end
-                end
-            end
-            if payload.after ~= expectedAfter then
-                return nil, makeError("effect_result_mismatch", path .. ".after", "무드 효과 결과가 명령 의미와 다릅니다.")
-            end
-            if payload.changed ~= (payload.blocked ~= true and payload.before ~= payload.after) then
-                return nil, makeError("effect_change_mismatch", path .. ".changed", "무드 효과의 changed가 before/after와 다릅니다.")
-            end
-        elseif op == "lock_mood" then
-            if payload.target ~= "character" then
-                return nil, makeError("effect_target_mismatch", path .. ".target", "무드 고정 대상은 character여야 합니다.")
-            end
-            if not isAsciiId(payload.mood)
-                or payload["until"] ~= "turn_end"
-                or type(payload.before) ~= "boolean"
-                or payload.after ~= true then
-                return nil, makeError("invalid_effect_payload", path, "무드 고정 효과 payload가 올바르지 않습니다.")
+            if not isAsciiId(payload.mood) or type(moods) ~= "table" or type(moods[payload.mood]) ~= "table"
+                or not isInteger(payload.amount, 1)
+                or not isInteger(payload.before, 0)
+                or not isInteger(payload.after, 1)
+                or payload.after ~= payload.before + payload.amount
+                or payload.changed ~= true then
+                return nil, makeError("invalid_effect_payload", path, "무드 토큰 효과 payload가 올바르지 않습니다.")
             end
             output.mood = payload.mood
-            output["until"] = payload["until"]
+            output.amount = payload.amount
             output.before = payload.before
-            output.after = true
-            if payload.changed ~= (not payload.before) then
-                return nil, makeError("effect_change_mismatch", path .. ".changed", "무드 고정 효과의 changed가 before와 다릅니다.")
+            output.after = payload.after
+        elseif op == "force_mood" then
+            if payload.target ~= "character" then
+                return nil, makeError("effect_target_mismatch", path .. ".target", "무드 강제 변경 대상은 character여야 합니다.")
             end
+            if not isAsciiId(payload.mood) or type(moods) ~= "table" or type(moods[payload.mood]) ~= "table"
+                or not isInteger(payload.before, 0)
+                or payload.after ~= payload.before + 1
+                or payload.changed ~= true then
+                return nil, makeError("invalid_effect_payload", path, "무드 강제 변경 요청 payload가 올바르지 않습니다.")
+            end
+            output.mood = payload.mood
+            output.before = payload.before
+            output.after = payload.after
         else
             return nil, makeError("unsupported_effect_op", path .. ".op", "지원하지 않는 효과 작업입니다.")
         end
@@ -975,8 +935,19 @@
         local trackedStealth = startingStealth
         local trackedResistance = startingResistance
         local trackedMood = type(startBaseline) == "table" and startBaseline.mood or beforeState.character.mood
-        local trackedMoodLocked = false
-        local trackedDirectMoodChanged = false
+        local function normalizedMoodTokens(source)
+            local counts = {}
+            source = type(source) == "table" and source or {}
+            for moodId in pairs(staticData.registry.moods) do
+                counts[moodId] = source[moodId] or 0
+            end
+            return counts
+        end
+        local trackedMoodTokens = normalizedMoodTokens(
+            type(startBaseline) == "table" and startBaseline.moodTokens
+                or beforeState.character.moodTokens
+        )
+        local trackedForcedMoodRequests = {}
         local function findBeforeInstance(instanceId)
             for _, instance in ipairs(beforeState.cardInstances) do
                 if instance.instanceId == instanceId then return instance end
@@ -1240,16 +1211,15 @@
             if command.op == "damage_resistance"
                 or command.op == "recover_resistance"
                 or command.op == "lose_stealth"
-                or command.op == "recover_stealth"
-                or command.op == "shift_mood" then
+                or command.op == "recover_stealth" then
                 return effect.amount == command.amount
             end
             if command.op == "draw_cards" then return effect.requested == command.amount end
             if command.op == "skip_actions" then return effect.scope == command.scope end
-            if command.op == "set_mood" then return effect.mood == command.mood end
-            if command.op == "lock_mood" then
-                return effect.mood == command.mood and effect["until"] == command["until"]
+            if command.op == "add_mood_token" then
+                return effect.mood == command.mood and effect.amount == command.amount
             end
+            if command.op == "force_mood" then return effect.mood == command.mood end
             return false
         end
 
@@ -1516,19 +1486,17 @@
                 return failure({ makeError("invalid_turn_tail_order", path, "세션 종료 사건은 턴 정리 뒤에만 올 수 있습니다.") })
             end
             if event.phase ~= "turn_start" and turnStartSettled ~= true then
-                local expectedReceiptLock = type(startReceipt) == "table"
+                local expectedForcedMoodRequests = type(startReceipt) == "table"
                     and type(startReceipt.transient) == "table"
-                    and startReceipt.transient.moodLock ~= nil
-                local expectedReceiptDirectMood = type(startReceipt) == "table"
-                    and type(startReceipt.transient) == "table"
-                    and startReceipt.transient.directMoodChanged == true
+                    and startReceipt.transient.forcedMoodRequests
+                    or {}
                 if not dataEqual(trackers.player.slot, beforeState.player.planSlot)
                     or not dataEqual(trackers.character.slot, beforeState.character.planSlot)
                     or trackedStealth ~= beforeState.player.stealth
                     or trackedResistance ~= beforeState.character.resistance
                     or trackedMood ~= beforeState.character.mood
-                    or trackedMoodLocked ~= expectedReceiptLock
-                    or trackedDirectMoodChanged ~= expectedReceiptDirectMood
+                    or not dataEqual(trackedMoodTokens, normalizedMoodTokens(beforeState.character.moodTokens))
+                    or not dataEqual(trackedForcedMoodRequests, expectedForcedMoodRequests)
                     or trackedHandCount.player ~= countAuthorityHand("player")
                     or trackedHandCount.character ~= countAuthorityHand("character") then
                     return failure({ makeError("turn_start_replay_mismatch", path, "턴 시작 사건 재생 결과가 beforeState와 다릅니다.") })
@@ -1715,12 +1683,10 @@
                 if effectError then
                     return failure({ effectError })
                 end
-                if payload.op == "shift_mood" or payload.op == "set_mood" or payload.op == "lock_mood" then
+                if payload.op == "add_mood_token" or payload.op == "force_mood" then
                     local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
                     if type(moods) ~= "table"
-                        or type(moods[payload.mood or payload.before]) ~= "table"
-                        or ((payload.op == "shift_mood" or payload.op == "set_mood")
-                            and type(moods[payload.after]) ~= "table") then
+                        or type(moods[payload.mood]) ~= "table" then
                         return failure({ makeError("unknown_effect_mood", path .. ".payload", "무드 효과가 등록되지 않은 무드를 참조합니다.") })
                     end
                 end
@@ -1736,19 +1702,19 @@
                     trackedResistance = effect.after
                 elseif payload.op == "draw_cards" then
                     trackedHandCount[effect.target] = trackedHandCount[effect.target] + effect.drawnCount
-                elseif payload.op == "shift_mood" or payload.op == "set_mood" then
-                    if effect.before ~= trackedMood
-                        or (trackedMoodLocked and effect.blocked ~= true)
-                        or (not trackedMoodLocked and effect.blocked ~= nil) then
-                        return failure({ makeError("effect_state_mismatch", path .. ".payload", "무드 효과가 앞선 무드·고정 사건과 다릅니다.") })
+                elseif payload.op == "add_mood_token" then
+                    if effect.before ~= trackedMoodTokens[effect.mood] then
+                        return failure({ makeError("effect_state_mismatch", path .. ".payload.before", "무드 토큰 효과 before가 앞선 토큰 수와 다릅니다.") })
                     end
-                    trackedMood = effect.after
-                    if effect.changed == true then trackedDirectMoodChanged = true end
-                elseif payload.op == "lock_mood" then
-                    if effect.mood ~= trackedMood or effect.before ~= trackedMoodLocked then
-                        return failure({ makeError("effect_state_mismatch", path .. ".payload", "무드 고정 효과가 앞선 무드·고정 사건과 다릅니다.") })
+                    trackedMoodTokens[effect.mood] = effect.after
+                elseif payload.op == "force_mood" then
+                    if effect.before ~= #trackedForcedMoodRequests then
+                        return failure({ makeError("effect_state_mismatch", path .. ".payload.before", "무드 강제 변경 요청 순서가 앞선 요청 수와 다릅니다.") })
                     end
-                    trackedMoodLocked = true
+                    trackedForcedMoodRequests[#trackedForcedMoodRequests + 1] = {
+                        mood = effect.mood,
+                        cause = payload.cause,
+                    }
                 end
                 if payload.op == "pay_stealth_cost" then
                     if event.resolutionId == nil then
@@ -2365,62 +2331,53 @@
                     reasonCode = payload.reasonCode,
                 })
             elseif event.type == "mood_evaluated" then
-                local _, sourceError = requireSource(event, path, "system", "mood_performance")
+                local _, sourceError = requireSource(event, path, "system", "mood_tokens")
                 local moods = staticData.registry.moods
-                local expectedPerformance = (startingResistance - trackedResistance)
-                    - math.max(0, startingStealth - trackedStealth)
                 local moodByOrder = {}
                 for moodId, mood in pairs(moods) do moodByOrder[mood.order] = moodId end
-                local beforeOrder = moods[trackedMood].order
-                local complianceAdjustment = 0
-                for _, traitId in ipairs(beforeState.character.traitIds) do
-                    local trait = staticData.traits[traitId]
-                    for _, modifier in ipairs(type(trait) == "table" and trait.modifiers or {}) do
-                        if modifier.timing == "moodPerformanceThreshold"
-                            and modifier.operation == "add"
-                            and modifier.direction == "compliance" then
-                            complianceAdjustment = complianceAdjustment + modifier.amount
-                        end
-                    end
-                end
                 local expectedMoodAfter = trackedMood
-                local expectedApplied = false
-                local expectedDirection = nil
-                local expectedThreshold = nil
-                local expectedMoodReason = nil
-                if resolution.afterState.status ~= "active" then
-                    expectedMoodReason = "battle_ended"
-                elseif trackedMoodLocked then
-                    expectedMoodReason = "mood_locked"
-                elseif trackedDirectMoodChanged then
-                    expectedMoodReason = "direct_mood_changed"
+                local expectedTokensAfter = normalizedMoodTokens(trackedMoodTokens)
+                local expectedResolution
+                local expectedTargetMood
+                local expectedTiedMoods
+                local forcedCount = #trackedForcedMoodRequests
+                if forcedCount == 1 then
+                    expectedResolution = "forced"
+                    expectedTargetMood = trackedForcedMoodRequests[1].mood
+                    expectedMoodAfter = expectedTargetMood
                 else
-                    if beforeOrder < #MOOD_BOUNDARIES + 1 then
-                        local threshold = MOOD_BOUNDARIES[beforeOrder] + complianceAdjustment
-                        if expectedPerformance >= threshold then
-                            expectedApplied = true
-                            expectedDirection = "compliance"
-                            expectedThreshold = threshold
-                            expectedMoodAfter = moodByOrder[beforeOrder + 1]
+                    local maximum = 0
+                    local leaders = {}
+                    for order = 1, #moodByOrder do
+                        local moodId = moodByOrder[order]
+                        local count = expectedTokensAfter[moodId]
+                        if count > maximum then
+                            maximum = count
+                            leaders = { moodId }
+                        elseif count == maximum then
+                            leaders[#leaders + 1] = moodId
                         end
                     end
-                    if not expectedApplied and beforeOrder > 1 then
-                        local threshold = MOOD_BOUNDARIES[beforeOrder - 1]
-                        if expectedPerformance <= -threshold then
-                            expectedApplied = true
-                            expectedDirection = "rejection"
-                            expectedThreshold = threshold
-                            expectedMoodAfter = moodByOrder[beforeOrder - 1]
+                    if maximum < 3 then
+                        expectedResolution = "none"
+                    elseif #leaders == 1 then
+                        expectedResolution = "token"
+                        expectedTargetMood = leaders[1]
+                        expectedTokensAfter[expectedTargetMood] = 0
+                        expectedMoodAfter = expectedTargetMood
+                    else
+                        expectedResolution = "tie"
+                        expectedTiedMoods = leaders
+                        for _, moodId in ipairs(leaders) do
+                            expectedTokensAfter[moodId] = expectedTokensAfter[moodId] - 1
                         end
                     end
-                    if not expectedApplied then expectedMoodReason = "threshold_not_met" end
                 end
+                local expectedApplied = trackedMood ~= expectedMoodAfter
                 if sourceError
                     or sawMoodEvaluation
                     or event.phase ~= "turn_end"
                     or event.side ~= "character"
-                    or not isFinite(payload.performance)
-                    or payload.performance ~= expectedPerformance
                     or type(moods) ~= "table"
                     or type(moods[payload.before]) ~= "table"
                     or type(moods[payload.after]) ~= "table"
@@ -2429,40 +2386,37 @@
                     or payload.after ~= expectedMoodAfter
                     or type(payload.applied) ~= "boolean"
                     or payload.applied ~= expectedApplied
-                    or payload.direction ~= expectedDirection
-                    or payload.threshold ~= expectedThreshold
-                    or payload.reasonCode ~= expectedMoodReason
-                    or (payload.direction ~= nil
-                        and payload.direction ~= "compliance"
-                        and payload.direction ~= "rejection")
-                    or (payload.threshold ~= nil and not isFinite(payload.threshold))
-                    or (payload.reasonCode ~= nil and not isAsciiId(payload.reasonCode))
-                    or (payload.applied == true
-                        and (payload.direction == nil or payload.threshold == nil or payload.reasonCode ~= nil))
-                    or (payload.applied == false
-                        and (payload.before ~= payload.after
-                            or payload.direction ~= nil
-                            or payload.threshold ~= nil
-                            or payload.reasonCode == nil)) then
+                    or payload.forcedCount ~= forcedCount
+                    or payload.forceCancelled ~= (forcedCount >= 2)
+                    or payload.resolution ~= expectedResolution
+                    or payload.targetMood ~= expectedTargetMood
+                    or not dataEqual(payload.tiedMoods, expectedTiedMoods)
+                    or not dataEqual(payload.tokensBefore, trackedMoodTokens)
+                    or not dataEqual(payload.tokensAfter, expectedTokensAfter)
+                    or not dataEqual(expectedTokensAfter, normalizedMoodTokens(resolution.afterState.character.moodTokens)) then
                     return failure({ sourceError or makeError("invalid_mood_evaluation", path .. ".payload", "무드 평가 사건 payload가 올바르지 않습니다.") })
                 end
                 sawMoodEvaluation = true
                 trackedMood = payload.after
+                trackedMoodTokens = expectedTokensAfter
                 local safe = {
-                    performance = payload.performance,
                     before = payload.before,
                     after = payload.after,
                     applied = payload.applied == true,
+                    forcedCount = payload.forcedCount,
+                    forceCancelled = payload.forceCancelled,
+                    resolution = payload.resolution,
+                    tokensBefore = payload.tokensBefore,
+                    tokensAfter = payload.tokensAfter,
                 }
-                if payload.direction ~= nil then safe.direction = payload.direction end
-                if payload.threshold ~= nil then safe.threshold = payload.threshold end
-                if payload.reasonCode ~= nil then safe.reasonCode = payload.reasonCode end
+                if payload.targetMood ~= nil then safe.targetMood = payload.targetMood end
+                if payload.tiedMoods ~= nil then safe.tiedMoods = payload.tiedMoods end
                 emit(publicResult, "mood_evaluated", safe)
                 if payload.applied == true then
                     emit(llmEvent, "mood_changed", {
                         before = payload.before,
                         after = payload.after,
-                        direction = payload.direction,
+                        resolution = payload.resolution,
                     })
                 end
             elseif event.type == "turn_cleanup" then
@@ -2500,7 +2454,8 @@
                     or not dataEqual(payload.before.character.planSlot, trackers.character.slot)
                     or trackedStealth ~= resolution.afterState.player.stealth
                     or trackedResistance ~= resolution.afterState.character.resistance
-                    or trackedMood ~= resolution.afterState.character.mood then
+                    or trackedMood ~= resolution.afterState.character.mood
+                    or not dataEqual(trackedMoodTokens, normalizedMoodTokens(resolution.afterState.character.moodTokens)) then
                     return failure({ sourceError or beforeError or afterError or movedError or transitionError
                         or makeError("invalid_turn_cleanup", path .. ".payload", "턴 정리 사건 payload가 올바르지 않습니다.") })
                 end

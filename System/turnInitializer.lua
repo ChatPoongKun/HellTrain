@@ -474,6 +474,19 @@
             resistance = authorityState.character.resistance,
             mood = authorityState.character.mood,
         }
+        local baselineTokens, baselineTokensError = cloneData(
+            authorityState.character.moodTokens or {},
+            "$.state.character.moodTokens"
+        )
+        if baselineTokensError then
+            return failure({ baselineTokensError })
+        end
+        for moodId in pairs(staticData.registry.moods) do
+            if baselineTokens[moodId] == nil then
+                baselineTokens[moodId] = 0
+            end
+        end
+        baseline.moodTokens = baselineTokens
         local state, stateCloneError = cloneData(authorityState, "$.state")
         if stateCloneError then
             return failure({ stateCloneError })
@@ -483,7 +496,7 @@
                 player = false,
                 character = false,
             },
-            directMoodChanged = false,
+            forcedMoodRequests = {},
         }
         local events = {}
 
@@ -599,7 +612,7 @@
             if type(skipRemaining) ~= "table"
                 or (skipRemaining.player ~= true and skipRemaining.player ~= false)
                 or (skipRemaining.character ~= true and skipRemaining.character ~= false)
-                or (report.transient.directMoodChanged ~= true and report.transient.directMoodChanged ~= false) then
+                or not isDenseArray(report.transient.forcedMoodRequests) then
                 return false, {
                     makeError(
                         "invalid_trigger_pipeline_transient",
@@ -979,15 +992,16 @@
                 player = type(transient.skipRemaining) == "table" and transient.skipRemaining.player == true,
                 character = type(transient.skipRemaining) == "table" and transient.skipRemaining.character == true,
             },
-            directMoodChanged = transient.directMoodChanged == true,
+            forcedMoodRequests = {},
         }
-        if transient.moodLock ~= nil then
-            local moodLockCopy, moodLockError = cloneData(transient.moodLock, "$.transient.moodLock")
-            if moodLockError then
-                return failure({ moodLockError })
-            end
-            storedTransient.moodLock = moodLockCopy
+        local forcedRequestsCopy, forcedRequestsError = cloneData(
+            transient.forcedMoodRequests or {},
+            "$.transient.forcedMoodRequests"
+        )
+        if forcedRequestsError then
+            return failure({ forcedRequestsError })
         end
+        storedTransient.forcedMoodRequests = forcedRequestsCopy
 
         local receiptDraws, receiptDrawsError = cloneData(draws, "$.draws")
         if receiptDrawsError then

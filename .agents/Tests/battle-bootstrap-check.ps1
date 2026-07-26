@@ -379,7 +379,7 @@ try {
     if (-not ($firstText -ceq $secondText)) {
         throw "Separate Lua processes produced different battle bootstrap results.`nFIRST:`n$firstText`nSECOND:`n$secondText"
     }
-    if ($firstText -cne 'BATTLE_BOOTSTRAP|hash=1068093683|cards=10|cursor=0') {
+    if ($firstText -cne 'BATTLE_BOOTSTRAP|hash=0838690133|cards=10|cursor=0') {
         throw "Unexpected battle bootstrap determinism vector: $firstText"
     }
 
