@@ -181,6 +181,7 @@
             and type(staticData.cards) == "table"
             and type(staticData.traits) == "table"
             and type(staticData.environments) == "table"
+            and type(staticData.subwayLines) == "table"
             and type(staticData.characters) == "table"
     end
 

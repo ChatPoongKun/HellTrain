@@ -21,7 +21,6 @@
         "silent_glare",
     }
     local ENVIRONMENT_ID = "uncrowded"
-    local TURN_LIMIT = 10
 
     local function makeError(code, path, message)
         return {
@@ -289,7 +288,6 @@
             playerCardIds = true,
             characterId = true,
             environmentId = true,
-            turnLimit = true,
         }
         for key in pairs(spec) do
             if type(key) ~= "string" or not allowed[key] then
@@ -359,14 +357,6 @@
                 "환경 ID는 lower_snake_case ASCII ID여야 합니다."
             )
         end
-        if not isSafeInteger(spec.turnLimit, 1) then
-            errors[#errors + 1] = makeError(
-                "invalid_turn_limit",
-                "$.turnLimit",
-                "제한 턴은 양의 안전 정수여야 합니다."
-            )
-        end
-
         if #errors > 0 then
             return nil, errors
         end
@@ -376,7 +366,6 @@
             playerCardIds = copyArray(spec.playerCardIds),
             characterId = spec.characterId,
             environmentId = spec.environmentId,
-            turnLimit = spec.turnLimit,
         }, nil
     end
 
@@ -544,6 +533,52 @@
         return character, battle, errors, nil
     end
 
+    local function buildJourney(seed, staticData)
+        if type(runScript) ~= "function" then
+            return nil, {
+                makeError(
+                    "runtime_unavailable",
+                    "$.runtime.subwayJourney",
+                    "전투 여정을 생성할 실행기를 찾을 수 없습니다."
+                ),
+            }
+        end
+        local ok, report = pcall(
+            runScript,
+            triggerId,
+            "subwayJourney",
+            "build",
+            seed,
+            staticData
+        )
+        if not ok then
+            return nil, {
+                makeError(
+                    "subway_journey_call_failed",
+                    "$.runtime.subwayJourney",
+                    "전투 여정 생성 호출에 실패했습니다: " .. tostring(report)
+                ),
+            }
+        end
+        if type(report) ~= "table" or report.ok ~= true
+            or not isSafeInteger(report.turnLimit, 1)
+            or type(report.transit) ~= "table" then
+            local nestedErrors = copyErrors(report)
+            if #nestedErrors == 0 then
+                nestedErrors[1] = makeError(
+                    "invalid_subway_journey_result",
+                    "$.runtime.subwayJourney",
+                    "전투 여정 생성기가 제한 턴과 이동 구간을 반환하지 않았습니다."
+                )
+            end
+            return nil, nestedErrors
+        end
+        return {
+            turnLimit = report.turnLimit,
+            transit = report.transit,
+        }, nil
+    end
+
     local function verticalSlice(spec, staticData)
         local normalized, specErrors = validateSpec(spec)
         if specErrors then
@@ -563,6 +598,10 @@
         if planCapacityError then
             return failure({ planCapacityError })
         end
+        local journey, journeyErrors = buildJourney(normalized.seed, staticData)
+        if journeyErrors then
+            return failure(journeyErrors)
+        end
 
         local cardInstances = makeInstances(PLAYER_CARD_IDS, "player")
         local characterInstances = makeInstances(CHARACTER_CARD_IDS, "character")
@@ -574,8 +613,9 @@
             battleId = normalized.battleId,
             status = "active",
             turnNumber = 1,
-            turnLimit = TURN_LIMIT,
+            turnLimit = journey.turnLimit,
             environmentId = ENVIRONMENT_ID,
+            transit = journey.transit,
             rng = {
                 seed = normalized.seed,
                 cursor = 0,
@@ -698,6 +738,10 @@
         if planCapacityError then
             return failure({ planCapacityError })
         end
+        local journey, journeyErrors = buildJourney(normalized.seed, staticData)
+        if journeyErrors then
+            return failure(journeyErrors)
+        end
 
         local cardInstances = makeInstances(normalized.playerCardIds, "player")
         local characterInstances = makeInstances(characterBattle.deck, "character")
@@ -709,8 +753,9 @@
             battleId = normalized.battleId,
             status = "active",
             turnNumber = 1,
-            turnLimit = normalized.turnLimit,
+            turnLimit = journey.turnLimit,
             environmentId = normalized.environmentId,
+            transit = journey.transit,
             rng = {
                 seed = normalized.seed,
                 cursor = 0,

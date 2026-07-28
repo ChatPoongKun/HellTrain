@@ -10,7 +10,6 @@
     local BATTLE_SEED_MODULUS = 2147483646
     local BATTLE_SEED_DOMAIN_OFFSET = 104729
     local DEFAULT_ENVIRONMENT_ID = "uncrowded"
-    local DEFAULT_TURN_LIMIT = 10
     local MAX_SAFE_INTEGER = 9007199254740991
 
     local function makeError(code, path, message)
@@ -543,7 +542,6 @@
             battleId = "battle-" .. setupId,
             seed = deriveBattleSeed(setupSeed),
             environmentId = DEFAULT_ENVIRONMENT_ID,
-            turnLimit = DEFAULT_TURN_LIMIT,
         }
     end
 
@@ -959,7 +957,6 @@
                     battleId = true,
                     seed = true,
                     environmentId = true,
-                    turnLimit = true,
                 }, "$.state.battleSpec", errors)
                 if not isRuntimeId(state.battleSpec.battleId) then
                     appendError(errors, "invalid_battle_id", "$.state.battleSpec.battleId", "battleId는 ASCII 런타임 ID여야 합니다.")
@@ -969,9 +966,6 @@
                 end
                 if state.battleSpec.environmentId ~= DEFAULT_ENVIRONMENT_ID then
                     appendError(errors, "invalid_battle_environment", "$.state.battleSpec.environmentId", "초기 환경은 uncrowded여야 합니다.")
-                end
-                if state.battleSpec.turnLimit ~= DEFAULT_TURN_LIMIT then
-                    appendError(errors, "invalid_battle_turn_limit", "$.state.battleSpec.turnLimit", "초기 턴 제한은 10이어야 합니다.")
                 end
             end
         end

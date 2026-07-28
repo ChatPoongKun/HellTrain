@@ -625,6 +625,70 @@
         return nil
     end
 
+    local function findSubwayStation(line, stationId)
+        for _, routePath in ipairs(type(line) == "table" and line.paths or {}) do
+            for _, station in ipairs(routePath.stations or {}) do
+                if station.id == stationId then
+                    return station
+                end
+            end
+        end
+        return nil
+    end
+
+    local function buildSubwayView(state, data, errors)
+        local transit = state.transit
+        local line = type(transit) == "table"
+            and type(data.subwayLines) == "table"
+            and data.subwayLines[transit.lineId]
+            or nil
+        if type(line) ~= "table" then
+            addError(errors, "missing_subway_line", "$.transit.lineId", "전투 지하철 노선 표시 정보를 찾을 수 없습니다.")
+            return nil
+        end
+
+        local completedTurns = state.status == "active"
+            and state.turnNumber - 1
+            or state.turnNumber
+        if completedTurns < 0 then completedTurns = 0 end
+        if completedTurns > state.turnLimit then completedTurns = state.turnLimit end
+        local currentIndex = completedTurns + 1
+        local stations = {}
+        for index, stationId in ipairs(transit.stationIds) do
+            local station = findSubwayStation(line, stationId)
+            if type(station) ~= "table" then
+                addError(errors, "missing_subway_station", "$.transit.stationIds[" .. index .. "]", "전투 이동 역 표시 정보를 찾을 수 없습니다.")
+            else
+                local status = index < currentIndex and "passed"
+                    or (index == currentIndex and "current" or "upcoming")
+                stations[index] = {
+                    index = index,
+                    id = station.id,
+                    code = station.code,
+                    name = station.name,
+                    status = status,
+                    isStart = index == 1,
+                    isDestination = index == #transit.stationIds,
+                }
+            end
+        end
+        if #stations ~= #transit.stationIds then
+            return nil
+        end
+
+        return {
+            lineId = line.id,
+            lineName = line.name,
+            lineCode = line.code,
+            lineColor = line.color,
+            operatorName = line.operatorName,
+            startStation = stations[1],
+            currentStation = stations[currentIndex],
+            destinationStation = stations[#stations],
+            stations = stations,
+        }
+    end
+
     local function buildBattleView(state, staticData, context)
         local errors = {}
         local data = normalizeStaticData(staticData)
@@ -633,6 +697,7 @@
             or type(data.cards) ~= "table"
             or type(data.traits) ~= "table"
             or type(data.environments) ~= "table"
+            or type(data.subwayLines) ~= "table"
             or type(data.characters) ~= "table" then
             addError(errors, "missing_static_data", "$", "battleView 생성에는 검증된 전체 정적 데이터가 필요합니다.")
             return failure(errors)
@@ -964,9 +1029,9 @@
             victory = "승리",
             defeat = "패배",
         }
-        local remaining = displayState.turnLimit - displayState.turnNumber + 1
-        if remaining < 0 then
-            remaining = 0
+        local subwayView = buildSubwayView(displayState, data, errors)
+        if subwayView == nil then
+            return failure(errors)
         end
 
         local selectionView = {
@@ -987,11 +1052,7 @@
             turnId = turnId,
             phase = phase,
             locked = locked,
-            turn = {
-                number = displayState.turnNumber,
-                limit = displayState.turnLimit,
-                remaining = remaining,
-            },
+            subway = subwayView,
             environment = {
                 id = environment.id,
                 name = environment.name,
@@ -1300,6 +1361,141 @@
         end
     end
 
+    local function validateSubwayStationView(value, path, errors)
+        if type(value) ~= "table" then
+            addError(errors, "invalid_subway_station_view", path, "역 View가 테이블이 아닙니다.")
+            return
+        end
+        checkAllowedKeys(value, {
+            index = true,
+            id = true,
+            code = true,
+            name = true,
+            status = true,
+            isStart = true,
+            isDestination = true,
+        }, path, errors)
+        if not isInteger(value.index, 1) then
+            addError(errors, "invalid_subway_station_index", path .. ".index", "역 순번이 올바르지 않습니다.")
+        end
+        if not isAsciiId(value.id) then
+            addError(errors, "invalid_subway_station_id", path .. ".id", "역 ID가 올바르지 않습니다.")
+        end
+        if type(value.code) ~= "string"
+            or string.match(value.code, "^[A-Za-z]+%d%d$") == nil then
+            addError(errors, "invalid_subway_station_code", path .. ".code", "역 번호가 올바르지 않습니다.")
+        end
+        if type(value.name) ~= "string" or value.name == "" then
+            addError(errors, "invalid_subway_station_name", path .. ".name", "역 이름이 필요합니다.")
+        end
+        if value.status ~= "passed" and value.status ~= "current" and value.status ~= "upcoming" then
+            addError(errors, "invalid_subway_station_status", path .. ".status", "역 진행 상태가 올바르지 않습니다.")
+        end
+        if value.isStart ~= true and value.isStart ~= false then
+            addError(errors, "invalid_subway_start_flag", path .. ".isStart", "isStart는 불리언이어야 합니다.")
+        end
+        if value.isDestination ~= true and value.isDestination ~= false then
+            addError(errors, "invalid_subway_destination_flag", path .. ".isDestination", "isDestination은 불리언이어야 합니다.")
+        end
+    end
+
+    local function sameSubwayStation(left, right)
+        return type(left) == "table"
+            and type(right) == "table"
+            and left.index == right.index
+            and left.id == right.id
+            and left.code == right.code
+            and left.name == right.name
+            and left.status == right.status
+            and left.isStart == right.isStart
+            and left.isDestination == right.isDestination
+    end
+
+    local function validateSubwayView(value, path, errors)
+        if type(value) ~= "table" then
+            addError(errors, "invalid_subway_view", path, "지하철 노선 View가 테이블이 아닙니다.")
+            return
+        end
+        checkAllowedKeys(value, {
+            lineId = true,
+            lineName = true,
+            lineCode = true,
+            lineColor = true,
+            operatorName = true,
+            startStation = true,
+            currentStation = true,
+            destinationStation = true,
+            stations = true,
+        }, path, errors)
+        if not isAsciiId(value.lineId) then
+            addError(errors, "invalid_subway_line_id", path .. ".lineId", "노선 ID가 올바르지 않습니다.")
+        end
+        for _, field in ipairs({ "lineName", "lineCode", "operatorName" }) do
+            if type(value[field]) ~= "string" or value[field] == "" then
+                addError(errors, "invalid_subway_line_label", path .. "." .. field, "노선 표시 문자열이 필요합니다.")
+            end
+        end
+        if type(value.lineColor) ~= "string"
+            or string.match(value.lineColor, "^#%x%x%x%x%x%x$") == nil then
+            addError(errors, "invalid_subway_line_color", path .. ".lineColor", "노선 색상은 #RRGGBB 형식이어야 합니다.")
+        end
+
+        validateSubwayStationView(value.startStation, path .. ".startStation", errors)
+        validateSubwayStationView(value.currentStation, path .. ".currentStation", errors)
+        validateSubwayStationView(value.destinationStation, path .. ".destinationStation", errors)
+
+        local length = getArrayLength(value.stations, path .. ".stations", errors)
+        if length == nil then
+            return
+        end
+        if length < 8 or length > 13 then
+            addError(errors, "invalid_subway_route_length", path .. ".stations", "전투 노선은 8~13개 역이어야 합니다.")
+        end
+
+        local currentCount = 0
+        local currentStation = nil
+        local reachedCurrent = false
+        for index = 1, length do
+            local station = value.stations[index]
+            local stationPath = path .. ".stations[" .. index .. "]"
+            validateSubwayStationView(station, stationPath, errors)
+            if type(station) == "table" then
+                if station.index ~= index then
+                    addError(errors, "subway_station_index_mismatch", stationPath .. ".index", "역 순번과 배열 위치가 다릅니다.")
+                end
+                if station.isStart ~= (index == 1) then
+                    addError(errors, "subway_start_mismatch", stationPath .. ".isStart", "출발역 표시는 첫 역에만 있어야 합니다.")
+                end
+                if station.isDestination ~= (index == length) then
+                    addError(errors, "subway_destination_mismatch", stationPath .. ".isDestination", "도착역 표시는 마지막 역에만 있어야 합니다.")
+                end
+                if station.status == "current" then
+                    currentCount = currentCount + 1
+                    currentStation = station
+                    reachedCurrent = true
+                elseif station.status == "passed" and reachedCurrent then
+                    addError(errors, "invalid_subway_status_order", stationPath .. ".status", "통과한 역은 현재역보다 앞에 있어야 합니다.")
+                elseif station.status == "upcoming" and not reachedCurrent then
+                    addError(errors, "invalid_subway_status_order", stationPath .. ".status", "예정 역은 현재역보다 뒤에 있어야 합니다.")
+                end
+            end
+        end
+        if currentCount ~= 1 then
+            addError(errors, "invalid_subway_current_count", path .. ".stations", "현재역은 정확히 하나여야 합니다.")
+        end
+        if length > 0 then
+            if not sameSubwayStation(value.startStation, value.stations[1]) then
+                addError(errors, "subway_start_reference_mismatch", path .. ".startStation", "출발역 요약과 노선의 첫 역이 다릅니다.")
+            end
+            if not sameSubwayStation(value.destinationStation, value.stations[length]) then
+                addError(errors, "subway_destination_reference_mismatch", path .. ".destinationStation", "도착역 요약과 노선의 마지막 역이 다릅니다.")
+            end
+            if not sameSubwayStation(value.currentStation, currentStation) then
+                addError(errors, "subway_current_reference_mismatch", path .. ".currentStation", "현재역 요약과 노선의 현재역이 다릅니다.")
+            end
+        end
+    end
+
     local function validateBattleView(view)
         local errors = {}
         if type(view) ~= "table" then
@@ -1318,7 +1514,7 @@
             phase = true,
             locked = true,
             interactionToken = true,
-            turn = true,
+            subway = true,
             environment = true,
             player = true,
             character = true,
@@ -1355,16 +1551,7 @@
             addError(errors, "ended_interaction_token", "$.interactionToken", "종료 View에는 상호작용 토큰을 넣을 수 없습니다.")
         end
 
-        if type(view.turn) ~= "table" then
-            addError(errors, "invalid_turn", "$.turn", "turn이 테이블이 아닙니다.")
-        else
-            checkAllowedKeys(view.turn, { number = true, limit = true, remaining = true }, "$.turn", errors)
-            if not isInteger(view.turn.number, 1) or not isInteger(view.turn.limit, 1) or not isInteger(view.turn.remaining, 0) then
-                addError(errors, "invalid_turn_value", "$.turn", "턴 표시 수치가 올바르지 않습니다.")
-            elseif view.turn.remaining ~= math.max(0, view.turn.limit - view.turn.number + 1) then
-                addError(errors, "turn_remaining_mismatch", "$.turn.remaining", "남은 턴 표시가 현재 턴과 제한 턴에서 계산한 값과 다릅니다.")
-            end
-        end
+        validateSubwayView(view.subway, "$.subway", errors)
 
         if type(view.environment) ~= "table" then
             addError(errors, "invalid_environment", "$.environment", "environment가 테이블이 아닙니다.")

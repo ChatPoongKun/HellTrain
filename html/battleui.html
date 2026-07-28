@@ -1,2111 +1,1295 @@
 <style>
-.battle-interface {
---battle-bg: #0a0a0b;
---battle-surface: #151516;
---battle-surface-raised: #1d1c1c;
---battle-surface-soft: #101011;
---battle-ink: #f4efe8;
---battle-muted: #aaa29a;
---battle-dim: #938c85;
---battle-line: rgba(244, 239, 232, 0.13);
---battle-line-strong: rgba(244, 239, 232, 0.25);
---battle-signal: #ff673d;
---battle-signal-soft: rgba(255, 103, 61, 0.13);
---battle-warning: #f6c453;
---battle-warning-soft: rgba(246, 196, 83, 0.12);
---battle-safe: #67e7bd;
---battle-safe-soft: rgba(103, 231, 189, 0.11);
---battle-mood: #c2a7ff;
---battle-mood-soft: rgba(194, 167, 255, 0.12);
-position: relative;
-width: min(100%, 920px);
-margin: 14px auto 0;
-overflow: hidden;
-color: var(--battle-ink);
-border: 1px solid var(--battle-line-strong);
-border-radius: 22px;
-background:
-radial-gradient(circle at 10% 0%, rgba(255, 103, 61, 0.12), transparent 27rem),
-radial-gradient(circle at 94% 15%, rgba(103, 231, 189, 0.07), transparent 24rem),
-linear-gradient(180deg, #151414 0%, var(--battle-bg) 32%, #0c0c0d 100%);
-box-shadow: 0 28px 70px rgba(0, 0, 0, 0.42), inset 0 1px rgba(255, 255, 255, 0.04);
-font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
-line-height: 1.5;
-isolation: isolate;
-container-name: battle-ui;
-container-type: inline-size;
-}
-
-.battle-interface,
-.battle-interface * {
+.ht-battle,
+.ht-battle * {
 box-sizing: border-box;
 }
-
-.battle-interface::before {
-position: absolute;
-inset: 0;
-z-index: -1;
-pointer-events: none;
-content: "";
-opacity: 0.3;
-background-image:
-linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-background-size: 28px 28px;
-mask-image: linear-gradient(to bottom, black, transparent 72%);
+.ht-battle {
+--ink: #f3eee6;
+--muted: #99938d;
+--dim: #6f6964;
+--line: rgba(255, 255, 255, .10);
+--panel: rgba(24, 23, 25, .94);
+--panel-2: rgba(34, 32, 34, .92);
+--black: #111012;
+--red: #e45555;
+--amber: #dfae3f;
+--green: #62b47d;
+--blue: #5b91d8;
+--accent: #d85252;
+width: min(100%, 600px);
+margin: 8px auto;
+overflow: hidden;
+color: var(--ink);
+background:
+linear-gradient(140deg, rgba(216, 82, 82, .08), transparent 34%),
+var(--black);
+border: 1px solid rgba(255, 255, 255, .12);
+border-radius: 16px;
+box-shadow: 0 18px 48px rgba(0, 0, 0, .32);
+font-family: Pretendard, "Noto Sans KR", system-ui, sans-serif;
+font-size: 12px;
+line-height: 1.4;
 }
-
-.battle-interface button,
-.battle-interface summary {
+.ht-battle button,
+.ht-battle summary {
 font: inherit;
 }
-
-.battle-interface button {
+.ht-battle button {
 color: inherit;
 }
-
-.battle-interface .sr-only {
-position: absolute;
-width: 1px;
-height: 1px;
-padding: 0;
-margin: -1px;
-overflow: hidden;
-clip: rect(0, 0, 0, 0);
-clip-path: inset(50%);
-white-space: nowrap;
-border: 0;
-}
-
-.battle-interface .battle-frame {
-padding: clamp(13px, 3vw, 24px);
-}
-
-.battle-interface .battle-masthead {
-display: grid;
-grid-template-columns: minmax(0, 1fr) auto;
-gap: 18px;
-align-items: end;
-padding-bottom: 17px;
-border-bottom: 1px solid var(--battle-line);
-}
-
-.battle-interface .battle-kicker,
-.battle-interface .section-kicker,
-.battle-interface .resource-label,
-.battle-interface .brief-label,
-.battle-interface .zone-label,
-.battle-interface .card-stat-label,
-.battle-interface .plan-owner,
-.battle-interface .log-meta {
-color: var(--battle-muted);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 9px;
-font-weight: 800;
-letter-spacing: 0.13em;
-line-height: 1.25;
-text-transform: uppercase;
-}
-
-.battle-interface .battle-kicker {
+.ht-topbar {
+height: 45px;
 display: flex;
 align-items: center;
-gap: 8px;
-color: var(--battle-signal);
-}
-
-.battle-interface .battle-kicker::before {
-width: 19px;
-height: 2px;
-content: "";
-background: var(--battle-signal);
-box-shadow: 0 0 12px rgba(255, 103, 61, 0.7);
-}
-
-.battle-interface .battle-title {
-margin: 6px 0 0;
-overflow-wrap: anywhere;
-color: #fffaf3;
-font-size: clamp(25px, 5vw, 38px);
-font-weight: 950;
-letter-spacing: -0.055em;
-line-height: 1.02;
-}
-
-.battle-interface .battle-subtitle {
-display: flex;
-flex-wrap: wrap;
-gap: 6px;
-align-items: center;
-margin-top: 9px;
-}
-
-.battle-interface .phase-state,
-.battle-interface .outcome-state {
-display: inline-flex;
-align-items: center;
-min-height: 24px;
-padding: 3px 8px;
-border: 1px solid var(--battle-line);
-border-radius: 4px;
-color: var(--battle-muted);
-background: rgba(0, 0, 0, 0.24);
-font-size: 9px;
-font-weight: 800;
-}
-
-.battle-interface .phase-state {
-border-color: rgba(103, 231, 189, 0.28);
-color: var(--battle-safe);
-background: var(--battle-safe-soft);
-}
-
-.battle-interface[data-phase="awaitingOutput"] .phase-state {
-border-color: rgba(246, 196, 83, 0.3);
-color: var(--battle-warning);
-background: var(--battle-warning-soft);
-}
-
-.battle-interface[data-phase="ended"] .phase-state,
-.battle-interface[data-outcome="defeat"] .outcome-state {
-border-color: rgba(255, 103, 61, 0.35);
-color: #ff9b7f;
-background: var(--battle-signal-soft);
-}
-
-.battle-interface[data-outcome="victory"] .outcome-state {
-border-color: rgba(103, 231, 189, 0.32);
-color: var(--battle-safe);
-background: var(--battle-safe-soft);
-}
-
-.battle-interface .turn-board {
-display: grid;
-grid-template-columns: auto auto;
 gap: 10px;
-align-items: end;
-min-width: 154px;
-padding-left: 18px;
-border-left: 1px solid var(--battle-line);
+padding: 0 13px;
+background: rgba(8, 8, 9, .74);
+border-bottom: 1px solid var(--line);
 }
-
-.battle-interface .turn-current {
-color: #fffaf3;
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: clamp(34px, 7vw, 52px);
-font-weight: 950;
-letter-spacing: -0.1em;
-line-height: 0.82;
-}
-
-.battle-interface .turn-limit {
-padding-bottom: 1px;
-color: var(--battle-dim);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 15px;
-font-weight: 800;
-}
-
-.battle-interface .turn-caption {
-grid-column: 1 / -1;
-display: flex;
-justify-content: space-between;
-gap: 8px;
-color: var(--battle-muted);
-font-size: 9px;
-font-weight: 700;
-}
-
-.battle-interface .route-board {
-position: relative;
-margin-top: 14px;
-padding: 12px 13px 11px;
-border: 1px solid var(--battle-line);
-border-radius: 13px;
-background: rgba(0, 0, 0, 0.28);
-}
-
-.battle-interface .route-meta {
+.ht-brand {
 display: flex;
 align-items: center;
-justify-content: space-between;
-gap: 12px;
-margin-bottom: 9px;
-color: var(--battle-muted);
-font-size: 9px;
-font-weight: 750;
+gap: 8px;
+min-width: 0;
 }
-
-.battle-interface .route-meta strong {
-color: var(--battle-warning);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+.ht-brand-mark {
+width: 7px;
+height: 19px;
+border-radius: 2px;
+background: var(--accent);
+box-shadow: 4px 0 0 rgba(216, 82, 82, .22);
+}
+.ht-brand-copy {
+min-width: 0;
+}
+.ht-kicker {
+color: #d56565;
+font-size: 8px;
+font-weight: 800;
+letter-spacing: .16em;
+line-height: 1;
+}
+.ht-title {
+margin-top: 3px;
 font-size: 12px;
+font-weight: 800;
+line-height: 1;
+white-space: nowrap;
 }
-
-.battle-interface .route-native,
-.battle-interface .meter-native {
+.ht-top-environment {
+ margin-left: auto;
+ max-width: 145px;
+ overflow: hidden;
+ color: var(--muted);
+ font-size: 9px;
+ font-weight: 700;
+ text-overflow: ellipsis;
+ white-space: nowrap;
+}
+.ht-route {
+ --route-color: #777;
+ padding: 7px 12px 8px;
+ background:
+  linear-gradient(90deg, rgba(255, 255, 255, .025), transparent 58%),
+  rgba(16, 15, 17, .92);
+ border-bottom: 1px solid var(--line);
+}
+.ht-route-head {
+ display: flex;
+ align-items: center;
+ min-width: 0;
+ gap: 7px;
+}
+.ht-route-badge {
+ display: grid;
+ place-items: center;
+ width: 24px;
+ height: 24px;
+ flex: 0 0 auto;
+ border: 3px solid var(--route-color);
+ border-radius: 50%;
+ color: #fff;
+ background: #171619;
+ font-size: 9px;
+ font-weight: 900;
+}
+.ht-route-line {
+ min-width: 0;
+}
+.ht-route-line strong,
+.ht-route-line small {
+ display: block;
+ overflow: hidden;
+ text-overflow: ellipsis;
+ white-space: nowrap;
+}
+.ht-route-line strong {
+ font-size: 10px;
+}
+.ht-route-line small {
+ color: var(--muted);
+ font-size: 7px;
+}
+.ht-route-endpoints {
+ display: flex;
+ align-items: center;
+ justify-content: flex-end;
+ min-width: 0;
+ margin-left: auto;
+ color: #d9d2cc;
+ font-size: 9px;
+ font-weight: 800;
+}
+.ht-route-endpoints strong {
+ max-width: 94px;
+ overflow: hidden;
+ text-overflow: ellipsis;
+ white-space: nowrap;
+}
+.ht-route-endpoints i {
+ width: 18px;
+ height: 1px;
+ flex: 0 0 auto;
+ margin: 0 5px;
+ background: var(--route-color);
+}
+.ht-route-current {
+ margin-left: 7px;
+ padding-left: 7px;
+ border-left: 1px solid var(--line);
+ color: #fff;
+ white-space: nowrap;
+}
+.ht-route-current::before {
+ content: "현재 ";
+ color: var(--muted);
+ font-size: 7px;
+}
+.ht-route-track {
+ position: relative;
+ display: flex;
+ margin-top: 5px;
+ padding-top: 8px;
+}
+.ht-route-track::before {
+ content: "";
+ position: absolute;
+ top: 19px;
+ left: 3.7%;
+ right: 3.7%;
+ height: 3px;
+ border-radius: 3px;
+ background: #3f3c40;
+}
+.ht-route-stop {
+ position: relative;
+ z-index: 1;
+ display: grid;
+ flex: 1 1 0;
+ place-items: center;
+ min-width: 0;
+ color: #716d71;
+}
+.ht-route-stop::after {
+ content: "";
+ position: absolute;
+ z-index: -1;
+ top: 11px;
+ left: 50%;
+ width: 100%;
+ height: 3px;
+ background: transparent;
+}
+.ht-route-stop:last-child::after {
+ display: none;
+}
+.ht-route-stop[data-status="passed"]::after {
+ background: var(--route-color);
+}
+.ht-route-code {
+ width: 100%;
+ overflow: hidden;
+ font-size: 7px;
+ font-weight: 800;
+ line-height: 8px;
+ text-align: center;
+ text-overflow: clip;
+ white-space: nowrap;
+}
+.ht-route-node {
+ display: block;
+ width: 10px;
+ height: 10px;
+ margin-top: 2px;
+ border: 2px solid currentColor;
+ border-radius: 50%;
+ background: #171619;
+}
+.ht-route-stop[data-status="passed"] {
+ color: var(--route-color);
+}
+.ht-route-stop[data-status="current"] {
+ color: #fff;
+}
+.ht-route-stop[data-status="current"] .ht-route-node {
+ width: 14px;
+ height: 14px;
+ margin-top: 0;
+ border: 3px solid var(--route-color);
+ background: #fff;
+ box-shadow: 0 0 0 2px #171619, 0 0 10px rgba(255, 255, 255, .22);
+}
+.ht-route-stop[data-start="true"] .ht-route-code,
+.ht-route-stop[data-destination="true"] .ht-route-code {
+ color: #d7d1cc;
+}
+.ht-layout {
+display: grid;
+grid-template-columns: 132px minmax(0, 1fr);
+min-height: 0;
+}
+.ht-character {
+position: relative;
+display: flex;
+flex-direction: column;
+min-width: 0;
+padding: 10px;
+background:
+linear-gradient(180deg, rgba(255, 255, 255, .025), transparent 44%),
+#171618;
+border-right: 1px solid var(--line);
+}
+.ht-portrait {
+position: relative;
+height: 170px;
+overflow: hidden;
+border-radius: 10px;
+background: #29262a;
+border: 1px solid rgba(255, 255, 255, .10);
+}
+.ht-portrait::after {
+content: "";
+position: absolute;
+inset: auto 0 0;
+height: 50%;
+background: linear-gradient(transparent, rgba(11, 10, 11, .92));
+pointer-events: none;
+}
+.ht-portrait img {
 display: block;
 width: 100%;
-height: 7px;
-overflow: hidden;
-border: 0;
-border-radius: 999px;
-appearance: none;
-background: #050506;
+height: 100%;
+object-fit: cover;
+object-position: 50% 20%;
 }
-
-.battle-interface .route-native::-webkit-progress-bar,
-.battle-interface .meter-native::-webkit-progress-bar {
-border-radius: inherit;
-background: #050506;
+.ht-character-name {
+position: absolute;
+z-index: 1;
+left: 9px;
+right: 9px;
+bottom: 8px;
 }
-
-.battle-interface .route-native::-webkit-progress-value {
-border-radius: inherit;
-background: linear-gradient(90deg, var(--battle-signal), var(--battle-warning));
-box-shadow: 0 0 12px rgba(255, 103, 61, 0.48);
+.ht-character-name strong {
+display: block;
+font-size: 15px;
+line-height: 1.1;
 }
-
-.battle-interface .route-native::-moz-progress-bar {
-border-radius: inherit;
-background: linear-gradient(90deg, var(--battle-signal), var(--battle-warning));
-}
-
-.battle-interface .meter-native::-webkit-progress-value {
-border-radius: inherit;
-background: linear-gradient(90deg, #ff3e35, var(--battle-signal));
-}
-
-.battle-interface .meter-native::-moz-progress-bar {
-border-radius: inherit;
-background: linear-gradient(90deg, #ff3e35, var(--battle-signal));
-}
-
-.battle-interface .scoreboard {
-display: grid;
-grid-template-columns: minmax(0, 0.8fr) minmax(250px, 1.3fr) minmax(0, 0.8fr);
-grid-template-areas: "stealth mood resistance";
-gap: 1px;
-margin-top: 13px;
-overflow: hidden;
-border: 1px solid var(--battle-line-strong);
-border-radius: 16px;
-background: var(--battle-line);
-}
-
-.battle-interface .resource-card,
-.battle-interface .mood-console {
-min-width: 0;
-padding: 16px;
-background: linear-gradient(145deg, rgba(29, 28, 28, 0.98), rgba(16, 16, 17, 0.98));
-}
-
-.battle-interface .stealth-card {
-grid-area: stealth;
-}
-
-.battle-interface .resistance-card {
-grid-area: resistance;
-}
-
-.battle-interface .mood-console {
-grid-area: mood;
-background:
-radial-gradient(circle at 50% 0%, rgba(194, 167, 255, 0.14), transparent 76%),
-linear-gradient(145deg, #201d23, #121113);
-}
-
-.battle-interface .resource-head {
-display: flex;
-align-items: center;
-justify-content: space-between;
-gap: 10px;
-}
-
-.battle-interface .resource-mark {
-display: grid;
-width: 27px;
-height: 27px;
-place-items: center;
-border: 1px solid rgba(103, 231, 189, 0.34);
-border-radius: 50%;
-color: var(--battle-safe);
-background: var(--battle-safe-soft);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 10px;
-font-weight: 900;
-}
-
-.battle-interface .resistance-card .resource-mark {
-border-color: rgba(255, 103, 61, 0.38);
-color: var(--battle-signal);
-background: var(--battle-signal-soft);
-}
-
-.battle-interface .resource-value {
-margin-top: 16px;
-color: #fffaf3;
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: clamp(35px, 6vw, 52px);
-font-weight: 950;
-letter-spacing: -0.09em;
-line-height: 0.9;
-}
-
-.battle-interface .resource-max {
-margin-left: 5px;
-color: var(--battle-dim);
-font-size: 12px;
-letter-spacing: 0;
-}
-
-.battle-interface .resource-rule {
-margin-top: 9px;
-color: var(--battle-muted);
+.ht-character-name span {
+display: block;
+margin-top: 3px;
+color: #c8c1bb;
 font-size: 9px;
 }
-
-.battle-interface .stealth-card .resource-rule strong {
-color: var(--battle-safe);
+.ht-resistance {
+padding: 10px 1px 9px;
+border-bottom: 1px solid var(--line);
 }
-
-.battle-interface .resistance-card .resource-rule strong {
-color: var(--battle-signal);
-}
-
-.battle-interface .resistance-card .meter-native {
-margin-top: 11px;
-}
-
-.battle-interface .mood-heading {
+.ht-label-row {
 display: flex;
 align-items: baseline;
 justify-content: space-between;
-gap: 12px;
-}
-
-.battle-interface .mood-name {
-color: #eee5ff;
-font-size: 19px;
-font-weight: 900;
-letter-spacing: -0.03em;
-}
-
-.battle-interface .mood-hint {
-color: var(--battle-muted);
-font-size: 8px;
-text-align: right;
-}
-
-.battle-interface .mood-scale {
-position: relative;
-display: grid;
-grid-template-columns: repeat(5, minmax(0, 1fr));
-gap: 4px;
-margin-top: 14px;
-}
-
-.battle-interface .mood-scale::before {
-position: absolute;
-top: 8px;
-right: 7%;
-left: 7%;
-height: 1px;
-content: "";
-background: rgba(244, 239, 232, 0.3);
-}
-
-.battle-interface .mood-node {
-position: relative;
-display: grid;
-gap: 5px;
-justify-items: center;
-min-width: 0;
-color: var(--battle-dim);
-font-size: 8px;
-font-weight: 800;
-}
-
-.battle-interface .mood-node::before {
-position: relative;
-z-index: 1;
-width: 9px;
-height: 9px;
-border: 2px solid #514b50;
-border-radius: 50%;
-content: "";
-background: #151416;
-}
-
-.battle-interface[data-mood-id="rejection"] .mood-rejection,
-.battle-interface[data-mood-id="suspicion"] .mood-suspicion,
-.battle-interface[data-mood-id="ignore"] .mood-ignore,
-.battle-interface[data-mood-id="confusion"] .mood-confusion,
-.battle-interface[data-mood-id="compliance"] .mood-compliance {
-color: #fffaf3;
-}
-
-.battle-interface[data-mood-id="rejection"] .mood-rejection::before,
-.battle-interface[data-mood-id="suspicion"] .mood-suspicion::before,
-.battle-interface[data-mood-id="ignore"] .mood-ignore::before,
-.battle-interface[data-mood-id="confusion"] .mood-confusion::before,
-.battle-interface[data-mood-id="compliance"] .mood-compliance::before {
-width: 13px;
-height: 13px;
-margin-top: -2px;
-border-color: #f7efff;
-background: var(--battle-mood);
-box-shadow: 0 0 0 4px rgba(194, 167, 255, 0.12), 0 0 17px rgba(194, 167, 255, 0.5);
-}
-
-.battle-interface .mood-thresholds {
-display: flex;
-flex-wrap: wrap;
-justify-content: center;
-gap: 5px;
-margin-top: 12px;
-}
-
-.battle-interface .mood-threshold {
-padding: 3px 7px;
-border: 1px solid var(--battle-line);
-border-radius: 999px;
-color: var(--battle-muted);
-background: rgba(0, 0, 0, 0.24);
-font-size: 8px;
-font-weight: 750;
-}
-
-.battle-interface .mood-threshold strong {
-color: var(--battle-mood);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-}
-
-.battle-interface .tactical-board {
-display: grid;
-grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-gap: 10px;
-margin-top: 10px;
-}
-
-.battle-interface .brief-card {
-min-width: 0;
-padding: 13px 14px;
-border: 1px solid var(--battle-line);
-border-radius: 13px;
-background: rgba(16, 16, 17, 0.86);
-}
-
-.battle-interface .intent-card {
-display: grid;
-grid-template-columns: auto minmax(0, 1fr);
-gap: 12px;
-align-items: center;
-border-color: rgba(255, 103, 61, 0.28);
-background:
-linear-gradient(90deg, rgba(255, 103, 61, 0.1), transparent 70%),
-rgba(16, 16, 17, 0.9);
-}
-
-.battle-interface .intent-signal {
-display: grid;
-width: 42px;
-height: 42px;
-place-items: center;
-border: 1px solid rgba(255, 103, 61, 0.38);
-border-radius: 50%;
-color: var(--battle-signal);
-background: var(--battle-signal-soft);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 18px;
-font-weight: 950;
-box-shadow: 0 0 20px rgba(255, 103, 61, 0.1);
-}
-
-.battle-interface .brief-title {
-margin-top: 3px;
-color: #fffaf3;
-font-size: 14px;
-font-weight: 900;
-letter-spacing: -0.025em;
-}
-
-.battle-interface .intent-card .brief-title {
-color: #ffd8cc;
-}
-
-.battle-interface .brief-copy {
-margin-top: 3px;
-color: var(--battle-muted);
+gap: 7px;
+color: var(--muted);
 font-size: 9px;
-line-height: 1.55;
+font-weight: 700;
+letter-spacing: .06em;
 }
-
-.battle-interface .environment-card {
-position: relative;
+.ht-label-row strong {
+color: var(--ink);
+font-size: 13px;
+letter-spacing: 0;
+}
+.ht-bar {
+height: 5px;
+margin-top: 6px;
 overflow: hidden;
-border-color: rgba(246, 196, 83, 0.23);
+border-radius: 999px;
+background: rgba(255, 255, 255, .09);
 }
-
-.battle-interface .environment-card::after {
-position: absolute;
-top: -18px;
-right: -18px;
-width: 68px;
-height: 68px;
-border: 16px solid rgba(246, 196, 83, 0.035);
-border-radius: 50%;
-content: "";
+.ht-bar > i {
+display: block;
+height: 100%;
+max-width: 100%;
+border-radius: inherit;
+background: linear-gradient(90deg, #8e3333, #e55f5f);
 }
-
-.battle-interface .environment-card .brief-title {
-color: #ffe9ad;
+.ht-side-section {
+padding-top: 9px;
 }
-
-.battle-interface .environment-rules {
-display: grid;
-gap: 4px;
-margin-top: 7px;
-padding-top: 7px;
-border-top: 1px dashed rgba(246, 196, 83, 0.18);
-}
-
-.battle-interface .intel-card {
-grid-column: 1 / -1;
-border-color: rgba(194, 167, 255, 0.23);
-background:
-linear-gradient(90deg, rgba(194, 167, 255, 0.055), transparent 72%),
-rgba(16, 16, 17, 0.9);
-}
-
-.battle-interface .tactical-intel-grid {
-display: grid;
-grid-template-columns: repeat(3, minmax(0, 1fr));
-gap: 7px;
-margin-top: 9px;
-}
-
-.battle-interface .tactical-intel-block {
-min-width: 0;
-padding: 9px 10px;
-border: 1px solid var(--battle-line);
-border-radius: 9px;
-background: rgba(0, 0, 0, 0.22);
-}
-
-.battle-interface .tactical-intel-head {
-display: flex;
-justify-content: space-between;
-gap: 8px;
-color: var(--battle-muted);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 10px;
+.ht-section-label {
+margin-bottom: 6px;
+color: var(--muted);
+font-size: 8px;
 font-weight: 800;
-letter-spacing: 0.06em;
+letter-spacing: .12em;
+text-transform: uppercase;
 }
-
-.battle-interface .tactical-plan-list {
-display: grid;
-gap: 7px;
-margin-top: 7px;
-}
-
-.battle-interface .tactical-plan-row {
-min-width: 0;
-padding-top: 7px;
-border-top: 1px dashed var(--battle-line);
-}
-
-.battle-interface .tactical-plan-row:first-child {
-padding-top: 0;
-border-top: 0;
-}
-
-.battle-interface .tactical-plan-slot {
-display: flex;
-justify-content: space-between;
-gap: 8px;
-color: var(--battle-dim);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 9px;
-font-weight: 800;
-letter-spacing: 0.05em;
-}
-
-.battle-interface .tactical-intel-name {
-margin-top: 5px;
-color: #f1ebe3;
-font-size: 12px;
-font-weight: 900;
-overflow-wrap: anywhere;
-}
-
-.battle-interface .tactical-intel-note,
-.battle-interface .tactical-trait {
-margin-top: 4px;
-color: var(--battle-muted);
-font-size: 11px;
-line-height: 1.55;
-}
-
-.battle-interface .tactical-trait + .tactical-trait {
-padding-top: 6px;
-border-top: 1px dashed var(--battle-line);
-}
-
-.battle-interface .tactical-trait strong {
-color: #ffd0c2;
-}
-
-.battle-interface .action-console {
-margin-top: 10px;
-padding: clamp(14px, 2.5vw, 20px);
-border: 1px solid var(--battle-line-strong);
-border-radius: 17px;
-background:
-linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 15%),
-rgba(13, 13, 14, 0.94);
-}
-
-.battle-interface .section-head {
-display: flex;
-align-items: flex-end;
-justify-content: space-between;
-gap: 16px;
-}
-
-.battle-interface .section-title {
-margin: 4px 0 0;
-color: #fffaf3;
-font-size: clamp(19px, 4vw, 26px);
-font-weight: 950;
-letter-spacing: -0.045em;
-line-height: 1.1;
-}
-
-.battle-interface .section-copy {
-max-width: 330px;
-margin: 0;
-color: var(--battle-muted);
-font-size: 9px;
-text-align: right;
-}
-
-.battle-interface .selection-rail {
-display: grid;
-grid-template-columns: minmax(0, 1fr) auto;
-gap: 7px;
-align-items: center;
-margin-top: 13px;
-padding: 10px;
-border: 1px solid var(--battle-line);
-border-radius: 12px;
-background: #080809;
-}
-
-.battle-interface .selection-status,
-.battle-interface .selection-order {
+.ht-plan-list,
+.ht-trait-list {
 display: flex;
 flex-wrap: wrap;
-gap: 6px;
+gap: 4px;
+}
+.ht-plan {
+display: inline-flex;
 align-items: center;
+gap: 4px;
+min-height: 21px;
+padding: 3px 6px;
+border: 1px dashed rgba(255, 255, 255, .17);
+border-radius: 6px;
+color: #aaa39d;
+background: rgba(255, 255, 255, .025);
+font-size: 9px;
+}
+.ht-plan--active {
+border-style: solid;
+border-color: rgba(91, 145, 216, .35);
+color: #b9d4f7;
+background: rgba(91, 145, 216, .09);
+}
+.ht-plan--hidden {
+color: #d5c29d;
+border-color: rgba(223, 174, 63, .30);
+background: rgba(223, 174, 63, .07);
+}
+.ht-trait {
+padding: 3px 6px;
+border-radius: 5px;
+color: #c8c2bc;
+background: rgba(255, 255, 255, .06);
+font-size: 9px;
+}
+.ht-main {
+min-width: 0;
+padding: 9px 10px 10px;
+}
+.ht-dashboard {
+display: grid;
+grid-template-columns: 1fr 1.25fr;
+gap: 6px;
+margin-bottom: 7px;
+}
+.ht-metric {
+min-width: 0;
+height: 45px;
+padding: 6px 8px;
+border: 1px solid var(--line);
+border-radius: 8px;
+background: var(--panel);
+}
+.ht-metric-label {
+display: block;
+color: var(--muted);
+font-size: 8px;
+font-weight: 800;
+letter-spacing: .08em;
+}
+.ht-metric-value {
+display: flex;
+align-items: center;
+gap: 5px;
+margin-top: 3px;
+min-width: 0;
+font-size: 13px;
+font-weight: 800;
+}
+.ht-metric-value--intent {
+font-size: 11px;
+}
+.ht-metric-value--intent span {
+overflow: hidden;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+.ht-stealth-icon {
+color: #86b9ee;
+}
+.ht-intent-dot {
+width: 6px;
+height: 6px;
+flex: 0 0 auto;
+border-radius: 99px;
+background: var(--amber);
+box-shadow: 0 0 0 3px rgba(223, 174, 63, .10);
+}
+.ht-moods {
+padding: 7px 8px 8px;
+border: 1px solid var(--line);
+border-radius: 9px;
+background: var(--panel);
+}
+.ht-moods-head {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 8px;
+margin-bottom: 6px;
+}
+.ht-moods-head h3 {
+margin: 0;
+font-size: 10px;
+letter-spacing: .02em;
+}
+.ht-current-mood {
+display: inline-flex;
+align-items: center;
+gap: 5px;
+color: #d8d2cc;
+font-size: 9px;
+}
+.ht-current-mood::before {
+content: "";
+width: 5px;
+height: 5px;
+border-radius: 50%;
+background: #fff;
+box-shadow: 0 0 0 3px rgba(255, 255, 255, .08);
+}
+.ht-mood-grid {
+display: grid;
+grid-template-columns: repeat(5, 1fr);
+gap: 5px;
+}
+.ht-mood {
+position: relative;
+display: grid;
+grid-template-columns: 1fr 16px;
+grid-template-rows: repeat(5, 5px) 14px;
+gap: 2px 4px;
+align-items: center;
+padding: 5px 5px 3px;
+border: 1px solid transparent;
+border-radius: 7px;
+background: rgba(255, 255, 255, .025);
+}
+.ht-mood.is-current {
+border-color: rgba(255, 255, 255, .30);
+background: rgba(255, 255, 255, .065);
+box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .035);
+}
+.ht-mood.is-current::before {
+content: "";
+position: absolute;
+top: 4px;
+right: 4px;
+width: 4px;
+height: 4px;
+border-radius: 50%;
+background: #fff;
+}
+.ht-mood-cell {
+grid-column: 1;
+height: 5px;
+border-radius: 2px;
+opacity: .16;
+background: currentColor;
+}
+.ht-mood-cell.is-filled {
+opacity: 1;
+box-shadow: 0 0 5px currentColor;
+}
+.ht-mood-cell--5 {
+grid-row: 1;
+color: var(--blue);
+}
+.ht-mood-cell--4 {
+grid-row: 2;
+color: var(--blue);
+}
+.ht-mood-cell--3 {
+grid-row: 3;
+color: var(--green);
+}
+.ht-mood-cell--2 {
+grid-row: 4;
+color: var(--amber);
+}
+.ht-mood-cell--1 {
+grid-row: 5;
+color: var(--red);
+}
+.ht-mood-count {
+grid-column: 2;
+grid-row: 1 / 6;
+align-self: center;
+color: #d9d3ce;
+font-size: 10px;
+font-weight: 800;
+text-align: center;
+}
+.ht-mood-name {
+grid-column: 1 / 3;
+grid-row: 6;
+align-self: end;
+overflow: hidden;
+color: var(--muted);
+font-size: 8px;
+font-weight: 700;
+text-align: center;
+white-space: nowrap;
+}
+.ht-mood.is-current .ht-mood-name {
+color: #fff;
+}
+.ht-subrow {
+display: grid;
+grid-template-columns: 1fr auto;
+gap: 6px;
+margin-top: 7px;
+}
+.ht-env-card {
+min-width: 0;
+padding: 6px 8px;
+border-left: 2px solid #676269;
+border-radius: 3px 7px 7px 3px;
+background: rgba(255, 255, 255, .035);
+}
+.ht-env-name {
+font-size: 9px;
+font-weight: 800;
+}
+.ht-env-desc {
+margin-top: 2px;
+overflow: hidden;
+color: var(--muted);
+font-size: 8px;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+.ht-player-plan {
+display: flex;
+align-items: center;
+gap: 5px;
+padding: 0 8px;
+border: 1px solid var(--line);
+border-radius: 7px;
+color: var(--muted);
+font-size: 8px;
+white-space: nowrap;
+}
+.ht-player-plan strong {
+color: #b9d4f7;
+font-size: 10px;
+}
+.ht-hand {
+margin-top: 8px;
+}
+.ht-hand-head {
+display: flex;
+align-items: center;
+gap: 7px;
+margin-bottom: 6px;
+}
+.ht-hand-head h3 {
+margin: 0;
+font-size: 11px;
+}
+.ht-hand-count {
+display: inline-flex;
+align-items: center;
+justify-content: center;
+min-width: 20px;
+height: 17px;
+padding: 0 5px;
+border-radius: 99px;
+background: rgba(255, 255, 255, .08);
+font-size: 9px;
+font-weight: 800;
+}
+.ht-zones {
+display: flex;
+gap: 7px;
+margin-left: auto;
+color: var(--dim);
+font-size: 8px;
+white-space: nowrap;
+}
+.ht-cards {
+display: grid;
+gap: 5px;
+}
+.ht-card {
+position: relative;
+width: 100%;
+min-width: 0;
+padding: 0;
+overflow: hidden;
+text-align: left;
+border: 1px solid var(--line);
+border-radius: 8px;
+background: var(--panel-2);
+cursor: pointer;
+transition: border-color .14s ease, background .14s ease, transform .14s ease;
+}
+.ht-card:hover {
+border-color: rgba(255, 255, 255, .24);
+background: #292629;
+}
+.ht-card:focus-visible {
+outline: 2px solid #fff;
+outline-offset: 2px;
+}
+.ht-card.is-focused {
+border-color: rgba(255, 255, 255, .33);
+background: #2b282b;
+box-shadow: 0 5px 18px rgba(0, 0, 0, .20);
+}
+.ht-card.is-selected {
+border-color: rgba(98, 180, 125, .52);
+box-shadow: inset 3px 0 0 var(--green);
+}
+.ht-card.is-preview {
+border-color: rgba(91, 145, 216, .40);
+}
+.ht-card.is-unplayable {
+opacity: .55;
+}
+.ht-card-top {
+display: grid;
+grid-template-columns: 22px minmax(0, 1fr) auto auto;
+align-items: center;
+gap: 7px;
+min-height: 43px;
+padding: 5px 7px;
+}
+.ht-order {
+display: flex;
+align-items: center;
+justify-content: center;
+width: 21px;
+height: 21px;
+border-radius: 6px;
+color: #aaa39e;
+background: rgba(255, 255, 255, .055);
+font-size: 9px;
+font-weight: 800;
+}
+.ht-card.is-selected .ht-order {
+color: #102316;
+background: var(--green);
+}
+.ht-card-name {
 min-width: 0;
 }
-
-.battle-interface .selection-order {
-grid-column: 1 / -1;
-padding-top: 8px;
-border-top: 1px dashed var(--battle-line);
+.ht-card-name strong {
+display: block;
+overflow: hidden;
+font-size: 11px;
+line-height: 1.2;
+text-overflow: ellipsis;
+white-space: nowrap;
 }
-
-.battle-interface .selection-order-label {
-color: var(--battle-dim);
-font-size: 10px;
-font-weight: 800;
+.ht-card-tags {
+display: flex;
+gap: 3px;
+margin-top: 3px;
+overflow: hidden;
 }
-
-.battle-interface .selection-card {
-display: inline-flex;
-gap: 5px;
-align-items: center;
-padding: 4px 7px;
-border: 1px solid rgba(103, 231, 189, 0.23);
-border-radius: 999px;
-color: #d9f8ee;
-background: rgba(103, 231, 189, 0.07);
-font-size: 10px;
-font-weight: 800;
-}
-
-.battle-interface .selection-card strong {
-color: var(--battle-safe);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-}
-
-.battle-interface .selection-badge {
+.ht-tag {
 display: inline-flex;
 align-items: center;
-min-height: 27px;
-padding: 4px 8px;
-border: 1px solid var(--battle-line);
-border-radius: 4px;
-color: var(--battle-muted);
-background: var(--battle-surface);
-font-size: 9px;
+min-height: 14px;
+padding: 0 4px;
+border: 1px solid rgba(216, 82, 82, .26);
+border-radius: 3px;
+color: #e49a9a;
+background: rgba(216, 82, 82, .07);
+font-size: 7px;
 font-weight: 800;
 white-space: nowrap;
 }
-
-.battle-interface .selection-badge strong {
-margin-left: 4px;
-color: #fffaf3;
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 12px;
+.ht-tag--mechanism {
+border-color: rgba(91, 145, 216, .28);
+color: #9ec3ef;
+background: rgba(91, 145, 216, .08);
 }
-
-.battle-interface .selection-ready {
-border-color: rgba(103, 231, 189, 0.28);
-color: var(--battle-safe);
-background: var(--battle-safe-soft);
+.ht-stat {
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+min-width: 30px;
+height: 29px;
+padding: 2px 5px;
+border-radius: 6px;
+background: rgba(255, 255, 255, .045);
 }
-
-.battle-interface .selection-locked {
-border-color: rgba(255, 103, 61, 0.28);
-color: #ff9b7f;
-background: var(--battle-signal-soft);
+.ht-stat b {
+font-size: 10px;
+line-height: 1;
 }
-
-.battle-interface .selection-guide {
-justify-self: end;
-color: #d7d0c8;
+.ht-stat small {
+margin-top: 3px;
+color: var(--muted);
+font-size: 6px;
+font-weight: 800;
+letter-spacing: .08em;
+}
+.ht-stat--cost b {
+color: #86b9ee;
+}
+.ht-stat--damage b {
+color: #ef7777;
+}
+.ht-card-detail {
+display: block;
+padding: 8px 10px 9px 36px;
+border-top: 1px solid var(--line);
+background: rgba(0, 0, 0, .12);
+}
+.ht-description {
+display: block;
+margin: 0;
+color: #d7d0ca;
 font-size: 9px;
-font-weight: 700;
-text-align: right;
+line-height: 1.55;
 }
-
-.battle-interface .hand-grid {
+.ht-inline-tag {
+display: inline;
+padding: 1px 4px;
+border-radius: 3px;
+color: #e49a9a;
+background: rgba(216, 82, 82, .12);
+font-size: 8px;
+font-weight: 800;
+}
+.ht-inline-tag--mechanism {
+color: #a8caf1;
+background: rgba(91, 145, 216, .14);
+}
+.ht-rules {
 display: grid;
-grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
-gap: 10px;
-align-items: start;
-margin-top: 11px;
+gap: 3px;
+margin: 6px 0 0;
+padding: 6px 0 0;
+border-top: 1px solid rgba(255, 255, 255, .07);
 }
-
-.battle-interface .hand-card {
+.ht-rules > span {
+display: block;
 position: relative;
-min-width: 0;
-overflow: visible;
-border: 1px solid var(--battle-line-strong);
-border-radius: 14px;
-background:
-linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 36%),
-linear-gradient(180deg, #211f1e, #131314);
-box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
-transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+padding-left: 9px;
+color: #aaa39d;
+font-size: 8px;
+line-height: 1.45;
 }
-
-.battle-interface .hand-card::before,
-.battle-interface .hand-card::after {
+.ht-rules > span::before {
+content: "·";
 position: absolute;
-top: 57%;
-z-index: 2;
-width: 10px;
-height: 18px;
-pointer-events: none;
-content: "";
-background: #0d0d0e;
+left: 1px;
+color: #d8d1cb;
 }
-
-.battle-interface .hand-card::before {
-left: -1px;
-border-radius: 0 10px 10px 0;
-border-right: 1px solid var(--battle-line-strong);
-}
-
-.battle-interface .hand-card::after {
-right: -1px;
-border-radius: 10px 0 0 10px;
-border-left: 1px solid var(--battle-line-strong);
-}
-
-.battle-interface .hand-card:hover {
-border-color: rgba(246, 196, 83, 0.44);
-transform: translateY(-2px);
-box-shadow: 0 16px 32px rgba(0, 0, 0, 0.26), inset 0 1px rgba(255, 255, 255, 0.04);
-}
-
-.battle-interface .hand-card[data-selected="true"] {
-border-color: rgba(103, 231, 189, 0.62);
-box-shadow: 0 0 0 1px rgba(103, 231, 189, 0.13), 0 16px 36px rgba(0, 0, 0, 0.28);
-}
-
-.battle-interface .hand-card[data-origin="preview"] {
-border-style: dashed;
-}
-
-.battle-interface[data-phase="selecting"] .hand-card[data-playable="false"] {
-opacity: 0.58;
-filter: saturate(0.55);
-}
-
-.battle-interface[data-locked="true"] .hand-card-actions {
-opacity: 0.62;
-}
-
-.battle-interface .hand-card-summary {
-display: grid;
-grid-template-rows: auto auto auto auto;
-min-height: 235px;
-padding: 13px 13px 15px;
-cursor: pointer;
-list-style: none;
-}
-
-.battle-interface .hand-card-summary::-webkit-details-marker {
-display: none;
-}
-
-.battle-interface .hand-card-summary:focus-visible {
-outline: 2px solid var(--battle-warning);
-outline-offset: 3px;
-}
-
-.battle-interface .card-head,
-.battle-interface .card-foot {
+.ht-card-help {
 display: flex;
 align-items: center;
 justify-content: space-between;
 gap: 8px;
-}
-
-.battle-interface .card-origin {
-display: inline-flex;
-align-items: center;
-min-height: 23px;
-padding: 3px 7px;
-border: 1px solid var(--battle-line);
-border-radius: 999px;
-color: var(--battle-muted);
-background: rgba(0, 0, 0, 0.26);
+margin-top: 7px;
+color: var(--dim);
 font-size: 8px;
-font-weight: 850;
 }
-
-.battle-interface .hand-card[data-origin="preview"] .card-origin {
-border-color: rgba(194, 167, 255, 0.32);
-color: #d9caff;
-background: var(--battle-mood-soft);
+.ht-card-help strong {
+color: #ddd6d0;
+font-weight: 700;
 }
-
-.battle-interface .card-order {
-display: inline-grid;
-min-width: 27px;
-height: 27px;
-padding: 0 7px;
-place-items: center;
-border: 1px solid rgba(103, 231, 189, 0.38);
-border-radius: 50%;
-color: var(--battle-safe);
-background: var(--battle-safe-soft);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 11px;
-font-weight: 950;
-}
-
-.battle-interface .card-open-state {
-color: var(--battle-dim);
-font-size: 8px;
-font-weight: 800;
-}
-
-.battle-interface .card-title {
-align-self: end;
-margin: 24px 0 4px;
-color: #fffaf3;
-font-size: clamp(17px, 3vw, 22px);
-font-weight: 950;
-letter-spacing: -0.045em;
-line-height: 1.12;
-overflow-wrap: anywhere;
-}
-
-.battle-interface .card-action-name {
-color: var(--battle-warning);
-font-size: 9px;
-font-weight: 850;
-}
-
-.battle-interface .card-tags {
-display: flex;
-flex-wrap: wrap;
-gap: 4px;
-align-self: start;
-margin-top: 10px;
-}
-
-.battle-interface .card-tag,
-.battle-interface .inline-tag {
-position: relative;
-display: inline-flex;
-align-items: center;
-padding: 3px 7px;
-border: 1px solid var(--battle-line);
-border-radius: 999px;
-color: #d1c9c1;
-background: rgba(0, 0, 0, 0.27);
-font-size: 8px;
-font-weight: 800;
-}
-
-.battle-interface .card-tag.is-mechanism,
-.battle-interface .inline-tag {
-border-color: rgba(194, 167, 255, 0.28);
-color: #dacdff;
-background: var(--battle-mood-soft);
-}
-
-.battle-interface .tag-tooltip {
+.ht-preview-flag {
 position: absolute;
-right: auto;
-bottom: calc(100% + 7px);
-left: 0;
-z-index: 20;
-display: none;
-width: max-content;
-max-width: 190px;
+top: 0;
+right: 0;
+padding: 2px 5px;
+border-radius: 0 7px 0 5px;
+color: #b9d4f7;
+background: rgba(91, 145, 216, .18);
+font-size: 6px;
+font-weight: 900;
+letter-spacing: .08em;
+}
+.ht-footer {
+display: flex;
+align-items: center;
+gap: 7px;
+margin-top: 7px;
 padding: 7px 8px;
-border: 1px solid var(--battle-line-strong);
-border-radius: 7px;
-color: #eee8e0;
-background: #080809;
-box-shadow: 0 10px 24px rgba(0, 0, 0, 0.36);
-font-size: 8px;
-font-weight: 650;
-line-height: 1.45;
-white-space: normal;
+border: 1px solid var(--line);
+border-radius: 8px;
+background: rgba(255, 255, 255, .025);
 }
-
-.battle-interface .card-tag:hover .tag-tooltip,
-.battle-interface .card-tag:focus .tag-tooltip,
-.battle-interface .inline-tag:hover .tag-tooltip,
-.battle-interface .inline-tag:focus .tag-tooltip {
-display: block;
-}
-
-.battle-interface .card-economy {
-display: grid;
-grid-template-columns: repeat(2, minmax(0, 1fr));
+.ht-selection-state {
+display: flex;
+align-items: center;
 gap: 5px;
-align-self: end;
-margin-top: 17px;
-padding-top: 12px;
-border-top: 1px dashed var(--battle-line-strong);
-}
-
-.battle-interface .card-stat {
-display: flex;
-align-items: center;
-justify-content: space-between;
-gap: 6px;
 min-width: 0;
-padding: 8px;
-border: 1px solid var(--battle-line);
-border-radius: 8px;
-background: rgba(0, 0, 0, 0.24);
-}
-
-.battle-interface .card-stat-label {
-font-size: 7px;
-letter-spacing: 0.06em;
-}
-
-.battle-interface .card-stat strong {
-color: var(--battle-safe);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 17px;
-font-weight: 950;
-}
-
-.battle-interface .card-stat.is-impact strong {
-color: var(--battle-signal);
-}
-
-.battle-interface .hand-card[open] {
-border-color: rgba(246, 196, 83, 0.48);
-}
-
-.battle-interface .hand-card[open] .hand-card-summary {
-min-height: 0;
-padding-bottom: 13px;
-}
-
-.battle-interface .hand-card-details {
-display: grid;
-gap: 10px;
-padding: 13px;
-border-top: 1px dashed var(--battle-line-strong);
-border-radius: 0 0 13px 13px;
-background: #0d0d0e;
-}
-
-.battle-interface .card-description {
-color: #e1dad2;
-font-size: 10px;
-font-weight: 650;
-line-height: 1.65;
-}
-
-.battle-interface .card-rule-lines,
-.battle-interface .dynamic-rule-lines {
-display: grid;
-gap: 5px;
-}
-
-.battle-interface .rule-line {
-color: #bbb3ab;
 font-size: 9px;
-line-height: 1.6;
+font-weight: 800;
 }
-
-.battle-interface .card-numbers {
-display: flex;
-flex-wrap: wrap;
-gap: 5px 10px;
-padding: 8px;
-border: 1px solid var(--battle-line);
-border-radius: 8px;
-color: var(--battle-muted);
-background: rgba(255, 255, 255, 0.018);
-font-size: 8px;
-}
-
-.battle-interface .card-numbers strong {
-color: #eee8df;
-}
-
-.battle-interface .unplayable-reason {
-padding: 8px;
-border: 1px solid rgba(255, 103, 61, 0.25);
-border-radius: 8px;
-color: #ffad96;
-background: var(--battle-signal-soft);
-font-size: 8px;
-font-weight: 750;
-}
-
-.battle-interface .hand-card-actions {
-display: grid;
-}
-
-.battle-interface .hand-card-action {
-min-height: 40px;
-padding: 9px 11px;
-border: 1px solid rgba(103, 231, 189, 0.4);
-border-radius: 8px;
-color: #06120e;
-background: var(--battle-safe);
-font-size: 10px;
-font-weight: 950;
-cursor: pointer;
-transition: transform 140ms ease, filter 140ms ease;
-}
-
-.battle-interface .hand-card-action.is-cancel {
-border-color: rgba(255, 103, 61, 0.42);
-color: #ffe5dc;
-background: var(--battle-signal-soft);
-}
-
-.battle-interface .hand-card-action:hover,
-.battle-interface .hand-card-action:focus-visible {
-filter: brightness(1.12);
-transform: translateY(-1px);
-}
-
-.battle-interface .hand-card-action:focus-visible {
-outline: 2px solid #fffaf3;
-outline-offset: 2px;
-}
-
-.battle-interface .hand-card-action:disabled {
-border-color: var(--battle-line);
-color: var(--battle-dim);
-background: rgba(255, 255, 255, 0.04);
-cursor: not-allowed;
-filter: none;
-transform: none;
-}
-
-.battle-interface .empty-hand {
-grid-column: 1 / -1;
-padding: 28px 16px;
-border: 1px dashed var(--battle-line-strong);
-border-radius: 12px;
-color: var(--battle-muted);
-font-size: 10px;
-text-align: center;
-}
-
-.battle-interface .send-protocol {
-display: grid;
-grid-template-columns: auto minmax(0, 1fr);
-gap: 10px;
-align-items: center;
-margin-top: 11px;
-padding: 11px 12px;
-border: 1px solid rgba(103, 231, 189, 0.2);
-border-radius: 11px;
-background: linear-gradient(90deg, rgba(103, 231, 189, 0.08), transparent 72%);
-}
-
-.battle-interface .protocol-step {
-display: grid;
-width: 30px;
-height: 30px;
-place-items: center;
-border: 1px solid rgba(103, 231, 189, 0.34);
+.ht-selection-dot {
+width: 6px;
+height: 6px;
+flex: 0 0 auto;
 border-radius: 50%;
-color: var(--battle-safe);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 11px;
-font-weight: 950;
+background: var(--green);
 }
-
-.battle-interface .protocol-copy {
-color: #d9d3ca;
-font-size: 9px;
+.ht-selection-dot--wait {
+background: var(--amber);
 }
-
-.battle-interface .protocol-copy strong {
-display: block;
-margin-bottom: 1px;
-color: var(--battle-safe);
-font-size: 10px;
-}
-
-.battle-interface .secondary-grid {
-display: grid;
-grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-gap: 10px;
-margin-top: 10px;
-}
-
-.battle-interface .secondary-panel {
-min-width: 0;
-padding: 14px;
-border: 1px solid var(--battle-line);
-border-radius: 14px;
-background: rgba(16, 16, 17, 0.82);
-}
-
-.battle-interface .secondary-title {
-margin: 4px 0 0;
-color: #fffaf3;
-font-size: 15px;
-font-weight: 900;
-letter-spacing: -0.025em;
-}
-
-.battle-interface .plan-grid {
-display: grid;
-grid-template-columns: repeat(2, minmax(0, 1fr));
-gap: 7px;
-margin-top: 11px;
-}
-
-.battle-interface .plan-owner-group {
-min-width: 0;
-}
-
-.battle-interface .plan-list {
-display: grid;
-gap: 7px;
-margin-top: 7px;
-}
-
-.battle-interface .plan-card {
-min-width: 0;
-padding: 10px;
-border: 1px solid var(--battle-line);
-border-radius: 10px;
-background: rgba(0, 0, 0, 0.24);
-}
-
-.battle-interface .plan-card[data-plan-status="hidden"] {
-border-style: dashed;
-background:
-repeating-linear-gradient(135deg, rgba(255, 103, 61, 0.035) 0 8px, transparent 8px 16px),
-rgba(0, 0, 0, 0.24);
-}
-
-.battle-interface .plan-owner {
-display: flex;
-justify-content: space-between;
-gap: 7px;
-font-size: 7px;
-letter-spacing: 0.07em;
-}
-
-.battle-interface .plan-owner span:last-child,
-.battle-interface .plan-slot-head span:last-child {
-color: var(--battle-dim);
-}
-
-.battle-interface .plan-slot-head {
-display: flex;
-justify-content: space-between;
-gap: 7px;
-color: var(--battle-muted);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+.ht-selection-help {
+margin-left: auto;
+color: var(--muted);
 font-size: 8px;
-font-weight: 850;
-letter-spacing: 0.06em;
-}
-
-.battle-interface .plan-name {
-margin-top: 8px;
-color: #eee8df;
-font-size: 11px;
-font-weight: 900;
-}
-
-.battle-interface .plan-card[data-plan-status="hidden"] .plan-name {
-color: #ffc2b1;
-}
-
-.battle-interface .plan-note,
-.battle-interface .plan-rule {
-margin-top: 4px;
-color: var(--battle-muted);
-font-size: 8px;
-line-height: 1.5;
-}
-
-.battle-interface .plan-card .card-tags,
-.battle-interface .plan-card .dynamic-rule-lines {
-margin-top: 7px;
-}
-
-.battle-interface .intel-details,
-.battle-interface .trait-details {
-margin-top: 10px;
-border-top: 1px solid var(--battle-line);
-}
-
-.battle-interface .intel-details summary,
-.battle-interface .trait-details summary {
-padding-top: 10px;
-color: var(--battle-muted);
-font-size: 9px;
-font-weight: 850;
-cursor: pointer;
-}
-
-.battle-interface .intel-details summary:focus-visible,
-.battle-interface .trait-details summary:focus-visible {
-outline: 2px solid var(--battle-warning);
-outline-offset: 3px;
-}
-
-.battle-interface .trait-list {
-display: grid;
-gap: 6px;
-margin-top: 8px;
-}
-
-.battle-interface .trait-item {
-padding: 8px 9px;
-border: 1px solid rgba(255, 103, 61, 0.17);
-border-radius: 8px;
-color: var(--battle-muted);
-background: rgba(255, 103, 61, 0.045);
-font-size: 8px;
-line-height: 1.55;
-}
-
-.battle-interface .trait-item strong {
-display: block;
-margin-bottom: 2px;
-color: #ffd0c2;
-font-size: 9px;
-}
-
-.battle-interface .zone-board {
-display: grid;
-grid-template-columns: repeat(4, minmax(0, 1fr));
-gap: 5px;
-margin-top: 11px;
-}
-
-.battle-interface .zone-cell {
-display: grid;
-gap: 3px;
-min-width: 0;
-padding: 8px 5px;
-place-items: center;
-border: 1px solid var(--battle-line);
-border-radius: 8px;
-background: rgba(0, 0, 0, 0.24);
-}
-
-.battle-interface .zone-label {
-font-size: 7px;
-letter-spacing: 0.06em;
-}
-
-.battle-interface .zone-count {
-color: #eee8df;
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 14px;
-font-weight: 900;
-}
-
-.battle-interface .turn-log {
-display: grid;
-gap: 7px;
-margin-top: 11px;
-}
-
-.battle-interface .log-entry {
-position: relative;
-padding: 9px 9px 9px 28px;
-border-left: 1px solid var(--battle-line-strong);
-color: #d4ccc4;
-font-size: 9px;
-line-height: 1.55;
-}
-
-.battle-interface .log-entry::before {
-position: absolute;
-top: 11px;
-left: -4px;
-width: 7px;
-height: 7px;
-border: 2px solid #161617;
-border-radius: 50%;
-content: "";
-background: var(--battle-warning);
-box-shadow: 0 0 10px rgba(246, 196, 83, 0.38);
-}
-
-.battle-interface .log-meta {
-display: block;
-margin-bottom: 3px;
-color: var(--battle-dim);
-font-size: 7px;
-letter-spacing: 0.07em;
-}
-
-.battle-interface .empty-log {
-margin-top: 11px;
-padding: 14px;
-border: 1px dashed var(--battle-line);
-border-radius: 9px;
-color: var(--battle-muted);
-font-size: 9px;
-text-align: center;
-}
-
-.battle-interface .outcome-banner {
-display: grid;
-grid-template-columns: auto minmax(0, 1fr) auto;
-gap: 10px;
-align-items: center;
-margin-top: 10px;
-padding: 13px 14px;
-border: 1px solid rgba(246, 196, 83, 0.32);
-border-radius: 13px;
-background: var(--battle-warning-soft);
-}
-
-.battle-interface .outcome-mark {
-display: grid;
-width: 33px;
-height: 33px;
-place-items: center;
-border: 1px solid rgba(246, 196, 83, 0.4);
-border-radius: 50%;
-color: var(--battle-warning);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-weight: 950;
-}
-
-.battle-interface .outcome-copy {
-color: #e9debe;
-font-size: 9px;
-}
-
-.battle-interface .outcome-banner strong {
-color: var(--battle-warning);
-font-size: 16px;
-font-weight: 950;
-}
-
-.battle-interface[data-outcome="victory"] .outcome-banner {
-border-color: rgba(103, 231, 189, 0.32);
-background: var(--battle-safe-soft);
-}
-
-.battle-interface[data-outcome="victory"] .outcome-mark {
-border-color: rgba(103, 231, 189, 0.4);
-color: var(--battle-safe);
-}
-
-.battle-interface[data-outcome="victory"] .outcome-banner strong {
-color: var(--battle-safe);
-}
-
-.battle-interface[data-outcome="defeat"] .outcome-banner {
-border-color: rgba(255, 103, 61, 0.35);
-background: var(--battle-signal-soft);
-}
-
-.battle-interface[data-outcome="defeat"] .outcome-mark,
-.battle-interface[data-outcome="defeat"] .outcome-banner strong {
-border-color: rgba(255, 103, 61, 0.42);
-color: #ff9b7f;
-}
-
-.battle-interface.battle-loading {
-display: grid;
-min-height: 230px;
-place-items: center;
-}
-
-.battle-interface .loading-panel {
-padding: 34px 24px;
-text-align: center;
-}
-
-.battle-interface .loading-line {
-width: min(100%, 240px);
-height: 3px;
-margin: 17px auto 0;
-overflow: hidden;
-border-radius: 999px;
-background: rgba(255, 255, 255, 0.07);
-}
-
-.battle-interface .loading-line::after {
-display: block;
-width: 35%;
-height: 100%;
-content: "";
-background: var(--battle-signal);
-animation: battle-scan 1.2s ease-in-out infinite alternate;
-}
-
-@keyframes battle-scan {
-from { transform: translateX(0); }
-to { transform: translateX(185%); }
-}
-
-.battle-interface .battle-kicker,
-.battle-interface .section-kicker,
-.battle-interface .resource-label,
-.battle-interface .brief-label,
-.battle-interface .zone-label,
-.battle-interface .card-stat-label,
-.battle-interface .plan-owner,
-.battle-interface .plan-slot-head,
-.battle-interface .log-meta,
-.battle-interface .mood-hint,
-.battle-interface .mood-node,
-.battle-interface .mood-threshold,
-.battle-interface .card-origin,
-.battle-interface .card-open-state,
-.battle-interface .card-tag,
-.battle-interface .inline-tag,
-.battle-interface .tag-tooltip {
-font-size: 10px;
-}
-
-.battle-interface .phase-state,
-.battle-interface .outcome-state,
-.battle-interface .turn-caption,
-.battle-interface .route-meta,
-.battle-interface .resource-rule,
-.battle-interface .brief-copy,
-.battle-interface .section-copy,
-.battle-interface .selection-badge,
-.battle-interface .selection-guide,
-.battle-interface .card-action-name,
-.battle-interface .rule-line,
-.battle-interface .card-numbers,
-.battle-interface .unplayable-reason,
-.battle-interface .protocol-copy,
-.battle-interface .plan-note,
-.battle-interface .plan-rule,
-.battle-interface .intel-details summary,
-.battle-interface .trait-details summary,
-.battle-interface .trait-item,
-.battle-interface .log-entry,
-.battle-interface .empty-log,
-.battle-interface .outcome-copy {
-font-size: 11px;
-}
-
-.battle-interface .card-description,
-.battle-interface .hand-card-action,
-.battle-interface .protocol-copy strong,
-.battle-interface .trait-item strong {
-font-size: 12px;
-}
-
-@container battle-ui (max-width: 760px) {
-.battle-interface .scoreboard {
-grid-template-columns: repeat(2, minmax(0, 1fr));
-grid-template-areas:
-"stealth resistance"
-"mood mood";
-}
-
-.battle-interface .secondary-grid {
-grid-template-columns: minmax(0, 1fr);
-}
-}
-
-@container battle-ui (max-width: 580px) {
-.battle-interface .battle-frame {
-padding: 12px;
-}
-
-.battle-interface .battle-masthead {
-grid-template-columns: minmax(0, 1fr);
-gap: 13px;
-}
-
-.battle-interface .turn-board {
-grid-template-columns: auto auto minmax(0, 1fr);
-align-items: center;
-padding: 11px 0 0;
-border-top: 1px solid var(--battle-line);
-border-left: 0;
-}
-
-.battle-interface .turn-current {
-font-size: 34px;
-}
-
-.battle-interface .turn-caption {
-grid-column: auto;
-display: grid;
-justify-content: end;
 text-align: right;
 }
-
-.battle-interface .tactical-board,
-.battle-interface .selection-rail {
-grid-template-columns: minmax(0, 1fr);
+.ht-selection-help strong {
+color: #e6dfd9;
 }
-
-.battle-interface .tactical-intel-grid {
-grid-template-columns: minmax(0, 1fr);
+.ht-log {
+margin-top: 6px;
+border-top: 1px solid var(--line);
 }
-
-.battle-interface .selection-guide {
-justify-self: start;
-text-align: left;
+.ht-log summary {
+padding: 6px 2px 0;
+color: var(--muted);
+font-size: 8px;
+cursor: pointer;
+list-style: none;
 }
-
-.battle-interface .section-head {
+.ht-log summary::-webkit-details-marker {
+display: none;
+}
+.ht-log summary::before {
+content: "＋";
+display: inline-block;
+margin-right: 5px;
+color: #d1cac4;
+}
+.ht-log[open] summary::before {
+content: "−";
+}
+.ht-log-list {
 display: grid;
+gap: 3px;
+margin: 5px 0 0;
+padding: 0 0 0 13px;
+color: #9f9892;
+font-size: 8px;
 }
-
-.battle-interface .section-copy {
-max-width: none;
-text-align: left;
+.ht-outcome {
+margin-bottom: 7px;
+padding: 7px 9px;
+border: 1px solid rgba(216, 82, 82, .34);
+border-radius: 8px;
+color: #f0b1b1;
+background: rgba(216, 82, 82, .10);
+font-size: 10px;
+font-weight: 800;
+text-align: center;
+}
+@media (max-width: 520px) {
+.ht-battle {
+margin: 4px auto;
+border-radius: 13px;
+}
+.ht-topbar {
+padding: 0 9px;
+}
+.ht-title {
+font-size: 11px;
+}
+.ht-top-environment {
+ max-width: 96px;
+}
+.ht-route {
+ padding-right: 7px;
+ padding-left: 7px;
+}
+.ht-route-endpoints strong {
+ max-width: 70px;
+}
+.ht-route-current {
+ max-width: 72px;
+ overflow: hidden;
+ font-size: 8px;
+ text-overflow: ellipsis;
+}
+.ht-layout {
+display: block;
+}
+.ht-character {
+display: grid;
+grid-template-columns: 76px minmax(0, 1fr);
+grid-template-rows: auto auto;
+gap: 0 9px;
+padding: 8px 9px;
+border-right: 0;
+border-bottom: 1px solid var(--line);
+}
+.ht-portrait {
+grid-row: 1 / 3;
+height: 81px;
+}
+.ht-character-name {
+left: 7px;
+right: 7px;
+bottom: 6px;
+}
+.ht-character-name strong {
+font-size: 11px;
+}
+.ht-character-name span {
+display: none;
+}
+.ht-resistance {
+align-self: end;
+padding: 3px 0 7px;
+}
+.ht-side-section {
+align-self: start;
+padding-top: 6px;
+}
+.ht-side-section--traits {
+display: none;
+}
+.ht-section-label {
+margin-bottom: 4px;
+}
+.ht-main {
+padding: 8px;
+}
+.ht-mood {
+grid-template-columns: 1fr 13px;
+padding-right: 3px;
+padding-left: 3px;
+}
+.ht-mood-grid {
+gap: 3px;
+}
+.ht-card-detail {
+padding-left: 10px;
 }
 }
-
-@container battle-ui (max-width: 440px) {
-.battle-interface .scoreboard,
-.battle-interface .plan-grid {
-grid-template-columns: minmax(0, 1fr);
+@media (max-width: 390px) {
+.ht-brand-copy .ht-kicker {
+ display: none;
 }
-
-.battle-interface .scoreboard {
-grid-template-areas:
-"stealth"
-"resistance"
-"mood";
+.ht-route-line small,
+.ht-top-environment {
+ display: none;
 }
-
-.battle-interface .hand-grid {
-grid-template-columns: none;
-grid-auto-flow: column;
-grid-auto-columns: 85%;
-overflow-x: auto;
-padding: 2px 2px 10px;
-scroll-snap-type: inline mandatory;
-scrollbar-color: var(--battle-line-strong) transparent;
+.ht-route-endpoints {
+ font-size: 8px;
 }
-
-.battle-interface .hand-card {
-scroll-snap-align: start;
+.ht-route-endpoints strong {
+ max-width: 52px;
 }
-
-.battle-interface .hand-card-summary {
-min-height: 220px;
+.ht-route-current {
+ max-width: 58px;
 }
-
-.battle-interface .intent-card {
-grid-template-columns: 36px minmax(0, 1fr);
+.ht-route-code {
+ font-size: 6px;
 }
-
-.battle-interface .intent-signal {
-width: 36px;
-height: 36px;
+.ht-dashboard {
+grid-template-columns: .8fr 1.2fr;
 }
+.ht-mood-name {
+font-size: 7px;
 }
-
-@media (max-width: 1024px) {
-.battle-interface {
-width: min(calc(100% - 52px), 920px);
-transform: translateX(-26px);
+.ht-card-top {
+grid-template-columns: 20px minmax(0, 1fr) 27px 27px;
+gap: 5px;
+padding-right: 5px;
+padding-left: 5px;
+}
+.ht-stat {
+min-width: 27px;
+padding-right: 3px;
+padding-left: 3px;
+}
+.ht-zones {
+gap: 4px;
 }
 }
-
-@media (max-width: 600px) {
-.battle-interface {
-border-radius: 16px;
-}
-}
-
 @media (prefers-reduced-motion: reduce) {
-.battle-interface *,
-.battle-interface *::before,
-.battle-interface *::after {
-scroll-behavior: auto !important;
-transition-duration: 0.01ms !important;
-animation-duration: 0.01ms !important;
-animation-iteration-count: 1 !important;
+.ht-card {
+transition: none;
 }
 }
 </style>
-{{settempvar::bv::{{getvar::battleView}}}}
-{{settempvar::bv_turn::{{dictelement::{{tempvar::bv}}::turn}}}}
-{{settempvar::bv_environment::{{dictelement::{{tempvar::bv}}::environment}}}}
-{{settempvar::bv_player::{{dictelement::{{tempvar::bv}}::player}}}}
-{{settempvar::bv_character::{{dictelement::{{tempvar::bv}}::character}}}}
-{{settempvar::bv_mood::{{dictelement::{{tempvar::bv_character}}::mood}}}}
-{{settempvar::bv_public_action::{{dictelement::{{tempvar::bv_character}}::publicAction}}}}
-{{settempvar::bv_player_plans::{{dictelement::{{tempvar::bv_player}}::plans}}}}
-{{settempvar::bv_character_plans::{{dictelement::{{tempvar::bv_character}}::plans}}}}
-{{settempvar::bv_hand::{{dictelement::{{tempvar::bv}}::hand}}}}
-{{settempvar::bv_selection::{{dictelement::{{tempvar::bv}}::selection}}}}
-{{settempvar::bv_zones::{{dictelement::{{tempvar::bv}}::zones}}}}
-{{settempvar::bv_last_turn::{{dictelement::{{tempvar::bv}}::lastTurn}}}}
-{{settempvar::bv_outcome::{{dictelement::{{tempvar::bv}}::outcome}}}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::kind}}::is::battleView}}
-<main class="battle-interface"
-data-battle-id="{{dictelement::{{tempvar::bv}}::battleId}}"
-data-turn-id="{{dictelement::{{tempvar::bv}}::turnId}}"
-data-phase="{{dictelement::{{tempvar::bv}}::phase}}"
-data-locked="{{dictelement::{{tempvar::bv}}::locked}}"
-data-outcome="{{dictelement::{{tempvar::bv_outcome}}::status}}"
-data-mood-id="{{dictelement::{{tempvar::bv_mood}}::id}}">
-<div class="battle-frame">
-<header class="battle-masthead">
-<div>
-<div class="battle-kicker">INFINITE HELL LINE</div>
-<h1 class="battle-title">{{dictelement::{{tempvar::bv_character}}::name}}</h1>
-<div class="battle-subtitle">
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::selecting}}<span class="phase-state">행동 선택 중</span>{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::awaitingOutput}}<span class="phase-state">판정 대기 중</span>{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::ended}}<span class="phase-state">운행 종료</span>{{/when}}
-<span class="outcome-state">{{dictelement::{{tempvar::bv_outcome}}::label}}</span>
+
+<section class="ht-battle" aria-label="함락! 무한의 지옥철 전투 화면">
+<header class="ht-topbar">
+<div class="ht-brand">
+<i class="ht-brand-mark" aria-hidden="true"></i>
+<div class="ht-brand-copy">
+<div class="ht-kicker">INFINITE HELLTRAIN</div>
+<div class="ht-title">함락! 무한의 지옥철</div>
 </div>
 </div>
-<div class="turn-board" aria-label="현재 턴">
-<span class="turn-current">{{dictelement::{{tempvar::bv_turn}}::number}}</span>
-<span class="turn-limit">/ {{dictelement::{{tempvar::bv_turn}}::limit}}</span>
-<span class="turn-caption"><span>현재 턴</span><span>남은 턴 {{dictelement::{{tempvar::bv_turn}}::remaining}}</span></span>
+<div class="ht-top-environment" title="{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::description}}">
+{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}}
 </div>
 </header>
-<section class="route-board" aria-label="전투 진행도">
-<div class="route-meta"><span>이번 객차의 턴 진행도</span><span>남은 턴 <strong>{{dictelement::{{tempvar::bv_turn}}::remaining}}</strong></span></div>
-<progress class="route-native" min="1" max="{{dictelement::{{tempvar::bv_turn}}::limit}}" value="{{dictelement::{{tempvar::bv_turn}}::number}}" aria-label="전투 턴 진행도"></progress>
-</section>
-<section class="scoreboard" aria-label="승패 핵심 상태">
-<article class="resource-card stealth-card">
-<div class="resource-head"><span class="resource-label">내 은폐</span><span class="resource-mark" aria-hidden="true">S</span></div>
-<div class="resource-value">{{dictelement::{{tempvar::bv_player}}::stealth}}</div>
-<div class="resource-rule"><strong>0이면 발각 위험.</strong> 저항도 동시에 0이라면 승리가 우선합니다.</div>
-</article>
-<article class="mood-console">
-<div class="mood-heading">
-<div><div class="resource-label">상대 무드</div><div class="mood-name">{{dictelement::{{tempvar::bv_mood}}::label}}</div></div>
-<div class="mood-hint">턴 종료 시 3개 이상인<br>단독 최다 토큰 무드로 변경</div>
+
+<section class="ht-route" style="--route-color: {{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::lineColor}}" aria-label="현재 지하철 이동 경로">
+<div class="ht-route-head">
+<span class="ht-route-badge">{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::lineCode}}</span>
+<div class="ht-route-line">
+<strong>{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::lineName}}</strong>
+<small>{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::operatorName}}</small>
 </div>
-<div class="mood-scale" aria-label="거절에서 순응까지의 무드 단계">
-<span class="mood-node mood-rejection">거절</span>
-<span class="mood-node mood-suspicion">의심</span>
-<span class="mood-node mood-ignore">무시</span>
-<span class="mood-node mood-confusion">혼란</span>
-<span class="mood-node mood-compliance">순응</span>
-</div>
-<div class="mood-thresholds">
-<span class="mood-threshold">거절 <strong>{{dictelement::{{dictelement::{{tempvar::bv_mood}}::tokens}}::rejection}}</strong></span>
-<span class="mood-threshold">의심 <strong>{{dictelement::{{dictelement::{{tempvar::bv_mood}}::tokens}}::suspicion}}</strong></span>
-<span class="mood-threshold">무시 <strong>{{dictelement::{{dictelement::{{tempvar::bv_mood}}::tokens}}::ignore}}</strong></span>
-<span class="mood-threshold">혼란 <strong>{{dictelement::{{dictelement::{{tempvar::bv_mood}}::tokens}}::confusion}}</strong></span>
-<span class="mood-threshold">순응 <strong>{{dictelement::{{dictelement::{{tempvar::bv_mood}}::tokens}}::compliance}}</strong></span>
-</div>
-</article>
-<article class="resource-card resistance-card">
-<div class="resource-head"><span class="resource-label">상대 저항</span><span class="resource-mark" aria-hidden="true">R</span></div>
-<div class="resource-value">{{dictelement::{{tempvar::bv_character}}::resistance}}<span class="resource-max">/ {{dictelement::{{tempvar::bv_character}}::startingResistance}}</span></div>
-<progress class="meter-native" max="{{dictelement::{{tempvar::bv_character}}::startingResistance}}" value="{{dictelement::{{tempvar::bv_character}}::resistance}}" aria-label="상대 저항"></progress>
-<div class="resource-rule"><strong>0까지 압박</strong>하면 함락에 성공합니다.</div>
-</article>
-</section>
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::ended}}
-<section class="outcome-banner" aria-live="polite"><span class="outcome-mark" aria-hidden="true">■</span><span class="outcome-copy">이번 객차의 전투가 끝났습니다.</span><strong>{{dictelement::{{tempvar::bv_outcome}}::label}}</strong></section>
-{{/when}}
-<section class="tactical-board" aria-label="카드 선택 전 확인 정보">
-<article class="brief-card intent-card">
-<div class="intent-signal" aria-hidden="true">!</div>
-<div>
-<div class="brief-label">상대 행동 예고</div>
-{{#when::keep::{{dictelement::{{tempvar::bv_public_action}}::status}}::is::tagRevealed}}
-{{settempvar::bv_public_tag::{{dictelement::{{tempvar::bv_public_action}}::tag}}}}
-<div class="brief-title">{{dictelement::{{tempvar::bv_public_tag}}::label}} 준비 중</div>
-<div class="brief-copy">{{dictelement::{{tempvar::bv_public_tag}}::tooltip}}</div>
-{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv_public_action}}::status}}::isnot::tagRevealed}}
-<div class="brief-title">드러난 움직임 없음</div>
-<div class="brief-copy">행동이 정해지면 카드 정체 대신 행동 성격만 표시됩니다.</div>
-{{/when}}
-</div>
-</article>
-<article class="brief-card environment-card" data-environment-id="{{dictelement::{{tempvar::bv_environment}}::id}}">
-<div class="brief-label">현재 객차 환경</div>
-<div class="brief-title">{{dictelement::{{tempvar::bv_environment}}::name}}</div>
-<div class="brief-copy">{{dictelement::{{tempvar::bv_environment}}::description}}</div>
-<div class="environment-rules">
-{{#each::keep {{dictelement::{{tempvar::bv_environment}}::ruleLines}} as environment_line}}
-<div class="rule-line">
-{{#each::keep {{dictelement::{{slot::environment_line}}::segments}} as environment_segment}}
-{{#when::keep::{{dictelement::{{slot::environment_segment}}::kind}}::is::text}}{{dictelement::{{slot::environment_segment}}::value}}{{/when}}
-{{#when::keep::{{dictelement::{{slot::environment_segment}}::kind}}::isnot::text}}<span class="inline-tag" tabindex="0">{{dictelement::{{slot::environment_segment}}::label}}<span class="tag-tooltip">{{dictelement::{{slot::environment_segment}}::tooltip}}</span></span>{{/when}}
-{{/each}}
-</div>
-{{/each}}
-</div>
-</article>
-<article class="brief-card intel-card">
-<div class="brief-label">지속 효과 브리핑 · 카드 선택 전 확인</div>
-<div class="tactical-intel-grid">
-<div class="tactical-intel-block">
-<div class="tactical-intel-head"><span>내 계획</span><span>{{dictelement::{{tempvar::bv_player}}::planCapacity}}칸</span></div>
-<div class="tactical-plan-list">
-{{#each::keep {{tempvar::bv_player_plans}} as brief_player_plan}}
-<div class="tactical-plan-row" data-plan-slot="{{dictelement::{{slot::brief_player_plan}}::slotIndex}}" data-plan-status="{{dictelement::{{slot::brief_player_plan}}::status}}">
-<div class="tactical-plan-slot"><span>슬롯 {{dictelement::{{slot::brief_player_plan}}::slotIndex}}</span><span>
-{{#when::keep::{{dictelement::{{slot::brief_player_plan}}::status}}::is::revealed}}공개{{/when}}
-{{#when::keep::{{dictelement::{{slot::brief_player_plan}}::status}}::is::empty}}없음{{/when}}
-</span></div>
-{{#when::keep::{{dictelement::{{slot::brief_player_plan}}::status}}::is::revealed}}
-{{settempvar::bv_brief_player_plan_card::{{dictelement::{{slot::brief_player_plan}}::card}}}}
-<div class="tactical-intel-name">{{dictelement::{{tempvar::bv_brief_player_plan_card}}::name}}</div>
-{{#when::keep::{{dictelement::{{slot::brief_player_plan}}::hasDuration}}::is::true}}<div class="tactical-intel-note">남은 지속 {{dictelement::{{slot::brief_player_plan}}::remainingTurns}}턴</div>{{/when}}
-{{/when}}
-{{#when::keep::{{dictelement::{{slot::brief_player_plan}}::status}}::is::empty}}<div class="tactical-intel-name">비어 있음</div><div class="tactical-intel-note">이 슬롯에 지속 중인 계획이 없습니다.</div>{{/when}}
-</div>
-{{/each}}
+<div class="ht-route-endpoints">
+<strong>{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::startStation}}::name}}</strong>
+<i aria-hidden="true"></i>
+<strong>{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::destinationStation}}::name}}</strong>
+<span class="ht-route-current">{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::currentStation}}::name}}</span>
 </div>
 </div>
-<div class="tactical-intel-block">
-<div class="tactical-intel-head"><span>상대 계획</span><span>{{dictelement::{{tempvar::bv_character}}::planCapacity}}칸</span></div>
-<div class="tactical-plan-list">
-{{#each::keep {{tempvar::bv_character_plans}} as brief_character_plan}}
-<div class="tactical-plan-row" data-plan-slot="{{dictelement::{{slot::brief_character_plan}}::slotIndex}}" data-plan-status="{{dictelement::{{slot::brief_character_plan}}::status}}">
-<div class="tactical-plan-slot"><span>슬롯 {{dictelement::{{slot::brief_character_plan}}::slotIndex}}</span><span>
-{{#when::keep::{{dictelement::{{slot::brief_character_plan}}::status}}::is::revealed}}공개{{/when}}
-{{#when::keep::{{dictelement::{{slot::brief_character_plan}}::status}}::is::hidden}}비공개{{/when}}
-{{#when::keep::{{dictelement::{{slot::brief_character_plan}}::status}}::is::empty}}없음{{/when}}
-</span></div>
-{{#when::keep::{{dictelement::{{slot::brief_character_plan}}::status}}::is::revealed}}
-{{settempvar::bv_brief_character_plan_card::{{dictelement::{{slot::brief_character_plan}}::card}}}}
-<div class="tactical-intel-name">{{dictelement::{{tempvar::bv_brief_character_plan_card}}::name}}</div>
-{{#when::keep::{{dictelement::{{slot::brief_character_plan}}::hasDuration}}::is::true}}<div class="tactical-intel-note">남은 지속 {{dictelement::{{slot::brief_character_plan}}::remainingTurns}}턴</div>{{/when}}
-{{/when}}
-{{#when::keep::{{dictelement::{{slot::brief_character_plan}}::status}}::is::hidden}}<div class="tactical-intel-name">정체 불명의 계획</div><div class="tactical-intel-note">카드 정보와 발동 조건은 공개되지 않습니다.</div>{{#when::keep::{{dictelement::{{slot::brief_character_plan}}::hasDuration}}::is::true}}<div class="tactical-intel-note">남은 지속 {{dictelement::{{slot::brief_character_plan}}::remainingTurns}}턴</div>{{/when}}{{/when}}
-{{#when::keep::{{dictelement::{{slot::brief_character_plan}}::status}}::is::empty}}<div class="tactical-intel-name">비어 있음</div><div class="tactical-intel-note">이 슬롯에서 감지된 상대 계획이 없습니다.</div>{{/when}}
-</div>
-{{/each}}
-</div>
-</div>
-<div class="tactical-intel-block">
-<div class="tactical-intel-head"><span>상대 공개 특징</span><span>상시 효과</span></div>
-{{#each::keep {{dictelement::{{tempvar::bv_character}}::traits}} as tactical_trait}}
-<div class="tactical-trait"><strong>{{dictelement::{{slot::tactical_trait}}::name}}</strong> · {{dictelement::{{slot::tactical_trait}}::description}}</div>
-{{/each}}
-</div>
-</div>
-</article>
-</section>
-<section class="action-console" aria-label="플레이어 손패와 행동 상태">
-<div class="section-head">
-<div><div class="section-kicker">ACTION STATUS</div>
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::selecting}}<h2 class="section-title">이번 턴 행동 선택</h2>{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::awaitingOutput}}<h2 class="section-title">턴 판정 대기</h2>{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::ended}}<h2 class="section-title">전투 종료 시 카드 상태</h2>{{/when}}
-</div>
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::selecting}}<p class="section-copy">카드를 열어 효과를 확인한 뒤 등록하세요. 연계 카드를 먼저, 주 행동을 마지막에 둡니다.</p>{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::awaitingOutput}}<p class="section-copy">등록한 행동을 판정하고 있습니다. 카드 상세와 선택 기록은 계속 확인할 수 있습니다.</p>{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::ended}}<p class="section-copy">전투 종료 시 공개된 카드 상태입니다. 실제 마지막 행동은 아래 직전 턴 판정 기록에서 확인하세요.</p>{{/when}}
-</div>
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::isnot::ended}}
-<div class="selection-rail" aria-live="polite">
-<div class="selection-status">
-<span class="selection-badge">등록 <strong>{{dictelement::{{tempvar::bv_selection}}::count}}</strong></span>
-{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::hasMainAction}}::is::true}}<span class="selection-badge">주 행동 포함</span>{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::hasMainAction}}::isnot::true}}{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::count}}::is::0}}<span class="selection-badge">이번 턴 패스</span>{{/when}}{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::hasMainAction}}::isnot::true}}{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::count}}::isnot::0}}<span class="selection-badge">연계만 실행</span>{{/when}}{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::selecting}}
-{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::canSubmit}}::is::true}}<span class="selection-badge selection-ready">전송 가능</span>{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::canSubmit}}::isnot::true}}<span class="selection-badge selection-locked">선택 확인 필요</span>{{/when}}
-{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::awaitingOutput}}<span class="selection-badge selection-locked">판정 대기 중</span>{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::ended}}<span class="selection-badge selection-locked">운행 종료</span>{{/when}}
-</div>
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::selecting}}{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::canSubmit}}::is::true}}<span class="selection-guide">선택을 마쳤다면 Risu 전송 버튼으로 제출 또는 패스</span>{{/when}}{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::selecting}}{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::canSubmit}}::isnot::true}}<span class="selection-guide">등록 순서와 사용 가능 여부를 확인하세요.</span>{{/when}}{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::awaitingOutput}}<span class="selection-guide">등록한 행동을 처리하고 있습니다.</span>{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::ended}}<span class="selection-guide">전투가 끝나 더 이상 행동을 제출할 수 없습니다.</span>{{/when}}
-<div class="selection-order">
-<span class="selection-order-label">등록 순서</span>
-{{#each::keep {{dictelement::{{tempvar::bv_hand}}::items}} as selected_card}}
-{{#when::keep::{{dictelement::{{slot::selected_card}}::selected}}::is::true}}<span class="selection-card"><strong>#{{dictelement::{{slot::selected_card}}::selectionOrder}}</strong>{{dictelement::{{slot::selected_card}}::name}}</span>{{/when}}
-{{/each}}
-{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::count}}::is::0}}<span class="selection-order-label">등록된 카드 없음</span>{{/when}}
-</div>
-</div>
-{{/when}}
-<div class="hand-grid">
-{{#each::keep {{dictelement::{{tempvar::bv_hand}}::items}} as hand_card}}
-{{settempvar::hand_card_action::{{dictelement::{{slot::hand_card}}::actionTag}}}}
-<details class="hand-card"
-data-instance-id="{{dictelement::{{slot::hand_card}}::instanceId}}"
-data-card-id="{{dictelement::{{slot::hand_card}}::cardId}}"
-data-origin="{{dictelement::{{slot::hand_card}}::origin}}"
-data-selected="{{dictelement::{{slot::hand_card}}::selected}}"
-data-action-id="{{dictelement::{{tempvar::hand_card_action}}::id}}"
-data-playable="{{dictelement::{{slot::hand_card}}::playable}}">
-<summary class="hand-card-summary">
-<span class="card-head">
-{{#when::keep::{{dictelement::{{slot::hand_card}}::origin}}::is::preview}}<span class="card-origin">드로우 프리뷰</span>{{/when}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::origin}}::isnot::preview}}<span class="card-origin">손패</span>{{/when}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::is::true}}<span class="card-order">{{dictelement::{{slot::hand_card}}::selectionOrder}}</span>{{/when}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::isnot::true}}{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::selecting}}<span class="card-open-state">열어서 선택</span>{{/when}}{{/when}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::isnot::true}}{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::isnot::selecting}}<span class="card-open-state">상세 보기</span>{{/when}}{{/when}}
+<div class="ht-route-track">
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::stations}} station}}
+<span class="ht-route-stop" data-status="{{dict_element::{{slot::station}}::status}}" data-start="{{dict_element::{{slot::station}}::isStart}}" data-destination="{{dict_element::{{slot::station}}::isDestination}}" title="{{dict_element::{{slot::station}}::name}}">
+<span class="ht-route-code">{{dict_element::{{slot::station}}::code}}</span>
+<i class="ht-route-node" aria-hidden="true"></i>
 </span>
-<span class="card-title">{{dictelement::{{slot::hand_card}}::name}}</span>
-<span class="card-action-name">{{dictelement::{{tempvar::hand_card_action}}::label}} 행동</span>
-<span class="card-tags">
-<span class="card-tag">{{dictelement::{{tempvar::hand_card_action}}::label}}<span class="tag-tooltip">{{dictelement::{{tempvar::hand_card_action}}::tooltip}}</span></span>
-{{#each::keep {{dictelement::{{slot::hand_card}}::mechanisms}} as card_mechanism}}
-<span class="card-tag is-mechanism">{{dictelement::{{slot::card_mechanism}}::label}}<span class="tag-tooltip">{{dictelement::{{slot::card_mechanism}}::tooltip}}</span></span>
+{{/each}}
+</div>
+</section>
+
+<div class="ht-layout">
+<aside class="ht-character" aria-label="캐릭터 상태">
+<div class="ht-portrait">
+<img src="{{source::char}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />
+<div class="ht-character-name">
+<strong>{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}</strong>
+<span>ENCOUNTER TARGET</span>
+</div>
+</div>
+<div class="ht-resistance">
+<div class="ht-label-row">
+<span>저항</span>
+<strong>{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}} / {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::startingResistance}}</strong>
+</div>
+<div class="ht-bar" aria-label="캐릭터 저항">
+<i style="width: {{? {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}} / {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::startingResistance}} * 100}}%"></i>
+</div>
+</div>
+<div class="ht-side-section">
+<div class="ht-section-label">상대 계획</div>
+<div class="ht-plan-list">
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::plans}} plan}}
+{{#if {{equal::{{dict_element::{{slot::plan}}::status}}::empty}}}}
+<span class="ht-plan">빈 슬롯</span>
+{{/if}}
+{{#if {{equal::{{dict_element::{{slot::plan}}::status}}::hidden}}}}
+<span class="ht-plan ht-plan--hidden" title="아직 공개되지 않은 계획">? 계획</span>
+{{/if}}
+{{#if {{equal::{{dict_element::{{slot::plan}}::status}}::revealed}}}}
+<span class="ht-plan ht-plan--active" title="{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}}">
+{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}}
+{{#if {{equal::{{dict_element::{{slot::plan}}::hasDuration}}::true}}}} · {{dict_element::{{slot::plan}}::remainingTurns}}T{{/if}}
+</span>
+{{/if}}
+{{/each}}
+</div>
+</div>
+<div class="ht-side-section ht-side-section--traits">
+<div class="ht-section-label">공개 특징</div>
+<div class="ht-trait-list">
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::traits}} trait}}
+<span class="ht-trait" title="{{dict_element::{{slot::trait}}::description}}">{{dict_element::{{slot::trait}}::name}}</span>
+{{/each}}
+</div>
+</div>
+</aside>
+
+<main class="ht-main">
+{{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::active}}}}}}
+<div class="ht-outcome">{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::label}} · 전투가 종료되었습니다</div>
+{{/if}}
+
+<div class="ht-dashboard">
+<div class="ht-metric">
+<span class="ht-metric-label">PLAYER · 은폐</span>
+<div class="ht-metric-value"><span class="ht-stealth-icon" aria-hidden="true">◆</span>{{dict_element::{{dict_element::{{getvar::battleView}}::player}}::stealth}}</div>
+</div>
+<div class="ht-metric">
+<span class="ht-metric-label">ENEMY · 예고 행동</span>
+<div class="ht-metric-value ht-metric-value--intent">
+<i class="ht-intent-dot" aria-hidden="true"></i>
+{{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::status}}::tagRevealed}}}}
+<span title="{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::tag}}::tooltip}}">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::tag}}::label}}</span>
+{{/if}}
+{{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::status}}::none}}}}
+<span>행동 없음</span>
+{{/if}}
+</div>
+</div>
+</div>
+
+<section class="ht-moods" aria-label="무드 게이지">
+<div class="ht-moods-head">
+<h3>무드</h3>
+<span class="ht-current-mood">현재 · {{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::label}}</span>
+</div>
+<div class="ht-mood-grid">
+<div class="ht-mood {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::rejection}}}}is-current{{/if}}" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::rejection}}}}aria-current="true"{{/if}}>
+<i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::5}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::4}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::3}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::2}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::1}}}}is-filled{{/if}}"></i>
+<b class="ht-mood-count">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}</b>
+<span class="ht-mood-name">거절</span>
+</div>
+<div class="ht-mood {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::suspicion}}}}is-current{{/if}}" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::suspicion}}}}aria-current="true"{{/if}}>
+<i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::5}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::4}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::3}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::2}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::1}}}}is-filled{{/if}}"></i>
+<b class="ht-mood-count">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}</b>
+<span class="ht-mood-name">의심</span>
+</div>
+<div class="ht-mood {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::ignore}}}}is-current{{/if}}" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::ignore}}}}aria-current="true"{{/if}}>
+<i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::5}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::4}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::3}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::2}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::1}}}}is-filled{{/if}}"></i>
+<b class="ht-mood-count">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}</b>
+<span class="ht-mood-name">무시</span>
+</div>
+<div class="ht-mood {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::confusion}}}}is-current{{/if}}" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::confusion}}}}aria-current="true"{{/if}}>
+<i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::5}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::4}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::3}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::2}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::1}}}}is-filled{{/if}}"></i>
+<b class="ht-mood-count">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}</b>
+<span class="ht-mood-name">혼란</span>
+</div>
+<div class="ht-mood {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::compliance}}}}is-current{{/if}}" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::compliance}}}}aria-current="true"{{/if}}>
+<i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::5}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::4}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::3}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::2}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::1}}}}is-filled{{/if}}"></i>
+<b class="ht-mood-count">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}</b>
+<span class="ht-mood-name">순응</span>
+</div>
+</div>
+</section>
+
+<div class="ht-subrow">
+<div class="ht-env-card" title="{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::description}}">
+<div class="ht-env-name">환경 · {{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}}</div>
+<div class="ht-env-desc">{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::description}}</div>
+</div>
+<div class="ht-player-plan" aria-label="플레이어 계획 슬롯">
+계획
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::player}}::plans}} playerPlan}}
+{{#if {{equal::{{dict_element::{{slot::playerPlan}}::status}}::empty}}}}<strong title="빈 계획 슬롯">◇</strong>{{/if}}
+{{#if {{equal::{{dict_element::{{slot::playerPlan}}::status}}::revealed}}}}<strong title="{{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::name}}">◆</strong>{{/if}}
+{{/each}}
+</div>
+</div>
+
+<section class="ht-hand" aria-label="플레이어 손패">
+<div class="ht-hand-head">
+<h3>핸드</h3>
+<span class="ht-hand-count">{{dict_element::{{dict_element::{{getvar::battleView}}::hand}}::count}}</span>
+<div class="ht-zones">
+<span>덱 {{dict_element::{{dict_element::{{getvar::battleView}}::zones}}::deckCount}}</span>
+<span>버림 {{dict_element::{{dict_element::{{getvar::battleView}}::zones}}::discardCount}}</span>
+<span>제거 {{dict_element::{{dict_element::{{getvar::battleView}}::zones}}::removedCount}}</span>
+</div>
+</div>
+
+<div class="ht-cards">
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::hand}}::items}} card}}
+<button type="button" class="ht-card {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}is-focused{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}is-selected{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::origin}}::preview}}}}is-preview{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::playable}}::false}}}}is-unplayable{{/if}}" risu-btn="battleController|clickCard|{{dict_element::{{slot::card}}::instanceId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-expanded="{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}true{{/if}}{{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}}}false{{/if}}" aria-pressed="{{dict_element::{{slot::card}}::selected}}" {{#if {{equal::{{dict_element::{{getvar::battleView}}::locked}}::true}}}}disabled{{/if}}>
+{{#if {{equal::{{dict_element::{{slot::card}}::origin}}::preview}}}}<span class="ht-preview-flag">DRAW PREVIEW</span>{{/if}}
+<span class="ht-card-top">
+<span class="ht-order">{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}{{dict_element::{{slot::card}}::selectionOrder}}{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::false}}}}＋{{/if}}</span>
+<span class="ht-card-name">
+<strong>{{dict_element::{{slot::card}}::name}}</strong>
+<span class="ht-card-tags">
+<span class="ht-tag" title="{{dict_element::{{dict_element::{{slot::card}}::actionTag}}::tooltip}}">{{dict_element::{{dict_element::{{slot::card}}::actionTag}}::label}}</span>
+{{#each {{dict_element::{{slot::card}}::mechanisms}} mechanism}}
+<span class="ht-tag ht-tag--mechanism" title="{{dict_element::{{slot::mechanism}}::tooltip}}">{{dict_element::{{slot::mechanism}}::label}}</span>
 {{/each}}
 </span>
-<span class="card-economy">
-<span class="card-stat"><span class="card-stat-label">은폐 비용</span><strong>{{dictelement::{{slot::hand_card}}::finalStealthCost}}</strong></span>
-<span class="card-stat is-impact"><span class="card-stat-label">저항 압박</span><strong>{{dictelement::{{slot::hand_card}}::finalResistanceDamage}}</strong></span>
 </span>
-</summary>
-<div class="hand-card-details">
-<div class="card-description">
-{{#each::keep {{dictelement::{{slot::hand_card}}::descriptionSegments}} as card_description_segment}}
-{{#when::keep::{{dictelement::{{slot::card_description_segment}}::kind}}::is::text}}{{dictelement::{{slot::card_description_segment}}::value}}{{/when}}
-{{#when::keep::{{dictelement::{{slot::card_description_segment}}::kind}}::isnot::text}}<span class="inline-tag" tabindex="0">{{dictelement::{{slot::card_description_segment}}::label}}<span class="tag-tooltip">{{dictelement::{{slot::card_description_segment}}::tooltip}}</span></span>{{/when}}
+<span class="ht-stat ht-stat--cost" aria-label="은폐 비용 {{dict_element::{{slot::card}}::finalStealthCost}}">
+<b>{{dict_element::{{slot::card}}::finalStealthCost}}</b><small>비용</small>
+</span>
+<span class="ht-stat ht-stat--damage" aria-label="저항 피해 {{dict_element::{{slot::card}}::finalResistanceDamage}}">
+<b>{{dict_element::{{slot::card}}::finalResistanceDamage}}</b><small>피해</small>
+</span>
+</span>
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}
+<span class="ht-card-detail">
+<span class="ht-description">
+{{#each {{dict_element::{{slot::card}}::descriptionSegments}} segment}}{{#if {{equal::{{dict_element::{{slot::segment}}::kind}}::text}}}}{{dict_element::{{slot::segment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::segment}}::kind}}::tag}}}}<span class="ht-inline-tag {{#if {{equal::{{dict_element::{{slot::segment}}::tagKind}}::mechanism}}}}ht-inline-tag--mechanism{{/if}}" title="{{dict_element::{{slot::segment}}::tooltip}}">{{dict_element::{{slot::segment}}::label}}</span>{{/if}}{{/each}}
+</span>
+<span class="ht-rules">{{#each {{dict_element::{{slot::card}}::ruleLines}} rule}}<span>{{#each {{dict_element::{{slot::rule}}::segments}} ruleSegment}}{{#if {{equal::{{dict_element::{{slot::ruleSegment}}::kind}}::text}}}}{{dict_element::{{slot::ruleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::ruleSegment}}::kind}}::tag}}}}<span class="ht-inline-tag {{#if {{equal::{{dict_element::{{slot::ruleSegment}}::tagKind}}::mechanism}}}}ht-inline-tag--mechanism{{/if}}" title="{{dict_element::{{slot::ruleSegment}}::tooltip}}">{{dict_element::{{slot::ruleSegment}}::label}}</span>{{/if}}{{/each}}
+</span>
+{{/each}}
+</span>
+<span class="ht-card-help">
+{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}<strong>다시 누르면 선택 취소</strong>{{/if}}
+{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::false}}}}<strong>한 번 더 눌러 사용 등록</strong>{{/if}}
+{{#if {{equal::{{dict_element::{{slot::card}}::reasonCode}}::insufficient_stealth}}}}<span>은폐가 부족합니다</span>{{/if}}
+</span>
+</span>
+{{/if}}
+</button>
 {{/each}}
 </div>
-<div class="card-rule-lines">
-{{#each::keep {{dictelement::{{slot::hand_card}}::ruleLines}} as card_rule_line}}
-<div class="rule-line">
-{{#each::keep {{dictelement::{{slot::card_rule_line}}::segments}} as card_rule_segment}}
-{{#when::keep::{{dictelement::{{slot::card_rule_segment}}::kind}}::is::text}}{{dictelement::{{slot::card_rule_segment}}::value}}{{/when}}
-{{#when::keep::{{dictelement::{{slot::card_rule_segment}}::kind}}::isnot::text}}<span class="inline-tag" tabindex="0">{{dictelement::{{slot::card_rule_segment}}::label}}<span class="tag-tooltip">{{dictelement::{{slot::card_rule_segment}}::tooltip}}</span></span>{{/when}}
-{{/each}}
-</div>
-{{/each}}
-</div>
-<div class="card-numbers"><span><strong>비용</strong> 기본 {{dictelement::{{slot::hand_card}}::baseStealthCost}} → 최종 {{dictelement::{{slot::hand_card}}::finalStealthCost}}</span><span><strong>저항</strong> 기본 {{dictelement::{{slot::hand_card}}::baseResistanceDamage}} → 최종 {{dictelement::{{slot::hand_card}}::finalResistanceDamage}}</span></div>
-{{#when::keep::{{dictelement::{{slot::hand_card}}::playable}}::isnot::true}}
-<div class="unplayable-reason">현재 등록할 수 없는 카드입니다.
-{{#when::keep::{{dictelement::{{slot::hand_card}}::reasonCode}}::is::insufficient_stealth}} 은폐가 비용보다 높아야 합니다.{{/when}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::reasonCode}}::is::awaiting_output}} 턴 판정이 끝날 때까지 기다려 주세요.{{/when}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::reasonCode}}::is::battle_ended}} 이미 전투가 종료되었습니다.{{/when}}
-</div>
-{{/when}}
-<div class="hand-card-actions">
-{{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::is::true}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::locked}}::isnot::true}}
-<button class="hand-card-action is-cancel" type="button" risu-btn="battleController|cancelCard|{{dictelement::{{slot::hand_card}}::instanceId}}|{{dictelement::{{tempvar::bv}}::interactionToken}}"><span class="sr-only">{{dictelement::{{slot::hand_card}}::name}} 카드 </span>등록 취소</button>
-{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::locked}}::is::true}}
-<button class="hand-card-action is-cancel" type="button" disabled><span class="sr-only">{{dictelement::{{slot::hand_card}}::name}} 카드 </span>등록 취소 불가</button>
-{{/when}}
-{{/when}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::selected}}::isnot::true}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::playable}}::is::true}}
-<button class="hand-card-action" type="button" risu-btn="battleController|registerCard|{{dictelement::{{slot::hand_card}}::instanceId}}|{{dictelement::{{tempvar::bv}}::interactionToken}}"><span class="sr-only">{{dictelement::{{slot::hand_card}}::name}} </span>카드 등록</button>
-{{/when}}
-{{#when::keep::{{dictelement::{{slot::hand_card}}::playable}}::isnot::true}}
-<button class="hand-card-action" type="button" disabled><span class="sr-only">{{dictelement::{{slot::hand_card}}::name}} </span>카드 등록 불가</button>
-{{/when}}
-{{/when}}
-</div>
-</div>
-</details>
-{{/each}}
-{{#when::keep::{{dictelement::{{tempvar::bv_hand}}::count}}::is::0}}<div class="empty-hand">현재 표시할 손패가 없습니다.</div>{{/when}}
-</div>
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::selecting}}
-{{#when::keep::{{dictelement::{{tempvar::bv_selection}}::canSubmit}}::is::true}}
-<div class="send-protocol">
-<span class="protocol-step" aria-hidden="true">→</span>
-<span class="protocol-copy"><strong>선택이 끝났나요?</strong>입력창은 비워 둔 채 Risu 전송 버튼을 누르세요. 등록 카드가 없으면 이번 턴은 패스합니다.</span>
-</div>
-{{/when}}
-{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::awaitingOutput}}<div class="send-protocol"><span class="protocol-step" aria-hidden="true">…</span><span class="protocol-copy"><strong>판정 대기 중</strong>이번 턴 결과가 도착하면 다음 행동을 선택할 수 있습니다.</span></div>{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::phase}}::is::ended}}<div class="send-protocol"><span class="protocol-step" aria-hidden="true">■</span><span class="protocol-copy"><strong>운행 종료</strong>전투가 끝났습니다. 추가 행동은 제출되지 않습니다.</span></div>{{/when}}
 </section>
-<section class="secondary-grid" aria-label="전투 보조 정보">
-<article class="secondary-panel">
-<div class="section-kicker">TACTICAL SLOTS</div>
-<h2 class="secondary-title">계획과 카드 영역</h2>
-<div class="plan-grid">
-<div class="plan-owner-group">
-<div class="plan-owner"><span>내 계획</span><span>{{dictelement::{{tempvar::bv_player}}::planCapacity}}칸</span></div>
-<div class="plan-list">
-{{#each::keep {{tempvar::bv_player_plans}} as player_plan}}
-<article class="plan-card" data-plan-slot="{{dictelement::{{slot::player_plan}}::slotIndex}}" data-plan-status="{{dictelement::{{slot::player_plan}}::status}}">
-<div class="plan-slot-head"><span>슬롯 {{dictelement::{{slot::player_plan}}::slotIndex}}</span><span>
-{{#when::keep::{{dictelement::{{slot::player_plan}}::status}}::is::revealed}}공개{{/when}}
-{{#when::keep::{{dictelement::{{slot::player_plan}}::status}}::is::empty}}없음{{/when}}
-</span></div>
-{{#when::keep::{{dictelement::{{slot::player_plan}}::status}}::is::revealed}}
-{{settempvar::bv_player_plan_card::{{dictelement::{{slot::player_plan}}::card}}}}
-<div class="plan-name">{{dictelement::{{tempvar::bv_player_plan_card}}::name}}</div>
-{{#when::keep::{{dictelement::{{slot::player_plan}}::hasDuration}}::is::true}}<div class="plan-rule">남은 지속 {{dictelement::{{slot::player_plan}}::remainingTurns}}턴</div>{{/when}}
-<div class="card-tags">
-{{settempvar::bv_player_plan_action::{{dictelement::{{tempvar::bv_player_plan_card}}::actionTag}}}}
-<span class="card-tag" tabindex="0">{{dictelement::{{tempvar::bv_player_plan_action}}::label}}<span class="tag-tooltip">{{dictelement::{{tempvar::bv_player_plan_action}}::tooltip}}</span></span>
-{{#each::keep {{dictelement::{{tempvar::bv_player_plan_card}}::mechanisms}} as player_plan_mechanism}}<span class="card-tag is-mechanism" tabindex="0">{{dictelement::{{slot::player_plan_mechanism}}::label}}<span class="tag-tooltip">{{dictelement::{{slot::player_plan_mechanism}}::tooltip}}</span></span>{{/each}}
+
+<div class="ht-footer">
+<div class="ht-selection-state">
+{{#if {{equal::{{dict_element::{{getvar::battleView}}::phase}}::selecting}}}}<i class="ht-selection-dot" aria-hidden="true"></i>{{/if}}
+{{#if {{equal::{{dict_element::{{getvar::battleView}}::phase}}::awaitingOutput}}}}<i class="ht-selection-dot ht-selection-dot--wait" aria-hidden="true"></i>{{/if}}
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::mode}}::pass}}}}카드 없이 패스{{/if}}
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::mode}}::chain_pass}}}}연계만 사용 · 주 행동 패스{{/if}}
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::mode}}::action}}}}{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::count}}장 선택됨{{/if}}
 </div>
-<details class="intel-details">
-<summary>계획 규칙 보기</summary>
-<div class="card-description">
-{{#each::keep {{dictelement::{{tempvar::bv_player_plan_card}}::descriptionSegments}} as player_plan_description_segment}}
-{{#when::keep::{{dictelement::{{slot::player_plan_description_segment}}::kind}}::is::text}}{{dictelement::{{slot::player_plan_description_segment}}::value}}{{/when}}
-{{#when::keep::{{dictelement::{{slot::player_plan_description_segment}}::kind}}::isnot::text}}<span class="inline-tag" tabindex="0">{{dictelement::{{slot::player_plan_description_segment}}::label}}<span class="tag-tooltip">{{dictelement::{{slot::player_plan_description_segment}}::tooltip}}</span></span>{{/when}}
+<div class="ht-selection-help">
+{{#if {{equal::{{dict_element::{{getvar::battleView}}::phase}}::selecting}}}}입력창을 비운 채 <strong>전송하면 확정</strong>{{/if}}
+{{#if {{equal::{{dict_element::{{getvar::battleView}}::phase}}::awaitingOutput}}}}턴 결과를 기다리는 중…{{/if}}
+{{#if {{equal::{{dict_element::{{getvar::battleView}}::phase}}::ended}}}}전투 종료{{/if}}
+</div>
+</div>
+
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::available}}::true}}}}
+<details class="ht-log">
+<summary>직전 판정 결과 보기</summary>
+<ol class="ht-log-list">
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::summaries}} summary}}
+<li>{{dict_element::{{slot::summary}}::text}}</li>
 {{/each}}
-</div>
-<div class="dynamic-rule-lines">
-{{#each::keep {{dictelement::{{tempvar::bv_player_plan_card}}::ruleLines}} as player_plan_line}}
-<div class="rule-line">{{#each::keep {{dictelement::{{slot::player_plan_line}}::segments}} as player_plan_segment}}{{#when::keep::{{dictelement::{{slot::player_plan_segment}}::kind}}::is::text}}{{dictelement::{{slot::player_plan_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::player_plan_segment}}::kind}}::isnot::text}}<span class="inline-tag" tabindex="0">{{dictelement::{{slot::player_plan_segment}}::label}}<span class="tag-tooltip">{{dictelement::{{slot::player_plan_segment}}::tooltip}}</span></span>{{/when}}{{/each}}</div>
-{{/each}}
-</div>
+</ol>
 </details>
-{{/when}}
-{{#when::keep::{{dictelement::{{slot::player_plan}}::status}}::is::empty}}<div class="plan-name">비어 있음</div><div class="plan-note">현재 이 슬롯에 배치한 계획이 없습니다.</div>{{/when}}
-</article>
-{{/each}}
-</div>
-</div>
-<div class="plan-owner-group">
-<div class="plan-owner"><span>상대 계획</span><span>{{dictelement::{{tempvar::bv_character}}::planCapacity}}칸</span></div>
-<div class="plan-list">
-{{#each::keep {{tempvar::bv_character_plans}} as character_plan}}
-<article class="plan-card" data-plan-slot="{{dictelement::{{slot::character_plan}}::slotIndex}}" data-plan-status="{{dictelement::{{slot::character_plan}}::status}}">
-<div class="plan-slot-head"><span>슬롯 {{dictelement::{{slot::character_plan}}::slotIndex}}</span><span>
-{{#when::keep::{{dictelement::{{slot::character_plan}}::status}}::is::revealed}}공개{{/when}}
-{{#when::keep::{{dictelement::{{slot::character_plan}}::status}}::is::hidden}}비공개{{/when}}
-{{#when::keep::{{dictelement::{{slot::character_plan}}::status}}::is::empty}}없음{{/when}}
-</span></div>
-{{#when::keep::{{dictelement::{{slot::character_plan}}::status}}::is::revealed}}
-{{settempvar::bv_character_plan_card::{{dictelement::{{slot::character_plan}}::card}}}}
-<div class="plan-name">{{dictelement::{{tempvar::bv_character_plan_card}}::name}}</div>
-{{#when::keep::{{dictelement::{{slot::character_plan}}::hasDuration}}::is::true}}<div class="plan-rule">남은 지속 {{dictelement::{{slot::character_plan}}::remainingTurns}}턴</div>{{/when}}
-<div class="card-tags">
-{{settempvar::bv_character_plan_action::{{dictelement::{{tempvar::bv_character_plan_card}}::actionTag}}}}
-<span class="card-tag" tabindex="0">{{dictelement::{{tempvar::bv_character_plan_action}}::label}}<span class="tag-tooltip">{{dictelement::{{tempvar::bv_character_plan_action}}::tooltip}}</span></span>
-{{#each::keep {{dictelement::{{tempvar::bv_character_plan_card}}::mechanisms}} as character_plan_mechanism}}<span class="card-tag is-mechanism" tabindex="0">{{dictelement::{{slot::character_plan_mechanism}}::label}}<span class="tag-tooltip">{{dictelement::{{slot::character_plan_mechanism}}::tooltip}}</span></span>{{/each}}
-</div>
-<details class="intel-details">
-<summary>공개된 계획 규칙 보기</summary>
-<div class="card-description">
-{{#each::keep {{dictelement::{{tempvar::bv_character_plan_card}}::descriptionSegments}} as character_plan_description_segment}}
-{{#when::keep::{{dictelement::{{slot::character_plan_description_segment}}::kind}}::is::text}}{{dictelement::{{slot::character_plan_description_segment}}::value}}{{/when}}
-{{#when::keep::{{dictelement::{{slot::character_plan_description_segment}}::kind}}::isnot::text}}<span class="inline-tag" tabindex="0">{{dictelement::{{slot::character_plan_description_segment}}::label}}<span class="tag-tooltip">{{dictelement::{{slot::character_plan_description_segment}}::tooltip}}</span></span>{{/when}}
-{{/each}}
-</div>
-<div class="dynamic-rule-lines">
-{{#each::keep {{dictelement::{{tempvar::bv_character_plan_card}}::ruleLines}} as character_plan_line}}
-<div class="rule-line">{{#each::keep {{dictelement::{{slot::character_plan_line}}::segments}} as character_plan_segment}}{{#when::keep::{{dictelement::{{slot::character_plan_segment}}::kind}}::is::text}}{{dictelement::{{slot::character_plan_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::character_plan_segment}}::kind}}::isnot::text}}<span class="inline-tag" tabindex="0">{{dictelement::{{slot::character_plan_segment}}::label}}<span class="tag-tooltip">{{dictelement::{{slot::character_plan_segment}}::tooltip}}</span></span>{{/when}}{{/each}}</div>
-{{/each}}
-</div>
-</details>
-{{/when}}
-{{#when::keep::{{dictelement::{{slot::character_plan}}::status}}::is::hidden}}
-<div class="plan-name">정체 불명의 계획</div>
-<div class="plan-note">카드 정보와 발동 조건은 공개되지 않습니다.</div>
-{{#when::keep::{{dictelement::{{slot::character_plan}}::hasDuration}}::is::true}}<div class="plan-rule">남은 지속 {{dictelement::{{slot::character_plan}}::remainingTurns}}턴</div>{{/when}}
-{{/when}}
-{{#when::keep::{{dictelement::{{slot::character_plan}}::status}}::is::empty}}<div class="plan-name">비어 있음</div><div class="plan-note">이 슬롯에서 감지된 상대 계획이 없습니다.</div>{{/when}}
-</article>
-{{/each}}
-</div>
-</div>
-</div>
-<div class="zone-board" aria-label="플레이어 카드 영역 수량">
-<div class="zone-cell"><span class="zone-label">덱</span><span class="zone-count">{{dictelement::{{tempvar::bv_zones}}::deckCount}}</span></div>
-<div class="zone-cell"><span class="zone-label">사용</span><span class="zone-count">{{dictelement::{{tempvar::bv_zones}}::usedCount}}</span></div>
-<div class="zone-cell"><span class="zone-label">버림</span><span class="zone-count">{{dictelement::{{tempvar::bv_zones}}::discardCount}}</span></div>
-<div class="zone-cell"><span class="zone-label">제거</span><span class="zone-count">{{dictelement::{{tempvar::bv_zones}}::removedCount}}</span></div>
-</div>
-<details class="trait-details">
-<summary>상대 공개 특징 보기</summary>
-<div class="trait-list">
-{{#each::keep {{dictelement::{{tempvar::bv_character}}::traits}} as public_trait}}
-<div class="trait-item" data-trait-id="{{dictelement::{{slot::public_trait}}::id}}"><strong>{{dictelement::{{slot::public_trait}}::name}}</strong><span class="trait-description">{{dictelement::{{slot::public_trait}}::description}}</span>
-<div class="dynamic-rule-lines">
-{{#each::keep {{dictelement::{{slot::public_trait}}::ruleLines}} as trait_line}}
-<div class="rule-line">{{#each::keep {{dictelement::{{slot::trait_line}}::segments}} as trait_segment}}{{#when::keep::{{dictelement::{{slot::trait_segment}}::kind}}::is::text}}{{dictelement::{{slot::trait_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::trait_segment}}::kind}}::isnot::text}}<span class="inline-tag" tabindex="0">{{dictelement::{{slot::trait_segment}}::label}}<span class="tag-tooltip">{{dictelement::{{slot::trait_segment}}::tooltip}}</span></span>{{/when}}{{/each}}</div>
-{{/each}}
-</div>
-</div>
-{{/each}}
-</div>
-</details>
-</article>
-<article class="secondary-panel">
-<div class="section-kicker">LAST TURN</div>
-<h2 class="secondary-title">직전 턴 판정 기록</h2>
-{{#when::keep::{{dictelement::{{tempvar::bv_last_turn}}::available}}::is::true}}
-<div class="turn-log">
-{{#each::keep {{dictelement::{{tempvar::bv_last_turn}}::summaries}} as public_summary}}
-<div class="log-entry" data-event-type="{{dictelement::{{slot::public_summary}}::type}}"><span class="log-meta">턴 {{dictelement::{{tempvar::bv_last_turn}}::turnNumber}} · 기록 {{dictelement::{{slot::public_summary}}::sequence}}</span>{{dictelement::{{slot::public_summary}}::text}}</div>
-{{/each}}
-</div>
-{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv_last_turn}}::available}}::isnot::true}}<div class="empty-log">아직 확정된 턴 기록이 없습니다.</div>{{/when}}
-</article>
-</section>
-</div>
+{{/if}}
 </main>
-{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::bv}}::kind}}::isnot::battleView}}
-<main class="battle-interface battle-loading">
-<section class="loading-panel" aria-live="polite">
-<div class="battle-kicker">INFINITE HELL LINE</div>
-<h1 class="battle-title">전투 신호 연결 중</h1>
-<p class="brief-copy">현재 객차의 상태와 손패를 불러오고 있습니다.</p>
-<div class="loading-line" aria-hidden="true"></div>
+</div>
 </section>
-</main>
-{{/when}}

@@ -458,6 +458,7 @@
             and type(rawget(staticData, "cards")) == "table"
             and type(rawget(staticData, "traits")) == "table"
             and type(rawget(staticData, "environments")) == "table"
+            and type(rawget(staticData, "subwayLines")) == "table"
             and type(rawget(staticData, "characters")) == "table"
             and isPlainTableTree(staticData)
     end
@@ -1953,6 +1954,115 @@
         validateTurnStartEvents(receipt.events, receipt.turnId, path .. ".events", errors)
     end
 
+    local function subwayStationsAdjacent(line, leftId, rightId)
+        for _, routePath in ipairs(type(line) == "table" and line.paths or {}) do
+            local stations = routePath.stations
+            for index = 1, #stations - 1 do
+                local left = stations[index].id
+                local right = stations[index + 1].id
+                if (left == leftId and right == rightId)
+                    or (left == rightId and right == leftId) then
+                    return true
+                end
+            end
+            if routePath.circular == true and #stations > 1 then
+                local first = stations[1].id
+                local last = stations[#stations].id
+                if (first == leftId and last == rightId)
+                    or (first == rightId and last == leftId) then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    local function subwayStationExists(line, stationId)
+        for _, routePath in ipairs(type(line) == "table" and line.paths or {}) do
+            for _, station in ipairs(routePath.stations or {}) do
+                if station.id == stationId then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    local function transitEqual(left, right)
+        if type(left) ~= "table" or type(right) ~= "table"
+            or left.algorithm ~= right.algorithm
+            or left.lineId ~= right.lineId
+            or type(left.stationIds) ~= "table"
+            or type(right.stationIds) ~= "table"
+            or #left.stationIds ~= #right.stationIds then
+            return false
+        end
+        for index = 1, #left.stationIds do
+            if left.stationIds[index] ~= right.stationIds[index] then
+                return false
+            end
+        end
+        return true
+    end
+
+    local function validateTransit(transit, turnLimit, staticData, errors)
+        local path = "$.transit"
+        if type(transit) ~= "table" then
+            addError(errors, "invalid_transit", path, "전투 이동 구간이 테이블이 아닙니다.")
+            return
+        end
+        checkAllowedKeys(transit, {
+            algorithm = true,
+            lineId = true,
+            stationIds = true,
+        }, path, errors)
+        if transit.algorithm ~= "tokyo_subway_segment_v1" then
+            addError(errors, "invalid_transit_algorithm", path .. ".algorithm", "지원하지 않는 지하철 여정 알고리즘입니다.")
+        end
+        if not isAsciiId(transit.lineId) then
+            addError(errors, "invalid_transit_line_id", path .. ".lineId", "지하철 노선 ID가 올바르지 않습니다.")
+        end
+        local stationCount = getArrayLength(transit.stationIds, path .. ".stationIds", errors)
+        if stationCount ~= nil then
+            if isInteger(turnLimit, 1) and stationCount ~= turnLimit + 1 then
+                addError(errors, "transit_length_mismatch", path .. ".stationIds", "이동 역 수는 제한 턴보다 하나 많아야 합니다.")
+            end
+            local seen = {}
+            for index = 1, stationCount do
+                local stationId = transit.stationIds[index]
+                if not isAsciiId(stationId) then
+                    addError(errors, "invalid_transit_station_id", path .. ".stationIds[" .. index .. "]", "이동 역 ID가 올바르지 않습니다.")
+                elseif seen[stationId] then
+                    addError(errors, "duplicate_transit_station", path .. ".stationIds[" .. index .. "]", "한 여정에서 같은 역을 두 번 지날 수 없습니다.")
+                else
+                    seen[stationId] = true
+                end
+            end
+        end
+
+        if type(staticData) == "table" and type(staticData.subwayLines) == "table" then
+            local line = staticData.subwayLines[transit.lineId]
+            if type(line) ~= "table" then
+                addError(errors, "unknown_transit_line", path .. ".lineId", "정적 DB에서 지하철 노선을 찾을 수 없습니다.")
+            elseif stationCount ~= nil then
+                for index = 1, stationCount do
+                    local stationId = transit.stationIds[index]
+                    if isAsciiId(stationId) and not subwayStationExists(line, stationId) then
+                        addError(errors, "unknown_transit_station", path .. ".stationIds[" .. index .. "]", "선택 노선에서 이동 역을 찾을 수 없습니다.")
+                    end
+                    if index > 1 then
+                        local previousId = transit.stationIds[index - 1]
+                        if isAsciiId(previousId)
+                            and isAsciiId(stationId)
+                            and not subwayStationsAdjacent(line, previousId, stationId) then
+                            addError(errors, "non_adjacent_transit_station", path .. ".stationIds[" .. index .. "]", "이동 구간에 서로 인접하지 않은 역이 있습니다.")
+                        end
+                    end
+                end
+            end
+        end
+    end
+
     local function validateBattleState(state, staticData)
         local errors = {}
         local staticDataProvided = staticData ~= nil
@@ -1985,6 +2095,7 @@
             turnNumber = true,
             turnLimit = true,
             environmentId = true,
+            transit = true,
             lastCommittedTurnId = true,
             rng = true,
             player = true,
@@ -2010,14 +2121,15 @@
         if not isInteger(state.turnNumber, 1) then
             addError(errors, "invalid_turn_number", "$.turnNumber", "현재 턴은 1 이상의 정수여야 합니다.")
         end
-        if not isInteger(state.turnLimit, 1) then
-            addError(errors, "invalid_turn_limit", "$.turnLimit", "제한 턴은 1 이상의 정수여야 합니다.")
+        if not isInteger(state.turnLimit, 7) or state.turnLimit > 12 then
+            addError(errors, "invalid_turn_limit", "$.turnLimit", "제한 턴은 7 이상 12 이하의 정수여야 합니다.")
         elseif isInteger(state.turnNumber, 1) and state.turnNumber > state.turnLimit then
             addError(errors, "turn_over_limit", "$.turnNumber", "현재 턴이 제한 턴을 초과했습니다.")
         end
         if not isAsciiId(state.environmentId) then
             addError(errors, "invalid_environment_id", "$.environmentId", "환경 ID가 올바르지 않습니다.")
         end
+        validateTransit(state.transit, state.turnLimit, staticData, errors)
         if state.lastCommittedTurnId ~= nil and not isRuntimeId(state.lastCommittedTurnId) then
             addError(errors, "invalid_turn_id", "$.lastCommittedTurnId", "마지막 확정 턴 ID가 올바르지 않습니다.")
         end
@@ -2827,6 +2939,9 @@
             end
             if pending.afterState.environmentId ~= pending.beforeState.environmentId then
                 addError(errors, "environment_changed", "$.afterState.environmentId", "한 턴 판정 중 환경을 바꿀 수 없습니다.")
+            end
+            if not transitEqual(pending.afterState.transit, pending.beforeState.transit) then
+                addError(errors, "transit_changed", "$.afterState.transit", "한 턴 판정 중 지하철 이동 구간을 바꿀 수 없습니다.")
             end
             local beforeCharacter = type(pending.beforeState.character) == "table" and pending.beforeState.character.characterId or nil
             local afterCharacter = type(pending.afterState.character) == "table" and pending.afterState.character.characterId or nil

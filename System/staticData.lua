@@ -8,6 +8,7 @@
         "CharacterCards.db",
         "CharTraits.db",
         "Environments.db",
+        "TokyoSubwayLines.db",
         "CharacterList.db",
     }
     local staticCacheEntries = {}
@@ -53,7 +54,7 @@
             "lore", "status", "entryCount", "error", "entryIndex",
             "schemaVersion", "kindType", "kind", "code", "path", "message",
             "expectedKind", "actualKindType", "actualKind", "errorCount",
-            "cards", "traits", "environments", "characters",
+            "cards", "traits", "environments", "subwayLines", "characters",
         }
         for _, key in ipairs(fieldOrder) do
             local value = type(fields) == "table" and fields[key] or nil
@@ -282,6 +283,11 @@
             collection = "environments",
             lores = { "Environments.db" },
         },
+        subwayLines = {
+            kind = "subwayLineDatabase",
+            collection = "subwayLines",
+            lores = { "TokyoSubwayLines.db" },
+        },
         characterList = {
             kind = "characterList",
             collection = "characters",
@@ -294,6 +300,7 @@
         ["CharacterCards.db"] = true,
         ["CharTraits.db"] = true,
         ["Environments.db"] = true,
+        ["TokyoSubwayLines.db"] = true,
         ["CharacterList.db"] = true,
     }
 
@@ -1214,6 +1221,117 @@
         end
     end
 
+    local function validateSubwayLines(subwayLines, errors)
+        if type(subwayLines) ~= "table" then
+            addError(errors, "missing_subway_lines", "subwayLines", "지하철 노선 컬렉션이 없습니다.")
+            return
+        end
+        if next(subwayLines) == nil then
+            addError(errors, "empty_subway_lines", "subwayLines", "지하철 노선 컬렉션이 비어 있습니다.")
+            return
+        end
+
+        for key, line in pairs(subwayLines) do
+            local linePath = "subwayLines." .. tostring(key)
+            if not isAsciiId(key) or type(line) ~= "table" or line.id ~= key then
+                addError(errors, "invalid_subway_line_id", linePath, "노선 키와 내부 ID가 올바르지 않습니다.")
+            else
+                if not isAsciiId(line.operatorId) then
+                    addError(errors, "invalid_subway_operator_id", linePath .. ".operatorId", "운영사 ID가 올바르지 않습니다.")
+                end
+                if type(line.operatorName) ~= "string" or line.operatorName == "" then
+                    addError(errors, "missing_subway_operator_name", linePath .. ".operatorName", "운영사 표시명이 없습니다.")
+                end
+                if type(line.name) ~= "string" or line.name == "" then
+                    addError(errors, "missing_subway_line_name", linePath .. ".name", "노선 표시명이 없습니다.")
+                end
+                if type(line.code) ~= "string"
+                    or string.match(line.code, "^[A-Z]$") == nil then
+                    addError(errors, "invalid_subway_line_code", linePath .. ".code", "노선 코드는 영문 대문자 한 글자여야 합니다.")
+                end
+                if type(line.color) ~= "string"
+                    or string.match(line.color, "^#%x%x%x%x%x%x$") == nil then
+                    addError(errors, "invalid_subway_line_color", linePath .. ".color", "노선 색상은 #RRGGBB 형식이어야 합니다.")
+                end
+
+                if not isArray(line.paths) or #line.paths == 0 then
+                    addError(errors, "invalid_subway_paths", linePath .. ".paths", "노선 경로 목록이 비어 있습니다.")
+                else
+                    local pathIds = {}
+                    local stationDefinitions = {}
+                    local supportsMinimum = false
+                    local supportsMaximum = false
+                    for pathIndex, routePath in ipairs(line.paths) do
+                        local pathPath = linePath .. ".paths[" .. pathIndex .. "]"
+                        if type(routePath) ~= "table" then
+                            addError(errors, "invalid_subway_path", pathPath, "노선 경로가 테이블이 아닙니다.")
+                        else
+                            if not isAsciiId(routePath.id) then
+                                addError(errors, "invalid_subway_path_id", pathPath .. ".id", "노선 경로 ID가 올바르지 않습니다.")
+                            elseif pathIds[routePath.id] then
+                                addError(errors, "duplicate_subway_path_id", pathPath .. ".id", "노선 경로 ID가 중복되었습니다.")
+                            else
+                                pathIds[routePath.id] = true
+                            end
+                            if type(routePath.circular) ~= "boolean" then
+                                addError(errors, "invalid_subway_path_circular", pathPath .. ".circular", "순환 경로 여부는 불리언이어야 합니다.")
+                            end
+                            if not isArray(routePath.stations) or #routePath.stations < 2 then
+                                addError(errors, "invalid_subway_stations", pathPath .. ".stations", "경로에는 두 개 이상의 역이 필요합니다.")
+                            else
+                                if routePath.circular == true or #routePath.stations >= 8 then
+                                    supportsMinimum = true
+                                end
+                                if routePath.circular == true or #routePath.stations >= 13 then
+                                    supportsMaximum = true
+                                end
+                                local stationIds = {}
+                                for stationIndex, station in ipairs(routePath.stations) do
+                                    local stationPath = pathPath .. ".stations[" .. stationIndex .. "]"
+                                    if type(station) ~= "table" then
+                                        addError(errors, "invalid_subway_station", stationPath, "역 정의가 테이블이 아닙니다.")
+                                    else
+                                        if not isAsciiId(station.id) then
+                                            addError(errors, "invalid_subway_station_id", stationPath .. ".id", "역 ID가 올바르지 않습니다.")
+                                        elseif stationIds[station.id] then
+                                            addError(errors, "duplicate_subway_station_id", stationPath .. ".id", "한 경로 안에서 역 ID가 중복되었습니다.")
+                                        else
+                                            stationIds[station.id] = true
+                                        end
+                                        if type(station.code) ~= "string"
+                                            or string.match(station.code, "^[A-Za-z]+[0-9][0-9]$") == nil then
+                                            addError(errors, "invalid_subway_station_code", stationPath .. ".code", "역 코드는 영문자와 두 자리 숫자로 구성해야 합니다.")
+                                        end
+                                        if type(station.name) ~= "string" or station.name == "" then
+                                            addError(errors, "missing_subway_station_name", stationPath .. ".name", "역 표시명이 없습니다.")
+                                        end
+
+                                        local previous = stationDefinitions[station.id]
+                                        if previous ~= nil
+                                            and (previous.code ~= station.code or previous.name ~= station.name) then
+                                            addError(errors, "subway_station_definition_conflict", stationPath, "같은 역 ID의 코드나 표시명이 경로마다 다릅니다.")
+                                        elseif previous == nil and isAsciiId(station.id) then
+                                            stationDefinitions[station.id] = {
+                                                code = station.code,
+                                                name = station.name,
+                                            }
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                    if not supportsMinimum then
+                        addError(errors, "subway_line_too_short", linePath .. ".paths", "이 노선에는 7턴 여정을 만들 수 있는 경로가 없습니다.")
+                    end
+                    if not supportsMaximum then
+                        addError(errors, "subway_line_missing_maximum_route", linePath .. ".paths", "이 노선에는 12턴 여정을 만들 수 있는 경로가 없습니다.")
+                    end
+                end
+            end
+        end
+    end
+
     local function validateCharacters(characters, cards, traits, registry, errors)
         if type(characters) ~= "table" then
             addError(errors, "missing_characters", "characters", "캐릭터 컬렉션이 없습니다.")
@@ -1346,6 +1464,7 @@
         local cards = loadMergedCollection(SOURCES.cards, errors, captured)
         local traits = loadMergedCollection(SOURCES.traits, errors, captured)
         local environments = loadMergedCollection(SOURCES.environments, errors, captured)
+        local subwayLines = loadMergedCollection(SOURCES.subwayLines, errors, captured)
         local characterList = discoveredCharacterList
         if characterList == nil then
             characterList = loadMergedCollection(SOURCES.characterList, errors, captured)
@@ -1357,6 +1476,7 @@
         validateCards(cards, registry, errors)
         validateTraits(traits, errors)
         validateEnvironments(environments, registry, errors)
+        validateSubwayLines(subwayLines, errors)
         validateCharacters(characters, cards, traits, registry, errors)
 
         return {
@@ -1367,6 +1487,7 @@
                 cards = countEntries(cards),
                 traits = countEntries(traits),
                 environments = countEntries(environments),
+                subwayLines = countEntries(subwayLines),
                 characters = countEntries(characters),
             },
             data = #errors == 0 and {
@@ -1374,6 +1495,7 @@
                 cards = cards,
                 traits = traits,
                 environments = environments,
+                subwayLines = subwayLines,
                 characters = characters,
             } or nil,
         }
@@ -1442,6 +1564,7 @@
             cards = report.counts.cards,
             traits = report.counts.traits,
             environments = report.counts.environments,
+            subwayLines = report.counts.subwayLines,
             characters = report.counts.characters,
         })
         if report.ok == true then

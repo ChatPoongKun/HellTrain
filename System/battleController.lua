@@ -1359,7 +1359,6 @@
             playerCardIds = playerCardIds,
             characterId = validated.state.selectedCharacterId,
             environmentId = battleSpec.environmentId,
-            turnLimit = battleSpec.turnLimit,
         }, nil
     end
 
@@ -1446,7 +1445,7 @@
         return nil
     end
 
-    local function validateExistingSetupBinding(authority, spec)
+    local function validateExistingSetupBinding(authority, spec, staticData)
         local errors = {}
         local function conflict(path, message)
             errors[#errors + 1] = makeError("battle_setup_conflict", path, message)
@@ -1458,8 +1457,20 @@
         if authority.environmentId ~= spec.environmentId then
             conflict("$.state.authority.environmentId", "기존 전투의 환경이 setup 전투 사양과 다릅니다.")
         end
-        if authority.turnLimit ~= spec.turnLimit then
-            conflict("$.state.authority.turnLimit", "기존 전투의 턴 제한이 setup 전투 사양과 다릅니다.")
+        local journey, journeyErrors = callModule(
+            "subwayJourney",
+            "build",
+            spec.seed,
+            staticData
+        )
+        if journeyErrors then
+            for _, item in ipairs(journeyErrors) do
+                errors[#errors + 1] = item
+            end
+        elseif type(journey) ~= "table"
+            or authority.turnLimit ~= journey.turnLimit
+            or not deepEqual(authority.transit, journey.transit) then
+            conflict("$.state.authority.transit", "기존 전투의 제한 턴 또는 지하철 여정이 setup seed에서 결정한 값과 다릅니다.")
         end
         if type(authority.character) ~= "table"
             or authority.character.characterId ~= spec.characterId then
@@ -1530,7 +1541,7 @@
                     ),
                 })
             end
-            local bindingErrors = validateExistingSetupBinding(current.authority, spec)
+            local bindingErrors = validateExistingSetupBinding(current.authority, spec, staticData)
             if bindingErrors then
                 return failure(bindingErrors)
             end
