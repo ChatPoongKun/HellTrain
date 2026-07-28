@@ -335,6 +335,59 @@
         }
     end
 
+    local function buildTagGlossary(publicAction, handItems)
+        local byId = {}
+        local function appendTag(tag)
+            if type(tag) ~= "table" or tag.kind ~= "tag" or type(tag.id) ~= "string" then
+                return
+            end
+            byId[tag.id] = {
+                kind = "tag",
+                id = tag.id,
+                label = tag.label,
+                tagKind = tag.tagKind,
+                tooltip = tag.tooltip,
+            }
+        end
+        local function appendSegments(segments)
+            for _, segment in ipairs(type(segments) == "table" and segments or {}) do
+                if type(segment) == "table" and segment.kind == "tag" then
+                    appendTag(segment)
+                end
+            end
+        end
+        local function appendRuleLines(ruleLines)
+            for _, ruleLine in ipairs(type(ruleLines) == "table" and ruleLines or {}) do
+                appendSegments(type(ruleLine) == "table" and ruleLine.segments or nil)
+            end
+        end
+
+        if type(publicAction) == "table" and publicAction.status == "tagRevealed" then
+            appendTag(publicAction.tag)
+        end
+        for _, item in ipairs(type(handItems) == "table" and handItems or {}) do
+            appendTag(item.actionTag)
+            for _, mechanism in ipairs(type(item.mechanisms) == "table" and item.mechanisms or {}) do
+                appendTag(mechanism)
+            end
+            appendSegments(item.descriptionSegments)
+            appendRuleLines(item.ruleLines)
+        end
+
+        local glossary = {}
+        local ids = {}
+        for id in pairs(byId) do
+            ids[#ids + 1] = id
+        end
+        table.sort(ids, function(left, right)
+            return tostring(left) < tostring(right)
+        end)
+        for _, id in ipairs(ids) do
+            glossary[#glossary + 1] = byId[id]
+        end
+        return glossary
+    end
+
     local function appendText(segments, value)
         if value == "" then
             return
@@ -1052,6 +1105,7 @@
             turnId = turnId,
             phase = phase,
             locked = locked,
+            tagGlossary = buildTagGlossary(publicAction, handItems),
             subway = subwayView,
             environment = {
                 id = environment.id,
@@ -1514,6 +1568,7 @@
             phase = true,
             locked = true,
             interactionToken = true,
+            tagGlossary = true,
             subway = true,
             environment = true,
             player = true,
@@ -1549,6 +1604,22 @@
             addError(errors, "missing_interaction_token", "$.interactionToken", "선택 가능한 View에는 상호작용 토큰이 필요합니다.")
         elseif view.phase == "ended" and view.interactionToken ~= nil then
             addError(errors, "ended_interaction_token", "$.interactionToken", "종료 View에는 상호작용 토큰을 넣을 수 없습니다.")
+        end
+
+        local glossaryLength = getArrayLength(view.tagGlossary, "$.tagGlossary", errors)
+        if glossaryLength then
+            local seenTagIds = {}
+            for index = 1, glossaryLength do
+                local tag = view.tagGlossary[index]
+                local path = "$.tagGlossary[" .. index .. "]"
+                validateTagView(tag, path, errors)
+                if type(tag) == "table" and type(tag.id) == "string" then
+                    if seenTagIds[tag.id] then
+                        addError(errors, "duplicate_glossary_tag", path .. ".id", "태그 설명 ID가 중복되었습니다.")
+                    end
+                    seenTagIds[tag.id] = true
+                end
+            end
         end
 
         validateSubwayView(view.subway, "$.subway", errors)

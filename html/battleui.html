@@ -37,12 +37,160 @@ font: inherit;
 .ht-battle button {
 color: inherit;
 }
+.ht-tip-trigger {
+margin: 0;
+padding: 0;
+border: 0;
+color: inherit;
+background: none;
+font: inherit;
+text-align: inherit;
+cursor: pointer;
+touch-action: manipulation;
+-webkit-appearance: none;
+appearance: none;
+}
+.ht-tip-trigger:focus-visible {
+outline: 2px solid rgba(255, 255, 255, .88);
+outline-offset: 2px;
+}
+.ht-popover {
+position: fixed;
+z-index: 2147483647;
+inset: 50% auto auto 50%;
+display: none;
+width: min(320px, calc(100vw - 28px));
+max-width: none;
+max-height: min(70vh, 420px);
+margin: 0;
+padding: 0;
+overflow: hidden;
+transform: translate(-50%, -50%);
+color: var(--ink);
+background:
+linear-gradient(145deg, rgba(216, 82, 82, .10), transparent 42%),
+#1c1a1d;
+border: 1px solid rgba(255, 255, 255, .20);
+border-radius: 12px;
+box-shadow: 0 24px 70px rgba(0, 0, 0, .62), 0 0 0 1px rgba(0, 0, 0, .45);
+font-family: Pretendard, "Noto Sans KR", system-ui, sans-serif;
+pointer-events: none;
+}
+.ht-popover:popover-open {
+display: block;
+}
+.ht-battle:has(.ht-popover:popover-open) button:not(.ht-popover-dismiss),
+.ht-battle:has(.ht-popover:popover-open) summary {
+pointer-events: none;
+}
+.ht-popover::backdrop {
+background: rgba(4, 4, 6, .30);
+}
+.ht-popover-dismiss {
+display: block;
+width: 100%;
+max-height: min(70vh, 420px);
+margin: 0;
+padding: 15px 16px 13px;
+overflow-y: auto;
+border: 0;
+color: inherit;
+background: transparent;
+font: inherit;
+text-align: left;
+cursor: pointer;
+pointer-events: auto;
+overscroll-behavior: contain;
+}
+.ht-popover-dismiss:focus-visible {
+outline: 2px solid #fff;
+outline-offset: -4px;
+}
+.ht-popover-kicker,
+.ht-popover-title,
+.ht-popover-copy,
+.ht-popover-meta,
+.ht-popover-rules,
+.ht-popover-rule,
+.ht-popover-close-hint {
+display: block;
+}
+.ht-popover-kicker {
+color: #d66c6c;
+font-size: 8px;
+font-weight: 900;
+letter-spacing: .13em;
+}
+.ht-popover-title {
+margin-top: 4px;
+color: #f3eee6;
+font-size: 15px;
+font-weight: 850;
+line-height: 1.3;
+word-break: keep-all;
+}
+.ht-popover-copy {
+margin-top: 8px;
+color: #cbc3bd;
+font-size: 10px;
+line-height: 1.6;
+word-break: keep-all;
+}
+.ht-popover-meta {
+margin-top: 7px;
+color: #9f9892;
+font-size: 9px;
+line-height: 1.5;
+}
+.ht-popover-rules {
+margin-top: 10px;
+padding-top: 8px;
+border-top: 1px solid rgba(255, 255, 255, .09);
+}
+.ht-popover-rule {
+position: relative;
+padding-left: 10px;
+color: #aaa39d;
+font-size: 9px;
+line-height: 1.5;
+}
+.ht-popover-rule + .ht-popover-rule {
+margin-top: 4px;
+}
+.ht-popover-rule::before {
+content: "·";
+position: absolute;
+left: 1px;
+color: #ddd6d0;
+}
+.ht-popover-tag {
+display: inline;
+padding: 1px 4px;
+border-radius: 3px;
+color: #e49a9a;
+background: rgba(216, 82, 82, .12);
+font-size: .9em;
+font-weight: 800;
+}
+.ht-popover-tag--mechanism {
+color: #a8caf1;
+background: rgba(91, 145, 216, .14);
+}
+.ht-popover-close-hint {
+margin-top: 11px;
+color: #716b66;
+font-size: 7px;
+text-align: right;
+}
+.ht-popover-bank {
+display: contents;
+}
 .ht-topbar {
-height: 45px;
+min-height: 45px;
 display: flex;
 align-items: center;
 gap: 10px;
-padding: 0 13px;
+padding: 8px 13px;
 background: rgba(8, 8, 9, .74);
 border-bottom: 1px solid var(--line);
 }
@@ -77,171 +225,166 @@ line-height: 1;
 white-space: nowrap;
 }
 .ht-top-environment {
- margin-left: auto;
- max-width: 145px;
- overflow: hidden;
- color: var(--muted);
- font-size: 9px;
- font-weight: 700;
- text-overflow: ellipsis;
- white-space: nowrap;
+display: inline-flex;
+align-items: center;
+min-height: 23px;
+margin-left: auto;
+padding: 3px 7px;
+color: #c9c2bc;
+background: rgba(255, 255, 255, .045);
+border: 1px solid var(--line);
+border-radius: 999px;
+font-size: 9px;
+font-weight: 700;
+line-height: 1.25;
+text-align: right;
+word-break: keep-all;
 }
 .ht-route {
- --route-color: #777;
- padding: 7px 12px 8px;
- background:
-  linear-gradient(90deg, rgba(255, 255, 255, .025), transparent 58%),
-  rgba(16, 15, 17, .92);
- border-bottom: 1px solid var(--line);
+--route-color: #777;
+padding: 8px 12px 10px;
+background:
+linear-gradient(90deg, rgba(255, 255, 255, .025), transparent 58%),
+rgba(16, 15, 17, .92);
+border-bottom: 1px solid var(--line);
 }
 .ht-route-head {
- display: flex;
- align-items: center;
- min-width: 0;
- gap: 7px;
+display: grid;
+grid-template-columns: auto minmax(75px, .75fr) minmax(0, 2.25fr);
+align-items: center;
+min-width: 0;
+gap: 8px;
 }
 .ht-route-badge {
- display: grid;
- place-items: center;
- width: 24px;
- height: 24px;
- flex: 0 0 auto;
- border: 3px solid var(--route-color);
- border-radius: 50%;
- color: #fff;
- background: #171619;
- font-size: 9px;
- font-weight: 900;
+display: grid;
+place-items: center;
+width: 24px;
+height: 24px;
+flex: 0 0 auto;
+border: 3px solid var(--route-color);
+border-radius: 50%;
+color: #fff;
+background: #171619;
+font-size: 9px;
+font-weight: 900;
 }
 .ht-route-line {
- min-width: 0;
+min-width: 0;
 }
 .ht-route-line strong,
 .ht-route-line small {
- display: block;
- overflow: hidden;
- text-overflow: ellipsis;
- white-space: nowrap;
+display: block;
+word-break: keep-all;
 }
 .ht-route-line strong {
- font-size: 10px;
+font-size: 10px;
 }
 .ht-route-line small {
- color: var(--muted);
- font-size: 7px;
+color: var(--muted);
+font-size: 7px;
 }
-.ht-route-endpoints {
- display: flex;
- align-items: center;
- justify-content: flex-end;
- min-width: 0;
- margin-left: auto;
- color: #d9d2cc;
- font-size: 9px;
- font-weight: 800;
+.ht-route-journey {
+display: flex;
+align-items: center;
+justify-content: flex-end;
+min-width: 0;
+margin-left: auto;
+color: #d9d2cc;
+font-size: 9px;
+font-weight: 800;
 }
-.ht-route-endpoints strong {
- max-width: 94px;
- overflow: hidden;
- text-overflow: ellipsis;
- white-space: nowrap;
+.ht-route-place {
+min-width: 0;
+text-align: right;
 }
-.ht-route-endpoints i {
- width: 18px;
- height: 1px;
- flex: 0 0 auto;
- margin: 0 5px;
- background: var(--route-color);
+.ht-route-place small,
+.ht-route-place strong,
+.ht-route-current small,
+.ht-route-current strong {
+display: block;
+word-break: keep-all;
+}
+.ht-route-place small,
+.ht-route-current small {
+color: var(--muted);
+font-size: 7px;
+font-weight: 700;
+}
+.ht-route-place strong,
+.ht-route-current strong {
+color: #eee8e2;
+font-size: 9px;
+line-height: 1.25;
+}
+.ht-route-arrow {
+width: 18px;
+height: 1px;
+flex: 0 0 auto;
+margin: 0 6px;
+background: var(--route-color);
 }
 .ht-route-current {
- margin-left: 7px;
- padding-left: 7px;
- border-left: 1px solid var(--line);
- color: #fff;
- white-space: nowrap;
-}
-.ht-route-current::before {
- content: "현재 ";
- color: var(--muted);
- font-size: 7px;
+min-width: 0;
+margin-left: 8px;
+padding-left: 8px;
+border-left: 1px solid var(--line);
+text-align: right;
 }
 .ht-route-track {
- position: relative;
- display: flex;
- margin-top: 5px;
- padding-top: 8px;
-}
-.ht-route-track::before {
- content: "";
- position: absolute;
- top: 19px;
- left: 3.7%;
- right: 3.7%;
- height: 3px;
- border-radius: 3px;
- background: #3f3c40;
+position: relative;
+display: flex;
+height: 14px;
+margin-top: 8px;
 }
 .ht-route-stop {
- position: relative;
- z-index: 1;
- display: grid;
- flex: 1 1 0;
- place-items: center;
- min-width: 0;
- color: #716d71;
+position: relative;
+z-index: 1;
+display: grid;
+flex: 1 1 0;
+place-items: center;
+height: 14px;
+min-width: 0;
+color: #716d71;
 }
 .ht-route-stop::after {
- content: "";
- position: absolute;
- z-index: -1;
- top: 11px;
- left: 50%;
- width: 100%;
- height: 3px;
- background: transparent;
+content: "";
+position: absolute;
+z-index: -1;
+top: 50%;
+left: 50%;
+width: 100%;
+height: 3px;
+transform: translateY(-50%);
+background: #3f3c40;
 }
-.ht-route-stop:last-child::after {
- display: none;
+.ht-route-stop[data-destination="true"]::after {
+display: none;
 }
 .ht-route-stop[data-status="passed"]::after {
- background: var(--route-color);
-}
-.ht-route-code {
- width: 100%;
- overflow: hidden;
- font-size: 7px;
- font-weight: 800;
- line-height: 8px;
- text-align: center;
- text-overflow: clip;
- white-space: nowrap;
+background: var(--route-color);
 }
 .ht-route-node {
- display: block;
- width: 10px;
- height: 10px;
- margin-top: 2px;
- border: 2px solid currentColor;
- border-radius: 50%;
- background: #171619;
+display: block;
+width: 10px;
+height: 10px;
+margin: 0;
+border: 2px solid currentColor;
+border-radius: 50%;
+background: #171619;
 }
 .ht-route-stop[data-status="passed"] {
- color: var(--route-color);
+color: var(--route-color);
 }
 .ht-route-stop[data-status="current"] {
- color: #fff;
+color: #fff;
 }
 .ht-route-stop[data-status="current"] .ht-route-node {
- width: 14px;
- height: 14px;
- margin-top: 0;
- border: 3px solid var(--route-color);
- background: #fff;
- box-shadow: 0 0 0 2px #171619, 0 0 10px rgba(255, 255, 255, .22);
-}
-.ht-route-stop[data-start="true"] .ht-route-code,
-.ht-route-stop[data-destination="true"] .ht-route-code {
- color: #d7d1cc;
+width: 14px;
+height: 14px;
+margin: 0;
+border: 3px solid var(--route-color);
+background: #fff;
+box-shadow: 0 0 0 2px #171619, 0 0 10px rgba(255, 255, 255, .22);
 }
 .ht-layout {
 display: grid;
@@ -300,39 +443,6 @@ margin-top: 3px;
 color: #c8c1bb;
 font-size: 9px;
 }
-.ht-resistance {
-padding: 10px 1px 9px;
-border-bottom: 1px solid var(--line);
-}
-.ht-label-row {
-display: flex;
-align-items: baseline;
-justify-content: space-between;
-gap: 7px;
-color: var(--muted);
-font-size: 9px;
-font-weight: 700;
-letter-spacing: .06em;
-}
-.ht-label-row strong {
-color: var(--ink);
-font-size: 13px;
-letter-spacing: 0;
-}
-.ht-bar {
-height: 5px;
-margin-top: 6px;
-overflow: hidden;
-border-radius: 999px;
-background: rgba(255, 255, 255, .09);
-}
-.ht-bar > i {
-display: block;
-height: 100%;
-max-width: 100%;
-border-radius: inherit;
-background: linear-gradient(90deg, #8e3333, #e55f5f);
-}
 .ht-side-section {
 padding-top: 9px;
 }
@@ -344,16 +454,23 @@ font-weight: 800;
 letter-spacing: .12em;
 text-transform: uppercase;
 }
-.ht-plan-list,
 .ht-trait-list {
 display: flex;
 flex-wrap: wrap;
 gap: 4px;
 }
-.ht-plan {
-display: inline-flex;
-align-items: center;
+.ht-plan-list {
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(68px, 1fr));
 gap: 4px;
+min-width: 0;
+}
+.ht-plan {
+display: flex;
+align-items: center;
+justify-content: center;
+gap: 4px;
+min-width: 0;
 min-height: 21px;
 padding: 3px 6px;
 border: 1px dashed rgba(255, 255, 255, .17);
@@ -361,6 +478,9 @@ border-radius: 6px;
 color: #aaa39d;
 background: rgba(255, 255, 255, .025);
 font-size: 9px;
+line-height: 1.25;
+text-align: center;
+word-break: keep-all;
 }
 .ht-plan--active {
 border-style: solid;
@@ -384,46 +504,39 @@ font-size: 9px;
 min-width: 0;
 padding: 9px 10px 10px;
 }
-.ht-dashboard {
-display: grid;
-grid-template-columns: 1fr 1.25fr;
-gap: 6px;
-margin-bottom: 7px;
-}
-.ht-metric {
-min-width: 0;
-height: 45px;
-padding: 6px 8px;
+.ht-encounter {
+padding: 7px;
 border: 1px solid var(--line);
-border-radius: 8px;
+border-radius: 9px;
 background: var(--panel);
 }
-.ht-metric-label {
-display: block;
-color: var(--muted);
-font-size: 8px;
-font-weight: 800;
-letter-spacing: .08em;
-}
-.ht-metric-value {
+.ht-encounter-head {
 display: flex;
 align-items: center;
-gap: 5px;
-margin-top: 3px;
+gap: 8px;
 min-width: 0;
-font-size: 13px;
-font-weight: 800;
+margin-bottom: 6px;
 }
-.ht-metric-value--intent {
-font-size: 11px;
+.ht-encounter-head h3 {
+margin: 0;
+font-size: 10px;
+letter-spacing: .02em;
 }
-.ht-metric-value--intent span {
+.ht-intent {
+display: inline-flex;
+align-items: center;
+gap: 5px;
+min-width: 0;
+margin-left: auto;
+color: var(--muted);
+font-size: 8px;
+font-weight: 700;
+}
+.ht-intent-trigger {
 overflow: hidden;
+color: #ded7d1;
 text-overflow: ellipsis;
 white-space: nowrap;
-}
-.ht-stealth-icon {
-color: #86b9ee;
 }
 .ht-intent-dot {
 width: 6px;
@@ -433,18 +546,93 @@ border-radius: 99px;
 background: var(--amber);
 box-shadow: 0 0 0 3px rgba(223, 174, 63, .10);
 }
+.ht-resource-grid,
+.ht-plan-owners {
+display: grid;
+grid-template-columns: repeat(2, minmax(0, 1fr));
+gap: 5px;
+}
+.ht-resource {
+display: flex;
+align-items: center;
+gap: 7px;
+min-width: 0;
+min-height: 43px;
+padding: 6px 8px;
+border: 1px solid rgba(255, 255, 255, .08);
+border-radius: 7px;
+background: rgba(255, 255, 255, .025);
+}
+.ht-resource::before {
+content: "";
+width: 7px;
+height: 7px;
+flex: 0 0 auto;
+border-radius: 2px;
+}
+.ht-resource--enemy::before {
+background: #dc6262;
+box-shadow: 0 0 0 3px rgba(220, 98, 98, .09);
+}
+.ht-resource--player::before {
+background: #78ace2;
+box-shadow: 0 0 0 3px rgba(120, 172, 226, .09);
+}
+.ht-resource-label {
+display: block;
+min-width: 0;
+color: var(--muted);
+font-size: 8px;
+font-weight: 800;
+letter-spacing: .07em;
+}
+.ht-resource strong {
+margin-left: auto;
+color: #f2ece6;
+font-size: 19px;
+line-height: 1;
+}
+.ht-plan-owners {
+margin-top: 5px;
+}
+.ht-plan-owner {
+min-width: 0;
+padding: 6px;
+border: 1px solid rgba(255, 255, 255, .08);
+border-radius: 7px;
+background: rgba(255, 255, 255, .018);
+}
+.ht-plan-owner-head {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 6px;
+margin-bottom: 4px;
+color: var(--muted);
+font-size: 8px;
+font-weight: 800;
+letter-spacing: .06em;
+}
 .ht-moods {
-padding: 7px 8px 8px;
+display: grid;
+grid-template-columns: 68px minmax(0, 1fr);
+align-items: stretch;
+gap: 7px;
+margin-top: 7px;
+padding: 6px 7px;
 border: 1px solid var(--line);
 border-radius: 9px;
 background: var(--panel);
 }
 .ht-moods-head {
 display: flex;
-align-items: center;
-justify-content: space-between;
-gap: 8px;
-margin-bottom: 6px;
+flex-direction: column;
+align-items: flex-start;
+justify-content: center;
+gap: 3px;
+min-width: 0;
+padding-right: 7px;
+border-right: 1px solid var(--line);
 }
 .ht-moods-head h3 {
 margin: 0;
@@ -454,60 +642,68 @@ letter-spacing: .02em;
 .ht-current-mood {
 display: inline-flex;
 align-items: center;
-gap: 5px;
+gap: 4px;
+max-width: 100%;
 color: #d8d2cc;
-font-size: 9px;
+font-size: 8px;
+font-weight: 700;
+line-height: 1.2;
+word-break: keep-all;
 }
 .ht-current-mood::before {
 content: "";
-width: 5px;
-height: 5px;
+width: 4px;
+height: 4px;
+flex: 0 0 auto;
 border-radius: 50%;
 background: #fff;
-box-shadow: 0 0 0 3px rgba(255, 255, 255, .08);
+box-shadow: 0 0 0 2px rgba(255, 255, 255, .08);
 }
 .ht-mood-grid {
 display: grid;
 grid-template-columns: repeat(5, 1fr);
-gap: 5px;
+gap: 2px;
+min-width: 0;
 }
 .ht-mood {
 position: relative;
 display: grid;
-grid-template-columns: 1fr 16px;
-grid-template-rows: repeat(5, 5px) 14px;
-gap: 2px 4px;
+grid-template-columns: 1fr;
+grid-template-rows: repeat(5, 3px) 11px;
+gap: 1px;
 align-items: center;
-padding: 5px 5px 3px;
+min-width: 0;
+padding: 3px 4px 2px;
 border: 1px solid transparent;
-border-radius: 7px;
-background: rgba(255, 255, 255, .025);
+border-radius: 6px;
+background: transparent;
 }
 .ht-mood.is-current {
 border-color: rgba(255, 255, 255, .30);
-background: rgba(255, 255, 255, .065);
-box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .035);
+background: rgba(255, 255, 255, .055);
 }
 .ht-mood.is-current::before {
 content: "";
 position: absolute;
-top: 4px;
-right: 4px;
-width: 4px;
-height: 4px;
+top: 3px;
+right: 3px;
+width: 3px;
+height: 3px;
 border-radius: 50%;
 background: #fff;
 }
 .ht-mood-cell {
 grid-column: 1;
-height: 5px;
+width: min(100%, 28px);
+height: 3px;
+justify-self: center;
 border-radius: 2px;
-opacity: .16;
+opacity: .13;
 background: currentColor;
 }
 .ht-mood-cell.is-filled {
 opacity: 1;
-box-shadow: 0 0 5px currentColor;
+box-shadow: 0 0 4px currentColor;
 }
 .ht-mood-cell--5 {
 grid-row: 1;
@@ -529,22 +725,12 @@ color: var(--amber);
 grid-row: 5;
 color: var(--red);
 }
-.ht-mood-count {
-grid-column: 2;
-grid-row: 1 / 6;
-align-self: center;
-color: #d9d3ce;
-font-size: 10px;
-font-weight: 800;
-text-align: center;
-}
 .ht-mood-name {
-grid-column: 1 / 3;
+grid-column: 1;
 grid-row: 6;
 align-self: end;
-overflow: hidden;
 color: var(--muted);
-font-size: 8px;
+font-size: 7px;
 font-weight: 700;
 text-align: center;
 white-space: nowrap;
@@ -553,44 +739,30 @@ white-space: nowrap;
 color: #fff;
 }
 .ht-subrow {
-display: grid;
-grid-template-columns: 1fr auto;
-gap: 6px;
+display: block;
 margin-top: 7px;
 }
 .ht-env-card {
+width: 100%;
 min-width: 0;
 padding: 6px 8px;
 border-left: 2px solid #676269;
 border-radius: 3px 7px 7px 3px;
 background: rgba(255, 255, 255, .035);
+text-align: left;
 }
 .ht-env-name {
+display: block;
 font-size: 9px;
 font-weight: 800;
 }
 .ht-env-desc {
+display: block;
 margin-top: 2px;
-overflow: hidden;
 color: var(--muted);
 font-size: 8px;
-text-overflow: ellipsis;
-white-space: nowrap;
-}
-.ht-player-plan {
-display: flex;
-align-items: center;
-gap: 5px;
-padding: 0 8px;
-border: 1px solid var(--line);
-border-radius: 7px;
-color: var(--muted);
-font-size: 8px;
-white-space: nowrap;
-}
-.ht-player-plan strong {
-color: #b9d4f7;
-font-size: 10px;
+line-height: 1.45;
+word-break: keep-all;
 }
 .ht-hand {
 margin-top: 8px;
@@ -642,13 +814,40 @@ background: var(--panel-2);
 cursor: pointer;
 transition: border-color .14s ease, background .14s ease, transform .14s ease;
 }
+.ht-card-action {
+position: absolute;
+z-index: 0;
+inset: 0;
+width: 100%;
+height: 100%;
+margin: 0;
+padding: 0;
+border: 0;
+border-radius: inherit;
+background: transparent;
+cursor: pointer;
+}
+.ht-card-action:focus-visible {
+outline: 2px solid #fff;
+outline-offset: -3px;
+}
+.ht-card-action:disabled {
+cursor: default;
+}
+.ht-card-top,
+.ht-card-detail {
+position: relative;
+z-index: 1;
+pointer-events: none;
+}
+.ht-card .ht-tip-trigger {
+position: relative;
+z-index: 2;
+pointer-events: auto;
+}
 .ht-card:hover {
 border-color: rgba(255, 255, 255, .24);
 background: #292629;
-}
-.ht-card:focus-visible {
-outline: 2px solid #fff;
-outline-offset: 2px;
 }
 .ht-card.is-focused {
 border-color: rgba(255, 255, 255, .33);
@@ -814,6 +1013,7 @@ font-weight: 700;
 }
 .ht-preview-flag {
 position: absolute;
+z-index: 2;
 top: 0;
 right: 0;
 padding: 2px 5px;
@@ -823,6 +1023,7 @@ background: rgba(91, 145, 216, .18);
 font-size: 6px;
 font-weight: 900;
 letter-spacing: .08em;
+pointer-events: none;
 }
 .ht-footer {
 display: flex;
@@ -909,42 +1110,71 @@ margin: 4px auto;
 border-radius: 13px;
 }
 .ht-topbar {
-padding: 0 9px;
+gap: 7px;
+padding: 7px 9px;
 }
 .ht-title {
 font-size: 11px;
 }
 .ht-top-environment {
- max-width: 96px;
+max-width: 46%;
+padding-right: 6px;
+padding-left: 6px;
+white-space: normal;
 }
 .ht-route {
- padding-right: 7px;
- padding-left: 7px;
+padding-right: 7px;
+padding-left: 7px;
 }
-.ht-route-endpoints strong {
- max-width: 70px;
+.ht-route-head {
+grid-template-columns: auto minmax(0, 1fr);
+align-items: start;
+gap: 6px 7px;
+}
+.ht-route-journey {
+display: grid;
+grid-column: 1 / -1;
+grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+align-items: center;
+width: 100%;
+margin: 1px 0 0;
+}
+.ht-route-place:first-child {
+text-align: left;
+}
+.ht-route-place:nth-of-type(2) {
+text-align: right;
 }
 .ht-route-current {
- max-width: 72px;
- overflow: hidden;
- font-size: 8px;
- text-overflow: ellipsis;
+display: flex;
+grid-column: 1 / -1;
+align-items: baseline;
+gap: 5px;
+margin: 5px 0 0;
+padding: 4px 0 0;
+border-top: 1px solid var(--line);
+border-left: 0;
+text-align: left;
+}
+.ht-route-current small,
+.ht-route-current strong {
+display: inline;
 }
 .ht-layout {
 display: block;
 }
 .ht-character {
 display: grid;
-grid-template-columns: 76px minmax(0, 1fr);
-grid-template-rows: auto auto;
+grid-template-columns: 96px minmax(0, 1fr);
+grid-template-rows: auto;
 gap: 0 9px;
 padding: 8px 9px;
 border-right: 0;
 border-bottom: 1px solid var(--line);
 }
 .ht-portrait {
-grid-row: 1 / 3;
-height: 81px;
+grid-row: 1;
+height: 88px;
 }
 .ht-character-name {
 left: 7px;
@@ -957,16 +1187,12 @@ font-size: 11px;
 .ht-character-name span {
 display: none;
 }
-.ht-resistance {
-align-self: end;
-padding: 3px 0 7px;
-}
 .ht-side-section {
-align-self: start;
-padding-top: 6px;
+align-self: center;
+padding-top: 0;
 }
 .ht-side-section--traits {
-display: none;
+display: block;
 }
 .ht-section-label {
 margin-bottom: 4px;
@@ -974,8 +1200,14 @@ margin-bottom: 4px;
 .ht-main {
 padding: 8px;
 }
+.ht-moods {
+grid-template-columns: 58px minmax(0, 1fr);
+gap: 4px;
+}
+.ht-moods-head {
+padding-right: 4px;
+}
 .ht-mood {
-grid-template-columns: 1fr 13px;
 padding-right: 3px;
 padding-left: 3px;
 }
@@ -988,26 +1220,43 @@ padding-left: 10px;
 }
 @media (max-width: 390px) {
 .ht-brand-copy .ht-kicker {
- display: none;
+display: none;
+}
+.ht-top-environment {
+max-width: 44%;
+font-size: 8px;
+}
+.ht-route-line strong {
+font-size: 9px;
 }
 .ht-route-line small,
-.ht-top-environment {
- display: none;
+.ht-route-place small,
+.ht-route-current small {
+font-size: 6px;
 }
-.ht-route-endpoints {
- font-size: 8px;
+.ht-route-place strong,
+.ht-route-current strong {
+font-size: 8px;
 }
-.ht-route-endpoints strong {
- max-width: 52px;
+.ht-resource {
+padding-right: 6px;
+padding-left: 6px;
 }
-.ht-route-current {
- max-width: 58px;
+.ht-resource-label,
+.ht-plan-owner-head {
+font-size: 7px;
+letter-spacing: .03em;
 }
-.ht-route-code {
- font-size: 6px;
+.ht-resource strong {
+font-size: 17px;
 }
-.ht-dashboard {
-grid-template-columns: .8fr 1.2fr;
+.ht-plan {
+font-size: 8px;
+}
+.ht-moods {
+grid-template-columns: 52px minmax(0, 1fr);
+padding-right: 5px;
+padding-left: 5px;
 }
 .ht-mood-name {
 font-size: 7px;
@@ -1043,10 +1292,19 @@ transition: none;
 <div class="ht-title">함락! 무한의 지옥철</div>
 </div>
 </div>
-<div class="ht-top-environment" title="{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::description}}">
+<button type="button" class="ht-top-environment ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-environment" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}} 환경 정보 보기">
 {{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}}
-</div>
+</button>
 </header>
+
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-environment" class="ht-popover" popover="auto" role="dialog" aria-label="환경 정보">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-environment" popovertargetaction="hide">
+<span class="ht-popover-kicker">ENVIRONMENT</span>
+<span class="ht-popover-title">{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}}</span>
+<span class="ht-popover-copy">{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::description}}</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
 
 <section class="ht-route" style="--route-color: {{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::lineColor}}" aria-label="현재 지하철 이동 경로">
 <div class="ht-route-head">
@@ -1055,19 +1313,32 @@ transition: none;
 <strong>{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::lineName}}</strong>
 <small>{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::operatorName}}</small>
 </div>
-<div class="ht-route-endpoints">
-<strong>{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::startStation}}::name}}</strong>
-<i aria-hidden="true"></i>
-<strong>{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::destinationStation}}::name}}</strong>
-<span class="ht-route-current">{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::currentStation}}::name}}</span>
+<div class="ht-route-journey">
+<span class="ht-route-place"><small>출발</small><strong>{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::startStation}}::name}}</strong></span>
+<i class="ht-route-arrow" aria-hidden="true"></i>
+<span class="ht-route-place"><small>도착</small><strong>{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::destinationStation}}::name}}</strong></span>
+<span class="ht-route-current"><small>현재역</small><strong>{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::currentStation}}::name}}</strong></span>
 </div>
 </div>
 <div class="ht-route-track">
 {{#each {{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::stations}} station}}
-<span class="ht-route-stop" data-status="{{dict_element::{{slot::station}}::status}}" data-start="{{dict_element::{{slot::station}}::isStart}}" data-destination="{{dict_element::{{slot::station}}::isDestination}}" title="{{dict_element::{{slot::station}}::name}}">
-<span class="ht-route-code">{{dict_element::{{slot::station}}::code}}</span>
+<button type="button" class="ht-route-stop ht-tip-trigger" data-status="{{dict_element::{{slot::station}}::status}}" data-start="{{dict_element::{{slot::station}}::isStart}}" data-destination="{{dict_element::{{slot::station}}::isDestination}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-station-{{dict_element::{{slot::station}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::station}}::name}} 역 정보 보기">
 <i class="ht-route-node" aria-hidden="true"></i>
+</button>
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-station-{{dict_element::{{slot::station}}::id}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{slot::station}}::name}} 역 정보">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-station-{{dict_element::{{slot::station}}::id}}" popovertargetaction="hide">
+<span class="ht-popover-kicker">{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::lineName}}</span>
+<span class="ht-popover-title">{{dict_element::{{slot::station}}::name}}</span>
+<span class="ht-popover-meta">
+{{#if {{equal::{{dict_element::{{slot::station}}::isStart}}::true}}}}출발역 · {{/if}}
+{{#if {{equal::{{dict_element::{{slot::station}}::status}}::passed}}}}지나온 역{{/if}}
+{{#if {{equal::{{dict_element::{{slot::station}}::status}}::current}}}}현재 위치{{/if}}
+{{#if {{equal::{{dict_element::{{slot::station}}::status}}::upcoming}}}}남은 경로{{/if}}
+{{#if {{equal::{{dict_element::{{slot::station}}::isDestination}}::true}}}} · 도착역{{/if}}
 </span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
 {{/each}}
 </div>
 </section>
@@ -1081,39 +1352,24 @@ transition: none;
 <span>ENCOUNTER TARGET</span>
 </div>
 </div>
-<div class="ht-resistance">
-<div class="ht-label-row">
-<span>저항</span>
-<strong>{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}} / {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::startingResistance}}</strong>
-</div>
-<div class="ht-bar" aria-label="캐릭터 저항">
-<i style="width: {{? {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}} / {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::startingResistance}} * 100}}%"></i>
-</div>
-</div>
-<div class="ht-side-section">
-<div class="ht-section-label">상대 계획</div>
-<div class="ht-plan-list">
-{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::plans}} plan}}
-{{#if {{equal::{{dict_element::{{slot::plan}}::status}}::empty}}}}
-<span class="ht-plan">빈 슬롯</span>
-{{/if}}
-{{#if {{equal::{{dict_element::{{slot::plan}}::status}}::hidden}}}}
-<span class="ht-plan ht-plan--hidden" title="아직 공개되지 않은 계획">? 계획</span>
-{{/if}}
-{{#if {{equal::{{dict_element::{{slot::plan}}::status}}::revealed}}}}
-<span class="ht-plan ht-plan--active" title="{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}}">
-{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}}
-{{#if {{equal::{{dict_element::{{slot::plan}}::hasDuration}}::true}}}} · {{dict_element::{{slot::plan}}::remainingTurns}}T{{/if}}
-</span>
-{{/if}}
-{{/each}}
-</div>
-</div>
 <div class="ht-side-section ht-side-section--traits">
 <div class="ht-section-label">공개 특징</div>
 <div class="ht-trait-list">
 {{#each {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::traits}} trait}}
-<span class="ht-trait" title="{{dict_element::{{slot::trait}}::description}}">{{dict_element::{{slot::trait}}::name}}</span>
+<button type="button" class="ht-trait ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-trait-{{dict_element::{{slot::trait}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::trait}}::name}} 특징 정보 보기">{{dict_element::{{slot::trait}}::name}}</button>
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-trait-{{dict_element::{{slot::trait}}::id}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{slot::trait}}::name}} 특징 정보">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-trait-{{dict_element::{{slot::trait}}::id}}" popovertargetaction="hide">
+<span class="ht-popover-kicker">PUBLIC TRAIT</span>
+<span class="ht-popover-title">{{dict_element::{{slot::trait}}::name}}</span>
+<span class="ht-popover-copy">{{dict_element::{{slot::trait}}::description}}</span>
+<span class="ht-popover-rules">
+{{#each {{dict_element::{{slot::trait}}::ruleLines}} traitRule}}
+<span class="ht-popover-rule">{{#each {{dict_element::{{slot::traitRule}}::segments}} traitRuleSegment}}{{#if {{equal::{{dict_element::{{slot::traitRuleSegment}}::kind}}::text}}}}{{dict_element::{{slot::traitRuleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::traitRuleSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::traitRuleSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::traitRuleSegment}}::label}}</span>{{/if}}{{/each}}</span>
+{{/each}}
+</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
 {{/each}}
 </div>
 </div>
@@ -1124,24 +1380,104 @@ transition: none;
 <div class="ht-outcome">{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::label}} · 전투가 종료되었습니다</div>
 {{/if}}
 
-<div class="ht-dashboard">
-<div class="ht-metric">
-<span class="ht-metric-label">PLAYER · 은폐</span>
-<div class="ht-metric-value"><span class="ht-stealth-icon" aria-hidden="true">◆</span>{{dict_element::{{dict_element::{{getvar::battleView}}::player}}::stealth}}</div>
-</div>
-<div class="ht-metric">
-<span class="ht-metric-label">ENEMY · 예고 행동</span>
-<div class="ht-metric-value ht-metric-value--intent">
+<section class="ht-encounter" aria-label="교전 현황">
+<div class="ht-encounter-head">
+<h3>교전 현황</h3>
+<div class="ht-intent">
+<span>예고 행동</span>
 <i class="ht-intent-dot" aria-hidden="true"></i>
 {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::status}}::tagRevealed}}}}
-<span title="{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::tag}}::tooltip}}">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::tag}}::label}}</span>
+<button type="button" class="ht-intent-trigger ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::tag}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::tag}}::label}} 태그 정보 보기">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::tag}}::label}}</button>
 {{/if}}
 {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::status}}::none}}}}
-<span>행동 없음</span>
+<strong>행동 없음</strong>
 {{/if}}
 </div>
 </div>
+<div class="ht-resource-grid">
+<button type="button" class="ht-resource ht-resource--enemy ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-resistance" aria-haspopup="dialog" aria-label="저항 {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}}, 설명 보기">
+<span class="ht-resource-label">저항</span>
+<strong>{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}}</strong>
+</button>
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-resistance" class="ht-popover" popover="auto" role="dialog" aria-label="저항 설명">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-resistance" popovertargetaction="hide">
+<span class="ht-popover-kicker">ENEMY · 교전 수치</span>
+<span class="ht-popover-title">저항 · {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}}</span>
+<span class="ht-popover-copy">상대가 교전을 버티는 수치입니다. 카드와 효과로 낮추며, 0 이하가 되면 승리합니다.</span>
+<span class="ht-popover-meta">회복 효과로 현재 수치가 증가할 수 있습니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
 </div>
+<button type="button" class="ht-resource ht-resource--player ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-stealth" aria-haspopup="dialog" aria-label="은폐 {{dict_element::{{dict_element::{{getvar::battleView}}::player}}::stealth}}, 설명 보기">
+<span class="ht-resource-label">은폐</span>
+<strong>{{dict_element::{{dict_element::{{getvar::battleView}}::player}}::stealth}}</strong>
+</button>
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-stealth" class="ht-popover" popover="auto" role="dialog" aria-label="은폐 설명">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-stealth" popovertargetaction="hide">
+<span class="ht-popover-kicker">PLAYER · 교전 수치</span>
+<span class="ht-popover-title">은폐 · {{dict_element::{{dict_element::{{getvar::battleView}}::player}}::stealth}}</span>
+<span class="ht-popover-copy">발각되지 않고 행동할 수 있는 여유입니다. 카드 비용과 효과로 감소합니다.</span>
+<span class="ht-popover-meta">상대의 저항이 남은 채 0 이하가 되면 패배하며, 회복 효과로 증가할 수 있습니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
+</div>
+<div class="ht-plan-owners" aria-label="양측 계획">
+<article class="ht-plan-owner">
+<div class="ht-plan-owner-head"><span>상대의 계획</span></div>
+<div class="ht-plan-list">
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::plans}} plan}}
+{{#if {{equal::{{dict_element::{{slot::plan}}::status}}::empty}}}}<span class="ht-plan">빈 슬롯</span>{{/if}}
+{{#if {{equal::{{dict_element::{{slot::plan}}::status}}::hidden}}}}
+<button type="button" class="ht-plan ht-plan--hidden ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-enemy-plan-{{dict_element::{{slot::plan}}::slotIndex}}" aria-haspopup="dialog" aria-label="공개되지 않은 상대 계획 정보 보기">? 계획</button>
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-enemy-plan-{{dict_element::{{slot::plan}}::slotIndex}}" class="ht-popover" popover="auto" role="dialog" aria-label="공개되지 않은 상대 계획">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-enemy-plan-{{dict_element::{{slot::plan}}::slotIndex}}" popovertargetaction="hide">
+<span class="ht-popover-kicker">상대의 계획</span>
+<span class="ht-popover-title">아직 공개되지 않음</span>
+<span class="ht-popover-copy">상대가 계획을 실행하거나 공개 효과가 적용되기 전까지 내용을 알 수 없습니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
+{{/if}}
+{{#if {{equal::{{dict_element::{{slot::plan}}::status}}::revealed}}}}
+<button type="button" class="ht-plan ht-plan--active ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-enemy-plan-{{dict_element::{{slot::plan}}::slotIndex}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}} 상대 계획 정보 보기">{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}}{{#if {{equal::{{dict_element::{{slot::plan}}::hasDuration}}::true}}}} · {{dict_element::{{slot::plan}}::remainingTurns}}T{{/if}}</button>
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-enemy-plan-{{dict_element::{{slot::plan}}::slotIndex}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}} 상대 계획 정보">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-enemy-plan-{{dict_element::{{slot::plan}}::slotIndex}}" popovertargetaction="hide">
+<span class="ht-popover-kicker">ENEMY · 상대 계획</span>
+<span class="ht-popover-title">{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}}</span>
+<span class="ht-popover-copy">{{#each {{dict_element::{{dict_element::{{slot::plan}}::card}}::descriptionSegments}} planDescriptionSegment}}{{#if {{equal::{{dict_element::{{slot::planDescriptionSegment}}::kind}}::text}}}}{{dict_element::{{slot::planDescriptionSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::planDescriptionSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::planDescriptionSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::planDescriptionSegment}}::label}}</span>{{/if}}{{/each}}</span>
+<span class="ht-popover-meta">{{#if {{equal::{{dict_element::{{slot::plan}}::hasDuration}}::true}}}}남은 지속시간 · {{dict_element::{{slot::plan}}::remainingTurns}}턴{{/if}}</span>
+<span class="ht-popover-rules">{{#each {{dict_element::{{dict_element::{{slot::plan}}::card}}::ruleLines}} planRule}}<span class="ht-popover-rule">{{#each {{dict_element::{{slot::planRule}}::segments}} planRuleSegment}}{{#if {{equal::{{dict_element::{{slot::planRuleSegment}}::kind}}::text}}}}{{dict_element::{{slot::planRuleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::planRuleSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::planRuleSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::planRuleSegment}}::label}}</span>{{/if}}{{/each}}</span>{{/each}}</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
+{{/if}}
+{{/each}}
+</div>
+</article>
+<article class="ht-plan-owner">
+<div class="ht-plan-owner-head"><span>PLAYER · 내 계획</span></div>
+<div class="ht-plan-list">
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::player}}::plans}} playerPlan}}
+{{#if {{equal::{{dict_element::{{slot::playerPlan}}::status}}::empty}}}}<span class="ht-plan">빈 슬롯</span>{{/if}}
+{{#if {{equal::{{dict_element::{{slot::playerPlan}}::status}}::revealed}}}}
+<button type="button" class="ht-plan ht-plan--active ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-player-plan-{{dict_element::{{slot::playerPlan}}::slotIndex}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::name}} 내 계획 정보 보기">{{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::name}}{{#if {{equal::{{dict_element::{{slot::playerPlan}}::hasDuration}}::true}}}} · {{dict_element::{{slot::playerPlan}}::remainingTurns}}T{{/if}}</button>
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-player-plan-{{dict_element::{{slot::playerPlan}}::slotIndex}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::name}} 내 계획 정보">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-player-plan-{{dict_element::{{slot::playerPlan}}::slotIndex}}" popovertargetaction="hide">
+<span class="ht-popover-kicker">PLAYER · 내 계획</span>
+<span class="ht-popover-title">{{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::name}}</span>
+<span class="ht-popover-copy">{{#each {{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::descriptionSegments}} playerPlanDescriptionSegment}}{{#if {{equal::{{dict_element::{{slot::playerPlanDescriptionSegment}}::kind}}::text}}}}{{dict_element::{{slot::playerPlanDescriptionSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::playerPlanDescriptionSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::playerPlanDescriptionSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::playerPlanDescriptionSegment}}::label}}</span>{{/if}}{{/each}}</span>
+<span class="ht-popover-meta">{{#if {{equal::{{dict_element::{{slot::playerPlan}}::hasDuration}}::true}}}}남은 지속시간 · {{dict_element::{{slot::playerPlan}}::remainingTurns}}턴{{/if}}</span>
+<span class="ht-popover-rules">{{#each {{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::ruleLines}} playerPlanRule}}<span class="ht-popover-rule">{{#each {{dict_element::{{slot::playerPlanRule}}::segments}} playerPlanRuleSegment}}{{#if {{equal::{{dict_element::{{slot::playerPlanRuleSegment}}::kind}}::text}}}}{{dict_element::{{slot::playerPlanRuleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::playerPlanRuleSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::playerPlanRuleSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::playerPlanRuleSegment}}::label}}</span>{{/if}}{{/each}}</span>{{/each}}</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
+{{/if}}
+{{/each}}
+</div>
+</article>
+</div>
+</section>
 
 <section class="ht-moods" aria-label="무드 게이지">
 <div class="ht-moods-head">
@@ -1149,66 +1485,99 @@ transition: none;
 <span class="ht-current-mood">현재 · {{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::label}}</span>
 </div>
 <div class="ht-mood-grid">
-<div class="ht-mood {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::rejection}}}}is-current{{/if}}" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::rejection}}}}aria-current="true"{{/if}}>
+<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::rejection}}}}is-current{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-rejection" aria-haspopup="dialog" aria-label="거절 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::rejection}}}}aria-current="true"{{/if}}>
 <i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::5}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::4}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::3}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::2}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::1}}}}is-filled{{/if}}"></i>
-<b class="ht-mood-count">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}</b>
 <span class="ht-mood-name">거절</span>
+</button>
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-rejection" class="ht-popover" popover="auto" role="dialog" aria-label="거절 무드 정보">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-rejection" popovertargetaction="hide">
+<span class="ht-popover-kicker">MOOD</span>
+<span class="ht-popover-title">거절 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}</span>
+<span class="ht-popover-copy">현재 거절 무드 토큰 수입니다.</span>
+<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
 </div>
-<div class="ht-mood {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::suspicion}}}}is-current{{/if}}" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::suspicion}}}}aria-current="true"{{/if}}>
+<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::suspicion}}}}is-current{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-suspicion" aria-haspopup="dialog" aria-label="의심 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::suspicion}}}}aria-current="true"{{/if}}>
 <i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::5}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::4}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::3}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::2}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::1}}}}is-filled{{/if}}"></i>
-<b class="ht-mood-count">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}</b>
 <span class="ht-mood-name">의심</span>
+</button>
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-suspicion" class="ht-popover" popover="auto" role="dialog" aria-label="의심 무드 정보">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-suspicion" popovertargetaction="hide">
+<span class="ht-popover-kicker">MOOD</span>
+<span class="ht-popover-title">의심 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}</span>
+<span class="ht-popover-copy">현재 의심 무드 토큰 수입니다.</span>
+<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
 </div>
-<div class="ht-mood {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::ignore}}}}is-current{{/if}}" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::ignore}}}}aria-current="true"{{/if}}>
+<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::ignore}}}}is-current{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-ignore" aria-haspopup="dialog" aria-label="무시 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::ignore}}}}aria-current="true"{{/if}}>
 <i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::5}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::4}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::3}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::2}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::1}}}}is-filled{{/if}}"></i>
-<b class="ht-mood-count">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}</b>
 <span class="ht-mood-name">무시</span>
+</button>
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-ignore" class="ht-popover" popover="auto" role="dialog" aria-label="무시 무드 정보">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-ignore" popovertargetaction="hide">
+<span class="ht-popover-kicker">MOOD</span>
+<span class="ht-popover-title">무시 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}</span>
+<span class="ht-popover-copy">현재 무시 무드 토큰 수입니다.</span>
+<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
 </div>
-<div class="ht-mood {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::confusion}}}}is-current{{/if}}" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::confusion}}}}aria-current="true"{{/if}}>
+<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::confusion}}}}is-current{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-confusion" aria-haspopup="dialog" aria-label="혼란 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::confusion}}}}aria-current="true"{{/if}}>
 <i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::5}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::4}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::3}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::2}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::1}}}}is-filled{{/if}}"></i>
-<b class="ht-mood-count">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}</b>
 <span class="ht-mood-name">혼란</span>
+</button>
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-confusion" class="ht-popover" popover="auto" role="dialog" aria-label="혼란 무드 정보">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-confusion" popovertargetaction="hide">
+<span class="ht-popover-kicker">MOOD</span>
+<span class="ht-popover-title">혼란 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}</span>
+<span class="ht-popover-copy">현재 혼란 무드 토큰 수입니다.</span>
+<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
 </div>
-<div class="ht-mood {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::compliance}}}}is-current{{/if}}" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::compliance}}}}aria-current="true"{{/if}}>
+<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::compliance}}}}is-current{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-compliance" aria-haspopup="dialog" aria-label="순응 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::compliance}}}}aria-current="true"{{/if}}>
 <i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::5}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::4}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::3}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::2}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::1}}}}is-filled{{/if}}"></i>
-<b class="ht-mood-count">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}</b>
 <span class="ht-mood-name">순응</span>
+</button>
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-compliance" class="ht-popover" popover="auto" role="dialog" aria-label="순응 무드 정보">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-compliance" popovertargetaction="hide">
+<span class="ht-popover-kicker">MOOD</span>
+<span class="ht-popover-title">순응 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}</span>
+<span class="ht-popover-copy">현재 순응 무드 토큰 수입니다.</span>
+<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
 </div>
 </div>
 </section>
 
 <div class="ht-subrow">
-<div class="ht-env-card" title="{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::description}}">
-<div class="ht-env-name">환경 · {{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}}</div>
-<div class="ht-env-desc">{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::description}}</div>
-</div>
-<div class="ht-player-plan" aria-label="플레이어 계획 슬롯">
-계획
-{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::player}}::plans}} playerPlan}}
-{{#if {{equal::{{dict_element::{{slot::playerPlan}}::status}}::empty}}}}<strong title="빈 계획 슬롯">◇</strong>{{/if}}
-{{#if {{equal::{{dict_element::{{slot::playerPlan}}::status}}::revealed}}}}<strong title="{{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::name}}">◆</strong>{{/if}}
-{{/each}}
-</div>
+<button type="button" class="ht-env-card ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-environment" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}} 환경 정보 보기">
+<span class="ht-env-name">환경 · {{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}}</span>
+<span class="ht-env-desc">{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::description}}</span>
+</button>
 </div>
 
 <section class="ht-hand" aria-label="플레이어 손패">
@@ -1224,16 +1593,17 @@ transition: none;
 
 <div class="ht-cards">
 {{#each {{dict_element::{{dict_element::{{getvar::battleView}}::hand}}::items}} card}}
-<button type="button" class="ht-card {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}is-focused{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}is-selected{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::origin}}::preview}}}}is-preview{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::playable}}::false}}}}is-unplayable{{/if}}" risu-btn="battleController|clickCard|{{dict_element::{{slot::card}}::instanceId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-expanded="{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}true{{/if}}{{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}}}false{{/if}}" aria-pressed="{{dict_element::{{slot::card}}::selected}}" {{#if {{equal::{{dict_element::{{getvar::battleView}}::locked}}::true}}}}disabled{{/if}}>
+<article class="ht-card {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}is-focused{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}is-selected{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::origin}}::preview}}}}is-preview{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::playable}}::false}}}}is-unplayable{{/if}}" aria-label="{{dict_element::{{slot::card}}::name}} 카드">
+<button type="button" class="ht-card-action" risu-btn="battleController|clickCard|{{dict_element::{{slot::card}}::instanceId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-label="{{dict_element::{{slot::card}}::name}} 카드 상세 보기 및 선택" aria-expanded="{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}true{{/if}}{{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}}}false{{/if}}" aria-pressed="{{dict_element::{{slot::card}}::selected}}" {{#if {{equal::{{dict_element::{{getvar::battleView}}::locked}}::true}}}}disabled{{/if}}></button>
 {{#if {{equal::{{dict_element::{{slot::card}}::origin}}::preview}}}}<span class="ht-preview-flag">DRAW PREVIEW</span>{{/if}}
 <span class="ht-card-top">
 <span class="ht-order">{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}{{dict_element::{{slot::card}}::selectionOrder}}{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::false}}}}＋{{/if}}</span>
 <span class="ht-card-name">
 <strong>{{dict_element::{{slot::card}}::name}}</strong>
 <span class="ht-card-tags">
-<span class="ht-tag" title="{{dict_element::{{dict_element::{{slot::card}}::actionTag}}::tooltip}}">{{dict_element::{{dict_element::{{slot::card}}::actionTag}}::label}}</span>
+<button type="button" class="ht-tag ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{dict_element::{{slot::card}}::actionTag}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::card}}::actionTag}}::label}} 태그 정보 보기">{{dict_element::{{dict_element::{{slot::card}}::actionTag}}::label}}</button>
 {{#each {{dict_element::{{slot::card}}::mechanisms}} mechanism}}
-<span class="ht-tag ht-tag--mechanism" title="{{dict_element::{{slot::mechanism}}::tooltip}}">{{dict_element::{{slot::mechanism}}::label}}</span>
+<button type="button" class="ht-tag ht-tag--mechanism ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{slot::mechanism}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::mechanism}}::label}} 태그 정보 보기">{{dict_element::{{slot::mechanism}}::label}}</button>
 {{/each}}
 </span>
 </span>
@@ -1247,9 +1617,9 @@ transition: none;
 {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}
 <span class="ht-card-detail">
 <span class="ht-description">
-{{#each {{dict_element::{{slot::card}}::descriptionSegments}} segment}}{{#if {{equal::{{dict_element::{{slot::segment}}::kind}}::text}}}}{{dict_element::{{slot::segment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::segment}}::kind}}::tag}}}}<span class="ht-inline-tag {{#if {{equal::{{dict_element::{{slot::segment}}::tagKind}}::mechanism}}}}ht-inline-tag--mechanism{{/if}}" title="{{dict_element::{{slot::segment}}::tooltip}}">{{dict_element::{{slot::segment}}::label}}</span>{{/if}}{{/each}}
+{{#each {{dict_element::{{slot::card}}::descriptionSegments}} segment}}{{#if {{equal::{{dict_element::{{slot::segment}}::kind}}::text}}}}{{dict_element::{{slot::segment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::segment}}::kind}}::tag}}}}<button type="button" class="ht-inline-tag ht-tip-trigger {{#if {{equal::{{dict_element::{{slot::segment}}::tagKind}}::mechanism}}}}ht-inline-tag--mechanism{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{slot::segment}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::segment}}::label}} 태그 정보 보기">{{dict_element::{{slot::segment}}::label}}</button>{{/if}}{{/each}}
 </span>
-<span class="ht-rules">{{#each {{dict_element::{{slot::card}}::ruleLines}} rule}}<span>{{#each {{dict_element::{{slot::rule}}::segments}} ruleSegment}}{{#if {{equal::{{dict_element::{{slot::ruleSegment}}::kind}}::text}}}}{{dict_element::{{slot::ruleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::ruleSegment}}::kind}}::tag}}}}<span class="ht-inline-tag {{#if {{equal::{{dict_element::{{slot::ruleSegment}}::tagKind}}::mechanism}}}}ht-inline-tag--mechanism{{/if}}" title="{{dict_element::{{slot::ruleSegment}}::tooltip}}">{{dict_element::{{slot::ruleSegment}}::label}}</span>{{/if}}{{/each}}
+<span class="ht-rules">{{#each {{dict_element::{{slot::card}}::ruleLines}} rule}}<span>{{#each {{dict_element::{{slot::rule}}::segments}} ruleSegment}}{{#if {{equal::{{dict_element::{{slot::ruleSegment}}::kind}}::text}}}}{{dict_element::{{slot::ruleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::ruleSegment}}::kind}}::tag}}}}<button type="button" class="ht-inline-tag ht-tip-trigger {{#if {{equal::{{dict_element::{{slot::ruleSegment}}::tagKind}}::mechanism}}}}ht-inline-tag--mechanism{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{slot::ruleSegment}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::ruleSegment}}::label}} 태그 정보 보기">{{dict_element::{{slot::ruleSegment}}::label}}</button>{{/if}}{{/each}}
 </span>
 {{/each}}
 </span>
@@ -1260,7 +1630,7 @@ transition: none;
 </span>
 </span>
 {{/if}}
-</button>
+</article>
 {{/each}}
 </div>
 </section>
@@ -1291,5 +1661,18 @@ transition: none;
 </details>
 {{/if}}
 </main>
+</div>
+
+<div class="ht-popover-bank">
+{{#each {{dict_element::{{getvar::battleView}}::tagGlossary}} glossaryTag}}
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{slot::glossaryTag}}::id}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{slot::glossaryTag}}::label}} 태그 정보">
+<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{slot::glossaryTag}}::id}}" popovertargetaction="hide">
+<span class="ht-popover-kicker">{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::action}}}}ACTION TAG{{/if}}{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::mechanism}}}}MECHANISM{{/if}}</span>
+<span class="ht-popover-title">{{dict_element::{{slot::glossaryTag}}::label}}</span>
+<span class="ht-popover-copy">{{dict_element::{{slot::glossaryTag}}::tooltip}}</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
+{{/each}}
 </div>
 </section>
