@@ -190,7 +190,8 @@ end
 -- warm path는 이 명시적 계약 덕분에 이벤트 사이에서 getLoreBooks/CBS bridge를
 -- 생략한다. 개발 중에는 setRunScriptCacheDevelopmentMode(true)를 사용하면 매
 -- 이벤트의 첫 모듈 호출에서 source를 다시 확인한다.
-RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION or "runtime-bundle-subway-route-v1-20260728"
+RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION
+    or "runtime-bundle-post-battle-loop-v1-one-click-cards-approach-transition-v1-20260729"
 RUNTIME_CACHE_DEVELOPMENT_BYPASS = RUNTIME_CACHE_DEVELOPMENT_BYPASS == true
 
 local RUN_SCRIPT_SOURCE_CACHE_MAX_ENTRIES = 64
@@ -779,11 +780,106 @@ local UI_SHELL_VAR = "helltrainUiShellV1"
 local UI_POPUP_VAR = "helltrainUiPopupV1"
 local UI_ANCHOR_INDEX_VAR = "helltrainUiAnchorIndexV1"
 local UI_READY_VAR = "gameSetupReady"
+local APPROACH_RETRY_VAR = "helltrainApproachRetryV1"
+local APPROACH_REQUEST_ATTEMPTS = 1
 local SETUP_START_MARKUP = [[<section class="helltrain-setup" aria-labelledby="helltrain-start-title">
 <p class="helltrain-setup-label">BOARDING PROTOCOL</p>
 <h2 class="helltrain-setup-title" id="helltrain-start-title">지옥철에 탑승하시겠습니까?</h2>
 <p class="helltrain-setup-copy" id="helltrain-start-copy">게임을 시작하면 초기 상태를 만들고, 덱을 구성하기 위한 카드 드래프트를 엽니다.</p>
 <button class="helltrain-start" type="button" risu-btn="init|start" aria-describedby="helltrain-start-copy">게임 시작</button>
+</section>]]
+local APPROACH_PROCESSING_MARKUP = [[<style>
+.helltrain-approach-processing,
+.helltrain-approach-processing * {
+box-sizing: border-box;
+}
+.helltrain-approach-processing {
+--approach-bg: #0d0c12;
+--approach-panel: rgba(22, 19, 28, .96);
+--approach-line: rgba(220, 204, 176, .2);
+--approach-text: #ece6dc;
+--approach-muted: #afa69d;
+--approach-accent: #e06a70;
+display: grid;
+width: min(100%, 600px);
+min-height: 180px;
+margin: 8px auto;
+place-items: center;
+overflow: hidden;
+border: 1px solid var(--approach-line);
+border-radius: 16px;
+background:
+radial-gradient(circle at 50% 0%, rgba(224, 106, 112, .12), transparent 48%),
+var(--approach-bg);
+color: var(--approach-text);
+box-shadow: 0 18px 48px rgba(0, 0, 0, .32);
+font-family: Pretendard, "Noto Sans KR", system-ui, sans-serif;
+}
+.helltrain-approach-processing__body {
+display: flex;
+align-items: center;
+flex-direction: column;
+padding: 34px 24px;
+text-align: center;
+}
+.helltrain-approach-processing__spinner {
+position: relative;
+width: 34px;
+height: 34px;
+margin-bottom: 16px;
+border: 2px solid rgba(255, 255, 255, .1);
+border-top-color: var(--approach-accent);
+border-radius: 50%;
+animation: helltrain-approach-spin .85s linear infinite;
+}
+.helltrain-approach-processing__spinner::after {
+position: absolute;
+inset: 6px;
+border: 1px solid rgba(224, 106, 112, .22);
+border-radius: inherit;
+content: "";
+}
+.helltrain-approach-processing__label {
+margin: 0;
+font-size: 15px;
+font-weight: 850;
+letter-spacing: .04em;
+}
+.helltrain-approach-processing__dot {
+display: inline-block;
+animation: helltrain-approach-dot 1.2s ease-in-out infinite;
+}
+.helltrain-approach-processing__dot:nth-child(2) {
+animation-delay: .15s;
+}
+.helltrain-approach-processing__dot:nth-child(3) {
+animation-delay: .3s;
+}
+.helltrain-approach-processing__copy {
+margin: 9px 0 0;
+color: var(--approach-muted);
+font-size: 11px;
+}
+@keyframes helltrain-approach-spin {
+to { transform: rotate(360deg); }
+}
+@keyframes helltrain-approach-dot {
+0%, 70%, 100% { opacity: .28; transform: translateY(0); }
+35% { opacity: 1; transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+.helltrain-approach-processing__spinner,
+.helltrain-approach-processing__dot {
+animation: none;
+}
+}
+</style>
+<section class="helltrain-approach-processing" role="status" aria-live="polite" aria-label="처리중...">
+<div class="helltrain-approach-processing__body">
+<span class="helltrain-approach-processing__spinner" aria-hidden="true"></span>
+<p class="helltrain-approach-processing__label">처리중<span aria-hidden="true"><span class="helltrain-approach-processing__dot">.</span><span class="helltrain-approach-processing__dot">.</span><span class="helltrain-approach-processing__dot">.</span></span></p>
+<p class="helltrain-approach-processing__copy">선택한 상대에게 접근하는 장면을 만들고 있습니다.</p>
+</div>
 </section>]]
 
 local function readUiFragment(triggerId, name)
@@ -883,6 +979,261 @@ function ensureGameUiAnchor(triggerId)
     end
     refreshGameUi(triggerId)
     return anchorIndex
+end
+
+local function writeUiFragmentVerified(triggerId, name, value)
+    if type(setChatVar) ~= "function" or type(getChatVar) ~= "function" then
+        error("setChatVar/getChatVar host functions are unavailable")
+    end
+    setChatVar(triggerId, name, value)
+    local stored = getChatVar(triggerId, name)
+    if stored ~= value then
+        error("UI fragment write was not persisted: " .. tostring(name))
+    end
+end
+
+local function readApproachRetry(triggerId)
+    if type(getChatVar) ~= "function" then
+        error("getChatVar host function is unavailable")
+    end
+    local readOk, value = pcall(getChatVar, triggerId, APPROACH_RETRY_VAR)
+    if not readOk then
+        error("failed to read approach retry state: " .. tostring(value))
+    end
+    if value == nil or value == "" or value == "null" then
+        return nil, nil
+    end
+    if type(value) ~= "string" then
+        error("invalid approach retry state")
+    end
+    local separator = string.find(value, "|", 1, true)
+    local phase = separator and string.sub(value, 1, separator - 1) or nil
+    local characterId = separator and string.sub(value, separator + 1) or nil
+    if (phase ~= "pending" and phase ~= "generated")
+        or type(characterId) ~= "string"
+        or string.match(characterId, "^[a-z][a-z0-9_]*$") == nil then
+        error("invalid approach retry state")
+    end
+    return phase, characterId
+end
+
+local function writeApproachRetryVerified(triggerId, phase, characterId)
+    local value = ""
+    if phase ~= nil then
+        value = phase .. "|" .. characterId
+    end
+    writeUiFragmentVerified(triggerId, APPROACH_RETRY_VAR, value)
+end
+
+local function showApproachProcessing(triggerId)
+    writeUiFragmentVerified(triggerId, UI_BODY_VAR, APPROACH_PROCESSING_MARKUP)
+    writeUiFragmentVerified(triggerId, UI_POPUP_VAR, "")
+    writeUiFragmentVerified(triggerId, UI_READY_VAR, "ready")
+    refreshGameUi(triggerId)
+end
+
+local function selectedApproachCharacter(triggerId, report, characterId)
+    local selected = type(report) == "table"
+        and type(report.view) == "table"
+        and report.view.selectedCharacter
+        or nil
+    local name = type(selected) == "table" and selected.name or nil
+    local profile = selected
+
+    local staticOk, staticReport = pcall(
+        runScript,
+        triggerId,
+        "staticData",
+        "loadAll"
+    )
+    if staticOk
+        and type(staticReport) == "table"
+        and staticReport.ok == true
+        and type(staticReport.data) == "table"
+        and type(staticReport.data.characters) == "table"
+        and type(staticReport.data.characters[characterId]) == "table" then
+        profile = staticReport.data.characters[characterId]
+        if type(profile.name) == "string" and profile.name ~= "" then
+            name = profile.name
+        end
+    end
+
+    if type(name) ~= "string" or name == "" then
+        name = "선택한 캐릭터"
+    end
+    return name, profile
+end
+
+local function buildApproachPrompt(characterName, profile)
+    local encodedProfile = "{}"
+    if type(profile) == "table" and type(json) == "table" and type(json.encode) == "function" then
+        local encodeOk, result = pcall(json.encode, profile)
+        if encodeOk and type(result) == "string" then
+            encodedProfile = result
+        end
+    end
+    return {
+        {
+            role = "system",
+            content = table.concat({
+                "당신은 성인용 한국어 다크 픽션 롤플레이의 장면 서술자다.",
+                "무한히 반복되는 지하철 안에서 플레이어가 선택한 성인 캐릭터에게 다가가는 첫 순간을 2~4문단으로 묘사하라.",
+                "캐릭터의 성격과 배경을 지키고, 아직 카드·수치·전투 UI나 게임 규칙은 언급하지 마라.",
+                "플레이어가 입력하지 않은 추가 행동·대사·생각은 만들어내지 마라.",
+                "선택한 캐릭터의 자연스러운 행동과 반응, 객실의 분위기에 집중하라.",
+                "대상 캐릭터: " .. characterName,
+                "캐릭터 자료(JSON): " .. encodedProfile,
+            }, "\n"),
+        },
+        {
+            role = "user",
+            content = characterName .. "에게 접근한다.",
+        },
+    }
+end
+
+local function appendChatVerified(triggerId, role, content)
+    if type(getFullChat) ~= "function" or type(addChat) ~= "function" then
+        error("getFullChat/addChat host functions are unavailable")
+    end
+    local before = getFullChat(triggerId)
+    if type(before) ~= "table" then
+        error("failed to read chat before append")
+    end
+    addChat(triggerId, role, content)
+    local after = getFullChat(triggerId)
+    local appended = type(after) == "table" and after[#after] or nil
+    if type(after) ~= "table"
+        or #after ~= #before + 1
+        or type(appended) ~= "table"
+        or appended.role ~= role
+        or appended.data ~= content then
+        error("chat append was not persisted")
+    end
+end
+
+local function generateApproachScene(triggerId, report, characterId)
+    if type(LLM) ~= "function" then
+        return nil, "LLM 함수를 사용할 수 없습니다. Lua 스크립트의 low-level access를 활성화해야 합니다."
+    end
+    local characterName, profile = selectedApproachCharacter(triggerId, report, characterId)
+    local approachMessage = characterName .. "에게 접근한다."
+    local chat = getFullChat(triggerId)
+    local last = type(chat) == "table" and chat[#chat] or nil
+    local previous = type(chat) == "table" and chat[#chat - 1] or nil
+    if type(last) == "table"
+        and last.role == "char"
+        and type(last.data) == "string"
+        and last.data:match("%S") ~= nil
+        and type(previous) == "table"
+        and previous.role == "user"
+        and previous.data == approachMessage then
+        return last.data, nil
+    end
+    if type(last) ~= "table"
+        or last.role ~= "user"
+        or last.data ~= approachMessage then
+        appendChatVerified(triggerId, "user", approachMessage)
+    end
+
+    local prompt = buildApproachPrompt(characterName, profile)
+    local lastError = "알 수 없는 LLM 오류"
+    for _ = 1, APPROACH_REQUEST_ATTEMPTS do
+        local requestOk, response = pcall(LLM, triggerId, prompt, false, { streaming = true })
+        if requestOk
+            and type(response) == "table"
+            and response.success == true
+            and type(response.result) == "string"
+            and response.result:match("%S") ~= nil then
+            appendChatVerified(triggerId, "char", response.result)
+            return response.result, nil
+        end
+        if requestOk and type(response) == "table" and response.result ~= nil then
+            lastError = tostring(response.result)
+        elseif not requestOk then
+            lastError = tostring(response)
+        end
+    end
+    return nil, lastError
+end
+
+local function removeApproachRetryFiller(triggerId)
+    if type(getFullChat) ~= "function" then
+        error("getFullChat host function is unavailable")
+    end
+    local chat = getFullChat(triggerId)
+    local last = type(chat) == "table" and chat[#chat] or nil
+    if type(last) ~= "table"
+        or last.role ~= "user"
+        or last.data ~= "*says nothing*" then
+        return
+    end
+    if type(removeChat) ~= "function" then
+        error("removeChat host function is unavailable")
+    end
+    removeChat(triggerId, #chat - 1)
+    local after = getFullChat(triggerId)
+    if type(after) ~= "table" or #after ~= #chat - 1 then
+        error("approach retry filler removal was not persisted")
+    end
+end
+
+local function finishApproachTransition(triggerId)
+    local report = runScript(triggerId, "init", "start")
+    if not controllerSucceeded("approach.init.start", report) then
+        return false
+    end
+    local anchorOk, anchorError = pcall(ensureGameUiAnchor, triggerId)
+    if not anchorOk then
+        debug(1, "approach: Battle UI anchor 생성 실패: " .. tostring(anchorError))
+        return false
+    end
+    return true
+end
+
+local function resumeApproachTransition(triggerId, report, characterId, phase)
+    removeApproachRetryFiller(triggerId)
+    if phase == "pending" then
+        showApproachProcessing(triggerId)
+        local output, generationError = generateApproachScene(
+            triggerId,
+            report,
+            characterId
+        )
+        if output == nil then
+            return false, generationError
+        end
+        writeApproachRetryVerified(triggerId, "generated", characterId)
+    end
+    if not finishApproachTransition(triggerId) then
+        return false, "전투 화면으로 전환하지 못했습니다."
+    end
+    writeApproachRetryVerified(triggerId, nil, nil)
+    return true, nil
+end
+
+local function resumeApproachWithAlert(triggerId, report, characterId, phase)
+    local runOk, completed, detail = pcall(
+        resumeApproachTransition,
+        triggerId,
+        report,
+        characterId,
+        phase
+    )
+    if runOk and completed then
+        return true
+    end
+    detail = runOk and detail or completed
+    debug(1, "character approach: 생성 또는 전환 실패: " .. tostring(detail))
+    if type(alertError) == "function" then
+        pcall(
+            alertError,
+            triggerId,
+            "접근 장면을 생성하지 못했습니다. 전송 버튼을 눌러 다시 시도하세요.\n"
+                .. tostring(detail)
+        )
+    end
+    return false
 end
 
 -- outer CBS가 이미 계산된 msgDisplay를 특정 메시지만 remount해도 최신 UI로
@@ -985,6 +1336,30 @@ onButtonClick = async(function(triggerId, data)
                 debug(1, "onButtonClick.init.start: UI anchor 생성 실패: " .. tostring(anchorError))
             end
         end
+    elseif script == "init"
+        and parts[1] == "chooseCharacter"
+        and type(report) == "table"
+        and report.ok == true
+        and report.applied == true then
+        local stateOk, stateError = pcall(
+            writeApproachRetryVerified,
+            triggerId,
+            "pending",
+            parts[2]
+        )
+        if not stateOk then
+            debug(1, "character approach: 재시도 상태 저장 실패: " .. tostring(stateError))
+            if type(alertError) == "function" then
+                pcall(alertError, triggerId, "접근 장면의 재시도 상태를 저장하지 못했습니다.")
+            end
+            return
+        end
+        resumeApproachWithAlert(
+            triggerId,
+            report,
+            parts[2],
+            "pending"
+        )
     end
 end)
 
@@ -1010,6 +1385,26 @@ end)
 --수동 전송의 턴 준비·실패 복구·commit-only 복구
 onStart = async(function(triggerId)
     beginRunScriptEvent(triggerId, "onStart")
+    local retryReadOk, retryPhase, retryCharacterId = pcall(
+        readApproachRetry,
+        triggerId
+    )
+    if not retryReadOk then
+        debug(1, "onStart: 접근 장면 재시도 상태 읽기 실패: " .. tostring(retryPhase))
+        if type(alertError) == "function" then
+            pcall(alertError, triggerId, "접근 장면의 재시도 상태가 올바르지 않습니다.")
+        end
+        return false
+    end
+    if retryPhase ~= nil then
+        resumeApproachWithAlert(
+            triggerId,
+            nil,
+            retryCharacterId,
+            retryPhase
+        )
+        return false
+    end
     local report = runScript(
         triggerId,
         "battleController",

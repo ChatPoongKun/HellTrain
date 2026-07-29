@@ -315,11 +315,13 @@
         end
 
         local playerDeckLength = getArrayLength(spec.playerCardIds)
-        if playerDeckLength ~= 10 then
+        if playerDeckLength == nil
+            or playerDeckLength < 10
+            or playerDeckLength > 20 then
             errors[#errors + 1] = makeError(
                 "invalid_player_deck",
                 "$.playerCardIds",
-                "초기 플레이어 덱은 정확히 10장의 연속 배열이어야 합니다."
+                "플레이어 덱은 10장 이상 20장 이하의 연속 배열이어야 합니다."
             )
         else
             local counts = {}
@@ -336,7 +338,7 @@
                         errors[#errors + 1] = makeError(
                             "player_card_copy_limit_exceeded",
                             "$.playerCardIds[" .. index .. "]",
-                            "초기 덱에는 같은 카드를 2장까지만 넣을 수 있습니다."
+                            "플레이어 덱에는 같은 카드를 2장까지만 넣을 수 있습니다."
                         )
                     end
                 end

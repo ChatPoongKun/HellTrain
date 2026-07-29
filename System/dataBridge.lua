@@ -15,6 +15,13 @@
             errorMessage = "gameSetupView 스키마 검증에 실패했습니다.",
             validatorMessage = "gameSetupView.validate 검증을 통과하지 못했습니다.",
         },
+        runProgressionView = {
+            moduleName = "runProgressionView",
+            action = "validate",
+            errorCode = "run_progression_view_invalid",
+            errorMessage = "runProgressionView 스키마 검증에 실패했습니다.",
+            validatorMessage = "runProgressionView.validate 검증을 통과하지 못했습니다.",
+        },
     }
 
     local function makeError(code, path, message)

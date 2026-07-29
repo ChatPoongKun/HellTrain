@@ -1,162 +1,176 @@
 <style>
-.setup-draft {
---draft-bg: #070a0f;
---draft-panel: rgba(14, 20, 29, 0.96);
---draft-panel-soft: rgba(22, 30, 42, 0.82);
---draft-line: rgba(148, 163, 184, 0.18);
---draft-line-strong: rgba(148, 163, 184, 0.34);
---draft-text: #edf4fb;
---draft-muted: #9baaba;
---draft-dim: #6e7d8d;
---draft-cyan: #46d9ef;
---draft-cyan-soft: rgba(70, 217, 239, 0.13);
---draft-rose: #fb7185;
---draft-rose-soft: rgba(251, 113, 133, 0.12);
---draft-amber: #f5c451;
-position: relative;
-width: min(100%, 760px);
-margin: 14px auto 0;
-overflow: hidden;
-color: var(--draft-text);
-border: 1px solid var(--draft-line);
-border-radius: 20px;
-background:
-linear-gradient(90deg, transparent 0 8%, rgba(70, 217, 239, 0.045) 8% 8.35%, transparent 8.35% 91.65%, rgba(70, 217, 239, 0.045) 91.65% 92%, transparent 92%),
-radial-gradient(circle at 50% -12%, rgba(70, 217, 239, 0.15), transparent 45%),
-linear-gradient(180deg, #111823 0%, var(--draft-bg) 100%);
-box-shadow: 0 24px 60px rgba(0, 0, 0, 0.38), inset 0 1px rgba(255, 255, 255, 0.035);
-font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
-line-height: 1.5;
-isolation: isolate;
-}
-
 .setup-draft,
 .setup-draft * {
 box-sizing: border-box;
 }
-
-.setup-draft::before {
-position: absolute;
-inset: 0;
-z-index: -1;
-pointer-events: none;
-content: "";
-opacity: 0.26;
-background-image:
-linear-gradient(rgba(255, 255, 255, 0.024) 1px, transparent 1px),
-linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
-background-size: 30px 30px;
-mask-image: linear-gradient(to bottom, black, transparent 86%);
+.setup-draft {
+--draft-ink: #f3eee6;
+--draft-muted: #99938d;
+--draft-dim: #6f6964;
+--draft-line: rgba(255, 255, 255, .10);
+--draft-line-strong: rgba(255, 255, 255, .24);
+--draft-panel: rgba(24, 23, 25, .94);
+--draft-panel-2: rgba(34, 32, 34, .92);
+--draft-black: #111012;
+--draft-red: #d85252;
+--draft-amber: #dfae3f;
+--draft-green: #62b47d;
+--draft-blue: #5b91d8;
+width: min(100%, 600px);
+margin: 8px auto;
+overflow: hidden;
+color: var(--draft-ink);
+border: 1px solid rgba(255, 255, 255, .12);
+border-radius: 16px;
+background:
+linear-gradient(140deg, rgba(216, 82, 82, .08), transparent 34%),
+var(--draft-black);
+box-shadow: 0 18px 48px rgba(0, 0, 0, .32);
+font-family: Pretendard, "Noto Sans KR", system-ui, sans-serif;
+font-size: 12px;
+line-height: 1.4;
 }
-
+.setup-draft button,
+.setup-draft label {
+font: inherit;
+}
+.setup-draft button {
+color: inherit;
+}
 .setup-draft .draft-shell {
-padding: clamp(14px, 3.5vw, 25px);
+padding: 0 12px 12px;
 }
-
 .setup-draft .draft-header {
 display: grid;
 grid-template-columns: minmax(0, 1fr) auto;
-align-items: end;
-gap: 18px;
-padding-bottom: 15px;
+align-items: center;
+gap: 12px;
+margin: 0 -12px;
+padding: 10px 13px;
 border-bottom: 1px solid var(--draft-line);
+background: rgba(8, 8, 9, .74);
 }
-
+.setup-draft .draft-brand {
+display: flex;
+align-items: center;
+gap: 9px;
+min-width: 0;
+}
+.setup-draft .draft-brand-mark {
+width: 7px;
+height: 27px;
+flex: 0 0 auto;
+border-radius: 2px;
+background: var(--draft-red);
+box-shadow: 4px 0 0 rgba(216, 82, 82, .22);
+}
+.setup-draft .draft-brand-copy {
+min-width: 0;
+}
 .setup-draft .draft-kicker,
 .setup-draft .draft-metric-label,
-.setup-draft .draft-section-label,
-.setup-draft .draft-stat-label {
-color: var(--draft-muted);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 10px;
-font-weight: 800;
-letter-spacing: 0.11em;
-line-height: 1.25;
+.setup-draft .draft-section-label {
+color: #d56565;
+font-size: 8px;
+font-weight: 900;
+letter-spacing: .14em;
+line-height: 1;
 text-transform: uppercase;
 }
-
-.setup-draft .draft-kicker {
-color: var(--draft-cyan);
-}
-
 .setup-draft .draft-title {
 margin: 4px 0 0;
-color: #fff;
-font-size: clamp(20px, 4.4vw, 30px);
-font-weight: 900;
-letter-spacing: -0.045em;
+color: #f4eee8;
+font-size: 15px;
+font-weight: 850;
+letter-spacing: -.025em;
 line-height: 1.15;
+word-break: keep-all;
 }
-
 .setup-draft .draft-subtitle {
-margin: 7px 0 0;
+margin: 4px 0 0;
 color: var(--draft-muted);
-font-size: 12px;
+font-size: 9px;
+line-height: 1.45;
+word-break: keep-all;
 }
-
 .setup-draft .draft-round {
-min-width: 92px;
-padding: 10px 12px;
-border: 1px solid rgba(70, 217, 239, 0.26);
-border-radius: 12px;
-background: var(--draft-cyan-soft);
+min-width: 76px;
+padding: 6px 8px;
+border: 1px solid rgba(216, 82, 82, .25);
+border-radius: 7px;
+background: rgba(216, 82, 82, .07);
 text-align: right;
 }
-
+.setup-draft .draft-round .draft-metric-label {
+display: block;
+}
 .setup-draft .draft-round strong {
 display: block;
-margin-top: 2px;
-color: #fff;
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 20px;
+margin-top: 4px;
+color: #f5efea;
+font-size: 13px;
 line-height: 1;
 }
-
 .setup-draft .draft-progress {
 display: grid;
 grid-template-columns: repeat(2, minmax(0, 1fr));
-gap: 8px;
-margin: 12px 0 0;
+gap: 5px;
+margin-top: 8px;
 }
-
 .setup-draft .draft-metric {
 display: flex;
 align-items: center;
-justify-content: space-between;
-gap: 10px;
-padding: 9px 11px;
-border: 1px solid var(--draft-line);
-border-radius: 11px;
-background: rgba(2, 6, 12, 0.45);
+gap: 7px;
+min-height: 38px;
+padding: 6px 8px;
+border: 1px solid rgba(255, 255, 255, .08);
+border-radius: 7px;
+background: rgba(255, 255, 255, .025);
 }
-
+.setup-draft .draft-metric::before {
+width: 7px;
+height: 7px;
+flex: 0 0 auto;
+border-radius: 2px;
+background: var(--draft-amber);
+box-shadow: 0 0 0 3px rgba(223, 174, 63, .09);
+content: "";
+}
+.setup-draft .draft-metric + .draft-metric::before {
+background: var(--draft-blue);
+box-shadow: 0 0 0 3px rgba(91, 145, 216, .09);
+}
+.setup-draft .draft-metric .draft-metric-label {
+color: var(--draft-muted);
+letter-spacing: .08em;
+}
 .setup-draft .draft-metric strong {
-color: #fff;
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 14px;
+margin-left: auto;
+color: #f2ece6;
+font-size: 16px;
+line-height: 1;
 }
-
 .setup-draft .draft-section-head {
 display: flex;
-align-items: baseline;
-justify-content: space-between;
-gap: 12px;
-margin: 18px 0 9px;
+align-items: center;
+gap: 7px;
+margin: 11px 0 6px;
 }
-
 .setup-draft .draft-section-title {
 margin: 0;
-color: #fff;
-font-size: 14px;
+color: #eee8e2;
+font-size: 11px;
 font-weight: 850;
 }
-
-.setup-draft .draft-instruction {
+.setup-draft .draft-section-label {
 color: var(--draft-muted);
-font-size: 10px;
+}
+.setup-draft .draft-instruction {
+margin-left: auto;
+color: var(--draft-dim);
+font-size: 8px;
 text-align: right;
 }
-
 .setup-draft .draft-none,
 .setup-draft .draft-choice-state {
 position: absolute;
@@ -168,434 +182,535 @@ clip: rect(0 0 0 0);
 clip-path: inset(50%);
 white-space: nowrap;
 }
-
 .setup-draft .draft-offers {
 display: grid;
 grid-template-columns: repeat(3, minmax(0, 1fr));
-gap: 9px;
+gap: 6px;
 }
-
 .setup-draft .draft-slot {
 position: relative;
 min-width: 0;
 }
-
 .setup-draft .draft-card {
 position: relative;
-display: grid;
-grid-template-rows: auto auto auto 1fr auto;
-min-height: 252px;
-padding: 13px 13px 12px;
+min-width: 0;
 overflow: hidden;
 border: 1px solid var(--draft-line);
-border-radius: 15px;
-color: var(--draft-text);
-background: linear-gradient(150deg, rgba(29, 39, 53, 0.97), rgba(10, 15, 23, 0.99));
-box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
-cursor: pointer;
-transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+border-radius: 8px;
+background: var(--draft-panel-2);
+transition: border-color .14s ease, background .14s ease, transform .14s ease;
 }
-
-.setup-draft .draft-card::before {
-position: absolute;
-inset: 0 auto 0 0;
-width: 3px;
-content: "";
-background: linear-gradient(180deg, var(--draft-cyan), rgba(70, 217, 239, 0.12));
-box-shadow: 0 0 18px rgba(70, 217, 239, 0.32);
-}
-
 .setup-draft .draft-card:hover {
 border-color: var(--draft-line-strong);
-transform: translateY(-2px);
+background: #292629;
 }
-
-.setup-draft .draft-choice-state:focus-visible + .draft-card {
-outline: 2px solid var(--draft-cyan);
-outline-offset: 3px;
-}
-
-.setup-draft .draft-choice-state:checked + .draft-card {
-border-color: rgba(70, 217, 239, 0.56);
-box-shadow: 0 13px 34px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(70, 217, 239, 0.12);
-transform: translateY(-3px);
-}
-
-.setup-draft .draft-card-top,
-.setup-draft .draft-card-bottom {
-display: flex;
-align-items: flex-start;
-justify-content: space-between;
-gap: 8px;
-}
-
-.setup-draft .draft-cost,
-.setup-draft .draft-damage {
-display: inline-flex;
-min-width: 42px;
-min-height: 38px;
-padding: 0 8px;
-align-items: center;
-justify-content: center;
-gap: 5px;
-border-radius: 10px;
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 16px;
-font-weight: 900;
-}
-
-.setup-draft .draft-stat-icon {
-display: inline-flex;
-width: 20px;
-height: 20px;
-flex: 0 0 20px;
-align-items: center;
-justify-content: center;
-}
-
-.setup-draft .draft-stat-icon img {
+.setup-draft .draft-card-action {
+position: absolute;
+z-index: 0;
+inset: 0;
 display: block;
 width: 100%;
 height: 100%;
-object-fit: contain;
+border-radius: inherit;
+cursor: pointer;
 }
-
-.setup-draft .draft-cost {
-border: 1px solid rgba(70, 217, 239, 0.32);
-color: var(--draft-cyan);
-background: rgba(2, 8, 14, 0.62);
+.setup-draft .draft-card-action:focus-visible {
+outline: 2px solid #fff;
+outline-offset: -3px;
 }
-
+.setup-draft .draft-card-top,
+.setup-draft .draft-card-detail,
+.setup-draft .draft-card-bottom {
+position: relative;
+z-index: 1;
+pointer-events: none;
+}
+.setup-draft .draft-card .draft-tip-trigger {
+position: relative;
+z-index: 2;
+pointer-events: auto;
+}
+.setup-draft .draft-choice-state:checked + .draft-card {
+border-color: rgba(98, 180, 125, .52);
+background: #2b282b;
+box-shadow: inset 3px 0 0 var(--draft-green), 0 5px 18px rgba(0, 0, 0, .20);
+transform: translateY(-1px);
+}
+.setup-draft .draft-choice-state:focus-visible + .draft-card {
+outline: 2px solid #fff;
+outline-offset: 2px;
+}
+.setup-draft .draft-card-top {
+display: grid;
+grid-template-columns: minmax(0, 1fr) auto;
+align-items: start;
+gap: 6px;
+min-height: 78px;
+padding: 8px;
+}
+.setup-draft .draft-card-heading {
+display: block;
+min-width: 0;
+}
 .setup-draft .draft-copy-count {
-padding: 5px 7px;
-border: 1px solid var(--draft-line);
-border-radius: 999px;
-color: var(--draft-muted);
-background: rgba(2, 6, 12, 0.5);
-font-size: 9px;
+display: inline-flex;
+align-items: center;
+min-height: 16px;
+padding: 1px 5px;
+border-radius: 99px;
+color: #aaa39e;
+background: rgba(255, 255, 255, .055);
+font-size: 7px;
 font-weight: 800;
 white-space: nowrap;
 }
-
-.setup-draft .draft-card-title {
-margin: 13px 0 0;
-color: #fff;
-font-size: 15px;
-font-weight: 900;
-letter-spacing: -0.025em;
-line-height: 1.25;
+.setup-draft .draft-choice-state:checked + .draft-card .draft-copy-count {
+color: #102316;
+background: var(--draft-green);
 }
-
+.setup-draft .draft-card-title {
+display: block;
+margin-top: 7px;
+overflow: hidden;
+color: #f2ece6;
+font-size: 11px;
+font-weight: 850;
+line-height: 1.25;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
 .setup-draft .draft-tags {
 display: flex;
 flex-wrap: wrap;
-gap: 5px;
-margin-top: 8px;
+gap: 3px;
+margin-top: 5px;
 }
-
-.setup-draft .draft-tag,
-.setup-draft .draft-inline-tag {
-position: relative;
+.setup-draft .draft-tip-trigger {
+margin: 0;
+padding: 0;
+border: 0;
+color: inherit;
+background: none;
+font: inherit;
+text-align: inherit;
+cursor: pointer;
+touch-action: manipulation;
+-webkit-appearance: none;
+appearance: none;
+}
+.setup-draft .draft-tip-trigger:focus-visible {
+outline: 2px solid rgba(255, 255, 255, .88);
+outline-offset: 2px;
+}
+.setup-draft .draft-tag {
 display: inline-flex;
 align-items: center;
-border: 1px solid rgba(70, 217, 239, 0.24);
-border-radius: 999px;
-color: #bff6ff;
-background: var(--draft-cyan-soft);
-font-size: 9px;
+min-height: 15px;
+padding: 0 4px;
+border: 1px solid rgba(216, 82, 82, .26);
+border-radius: 3px;
+color: #e49a9a;
+background: rgba(216, 82, 82, .07);
+font-size: 7px;
 font-weight: 800;
 white-space: nowrap;
 }
-
-.setup-draft .draft-tag {
-padding: 4px 7px;
+.setup-draft .draft-tag.is-mechanism {
+border-color: rgba(91, 145, 216, .28);
+color: #9ec3ef;
+background: rgba(91, 145, 216, .08);
 }
-
-.setup-draft .draft-tag.is-mechanism,
-.setup-draft .draft-inline-tag.is-mechanism {
-border-color: rgba(245, 196, 81, 0.25);
-color: #fde7a5;
-background: rgba(245, 196, 81, 0.1);
+.setup-draft .draft-stats {
+display: grid;
+gap: 4px;
 }
-
-.setup-draft .draft-inline-tag {
-margin: 0 2px;
-padding: 1px 5px;
-vertical-align: baseline;
+.setup-draft .draft-stat {
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+min-width: 31px;
+height: 31px;
+padding: 2px 5px;
+border-radius: 6px;
+background: rgba(255, 255, 255, .045);
 }
-
-.setup-draft .draft-tag-tooltip {
-position: absolute;
-right: 0;
-bottom: calc(100% + 7px);
-z-index: 20;
-width: max-content;
-max-width: 190px;
-padding: 7px 8px;
-pointer-events: none;
-border: 1px solid var(--draft-line-strong);
-border-radius: 8px;
-color: #dce6ef;
-background: #080d14;
-box-shadow: 0 9px 24px rgba(0, 0, 0, 0.42);
-font-size: 9px;
-font-weight: 600;
-line-height: 1.4;
-opacity: 0;
-transform: translateY(3px);
-transition: opacity 120ms ease, transform 120ms ease;
-white-space: normal;
+.setup-draft .draft-stat b {
+font-size: 10px;
+line-height: 1;
 }
-
-.setup-draft .draft-tag:hover .draft-tag-tooltip,
-.setup-draft .draft-tag:focus .draft-tag-tooltip,
-.setup-draft .draft-inline-tag:hover .draft-tag-tooltip,
-.setup-draft .draft-inline-tag:focus .draft-tag-tooltip {
-opacity: 1;
-transform: translateY(0);
+.setup-draft .draft-stat small {
+margin-top: 3px;
+color: var(--draft-muted);
+font-size: 6px;
+font-weight: 800;
+letter-spacing: .08em;
 }
-
+.setup-draft .draft-stat--cost b {
+color: #86b9ee;
+}
+.setup-draft .draft-stat--damage b {
+color: #ef7777;
+}
 .setup-draft .draft-details {
 display: grid;
 grid-template-rows: 0fr;
-margin-top: 9px;
-transition: grid-template-rows 180ms ease;
+transition: grid-template-rows .16s ease;
 }
-
 .setup-draft .draft-details-inner {
 overflow: hidden;
 }
-
-.setup-draft .draft-details-content {
-padding-top: 0;
-color: #b9c5d1;
-font-size: 10px;
-line-height: 1.55;
+.setup-draft .draft-card-detail {
+display: block;
+padding: 0 9px 0;
+border-top: 1px solid transparent;
+background: rgba(0, 0, 0, .12);
 opacity: 0;
-transform: translateY(-5px);
-transition: opacity 140ms ease, transform 140ms ease, padding-top 140ms ease;
+transform: translateY(-3px);
+transition: opacity .14s ease, transform .14s ease, padding .14s ease, border-color .14s ease;
 }
-
 .setup-draft .draft-choice-state:checked + .draft-card .draft-details {
 grid-template-rows: 1fr;
 }
-
-.setup-draft .draft-choice-state:checked + .draft-card .draft-details-content {
-padding-top: 8px;
+.setup-draft .draft-choice-state:checked + .draft-card .draft-card-detail {
+padding: 8px 9px 9px;
+border-top-color: var(--draft-line);
 opacity: 1;
 transform: translateY(0);
 }
-
+.setup-draft .draft-description {
+display: block;
+color: #d7d0ca;
+font-size: 9px;
+line-height: 1.55;
+word-break: keep-all;
+}
+.setup-draft .draft-inline-tag {
+display: inline;
+padding: 1px 4px;
+border-radius: 3px;
+color: #e49a9a;
+background: rgba(216, 82, 82, .12);
+font-size: 8px;
+font-weight: 800;
+}
+.setup-draft .draft-inline-tag.is-mechanism {
+color: #a8caf1;
+background: rgba(91, 145, 216, .14);
+}
 .setup-draft .draft-rule-lines {
 display: grid;
-gap: 4px;
-margin-top: 7px;
+gap: 3px;
+margin-top: 6px;
+padding-top: 6px;
+border-top: 1px solid rgba(255, 255, 255, .07);
 }
-
 .setup-draft .draft-rule-line {
-padding: 5px 6px;
-border-left: 2px solid rgba(245, 196, 81, 0.42);
-color: #c9d3dd;
-background: rgba(245, 196, 81, 0.055);
+position: relative;
+display: block;
+padding-left: 9px;
+color: #aaa39d;
+font-size: 8px;
+line-height: 1.45;
 }
-
+.setup-draft .draft-rule-line::before {
+position: absolute;
+left: 1px;
+color: #d8d1cb;
+content: "·";
+}
 .setup-draft .draft-card-bottom {
-align-items: flex-end;
-margin-top: 12px;
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 7px;
+min-height: 29px;
+padding: 6px 8px;
+border-top: 1px solid var(--draft-line);
+background: rgba(0, 0, 0, .08);
 }
-
 .setup-draft .draft-first-hint {
 color: var(--draft-dim);
-font-size: 9px;
+font-size: 7px;
 line-height: 1.35;
 }
-
+.setup-draft .draft-selected-state {
+display: inline-flex;
+align-items: center;
+gap: 4px;
+color: var(--draft-muted);
+font-size: 7px;
+font-weight: 800;
+}
+.setup-draft .draft-selected-state::before {
+width: 5px;
+height: 5px;
+flex: 0 0 auto;
+border-radius: 50%;
+background: var(--draft-dim);
+content: "";
+}
 .setup-draft .draft-choice-state:checked + .draft-card .draft-first-hint {
-color: var(--draft-cyan);
+color: #ddd6d0;
 }
-
-.setup-draft .draft-damage {
-border: 1px solid rgba(251, 113, 133, 0.3);
-color: var(--draft-rose);
-background: var(--draft-rose-soft);
+.setup-draft .draft-choice-state:checked + .draft-card .draft-selected-state {
+color: #a9d8b8;
 }
-
+.setup-draft .draft-choice-state:checked + .draft-card .draft-selected-state::before {
+background: var(--draft-green);
+box-shadow: 0 0 0 3px rgba(98, 180, 125, .09);
+}
 .setup-draft .draft-confirm {
 display: none;
-width: calc(100% - 16px);
-min-height: 39px;
-margin: 8px 8px 0;
-padding: 8px 10px;
-border: 1px solid rgba(70, 217, 239, 0.5);
-border-radius: 11px;
-color: #021116;
-background: linear-gradient(135deg, #a3f2fb, var(--draft-cyan));
-box-shadow: 0 8px 22px rgba(70, 217, 239, 0.17);
+width: calc(100% - 10px);
+min-height: 32px;
+margin: 5px 5px 0;
+padding: 6px 8px;
+border: 1px solid rgba(98, 180, 125, .50);
+border-radius: 7px;
+color: #e4f2e8;
+background: rgba(98, 180, 125, .15);
+box-shadow: inset 3px 0 0 var(--draft-green);
 cursor: pointer;
 font: inherit;
-font-size: 11px;
-font-weight: 900;
+font-size: 9px;
+font-weight: 850;
 text-align: center;
 }
-
 .setup-draft .draft-choice-state:checked ~ .draft-confirm {
 display: block;
 }
-
-.setup-draft .draft-confirm:hover,
-.setup-draft .draft-confirm:focus-visible {
-outline: 2px solid #d9fbff;
-outline-offset: 2px;
-filter: brightness(1.06);
+.setup-draft .draft-confirm:hover {
+border-color: rgba(98, 180, 125, .74);
+background: rgba(98, 180, 125, .22);
 }
-
+.setup-draft .draft-confirm:focus-visible {
+outline: 2px solid #fff;
+outline-offset: 2px;
+}
 .setup-draft .draft-deck {
 display: flex;
 flex-wrap: wrap;
-gap: 6px;
-min-height: 42px;
-padding: 9px;
+gap: 4px;
+min-height: 38px;
+padding: 6px;
 border: 1px solid var(--draft-line);
-border-radius: 12px;
-background: rgba(2, 6, 12, 0.4);
+border-radius: 8px;
+background: var(--draft-panel);
 }
-
 .setup-draft .draft-deck-item {
 display: inline-flex;
 align-items: center;
-gap: 6px;
+gap: 5px;
 min-width: 0;
-padding: 6px 8px;
-border: 1px solid rgba(148, 163, 184, 0.15);
-border-radius: 9px;
-color: #dce6ef;
-background: var(--draft-panel-soft);
-font-size: 10px;
+padding: 4px 6px;
+border: 1px solid rgba(255, 255, 255, .08);
+border-radius: 6px;
+color: #c8c2bc;
+background: rgba(255, 255, 255, .035);
+font-size: 8px;
 }
-
 .setup-draft .draft-deck-item strong {
 display: grid;
-min-width: 20px;
-height: 20px;
+min-width: 17px;
+height: 17px;
 place-items: center;
-border-radius: 6px;
-color: var(--draft-cyan);
-background: var(--draft-cyan-soft);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 10px;
+border-radius: 5px;
+color: #f0d18c;
+background: rgba(223, 174, 63, .10);
+font-size: 8px;
 }
-
 .setup-draft .draft-deck-empty {
 align-self: center;
 color: var(--draft-dim);
-font-size: 10px;
+font-size: 8px;
 }
-
 .setup-draft .draft-complete {
 display: grid;
 justify-items: center;
-padding: clamp(28px, 8vw, 52px) 18px;
+padding: 32px 18px 27px;
 text-align: center;
 }
-
 .setup-draft .draft-complete-mark {
 display: grid;
-width: 58px;
-height: 58px;
+width: 48px;
+height: 48px;
 place-items: center;
-border: 1px solid rgba(70, 217, 239, 0.42);
-border-radius: 18px;
-color: var(--draft-cyan);
-background: var(--draft-cyan-soft);
-box-shadow: 0 0 30px rgba(70, 217, 239, 0.12);
-font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-font-size: 25px;
-font-weight: 900;
-}
-
-.setup-draft .draft-complete-title,
-.setup-draft .draft-fallback-title {
-margin: 15px 0 0;
-color: #fff;
+border: 1px solid rgba(98, 180, 125, .42);
+border-radius: 10px;
+color: #a9d8b8;
+background: rgba(98, 180, 125, .10);
+box-shadow: 0 0 24px rgba(98, 180, 125, .10);
 font-size: 20px;
 font-weight: 900;
-letter-spacing: -0.035em;
 }
-
+.setup-draft .draft-complete-title,
+.setup-draft .draft-fallback-title {
+margin: 13px 0 0;
+color: #f4eee8;
+font-size: 17px;
+font-weight: 850;
+letter-spacing: -.03em;
+}
 .setup-draft .draft-complete-copy,
 .setup-draft .draft-fallback-copy {
-max-width: 460px;
-margin: 8px 0 0;
+max-width: 430px;
+margin: 7px 0 0;
 color: var(--draft-muted);
-font-size: 12px;
-line-height: 1.65;
+font-size: 9px;
+line-height: 1.6;
 }
-
 .setup-draft .draft-wait-chip {
-margin-top: 15px;
-padding: 7px 10px;
+margin-top: 12px;
+padding: 5px 8px;
 border: 1px solid var(--draft-line);
-border-radius: 999px;
-color: #cbd6e1;
-background: rgba(2, 6, 12, 0.48);
-font-size: 10px;
+border-radius: 99px;
+color: #c8c1bb;
+background: rgba(255, 255, 255, .035);
+font-size: 8px;
 font-weight: 800;
 }
-
 .setup-draft .draft-fallback {
 padding: 28px 20px;
 text-align: center;
 }
-
-@media (max-width: 640px) {
-.setup-draft .draft-header {
-grid-template-columns: 1fr;
-align-items: start;
+.setup-draft .draft-popover {
+position: fixed;
+z-index: 2147483647;
+inset: 50% auto auto 50%;
+display: none;
+width: min(320px, calc(100vw - 28px));
+max-width: none;
+max-height: min(70vh, 420px);
+margin: 0;
+padding: 0;
+overflow: hidden;
+transform: translate(-50%, -50%);
+color: var(--draft-ink);
+border: 1px solid rgba(255, 255, 255, .20);
+border-radius: 12px;
+background:
+linear-gradient(145deg, rgba(216, 82, 82, .10), transparent 42%),
+#1c1a1d;
+box-shadow: 0 24px 70px rgba(0, 0, 0, .62), 0 0 0 1px rgba(0, 0, 0, .45);
+font-family: Pretendard, "Noto Sans KR", system-ui, sans-serif;
+pointer-events: none;
 }
-
-.setup-draft .draft-round {
+.setup-draft .draft-popover:popover-open {
+display: block;
+}
+.setup-draft:has(.draft-popover:popover-open) button:not(.draft-popover-dismiss),
+.setup-draft:has(.draft-popover:popover-open) label {
+pointer-events: none;
+}
+.setup-draft .draft-popover::backdrop {
+background: rgba(4, 4, 6, .30);
+}
+.setup-draft .draft-popover-dismiss {
+display: block;
 width: 100%;
+max-height: min(70vh, 420px);
+margin: 0;
+padding: 15px 16px 13px;
+overflow-y: auto;
+border: 0;
+color: inherit;
+background: transparent;
+font: inherit;
 text-align: left;
+cursor: pointer;
+pointer-events: auto;
+overscroll-behavior: contain;
 }
-
+.setup-draft .draft-popover-dismiss:focus-visible {
+outline: 2px solid #fff;
+outline-offset: -4px;
+}
+.setup-draft .draft-popover-kicker,
+.setup-draft .draft-popover-title,
+.setup-draft .draft-popover-copy,
+.setup-draft .draft-popover-close-hint {
+display: block;
+}
+.setup-draft .draft-popover-kicker {
+color: #d66c6c;
+font-size: 8px;
+font-weight: 900;
+letter-spacing: .13em;
+}
+.setup-draft .draft-popover-kicker.is-mechanism {
+color: #8eb8e9;
+}
+.setup-draft .draft-popover-title {
+margin-top: 4px;
+color: #f3eee6;
+font-size: 15px;
+font-weight: 850;
+line-height: 1.3;
+word-break: keep-all;
+}
+.setup-draft .draft-popover-copy {
+margin-top: 8px;
+color: #cbc3bd;
+font-size: 10px;
+line-height: 1.6;
+word-break: keep-all;
+}
+.setup-draft .draft-popover-close-hint {
+margin-top: 11px;
+color: #716b66;
+font-size: 7px;
+text-align: right;
+}
+.setup-draft .draft-popover-bank {
+display: contents;
+}
+@media (max-width: 520px) {
 .setup-draft .draft-offers {
 grid-template-columns: 1fr;
 }
-
-.setup-draft .draft-card {
-min-height: 212px;
+.setup-draft .draft-card-top {
+grid-template-columns: minmax(0, 1fr) auto;
+min-height: 0;
 }
-
-.setup-draft .draft-section-head {
-align-items: flex-start;
-flex-direction: column;
-gap: 3px;
+.setup-draft .draft-stats {
+grid-template-columns: repeat(2, auto);
 }
-
-.setup-draft .draft-instruction {
-text-align: left;
+.setup-draft .draft-card-bottom {
+min-height: 27px;
 }
 }
-
-@media (max-width: 400px) {
+@media (max-width: 360px) {
 .setup-draft {
 border-right: 0;
 border-left: 0;
 border-radius: 0;
 }
-
-.setup-draft .draft-progress {
+.setup-draft .draft-header {
 grid-template-columns: 1fr;
+align-items: start;
+}
+.setup-draft .draft-round {
+width: 100%;
+text-align: left;
+}
+.setup-draft .draft-section-head {
+align-items: flex-start;
+flex-direction: column;
+gap: 3px;
+}
+.setup-draft .draft-instruction {
+margin-left: 0;
+text-align: left;
 }
 }
-
 @media (prefers-reduced-motion: reduce) {
 .setup-draft *,
 .setup-draft *::before,
 .setup-draft *::after {
 scroll-behavior: auto !important;
-transition-duration: 0.01ms !important;
-animation-duration: 0.01ms !important;
+transition-duration: .01ms !important;
+animation-duration: .01ms !important;
 animation-iteration-count: 1 !important;
 }
 }
@@ -611,9 +726,13 @@ animation-iteration-count: 1 !important;
 {{settempvar::setup_draft_offer::{{dictelement::{{tempvar::setup_draft_view}}::offer}}}}
 <div class="draft-shell">
 <header class="draft-header">
-<div>
-<h2 class="draft-title">치한 스킬을 선택하세요.</h2>
-<p class="draft-subtitle">세 장을 살펴보고 한 장을 골라 초기 덱에 추가하세요.</p>
+<div class="draft-brand">
+<span class="draft-brand-mark" aria-hidden="true"></span>
+<div class="draft-brand-copy">
+<span class="draft-kicker">DECK DRAFT</span>
+<h2 class="draft-title">치한 스킬을 선택하세요</h2>
+<p class="draft-subtitle">세 장을 살펴보고 초기 덱에 추가할 한 장을 고르세요.</p>
+</div>
 </div>
 <div class="draft-round" aria-label="현재 드래프트 회차">
 <span class="draft-metric-label">ROUND</span>
@@ -633,15 +752,16 @@ animation-iteration-count: 1 !important;
 </div>
 
 <div class="draft-section-head">
+<span class="draft-section-label">OFFER</span>
 <h3 class="draft-section-title">제안 카드</h3>
-<span class="draft-instruction">첫 클릭: 상세 확인 · 두 번째 클릭: 선택 확정</span>
+<span class="draft-instruction">카드 클릭: 상세 확인 · 아래 버튼: 선택 확정</span>
 </div>
 
 <input class="draft-none" type="radio" name="setup-draft-choice" id="setup-draft-none" checked aria-hidden="true">
 <div class="draft-offers" role="list" aria-label="제안된 카드 세 장">
 {{#each::keep {{dictelement::{{tempvar::setup_draft_offer}}::cards}} as setup_offer_card}}
 {{settempvar::setup_offer_action::{{dictelement::{{slot::setup_offer_card}}::actionTag}}}}
-<article class="draft-slot" role="listitem">
+<div class="draft-slot" role="listitem">
 <input
 class="draft-choice-state"
 type="radio"
@@ -649,53 +769,70 @@ name="setup-draft-choice"
 id="setup-draft-card-{{dictelement::{{slot::setup_offer_card}}::slot}}"
 aria-label="카드 상세 보기"
 >
-<label class="draft-card" for="setup-draft-card-{{dictelement::{{slot::setup_offer_card}}::slot}}">
+<article class="draft-card" aria-label="{{dictelement::{{slot::setup_offer_card}}::name}} 카드">
+<label class="draft-card-action" for="setup-draft-card-{{dictelement::{{slot::setup_offer_card}}::slot}}" aria-label="{{dictelement::{{slot::setup_offer_card}}::name}} 카드 상세 보기"></label>
 <span class="draft-card-top">
-<span class="draft-cost" aria-label="기본 은폐 비용 {{dictelement::{{slot::setup_offer_card}}::baseStealthCost}}"><span class="draft-stat-icon" aria-hidden="true">{{img::cost.png}}</span><span>{{dictelement::{{slot::setup_offer_card}}::baseStealthCost}}</span></span>
+<span class="draft-card-heading">
 <span class="draft-copy-count">보유 {{dictelement::{{slot::setup_offer_card}}::ownedCopies}} / 2</span>
-</span>
-
-<span class="draft-card-title">{{dictelement::{{slot::setup_offer_card}}::name}}</span>
-
+<strong class="draft-card-title">{{dictelement::{{slot::setup_offer_card}}::name}}</strong>
 <span class="draft-tags" aria-label="카드 태그">
-<span class="draft-tag" tabindex="0">
-{{dictelement::{{tempvar::setup_offer_action}}::label}}
-<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{tempvar::setup_offer_action}}::tooltip}}</span>
+<button type="button" class="draft-tag draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::setup_offer_action}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{tempvar::setup_offer_action}}::label}} 태그 정보 보기">{{dictelement::{{tempvar::setup_offer_action}}::label}}</button>{{#each::keep {{dictelement::{{slot::setup_offer_card}}::mechanisms}} as setup_offer_mechanism}}<button type="button" class="draft-tag is-mechanism draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_offer_mechanism}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::setup_offer_mechanism}}::label}} 태그 정보 보기">{{dictelement::{{slot::setup_offer_mechanism}}::label}}</button>{{/each}}
 </span>
-{{#each::keep {{dictelement::{{slot::setup_offer_card}}::mechanisms}} as setup_offer_mechanism}}
-<span class="draft-tag is-mechanism" tabindex="0">
-{{dictelement::{{slot::setup_offer_mechanism}}::label}}
-<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_offer_mechanism}}::tooltip}}</span>
 </span>
-{{/each}}
+<span class="draft-stats">
+<span class="draft-stat draft-stat--cost" aria-label="기본 은폐 비용 {{dictelement::{{slot::setup_offer_card}}::baseStealthCost}}"><b>{{dictelement::{{slot::setup_offer_card}}::baseStealthCost}}</b><small>비용</small></span>
+<span class="draft-stat draft-stat--damage" aria-label="기본 저항 피해 {{dictelement::{{slot::setup_offer_card}}::baseResistanceDamage}}"><b>{{dictelement::{{slot::setup_offer_card}}::baseResistanceDamage}}</b><small>피해</small></span>
+</span>
 </span>
 
 <span class="draft-details">
 <span class="draft-details-inner">
-<span class="draft-details-content">
+<span class="draft-card-detail">
 <span class="draft-description">
-{{#each::keep {{dictelement::{{slot::setup_offer_card}}::descriptionSegments}} as setup_description_segment}}{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::kind}}::is::text}}{{dictelement::{{slot::setup_description_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::kind}}::isnot::text}}{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::tagKind}}::is::mechanism}}<span class="draft-inline-tag is-mechanism" tabindex="0">{{dictelement::{{slot::setup_description_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_description_segment}}::tooltip}}</span></span>{{/when}}{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::tagKind}}::isnot::mechanism}}<span class="draft-inline-tag" tabindex="0">{{dictelement::{{slot::setup_description_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_description_segment}}::tooltip}}</span></span>{{/when}}{{/when}}{{/each}}</span>
-<span class="draft-rule-lines">{{#each::keep {{dictelement::{{slot::setup_offer_card}}::ruleLines}} as setup_rule_line}}<span class="draft-rule-line">{{#each::keep {{dictelement::{{slot::setup_rule_line}}::segments}} as setup_rule_segment}}{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::kind}}::is::text}}{{dictelement::{{slot::setup_rule_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::kind}}::isnot::text}}{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::tagKind}}::is::mechanism}}<span class="draft-inline-tag is-mechanism" tabindex="0">{{dictelement::{{slot::setup_rule_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_rule_segment}}::tooltip}}</span></span>{{/when}}{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::tagKind}}::isnot::mechanism}}<span class="draft-inline-tag" tabindex="0">{{dictelement::{{slot::setup_rule_segment}}::label}}<span class="draft-tag-tooltip" role="tooltip">{{dictelement::{{slot::setup_rule_segment}}::tooltip}}</span></span>{{/when}}{{/when}}{{/each}}</span>{{/each}}</span>
+{{#each::keep {{dictelement::{{slot::setup_offer_card}}::descriptionSegments}} as setup_description_segment}}{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::kind}}::is::text}}{{dictelement::{{slot::setup_description_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::kind}}::isnot::text}}{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::tagKind}}::is::mechanism}}<button type="button" class="draft-inline-tag is-mechanism draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_description_segment}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::setup_description_segment}}::label}} 태그 정보 보기">{{dictelement::{{slot::setup_description_segment}}::label}}</button>{{/when}}{{#when::keep::{{dictelement::{{slot::setup_description_segment}}::tagKind}}::isnot::mechanism}}<button type="button" class="draft-inline-tag draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_description_segment}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::setup_description_segment}}::label}} 태그 정보 보기">{{dictelement::{{slot::setup_description_segment}}::label}}</button>{{/when}}{{/when}}{{/each}}</span>
+<span class="draft-rule-lines">{{#each::keep {{dictelement::{{slot::setup_offer_card}}::ruleLines}} as setup_rule_line}}<span class="draft-rule-line">{{#each::keep {{dictelement::{{slot::setup_rule_line}}::segments}} as setup_rule_segment}}{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::kind}}::is::text}}{{dictelement::{{slot::setup_rule_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::kind}}::isnot::text}}{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::tagKind}}::is::mechanism}}<button type="button" class="draft-inline-tag is-mechanism draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_rule_segment}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::setup_rule_segment}}::label}} 태그 정보 보기">{{dictelement::{{slot::setup_rule_segment}}::label}}</button>{{/when}}{{#when::keep::{{dictelement::{{slot::setup_rule_segment}}::tagKind}}::isnot::mechanism}}<button type="button" class="draft-inline-tag draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_rule_segment}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::setup_rule_segment}}::label}} 태그 정보 보기">{{dictelement::{{slot::setup_rule_segment}}::label}}</button>{{/when}}{{/when}}{{/each}}</span>{{/each}}</span>
 </span>
 </span>
 </span>
 
 <span class="draft-card-bottom">
-<span class="draft-first-hint">클릭해 상세 보기<br>선택 후 아래에서 확정</span>
-<span class="draft-damage" aria-label="기본 저항 피해 {{dictelement::{{slot::setup_offer_card}}::baseResistanceDamage}}"><span class="draft-stat-icon" aria-hidden="true">{{img::damage.png}}</span><span>{{dictelement::{{slot::setup_offer_card}}::baseResistanceDamage}}</span></span>
+<span class="draft-first-hint">카드를 눌러 상세 보기</span>
+<span class="draft-selected-state">선택 대기</span>
 </span>
-</label>
+</article>
 <button
 class="draft-confirm"
 type="button"
 risu-btn="init|choose|{{dictelement::{{slot::setup_offer_card}}::cardId}}|{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}"
 aria-label="현재 카드를 초기 덱에 추가"
->이 카드를 선택 · 클릭해 확정</button>
-</article>
+>이 카드를 초기 덱에 추가</button>
+
+<div class="draft-popover-bank">
+<div id="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::setup_offer_action}}::id}}" class="draft-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{tempvar::setup_offer_action}}::label}} 태그 정보">
+<button type="button" class="draft-popover-dismiss" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::setup_offer_action}}::id}}" popovertargetaction="hide">
+<span class="draft-popover-kicker">ACTION TAG</span>
+<span class="draft-popover-title">{{dictelement::{{tempvar::setup_offer_action}}::label}}</span>
+<span class="draft-popover-copy">{{dictelement::{{tempvar::setup_offer_action}}::tooltip}}</span>
+<span class="draft-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
+{{#each::keep {{dictelement::{{slot::setup_offer_card}}::mechanisms}} as setup_popover_mechanism}}
+<div id="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_popover_mechanism}}::id}}" class="draft-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{slot::setup_popover_mechanism}}::label}} 태그 정보">
+<button type="button" class="draft-popover-dismiss" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_popover_mechanism}}::id}}" popovertargetaction="hide">
+<span class="draft-popover-kicker is-mechanism">MECHANISM</span>
+<span class="draft-popover-title">{{dictelement::{{slot::setup_popover_mechanism}}::label}}</span>
+<span class="draft-popover-copy">{{dictelement::{{slot::setup_popover_mechanism}}::tooltip}}</span>
+<span class="draft-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
+{{/each}}
+</div>
+</div>
 {{/each}}
 </div>
 
 <div class="draft-section-head">
+<span class="draft-section-label">DECK</span>
 <h3 class="draft-section-title">선택된 덱</h3>
 <span class="draft-instruction">{{dictelement::{{tempvar::setup_draft_deck}}::count}} / {{dictelement::{{tempvar::setup_draft_deck}}::limit}}장</span>
 </div>
@@ -719,6 +856,7 @@ aria-label="현재 카드를 초기 덱에 추가"
 <span class="draft-wait-chip">캐릭터 선택 단계 준비 중</span>
 </div>
 <div class="draft-section-head">
+<span class="draft-section-label">DECK</span>
 <h3 class="draft-section-title">완성된 덱</h3>
 <span class="draft-instruction">{{dictelement::{{tempvar::setup_draft_deck}}::count}} / {{dictelement::{{tempvar::setup_draft_deck}}::limit}}장</span>
 </div>
@@ -733,6 +871,7 @@ aria-label="현재 카드를 초기 덱에 추가"
 {{#when::keep::{{dictelement::{{tempvar::setup_draft_view}}::phase}}::isnot::deckDraft}}
 {{#when::keep::{{dictelement::{{tempvar::setup_draft_view}}::phase}}::isnot::deckComplete}}
 <div class="draft-fallback" aria-live="polite">
+<span class="draft-kicker">DECK DRAFT</span>
 <h2 class="draft-fallback-title">지원하지 않는 준비 단계</h2>
 <p class="draft-fallback-copy">현재 gameSetupView 단계는 이 카드 드래프트 화면에서 표시할 수 없습니다.</p>
 </div>
@@ -744,7 +883,7 @@ aria-label="현재 카드를 초기 덱에 추가"
 {{#when::keep::{{dictelement::{{tempvar::setup_draft_view}}::kind}}::isnot::gameSetupView}}
 <section class="setup-draft" aria-label="카드 드래프트 데이터 대기">
 <div class="draft-fallback" aria-live="polite">
-<div class="draft-kicker">DECK DRAFT</div>
+<span class="draft-kicker">DECK DRAFT</span>
 <h2 class="draft-fallback-title">드래프트 데이터를 기다리는 중</h2>
 <p class="draft-fallback-copy">유효한 gameSetupView가 게시되면 세 장의 카드 제안이 이곳에 표시됩니다.</p>
 </div>

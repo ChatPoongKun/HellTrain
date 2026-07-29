@@ -1062,6 +1062,49 @@ text-align: right;
 .ht-selection-help strong {
 color: #e6dfd9;
 }
+.ht-processing {
+display: flex;
+align-items: center;
+justify-content: center;
+gap: 8px;
+margin-top: 7px;
+padding: 9px 10px;
+overflow: hidden;
+border: 1px solid rgba(223, 174, 63, .24);
+border-radius: 8px;
+background:
+linear-gradient(90deg, rgba(223, 174, 63, .035), rgba(223, 174, 63, .1), rgba(223, 174, 63, .035));
+color: #efd58f;
+font-size: 9px;
+font-weight: 850;
+letter-spacing: .04em;
+}
+.ht-processing-spinner {
+width: 12px;
+height: 12px;
+flex: 0 0 auto;
+border: 2px solid rgba(239, 213, 143, .18);
+border-top-color: currentColor;
+border-radius: 50%;
+animation: ht-processing-spin .8s linear infinite;
+}
+.ht-processing-dot {
+display: inline-block;
+animation: ht-processing-dot 1.2s ease-in-out infinite;
+}
+.ht-processing-dot:nth-child(2) {
+animation-delay: .15s;
+}
+.ht-processing-dot:nth-child(3) {
+animation-delay: .3s;
+}
+@keyframes ht-processing-spin {
+to { transform: rotate(360deg); }
+}
+@keyframes ht-processing-dot {
+0%, 70%, 100% { opacity: .25; transform: translateY(0); }
+35% { opacity: 1; transform: translateY(-1px); }
+}
 .ht-log {
 margin-top: 6px;
 border-top: 1px solid var(--line);
@@ -1279,6 +1322,10 @@ gap: 4px;
 @media (prefers-reduced-motion: reduce) {
 .ht-card {
 transition: none;
+}
+.ht-processing-spinner,
+.ht-processing-dot {
+animation: none;
 }
 }
 </style>
@@ -1625,7 +1672,7 @@ transition: none;
 </span>
 <span class="ht-card-help">
 {{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}<strong>다시 누르면 선택 취소</strong>{{/if}}
-{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::false}}}}<strong>한 번 더 눌러 사용 등록</strong>{{/if}}
+{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::false}}}}<strong>누르면 상세 표시 및 사용 등록</strong>{{/if}}
 {{#if {{equal::{{dict_element::{{slot::card}}::reasonCode}}::insufficient_stealth}}}}<span>은폐가 부족합니다</span>{{/if}}
 </span>
 </span>
@@ -1659,6 +1706,13 @@ transition: none;
 {{/each}}
 </ol>
 </details>
+{{/if}}
+
+{{#if {{equal::{{dict_element::{{getvar::battleView}}::phase}}::awaitingOutput}}}}
+<div class="ht-processing" role="status" aria-live="polite" aria-label="처리중...">
+<span class="ht-processing-spinner" aria-hidden="true"></span>
+<span>처리중<span aria-hidden="true"><span class="ht-processing-dot">.</span><span class="ht-processing-dot">.</span><span class="ht-processing-dot">.</span></span></span>
+</div>
 {{/if}}
 </main>
 </div>

@@ -1439,6 +1439,172 @@
         return values, nil
     end
 
+    local function buildTerminalSummary(authority, lastCommitted, staticData)
+        if type(authority) ~= "table"
+            or (authority.status ~= "victory" and authority.status ~= "defeat") then
+            return nil, {
+                makeError(
+                    "battle_not_terminal",
+                    "$.state.authority.status",
+                    "승리 또는 패배로 확정된 전투만 정산할 수 있습니다."
+                ),
+            }
+        end
+        if type(lastCommitted) ~= "table"
+            or lastCommitted.battleId ~= authority.battleId
+            or lastCommitted.turnId ~= authority.lastCommittedTurnId
+            or type(lastCommitted.afterState) ~= "table"
+            or not deepEqual(lastCommitted.afterState, authority) then
+            return nil, {
+                makeError(
+                    "terminal_receipt_mismatch",
+                    "$.state.lastCommittedPending",
+                    "마지막 확정 턴 영수증이 종료 권위 상태와 정확히 일치하지 않습니다."
+                ),
+            }
+        end
+
+        local presented, presentationErrors = callModule(
+            "turnPresentation",
+            "build",
+            lastCommitted,
+            staticData
+        )
+        if presentationErrors then return nil, presentationErrors end
+        if type(presented.lastTurn) ~= "table" or presented.lastTurn.available ~= true then
+            return nil, {
+                makeError(
+                    "missing_terminal_presentation",
+                    "$.runtime.turnPresentation.lastTurn",
+                    "종료 턴의 공개 결과를 검증하지 못했습니다."
+                ),
+            }
+        end
+
+        local events = type(lastCommitted.turnResult) == "table"
+            and type(lastCommitted.turnResult.publicResult) == "table"
+            and lastCommitted.turnResult.publicResult.events
+            or nil
+        if type(events) ~= "table" then
+            return nil, {
+                makeError(
+                    "missing_terminal_events",
+                    "$.state.lastCommittedPending.turnResult.publicResult.events",
+                    "종료 턴의 공개 사건 배열이 없습니다."
+                ),
+            }
+        end
+        local outcomePayload
+        local outcomeCount = 0
+        local sessionStatus
+        local sessionCount = 0
+        for _, event in ipairs(events) do
+            if type(event) == "table" and event.type == "outcome" then
+                outcomeCount = outcomeCount + 1
+                outcomePayload = event.payload
+            elseif type(event) == "table" and event.type == "session_ended" then
+                sessionCount = sessionCount + 1
+                sessionStatus = type(event.payload) == "table" and event.payload.status or nil
+            end
+        end
+        if outcomeCount ~= 1
+            or sessionCount ~= 1
+            or type(outcomePayload) ~= "table"
+            or outcomePayload.status ~= authority.status
+            or sessionStatus ~= authority.status
+            or (outcomePayload.reasonCode ~= "card_checkpoint"
+                and outcomePayload.reasonCode ~= "turn_end_checkpoint"
+                and outcomePayload.reasonCode ~= "turn_limit")
+            or outcomePayload.stealth ~= authority.player.stealth
+            or outcomePayload.resistance ~= authority.character.resistance then
+            return nil, {
+                makeError(
+                    "invalid_terminal_events",
+                    "$.state.lastCommittedPending.turnResult.publicResult.events",
+                    "종료 공개 사건이 권위 상태의 승패와 최종 수치에 일치하지 않습니다."
+                ),
+            }
+        end
+        if outcomePayload.reasonCode == "turn_limit" and authority.status ~= "defeat" then
+            return nil, {
+                makeError(
+                    "invalid_terminal_reason",
+                    "$.state.lastCommittedPending.turnResult.publicResult.events",
+                    "턴 제한 종료는 패배 결과여야 합니다."
+                ),
+            }
+        end
+
+        local transitCopy, transitError = cloneJson(authority.transit, "$.summary.transit")
+        if transitError then return nil, { transitError } end
+        return {
+            battleId = authority.battleId,
+            turnId = authority.lastCommittedTurnId,
+            characterId = authority.character.characterId,
+            status = authority.status,
+            reasonCode = outcomePayload.reasonCode,
+            turnNumber = authority.turnNumber,
+            turnLimit = authority.turnLimit,
+            finalStealth = authority.player.stealth,
+            finalResistance = authority.character.resistance,
+            environmentId = authority.environmentId,
+            transit = transitCopy,
+        }, nil
+    end
+
+    local function getTerminalSummary()
+        local staticData, staticErrors = loadStaticData()
+        if staticErrors then return failure(staticErrors) end
+        local current, currentErrors = readRuntimeBundle()
+        if currentErrors then return failure(currentErrors) end
+        if current.authority == nil then
+            return success({
+                terminal = false,
+                hasBattle = false,
+                settlementAvailable = false,
+            })
+        end
+        if current.authority.status == "active" then
+            return success({
+                terminal = false,
+                hasBattle = true,
+                settlementAvailable = false,
+                battleId = current.authority.battleId,
+                status = current.authority.status,
+            })
+        end
+        if current.lastCommittedPending == nil
+            and current.draft == nil
+            and current.pending == nil
+            and current.activeRequest == nil then
+            -- startFromRun은 종료 영수증을 확인한 뒤 보조 상태를 먼저
+            -- 비운다. 그 직후 중단된 경우에도 다음 호출이 run의 저장된
+            -- 정산 영수증으로 retirement를 재개할 수 있게 identity만
+            -- 반환한다.
+            return success({
+                terminal = true,
+                hasBattle = true,
+                settlementAvailable = false,
+                battleId = current.authority.battleId,
+                status = current.authority.status,
+            })
+        end
+        local summary, summaryErrors = buildTerminalSummary(
+            current.authority,
+            current.lastCommittedPending,
+            staticData
+        )
+        if summaryErrors then return failure(summaryErrors) end
+        return success({
+            terminal = true,
+            hasBattle = true,
+            settlementAvailable = true,
+            battleId = current.authority.battleId,
+            status = current.authority.status,
+            summary = summary,
+        })
+    end
+
     local function writeInitialRuntime(expected)
         for _, name in ipairs({
             "authority",
@@ -1615,6 +1781,287 @@
         if publishErrors then
             return failure(publishErrors)
         end
+        return success({
+            applied = true,
+            reused = false,
+            recovered = recovered,
+            battleId = expected.authority.battleId,
+            turnId = expected.turnId,
+            turnNumber = expected.authority.turnNumber,
+            setupId = canonicalSetup.setupId,
+            view = published.view,
+        })
+    end
+
+    local function validateBattleReadyRun(runState, setupState, staticData)
+        local canonicalSetup, _, setupErrors = validateBattleReadySetup(
+            setupState,
+            staticData
+        )
+        if setupErrors then return nil, nil, nil, setupErrors end
+
+        local runCopy, runCopyError = cloneJson(runState, "$.runState")
+        if runCopyError then return nil, nil, nil, { runCopyError } end
+        local validated, validationErrors = callModule(
+            "runProgression",
+            "validate",
+            runCopy,
+            canonicalSetup,
+            staticData
+        )
+        if validationErrors then return nil, nil, nil, validationErrors end
+        if type(validated.state) ~= "table"
+            or getmetatable(validated.state) ~= nil
+            or not deepEqual(runCopy, validated.state) then
+            return nil, nil, nil, {
+                makeError(
+                    "run_validation_mismatch",
+                    "$.runState",
+                    "진행 상태가 runProgression.validate의 정규 상태와 정확히 일치하지 않습니다."
+                ),
+            }
+        end
+        if validated.state.phase ~= "battleReady" then
+            return nil, nil, nil, {
+                makeError(
+                    "run_not_battle_ready",
+                    "$.runState.phase",
+                    "다음 상대 선택까지 끝난 battleReady 진행 상태만 전투를 시작할 수 있습니다."
+                ),
+            }
+        end
+        local battleSpec = validated.state.battleSpec
+        if type(battleSpec) ~= "table" or getmetatable(battleSpec) ~= nil then
+            return nil, nil, nil, {
+                makeError(
+                    "missing_battle_spec",
+                    "$.runState.battleSpec",
+                    "진행 상태에 다음 전투 사양이 없습니다."
+                ),
+            }
+        end
+        local deckCopy, deckCopyError = cloneJson(
+            battleSpec.playerCardIds,
+            "$.runState.battleSpec.playerCardIds"
+        )
+        if deckCopyError then return nil, nil, nil, { deckCopyError } end
+        local normalizedRun, normalizedRunError = cloneJson(
+            validated.state,
+            "$.runState"
+        )
+        if normalizedRunError then
+            return nil, nil, nil, { normalizedRunError }
+        end
+        return normalizedRun, canonicalSetup, {
+            battleId = battleSpec.battleId,
+            seed = battleSpec.seed,
+            playerCardIds = deckCopy,
+            characterId = battleSpec.characterId,
+            environmentId = battleSpec.environmentId,
+        }, nil
+    end
+
+    local function latestRunSession(runState)
+        local sessions = type(runState) == "table" and runState.sessions or nil
+        if type(sessions) ~= "table" then return nil end
+        return sessions[#sessions]
+    end
+
+    local function summaryMatchesRunSession(summary, session)
+        return type(summary) == "table"
+            and type(session) == "table"
+            and summary.battleId == session.battleId
+            and summary.turnId == session.turnId
+            and summary.characterId == session.characterId
+            and summary.status == session.status
+            and summary.reasonCode == session.reasonCode
+            and summary.turnNumber == session.turnNumber
+            and summary.turnLimit == session.turnLimit
+            and summary.finalStealth == session.finalStealth
+            and summary.finalResistance == session.finalResistance
+            and summary.environmentId == session.environmentId
+            and deepEqual(summary.transit, session.transit)
+    end
+
+    local function validateRetiredBattle(current, runState, staticData)
+        local authority = current.authority
+        local session = latestRunSession(runState)
+        if type(authority) ~= "table"
+            or (authority.status ~= "victory" and authority.status ~= "defeat")
+            or type(authority.character) ~= "table"
+            or type(authority.player) ~= "table"
+            or type(session) ~= "table"
+            or authority.battleId ~= session.battleId
+            or authority.lastCommittedTurnId ~= session.turnId
+            or authority.character.characterId ~= session.characterId
+            or authority.status ~= session.status
+            or authority.turnNumber ~= session.turnNumber
+            or authority.turnLimit ~= session.turnLimit
+            or authority.player.stealth ~= session.finalStealth
+            or authority.character.resistance ~= session.finalResistance
+            or authority.environmentId ~= session.environmentId
+            or not deepEqual(authority.transit, session.transit) then
+            return {
+                makeError(
+                    "unsettled_battle_runtime",
+                    "$.state.authority",
+                    "기존 종료 전투가 저장된 진행 정산 영수증과 일치하지 않습니다."
+                ),
+            }
+        end
+
+        if current.lastCommittedPending ~= nil then
+            local summary, summaryErrors = buildTerminalSummary(
+                authority,
+                current.lastCommittedPending,
+                staticData
+            )
+            if summaryErrors then return summaryErrors end
+            if not summaryMatchesRunSession(summary, session) then
+                return {
+                    makeError(
+                        "settlement_receipt_mismatch",
+                        "$.runState.sessions",
+                        "종료 턴 공개 영수증과 진행 정산 기록이 일치하지 않습니다."
+                    ),
+                }
+            end
+        elseif current.draft ~= nil
+            or current.pending ~= nil
+            or current.activeRequest ~= nil then
+            return {
+                makeError(
+                    "unsafe_retirement_partial",
+                    "$.state",
+                    "종료 영수증이 사라진 부분 정리 상태에 다른 전투 보조 상태가 남아 있습니다."
+                ),
+            }
+        end
+        return nil
+    end
+
+    local function clearRetiredRuntimeAuxiliary()
+        for _, name in ipairs({
+            "draft",
+            "pending",
+            "activeRequest",
+            "lastCommittedPending",
+        }) do
+            local writeErrors = writeStored(KEYS[name], nil)
+            if writeErrors then return writeErrors end
+        end
+        return nil
+    end
+
+    local function startFromRun(runState, setupState)
+        local staticData, staticErrors = loadStaticData()
+        if staticErrors then return failure(staticErrors) end
+        local canonicalRun, canonicalSetup, spec, runErrors =
+            validateBattleReadyRun(runState, setupState, staticData)
+        if runErrors then return failure(runErrors) end
+
+        local current, currentErrors = readRuntimeBundle()
+        if currentErrors then return failure(currentErrors) end
+        local retired = false
+        if current.authority ~= nil and current.authority.battleId ~= spec.battleId then
+            local retirementErrors = validateRetiredBattle(
+                current,
+                canonicalRun,
+                staticData
+            )
+            if retirementErrors then return failure(retirementErrors) end
+            local clearErrors = clearRetiredRuntimeAuxiliary()
+            if clearErrors then return failure(clearErrors) end
+            current.draft = nil
+            current.pending = nil
+            current.activeRequest = nil
+            current.lastCommittedPending = nil
+            retired = true
+        end
+
+        local expected, expectedErrors = buildInitialBattleFromSetup(spec, staticData)
+        if expectedErrors then return failure(expectedErrors) end
+
+        if current.authority ~= nil and current.authority.battleId == spec.battleId then
+            local bindingErrors = validateExistingSetupBinding(
+                current.authority,
+                spec,
+                staticData
+            )
+            if bindingErrors then return failure(bindingErrors) end
+            if current.authority.status ~= "active" then
+                return failure({
+                    makeError(
+                        "battle_already_terminal",
+                        "$.state.authority.status",
+                        "종료된 현재 전투를 먼저 정산해야 다음 상태를 게시할 수 있습니다."
+                    ),
+                })
+            end
+            local looksLikeInitialPartial = deepEqual(
+                current.authority,
+                expected.authority
+            )
+                and current.draft == nil
+                and current.pending == nil
+                and current.lastCommittedPending == nil
+                and current.activeRequest == nil
+            if not looksLikeInitialPartial then
+                local published, publishErrors = publishCurrentViewInternal(
+                    staticData,
+                    true
+                )
+                if publishErrors then return failure(publishErrors) end
+                return success({
+                    applied = false,
+                    reused = true,
+                    recovered = false,
+                    battleId = current.authority.battleId,
+                    turnNumber = current.authority.turnNumber,
+                    setupId = canonicalSetup.setupId,
+                    view = published.view,
+                })
+            end
+        end
+
+        for _, name in ipairs({
+            "authority",
+            "draft",
+            "pending",
+            "lastCommittedPending",
+            "activeRequest",
+        }) do
+            local existing = current[name]
+            if name == "authority"
+                and retired
+                and type(existing) == "table"
+                and existing.battleId ~= spec.battleId then
+                existing = nil
+            end
+            if existing ~= nil and not deepEqual(existing, expected[name]) then
+                return failure({
+                    makeError(
+                        "unsafe_partial_battle_runtime",
+                        "$.state[" .. string.format("%q", KEYS[name]) .. "]",
+                        "기존 부분 전투 상태가 다음 전투 사양에서 재생한 초기 상태와 일치하지 않습니다."
+                    ),
+                })
+            end
+        end
+
+        local recovered = retired
+            or current.authority ~= nil
+            or current.draft ~= nil
+            or current.pending ~= nil
+            or current.lastCommittedPending ~= nil
+            or current.activeRequest ~= nil
+        local writeErrors = writeInitialRuntime(expected)
+        if writeErrors then return failure(writeErrors) end
+        local published, publishErrors = publishCurrentViewInternal(
+            staticData,
+            true
+        )
+        if publishErrors then return failure(publishErrors) end
         return success({
             applied = true,
             reused = false,
@@ -2721,11 +3168,39 @@
             end
         end
 
-        -- 현재 턴 UI 메시지는 완성 출력 관측 뒤 제거됐다. View만 게시하고,
-        -- onOutput 훅이 장면 응답 다음에 새 UI anchor를 만든 뒤 갱신한다.
-        local published, publishErrors = publishCurrentViewInternal(staticData, true)
-        if publishErrors then
-            return failure(publishErrors)
+        -- 현재 턴 UI 메시지는 완성 출력 관측 뒤 제거됐다. 활성 전투는
+        -- 다음 턴 View를, 종료 전투는 멱등 정산 뒤 결과/보상 View를
+        -- 게시한다. onOutput 훅이 응답 다음에 새 UI anchor를 만든다.
+        local published
+        local progressionState
+        if nextState.status == "active" then
+            local publishErrors
+            published, publishErrors = publishCurrentViewInternal(staticData, true)
+            if publishErrors then return failure(publishErrors) end
+        else
+            local summary, summaryErrors = buildTerminalSummary(
+                nextState,
+                selectedPending,
+                staticData
+            )
+            if summaryErrors then return failure(summaryErrors) end
+            local settled, settlementErrors = callModule(
+                "gameSetupController",
+                "completeBattle",
+                summary
+            )
+            if settlementErrors then return failure(settlementErrors) end
+            if type(settled.view) ~= "table" or type(settled.state) ~= "table" then
+                return failure({
+                    makeError(
+                        "invalid_settlement_result",
+                        "$.runtime.gameSetupController.completeBattle",
+                        "전투 정산이 진행 상태와 결과 View를 반환하지 않았습니다."
+                    ),
+                })
+            end
+            published = { view = settled.view }
+            progressionState = settled.state
         end
         return success({
             generationReady = false,
@@ -2737,6 +3212,7 @@
             turnNumber = nextState.turnNumber,
             publicResult = selectedPending.turnResult.publicResult,
             view = published.view,
+            progressionState = progressionState,
         })
     end
 
@@ -2790,6 +3266,8 @@
         return startVerticalSlice(arguments[1], arguments[2])
     elseif action == "startFromSetup" then
         return startFromSetup(arguments[1])
+    elseif action == "startFromRun" then
+        return startFromRun(arguments[1], arguments[2])
     elseif action == "clickCard" then
         return clickCard(arguments[1], arguments[2])
     elseif action == "registerCard" then
@@ -2806,6 +3284,8 @@
         return publishCurrentView()
     elseif action == "getSnapshot" then
         return getSnapshot()
+    elseif action == "getTerminalSummary" then
+        return getTerminalSummary()
     end
     return failure({
         makeError("unknown_action", "$.action", "지원하지 않는 battleController 작업입니다: " .. tostring(action)),

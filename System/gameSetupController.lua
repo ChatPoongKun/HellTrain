@@ -3,6 +3,8 @@
     local MAX_SAFE_INTEGER = 9007199254740991
     local AUTHORITY_KEY = "gameSetupV1.authority"
     local VIEW_NAME = "gameSetupView"
+    local RUN_AUTHORITY_KEY = "runProgressionV1.authority"
+    local RUN_VIEW_NAME = "runProgressionView"
     local READY_NAME = "gameSetupReady"
     local UI_NAME = "🔯🔯🔯"
     local UI_SHELL_NAME = "helltrainUiShellV1"
@@ -359,6 +361,31 @@
         return copy, nil
     end
 
+    local function readRunAuthority(required)
+        if type(getState) ~= "function" then
+            return nil, {
+                makeError("state_read_unavailable", "$.host.getState", "getState 호스트 함수를 찾을 수 없습니다."),
+            }
+        end
+        local ok, value = pcall(getState, triggerId, RUN_AUTHORITY_KEY)
+        if not ok then
+            return nil, {
+                makeError("state_read_failed", "$.state.runAuthority", "진행 상태를 읽지 못했습니다: " .. tostring(value)),
+            }
+        end
+        if value == nil then
+            if required then
+                return nil, {
+                    makeError("missing_run_authority", "$.state.runAuthority", "전투 후 진행 상태가 없습니다."),
+                }
+            end
+            return nil, nil
+        end
+        local copy, copyError = cloneJson(value, "$.state.runAuthority")
+        if copyError then return nil, { copyError } end
+        return copy, nil
+    end
+
     local function generateSetupSeed()
         if type(cbs) ~= "function" then
             return nil, {
@@ -432,11 +459,35 @@
         return setupUi, nil
     end
 
+    local function loadRunUi()
+        if type(loadLores) ~= "function" then
+            return nil, {
+                makeError("lore_loader_unavailable", "$.host.loadLores", "UI 로어북을 읽을 loadLores 함수를 찾을 수 없습니다."),
+            }
+        end
+        local loadOk, runUi = pcall(loadLores, triggerId, "postBattle.html")
+        if not loadOk then
+            return nil, {
+                makeError("lore_load_failed", "$.lore.postBattle", "postBattle.html을 읽지 못했습니다: " .. tostring(runUi)),
+            }
+        end
+        if type(runUi) ~= "string" or runUi == "" then
+            return nil, {
+                makeError("missing_lore", "$.lore.postBattle", "postBattle.html 로어북 내용이 없습니다."),
+            }
+        end
+        return runUi, nil
+    end
+
     local function permitCanonicalView(purpose, viewName)
         if purpose == "gameSetupViewCanonicalV1" then
             return true
         end
-        return purpose == "dataBridgeCanonicalV1" and viewName == VIEW_NAME
+        if purpose == "runProgressionViewCanonicalV1" then
+            return true
+        end
+        return purpose == "dataBridgeCanonicalV1"
+            and (viewName == VIEW_NAME or viewName == RUN_VIEW_NAME)
     end
 
     local function buildTarget(state, staticData)
@@ -464,6 +515,40 @@
 
         return {
             state = stateCopy,
+            view = viewCopy,
+        }, nil
+    end
+
+    local function buildRunTarget(runState, setupState, staticData)
+        local runCopy, runCopyError = cloneJson(runState, "$.target.runState")
+        if runCopyError then return nil, { runCopyError } end
+        local setupCopy, setupCopyError = cloneJson(setupState, "$.target.setupState")
+        if setupCopyError then return nil, { setupCopyError } end
+
+        local viewReport, viewErrors = callModule(
+            "runProgressionView",
+            "_buildCanonical",
+            runCopy,
+            setupCopy,
+            staticData,
+            permitCanonicalView
+        )
+        if viewErrors then return nil, viewErrors end
+        if type(viewReport.view) ~= "table" or getmetatable(viewReport.view) ~= nil then
+            return nil, {
+                makeError(
+                    "missing_run_progression_view",
+                    "$.runtime.runProgressionView.view",
+                    "runProgressionView 생성 결과에 View가 없습니다."
+                ),
+            }
+        end
+        local viewCopy, viewCopyError = cloneJson(viewReport.view, "$.target.runView")
+        if viewCopyError then return nil, { viewCopyError } end
+
+        return {
+            state = runCopy,
+            setupState = setupCopy,
             view = viewCopy,
         }, nil
     end
@@ -613,12 +698,86 @@
         return nil
     end
 
+    local function verifyExpectedRunAuthority(expectedAuthority, expectMissing)
+        local beforeOk, before = pcall(getState, triggerId, RUN_AUTHORITY_KEY)
+        if not beforeOk then
+            return {
+                makeError(
+                    "state_verify_read_failed",
+                    "$.state.runAuthority",
+                    "진행 상태 쓰기 직전 현재 값을 읽지 못했습니다: " .. tostring(before)
+                ),
+            }
+        end
+        if expectMissing == true then
+            if before ~= nil then
+                return {
+                    makeError(
+                        "run_authority_concurrent_change",
+                        "$.state.runAuthority",
+                        "첫 전투 정산을 저장하기 전에 다른 요청이 진행 상태를 만들었습니다."
+                    ),
+                }
+            end
+        elseif type(expectedAuthority) ~= "table" or not deepEqual(before, expectedAuthority) then
+            return {
+                makeError(
+                    "run_authority_concurrent_change",
+                    "$.state.runAuthority",
+                    "진행 전이를 저장하기 전에 상태가 다른 요청에 의해 변경되었습니다."
+                ),
+            }
+        end
+        return nil
+    end
+
+    local function writeRunAuthorityVerified(state, expectedAuthority, expectMissing)
+        local concurrentErrors = verifyExpectedRunAuthority(expectedAuthority, expectMissing)
+        if concurrentErrors then return concurrentErrors end
+
+        local storedCopy, copyError = cloneJson(state, "$.state.runAuthority")
+        if copyError then return { copyError } end
+        local writeOk, writeError = pcall(setState, triggerId, RUN_AUTHORITY_KEY, storedCopy)
+        if not writeOk then
+            return {
+                makeError("state_write_failed", "$.state.runAuthority", "진행 상태 저장에 실패했습니다: " .. tostring(writeError)),
+            }
+        end
+        local readOk, stored = pcall(getState, triggerId, RUN_AUTHORITY_KEY)
+        if not readOk then
+            return {
+                makeError("state_verify_read_failed", "$.state.runAuthority", "쓰기 뒤 진행 상태를 읽지 못했습니다: " .. tostring(stored)),
+            }
+        end
+        if not deepEqual(storedCopy, stored) then
+            return {
+                makeError("state_write_not_persisted", "$.state.runAuthority", "쓰기 뒤 읽은 진행 상태가 저장하려던 상태와 다릅니다."),
+            }
+        end
+        return nil
+    end
+
     local function beginPublish(writeAuthority, expectedAuthority, expectMissing)
         local hostErrors = preflightHost(writeAuthority)
         if hostErrors then return failure(hostErrors) end
 
         if writeAuthority then
             local concurrentErrors = verifyExpectedAuthority(expectedAuthority, expectMissing)
+            if concurrentErrors then return failure(concurrentErrors) end
+        end
+
+        local updatingErrors = writeChatVarVerified(READY_NAME, "updating", "$.chatVar.gameSetupReady")
+        if updatingErrors then return failure(updatingErrors) end
+
+        return nil
+    end
+
+    local function beginRunPublish(writeAuthority, expectedAuthority, expectMissing)
+        local hostErrors = preflightHost(writeAuthority)
+        if hostErrors then return failure(hostErrors) end
+
+        if writeAuthority then
+            local concurrentErrors = verifyExpectedRunAuthority(expectedAuthority, expectMissing)
             if concurrentErrors then return failure(concurrentErrors) end
         end
 
@@ -706,6 +865,95 @@
         })
     end
 
+    local function publishRunState(
+        runState,
+        setupState,
+        writeAuthority,
+        actionName,
+        applied,
+        stale,
+        staticData,
+        expectedAuthority,
+        expectMissing
+    )
+        local beginErrors = beginRunPublish(
+            writeAuthority,
+            expectedAuthority,
+            expectMissing
+        )
+        if beginErrors then return beginErrors end
+
+        if writeAuthority then
+            local authorityErrors = writeRunAuthorityVerified(
+                runState,
+                expectedAuthority,
+                expectMissing
+            )
+            if authorityErrors then return failure(authorityErrors) end
+        end
+
+        local target, targetErrors = buildRunTarget(runState, setupState, staticData)
+        if targetErrors then return failure(targetErrors) end
+
+        local published, publishErrors = callModule(
+            "dataBridge",
+            "_publishCanonical",
+            RUN_VIEW_NAME,
+            target.view,
+            permitCanonicalView
+        )
+        if publishErrors then return failure(publishErrors) end
+        if type(published.encoded) ~= "string" or published.encoded == "" then
+            return failure({
+                makeError(
+                    "missing_published_view",
+                    "$.runtime.dataBridge.encoded",
+                    "게시 결과에 runProgressionView 문자열이 없습니다."
+                ),
+            })
+        end
+        local viewReadOk, storedView = pcall(getChatVar, triggerId, RUN_VIEW_NAME)
+        if not viewReadOk then
+            return failure({
+                makeError(
+                    "view_verify_read_failed",
+                    "$.chatVar.runProgressionView",
+                    "게시 뒤 runProgressionView를 읽지 못했습니다: " .. tostring(storedView)
+                ),
+            })
+        end
+        if storedView ~= published.encoded then
+            return failure({
+                makeError(
+                    "view_write_not_persisted",
+                    "$.chatVar.runProgressionView",
+                    "게시된 runProgressionView가 인코딩 결과와 다릅니다."
+                ),
+            })
+        end
+
+        local shellErrors = ensureUiShell()
+        if shellErrors then return failure(shellErrors) end
+        local ui, loadUiErrors = loadRunUi()
+        if loadUiErrors then return failure(loadUiErrors) end
+        local uiErrors = writeChatVarVerified(UI_NAME, ui, "$.chatVar.ui")
+        if uiErrors then return failure(uiErrors) end
+        local readyErrors = writeChatVarVerified(READY_NAME, "ready", "$.chatVar.gameSetupReady")
+        if readyErrors then return failure(readyErrors) end
+
+        local returnState, stateError = cloneJson(target.state, "$.result.state")
+        if stateError then return failure({ stateError }) end
+        local returnView, viewError = cloneJson(target.view, "$.result.view")
+        if viewError then return failure({ viewError }) end
+        return success({
+            action = actionName,
+            applied = applied,
+            stale = stale,
+            state = returnState,
+            view = returnView,
+        })
+    end
+
     local function validateTransitionResult(report, previousState, moduleAction)
         if type(report) ~= "table"
             or type(report.state) ~= "table"
@@ -734,6 +982,41 @@
                     "stale_state_changed",
                     "$.runtime.gameSetup." .. tostring(moduleAction) .. ".state",
                     "stale 설정 전이가 권위 상태를 변경했습니다."
+                ),
+            }
+        end
+        return report, nil
+    end
+
+    local function validateRunTransitionResult(report, previousState, moduleAction)
+        if type(report) ~= "table"
+            or type(report.state) ~= "table"
+            or type(report.applied) ~= "boolean"
+            or type(report.stale) ~= "boolean" then
+            return nil, {
+                makeError(
+                    "invalid_transition_result",
+                    "$.runtime.runProgression." .. tostring(moduleAction),
+                    "진행 전이 결과에 state/applied/stale가 올바르게 포함되지 않았습니다."
+                ),
+            }
+        end
+        if report.stale == true and report.applied ~= false then
+            return nil, {
+                makeError(
+                    "invalid_stale_result",
+                    "$.runtime.runProgression." .. tostring(moduleAction),
+                    "stale 진행 전이는 적용 상태일 수 없습니다."
+                ),
+            }
+        end
+        if report.stale == true
+            and (type(previousState) ~= "table" or not deepEqual(report.state, previousState)) then
+            return nil, {
+                makeError(
+                    "stale_state_changed",
+                    "$.runtime.runProgression." .. tostring(moduleAction) .. ".state",
+                    "stale 진행 전이가 권위 상태를 변경했습니다."
                 ),
             }
         end
@@ -854,7 +1137,196 @@
         })
     end
 
+    local function handoffRunBattle(
+        runState,
+        setupState,
+        writeAuthority,
+        actionName,
+        applied,
+        stale,
+        staticData,
+        expectedAuthority,
+        expectMissing
+    )
+        local target, targetErrors = buildRunTarget(runState, setupState, staticData)
+        if targetErrors then return failure(targetErrors) end
+        if target.state.phase ~= "battleReady" then
+            return failure({
+                makeError(
+                    "run_not_battle_ready",
+                    "$.state.runAuthority.phase",
+                    "다음 상대 선택까지 끝난 battleReady 진행 상태만 전투로 인계할 수 있습니다."
+                ),
+            })
+        end
+
+        local beginErrors = beginRunPublish(
+            writeAuthority,
+            expectedAuthority,
+            expectMissing
+        )
+        if beginErrors then return beginErrors end
+        if writeAuthority then
+            local authorityErrors = writeRunAuthorityVerified(
+                target.state,
+                expectedAuthority,
+                expectMissing
+            )
+            if authorityErrors then return failure(authorityErrors) end
+        end
+
+        local shellErrors = ensureUiShell()
+        if shellErrors then return failure(shellErrors) end
+        local battle, battleErrors = callModule(
+            "battleController",
+            "startFromRun",
+            target.state,
+            target.setupState
+        )
+        if battleErrors then return failure(battleErrors) end
+        local battleSpec = target.state.battleSpec
+        if type(battleSpec) ~= "table"
+            or type(battle.applied) ~= "boolean"
+            or type(battle.reused) ~= "boolean"
+            or type(battle.recovered) ~= "boolean"
+            or battle.applied == battle.reused
+            or battle.battleId ~= battleSpec.battleId
+            or battle.setupId ~= target.setupState.setupId
+            or not isSafeInteger(battle.turnNumber, 1)
+            or type(battle.view) ~= "table" then
+            return failure({
+                makeError(
+                    "invalid_battle_handoff_result",
+                    "$.runtime.battleController.startFromRun",
+                    "다음 전투 인계 결과가 진행 상태 identity와 필수 결과 계약을 만족하지 않습니다."
+                ),
+            })
+        end
+
+        local readyErrors = writeChatVarVerified(READY_NAME, "ready", "$.chatVar.gameSetupReady")
+        if readyErrors then return failure(readyErrors) end
+
+        local returnState, stateError = cloneJson(target.state, "$.result.state")
+        if stateError then return failure({ stateError }) end
+        local returnView, viewError = cloneJson(target.view, "$.result.view")
+        if viewError then return failure({ viewError }) end
+        local returnBattle, battleError = cloneJson(battle, "$.result.battle")
+        if battleError then return failure({ battleError }) end
+        local returnBattleView, battleViewError = cloneJson(battle.view, "$.result.battleView")
+        if battleViewError then return failure({ battleViewError }) end
+        return success({
+            action = actionName,
+            applied = applied,
+            stale = stale,
+            state = returnState,
+            view = returnView,
+            battle = returnBattle,
+            battleView = returnBattleView,
+        })
+    end
+
+    local function settleProgression(setupState, currentRun, summary, staticData, actionName)
+        local settled, settleErrors = callModule(
+            "runProgression",
+            "settle",
+            currentRun,
+            setupState,
+            summary,
+            staticData
+        )
+        if settleErrors then return failure(settleErrors) end
+        local checked, checkedErrors = validateRunTransitionResult(
+            settled,
+            currentRun,
+            "settle"
+        )
+        if checkedErrors then return failure(checkedErrors) end
+        return publishRunState(
+            checked.state,
+            setupState,
+            checked.applied == true,
+            actionName,
+            checked.applied,
+            checked.stale,
+            staticData,
+            currentRun,
+            currentRun == nil
+        )
+    end
+
+    local function inspectTerminalBattle()
+        local inspected, inspectErrors = callModule(
+            "battleController",
+            "getTerminalSummary"
+        )
+        if inspectErrors then return nil, inspectErrors end
+        if type(inspected.terminal) ~= "boolean" then
+            return nil, {
+                makeError(
+                    "invalid_terminal_inspection",
+                    "$.runtime.battleController.getTerminalSummary",
+                    "전투 종료 점검 결과에 terminal 불리언이 없습니다."
+                ),
+            }
+        end
+        if type(inspected.settlementAvailable) ~= "boolean" then
+            return nil, {
+                makeError(
+                    "invalid_terminal_inspection",
+                    "$.runtime.battleController.getTerminalSummary.settlementAvailable",
+                    "전투 종료 점검 결과에 settlementAvailable 불리언이 없습니다."
+                ),
+            }
+        end
+        if inspected.terminal == true
+            and inspected.settlementAvailable == true
+            and (type(inspected.summary) ~= "table" or getmetatable(inspected.summary) ~= nil) then
+            return nil, {
+                makeError(
+                    "missing_terminal_summary",
+                    "$.runtime.battleController.getTerminalSummary.summary",
+                    "종료된 전투 점검 결과에 정산 요약이 없습니다."
+                ),
+            }
+        end
+        if inspected.terminal == true
+            and (type(inspected.battleId) ~= "string"
+                or type(inspected.status) ~= "string") then
+            return nil, {
+                makeError(
+                    "invalid_terminal_identity",
+                    "$.runtime.battleController.getTerminalSummary",
+                    "종료된 전투 점검 결과에 battleId와 status가 없습니다."
+                ),
+            }
+        end
+        return inspected, nil
+    end
+
     local function validateInvocation()
+        if action == "completeBattle" then
+            if argumentCount ~= 1 then
+                return nil, {
+                    makeError(
+                        "invalid_argument_count",
+                        "$.arguments",
+                        "completeBattle 작업에는 종료 요약 하나가 필요합니다."
+                    ),
+                }
+            end
+            if type(arguments[1]) ~= "table" or getmetatable(arguments[1]) ~= nil then
+                return nil, {
+                    makeError(
+                        "invalid_battle_summary",
+                        "$.arguments[1]",
+                        "종료 요약은 메타테이블 없는 객체여야 합니다."
+                    ),
+                }
+            end
+            local summaryCopy, summaryError = cloneJson(arguments[1], "$.arguments[1]")
+            if summaryError then return nil, { summaryError } end
+            return { summary = summaryCopy }, nil
+        end
         if action == "start" then
             if argumentCount ~= 0 then
                 return nil, {
@@ -913,7 +1385,93 @@
         local staticData, staticErrors = loadStaticData()
         if staticErrors then return failure(staticErrors) end
 
+        if action == "completeBattle" then
+            local setupState, setupErrors = readAuthority(true)
+            if setupErrors then return failure(setupErrors) end
+            local currentRun, runErrors = readRunAuthority(false)
+            if runErrors then return failure(runErrors) end
+            return settleProgression(
+                setupState,
+                currentRun,
+                command.summary,
+                staticData,
+                "completeBattle"
+            )
+        end
+
         if action == "start" then
+            local currentRun, runReadErrors = readRunAuthority(false)
+            if runReadErrors then return failure(runReadErrors) end
+            if currentRun ~= nil then
+                local setupState, setupReadErrors = readAuthority(true)
+                if setupReadErrors then return failure(setupReadErrors) end
+                local validatedRun, validationErrors = callModule(
+                    "runProgression",
+                    "validate",
+                    currentRun,
+                    setupState,
+                    staticData
+                )
+                if validationErrors then return failure(validationErrors) end
+                if type(validatedRun.state) ~= "table"
+                    or not deepEqual(currentRun, validatedRun.state) then
+                    return failure({
+                        makeError(
+                            "run_authority_validation_mismatch",
+                            "$.state.runAuthority",
+                            "저장된 진행 상태의 정규 검증 결과가 원본과 일치하지 않습니다."
+                        ),
+                    })
+                end
+                currentRun = validatedRun.state
+                if currentRun.phase == "battleReady" then
+                    local inspected, inspectErrors = inspectTerminalBattle()
+                    if inspectErrors then return failure(inspectErrors) end
+                    if inspected.terminal == true
+                        and type(currentRun.battleSpec) == "table"
+                        and inspected.battleId == currentRun.battleSpec.battleId then
+                        if inspected.settlementAvailable ~= true then
+                            return failure({
+                                makeError(
+                                    "missing_terminal_settlement_receipt",
+                                    "$.state.battleRuntime",
+                                    "현재 종료 전투를 정산할 마지막 확정 턴 영수증이 없습니다."
+                                ),
+                            })
+                        end
+                        return settleProgression(
+                            setupState,
+                            currentRun,
+                            inspected.summary,
+                            staticData,
+                            "start"
+                        )
+                    end
+                    return handoffRunBattle(
+                        currentRun,
+                        setupState,
+                        false,
+                        "start",
+                        false,
+                        false,
+                        staticData,
+                        currentRun,
+                        false
+                    )
+                end
+                return publishRunState(
+                    currentRun,
+                    setupState,
+                    false,
+                    "start",
+                    false,
+                    false,
+                    staticData,
+                    currentRun,
+                    false
+                )
+            end
+
             local stored, readErrors = readAuthority(false)
             if readErrors then return failure(readErrors) end
             local expectedAuthority = stored
@@ -965,6 +1523,37 @@
             end
 
             if state.phase == "battleReady" then
+                local inspected, inspectErrors = inspectTerminalBattle()
+                if inspectErrors then return failure(inspectErrors) end
+                if inspected.terminal == true
+                    and type(state.battleSpec) == "table"
+                    and inspected.battleId == state.battleSpec.battleId then
+                    if inspected.settlementAvailable ~= true then
+                        return failure({
+                            makeError(
+                                "missing_terminal_settlement_receipt",
+                                "$.state.battleRuntime",
+                                "현재 종료 전투를 정산할 마지막 확정 턴 영수증이 없습니다."
+                            ),
+                        })
+                    end
+                    if writeAuthority then
+                        local authorityErrors = writeAuthorityVerified(
+                            state,
+                            expectedAuthority,
+                            expectMissing
+                        )
+                        if authorityErrors then return failure(authorityErrors) end
+                        writeAuthority = false
+                    end
+                    return settleProgression(
+                        state,
+                        nil,
+                        inspected.summary,
+                        staticData,
+                        "start"
+                    )
+                end
                 return handoffBattle(
                     state,
                     writeAuthority,
@@ -998,6 +1587,55 @@
 
         local stored, readErrors = readAuthority(true)
         if readErrors then return failure(readErrors) end
+        local currentRun, runReadErrors = readRunAuthority(false)
+        if runReadErrors then return failure(runReadErrors) end
+        if currentRun ~= nil then
+            local runAction = action == "chooseCharacter"
+                and "chooseCharacter"
+                or "claimReward"
+            local transitioned, transitionErrors = callModule(
+                "runProgression",
+                runAction,
+                currentRun,
+                stored,
+                command,
+                staticData
+            )
+            if transitionErrors then return failure(transitionErrors) end
+            local checked, checkedErrors = validateRunTransitionResult(
+                transitioned,
+                currentRun,
+                runAction
+            )
+            if checkedErrors then return failure(checkedErrors) end
+
+            local runState = checked.state
+            local writeRun = checked.applied == true
+            if runState.phase == "battleReady" then
+                return handoffRunBattle(
+                    runState,
+                    stored,
+                    writeRun,
+                    action,
+                    checked.applied,
+                    checked.stale,
+                    staticData,
+                    currentRun,
+                    false
+                )
+            end
+            return publishRunState(
+                runState,
+                stored,
+                writeRun,
+                action,
+                checked.applied,
+                checked.stale,
+                staticData,
+                currentRun,
+                false
+            )
+        end
         local moduleAction = action == "chooseCharacter" and "chooseCharacter" or "choose"
         -- 저장소에서 읽은 authority를 gameSetup이 처음부터 재생 검증한 뒤
         -- 현재 카드 또는 캐릭터 interaction token만 적용한다.

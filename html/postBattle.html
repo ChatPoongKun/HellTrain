@@ -1,0 +1,1162 @@
+<style>
+.run-flow {
+--run-bg: #070a10;
+--run-panel: rgba(14, 20, 30, 0.96);
+--run-panel-soft: rgba(22, 30, 43, 0.86);
+--run-line: rgba(148, 163, 184, 0.2);
+--run-line-strong: rgba(148, 163, 184, 0.4);
+--run-text: #edf4fb;
+--run-muted: #9aa9b8;
+--run-dim: #6f7e8d;
+--run-cyan: #48d9ef;
+--run-cyan-soft: rgba(72, 217, 239, 0.12);
+--run-green: #52e1a7;
+--run-green-soft: rgba(82, 225, 167, 0.13);
+--run-red: #fb7185;
+--run-red-soft: rgba(251, 113, 133, 0.13);
+--run-amber: #f6c85d;
+--run-route-color: #48d9ef;
+position: relative;
+width: min(100%, 840px);
+margin: 14px auto 0;
+overflow: hidden;
+color: var(--run-text);
+border: 1px solid var(--run-line);
+border-radius: 21px;
+background:
+radial-gradient(circle at 50% -15%, rgba(72, 217, 239, 0.14), transparent 43%),
+linear-gradient(180deg, #111925 0%, var(--run-bg) 100%);
+box-shadow: 0 25px 64px rgba(0, 0, 0, 0.4), inset 0 1px rgba(255, 255, 255, 0.035);
+font-family: Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", system-ui, sans-serif;
+line-height: 1.5;
+isolation: isolate;
+}
+
+.run-flow,
+.run-flow * {
+box-sizing: border-box;
+}
+
+.run-flow::before {
+position: absolute;
+inset: 0;
+z-index: -1;
+pointer-events: none;
+content: "";
+opacity: 0.26;
+background-image:
+linear-gradient(rgba(255, 255, 255, 0.024) 1px, transparent 1px),
+linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+background-size: 30px 30px;
+mask-image: linear-gradient(to bottom, black, transparent 90%);
+}
+
+.run-flow .run-shell {
+padding: clamp(14px, 3.5vw, 27px);
+}
+
+.run-flow .run-topbar {
+display: flex;
+align-items: end;
+justify-content: space-between;
+gap: 18px;
+padding-bottom: 14px;
+border-bottom: 1px solid var(--run-line);
+}
+
+.run-flow .run-kicker,
+.run-flow .run-label,
+.run-flow .run-score-label,
+.run-flow .run-resource-label,
+.run-flow .run-card-stat-label,
+.run-flow .run-target-stat-label {
+color: var(--run-muted);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 9px;
+font-weight: 850;
+letter-spacing: 0.1em;
+line-height: 1.25;
+text-transform: uppercase;
+}
+
+.run-flow .run-kicker {
+color: var(--run-cyan);
+}
+
+.run-flow .run-stage-title {
+margin: 4px 0 0;
+color: #fff;
+font-size: clamp(18px, 4vw, 27px);
+font-weight: 900;
+letter-spacing: -0.04em;
+line-height: 1.15;
+}
+
+.run-flow .run-scorebar {
+display: grid;
+grid-template-columns: repeat(4, minmax(58px, 1fr));
+gap: 6px;
+width: min(100%, 380px);
+}
+
+.run-flow .run-score {
+min-width: 0;
+padding: 8px 7px;
+border: 1px solid var(--run-line);
+border-radius: 10px;
+background: rgba(2, 6, 12, 0.5);
+text-align: center;
+}
+
+.run-flow .run-score strong {
+display: block;
+margin-top: 2px;
+color: #fff;
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 14px;
+line-height: 1.1;
+}
+
+.run-flow .run-score.run-score-win strong {
+color: var(--run-green);
+}
+
+.run-flow .run-score.run-score-loss strong {
+color: var(--run-red);
+}
+
+.run-flow .run-result {
+position: relative;
+margin-top: 15px;
+overflow: hidden;
+border: 1px solid var(--run-line);
+border-radius: 17px;
+background:
+linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 46%),
+var(--run-panel);
+}
+
+.run-flow .run-result::before {
+position: absolute;
+inset: 0 auto 0 0;
+width: 4px;
+content: "";
+background: var(--run-dim);
+box-shadow: 0 0 22px rgba(148, 163, 184, 0.2);
+}
+
+.run-flow .run-result.run-is-victory {
+border-color: rgba(82, 225, 167, 0.34);
+background:
+radial-gradient(circle at 10% 0%, rgba(82, 225, 167, 0.12), transparent 38%),
+linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 46%),
+var(--run-panel);
+}
+
+.run-flow .run-result.run-is-victory::before {
+background: var(--run-green);
+box-shadow: 0 0 24px rgba(82, 225, 167, 0.45);
+}
+
+.run-flow .run-result.run-is-defeat {
+border-color: rgba(251, 113, 133, 0.35);
+background:
+radial-gradient(circle at 10% 0%, rgba(251, 113, 133, 0.12), transparent 38%),
+linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 46%),
+var(--run-panel);
+}
+
+.run-flow .run-result.run-is-defeat::before {
+background: var(--run-red);
+box-shadow: 0 0 24px rgba(251, 113, 133, 0.45);
+}
+
+.run-flow .run-result-main {
+display: grid;
+grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.8fr);
+gap: 16px;
+padding: clamp(16px, 4vw, 24px);
+}
+
+.run-flow .run-outcome-row {
+display: flex;
+align-items: center;
+gap: 9px;
+flex-wrap: wrap;
+}
+
+.run-flow .run-outcome {
+display: inline-flex;
+align-items: center;
+gap: 7px;
+padding: 5px 10px;
+border: 1px solid var(--run-line);
+border-radius: 999px;
+background: rgba(148, 163, 184, 0.08);
+font-size: 11px;
+font-weight: 900;
+letter-spacing: 0.08em;
+}
+
+.run-flow .run-is-victory .run-outcome {
+color: var(--run-green);
+border-color: rgba(82, 225, 167, 0.34);
+background: var(--run-green-soft);
+}
+
+.run-flow .run-is-defeat .run-outcome {
+color: var(--run-red);
+border-color: rgba(251, 113, 133, 0.34);
+background: var(--run-red-soft);
+}
+
+.run-flow .run-session-chip {
+color: var(--run-muted);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 10px;
+font-weight: 800;
+}
+
+.run-flow .run-headline {
+margin: 12px 0 0;
+color: #fff;
+font-size: clamp(22px, 5vw, 34px);
+font-weight: 950;
+letter-spacing: -0.05em;
+line-height: 1.12;
+}
+
+.run-flow .run-result-copy {
+margin: 8px 0 0;
+color: var(--run-muted);
+font-size: 12px;
+}
+
+.run-flow .run-result-copy strong {
+color: var(--run-text);
+font-weight: 850;
+}
+
+.run-flow .run-reason {
+display: inline-flex;
+margin-top: 11px;
+padding: 5px 8px;
+color: #c7d2df;
+border: 1px solid var(--run-line);
+border-radius: 7px;
+background: rgba(2, 6, 12, 0.42);
+font-size: 10px;
+}
+
+.run-flow .run-resources {
+display: grid;
+grid-template-columns: repeat(2, minmax(0, 1fr));
+gap: 8px;
+align-self: stretch;
+}
+
+.run-flow .run-resource {
+display: flex;
+min-height: 88px;
+padding: 11px;
+align-items: center;
+justify-content: center;
+flex-direction: column;
+border: 1px solid var(--run-line);
+border-radius: 12px;
+background: rgba(2, 6, 12, 0.48);
+text-align: center;
+}
+
+.run-flow .run-resource strong {
+margin-top: 4px;
+color: #fff;
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: clamp(22px, 4vw, 30px);
+line-height: 1;
+}
+
+.run-flow .run-resource.run-resource-stealth strong {
+color: var(--run-cyan);
+}
+
+.run-flow .run-resource.run-resource-resistance strong {
+color: var(--run-red);
+}
+
+.run-flow .run-route {
+--run-route-color: #48d9ef;
+display: grid;
+grid-template-columns: auto minmax(0, 1fr) auto;
+align-items: center;
+gap: 12px;
+padding: 13px clamp(16px, 4vw, 24px);
+border-top: 1px solid var(--run-line);
+background: rgba(2, 6, 12, 0.35);
+}
+
+.run-flow .run-line-badge {
+display: inline-flex;
+align-items: center;
+gap: 7px;
+min-width: 0;
+font-size: 11px;
+font-weight: 850;
+}
+
+.run-flow .run-line-dot {
+width: 10px;
+height: 10px;
+flex: 0 0 auto;
+border: 2px solid rgba(255, 255, 255, 0.8);
+border-radius: 50%;
+background: var(--run-route-color);
+box-shadow: 0 0 13px var(--run-route-color);
+}
+
+.run-flow .run-line-code {
+padding: 2px 5px;
+color: #fff;
+border-radius: 5px;
+background: var(--run-route-color);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 9px;
+}
+
+.run-flow .run-stations {
+display: grid;
+grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+align-items: center;
+gap: 7px;
+min-width: 0;
+}
+
+.run-flow .run-station {
+min-width: 0;
+text-align: center;
+}
+
+.run-flow .run-station span {
+display: block;
+color: var(--run-dim);
+font-size: 8px;
+font-weight: 800;
+letter-spacing: 0.06em;
+}
+
+.run-flow .run-station strong {
+display: block;
+overflow: hidden;
+color: var(--run-text);
+font-size: 10px;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.run-flow .run-station.run-station-current strong {
+color: var(--run-route-color);
+}
+
+.run-flow .run-route-arrow {
+color: var(--run-dim);
+font-size: 11px;
+}
+
+.run-flow .run-environment {
+color: var(--run-muted);
+font-size: 9px;
+text-align: right;
+}
+
+.run-flow .run-environment strong {
+display: block;
+color: var(--run-text);
+font-size: 10px;
+}
+
+.run-flow .run-section-head {
+display: flex;
+align-items: baseline;
+justify-content: space-between;
+gap: 14px;
+margin: 19px 0 10px;
+}
+
+.run-flow .run-section-title {
+margin: 0;
+color: #fff;
+font-size: 16px;
+font-weight: 900;
+letter-spacing: -0.025em;
+}
+
+.run-flow .run-instruction {
+color: var(--run-muted);
+font-size: 10px;
+text-align: right;
+}
+
+.run-flow .run-choice-none,
+.run-flow .run-choice-state {
+position: absolute;
+width: 1px;
+height: 1px;
+margin: -1px;
+overflow: hidden;
+clip: rect(0 0 0 0);
+clip-path: inset(50%);
+white-space: nowrap;
+}
+
+.run-flow .run-card-grid,
+.run-flow .run-target-grid {
+display: grid;
+grid-template-columns: repeat(3, minmax(0, 1fr));
+gap: 10px;
+}
+
+.run-flow .run-choice-slot {
+position: relative;
+min-width: 0;
+}
+
+.run-flow .run-reward-card,
+.run-flow .run-target-card {
+display: flex;
+min-height: 248px;
+padding: 14px;
+overflow: hidden;
+cursor: pointer;
+border: 1px solid var(--run-line);
+border-radius: 15px;
+background:
+linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 46%),
+var(--run-panel-soft);
+box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
+transition: border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.run-flow .run-reward-card:hover,
+.run-flow .run-target-card:hover {
+border-color: var(--run-line-strong);
+transform: translateY(-2px);
+}
+
+.run-flow .run-choice-state:focus-visible + .run-reward-card,
+.run-flow .run-choice-state:focus-visible + .run-target-card {
+outline: 3px solid rgba(72, 217, 239, 0.48);
+outline-offset: 3px;
+}
+
+.run-flow .run-choice-state:checked + .run-reward-card,
+.run-flow .run-choice-state:checked + .run-target-card {
+border-color: rgba(72, 217, 239, 0.68);
+background:
+linear-gradient(145deg, rgba(72, 217, 239, 0.12), transparent 48%),
+rgba(16, 27, 39, 0.98);
+box-shadow: 0 0 0 1px rgba(72, 217, 239, 0.12), 0 15px 34px rgba(0, 0, 0, 0.26);
+}
+
+.run-flow .run-card-inner,
+.run-flow .run-target-inner {
+display: flex;
+width: 100%;
+min-width: 0;
+flex-direction: column;
+}
+
+.run-flow .run-card-top,
+.run-flow .run-target-top {
+display: flex;
+align-items: start;
+justify-content: space-between;
+gap: 8px;
+}
+
+.run-flow .run-slot-index {
+display: inline-grid;
+width: 29px;
+height: 29px;
+place-items: center;
+flex: 0 0 auto;
+color: var(--run-cyan);
+border: 1px solid rgba(72, 217, 239, 0.28);
+border-radius: 9px;
+background: var(--run-cyan-soft);
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 12px;
+font-weight: 900;
+}
+
+.run-flow .run-owned,
+.run-flow .run-mood {
+display: inline-flex;
+padding: 4px 8px;
+color: var(--run-amber);
+border: 1px solid rgba(246, 200, 93, 0.27);
+border-radius: 999px;
+background: rgba(246, 200, 93, 0.09);
+font-size: 9px;
+font-weight: 850;
+}
+
+.run-flow .run-card-name,
+.run-flow .run-target-name {
+margin-top: 15px;
+color: #fff;
+font-size: clamp(18px, 3.6vw, 25px);
+font-weight: 900;
+letter-spacing: -0.04em;
+line-height: 1.12;
+overflow-wrap: anywhere;
+}
+
+.run-flow .run-target-meta {
+margin-top: 5px;
+color: var(--run-muted);
+font-size: 10px;
+}
+
+.run-flow .run-target-summary {
+display: -webkit-box;
+margin-top: 10px;
+overflow: hidden;
+color: #c7d2df;
+font-size: 10px;
+-webkit-box-orient: vertical;
+-webkit-line-clamp: 3;
+}
+
+.run-flow .run-tags {
+display: flex;
+gap: 5px;
+margin-top: 10px;
+flex-wrap: wrap;
+}
+
+.run-flow .run-tag,
+.run-flow .run-inline-tag {
+position: relative;
+display: inline-flex;
+align-items: center;
+padding: 3px 6px;
+color: #bceef6;
+border: 1px solid rgba(72, 217, 239, 0.25);
+border-radius: 6px;
+background: rgba(72, 217, 239, 0.08);
+font-size: 8px;
+font-weight: 850;
+}
+
+.run-flow .run-tag.run-is-mechanism,
+.run-flow .run-inline-tag.run-is-mechanism {
+color: #e8ccff;
+border-color: rgba(196, 132, 252, 0.26);
+background: rgba(196, 132, 252, 0.09);
+}
+
+.run-flow .run-tooltip {
+position: absolute;
+bottom: calc(100% + 7px);
+left: 50%;
+z-index: 8;
+width: max-content;
+max-width: 190px;
+padding: 6px 8px;
+pointer-events: none;
+color: var(--run-text);
+border: 1px solid var(--run-line-strong);
+border-radius: 7px;
+background: #111925;
+box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+font-size: 9px;
+font-weight: 500;
+line-height: 1.4;
+opacity: 0;
+transform: translate(-50%, 4px);
+transition: opacity 130ms ease, transform 130ms ease;
+}
+
+.run-flow .run-tag:hover .run-tooltip,
+.run-flow .run-tag:focus .run-tooltip,
+.run-flow .run-inline-tag:hover .run-tooltip,
+.run-flow .run-inline-tag:focus .run-tooltip {
+opacity: 1;
+transform: translate(-50%, 0);
+}
+
+.run-flow .run-card-details,
+.run-flow .run-target-details {
+display: grid;
+grid-template-rows: 0fr;
+opacity: 0;
+transition: grid-template-rows 180ms ease, opacity 180ms ease;
+}
+
+.run-flow .run-card-details-inner,
+.run-flow .run-target-details-inner {
+min-height: 0;
+overflow: hidden;
+}
+
+.run-flow .run-choice-state:checked + .run-reward-card .run-card-details,
+.run-flow .run-choice-state:checked + .run-target-card .run-target-details {
+grid-template-rows: 1fr;
+opacity: 1;
+}
+
+.run-flow .run-description {
+display: block;
+margin-top: 12px;
+padding-top: 11px;
+color: #ced9e4;
+border-top: 1px solid var(--run-line);
+font-size: 10px;
+line-height: 1.65;
+}
+
+.run-flow .run-rule-lines {
+display: block;
+margin-top: 8px;
+}
+
+.run-flow .run-rule-line {
+display: block;
+margin-top: 5px;
+padding: 6px 7px;
+color: var(--run-muted);
+border-left: 2px solid rgba(72, 217, 239, 0.34);
+background: rgba(2, 6, 12, 0.35);
+font-size: 9px;
+}
+
+.run-flow .run-card-stats,
+.run-flow .run-target-stats {
+display: grid;
+grid-template-columns: repeat(2, minmax(0, 1fr));
+gap: 6px;
+margin-top: auto;
+padding-top: 14px;
+}
+
+.run-flow .run-target-stats {
+grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.run-flow .run-card-stat,
+.run-flow .run-target-stat {
+min-width: 0;
+padding: 7px 4px;
+border: 1px solid var(--run-line);
+border-radius: 8px;
+background: rgba(2, 6, 12, 0.44);
+text-align: center;
+}
+
+.run-flow .run-card-stat strong,
+.run-flow .run-target-stat strong {
+display: block;
+margin-top: 2px;
+color: #fff;
+font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+font-size: 14px;
+}
+
+.run-flow .run-traits {
+display: grid;
+gap: 6px;
+margin-top: 12px;
+padding-top: 11px;
+border-top: 1px solid var(--run-line);
+}
+
+.run-flow .run-trait {
+display: block;
+padding: 7px 8px;
+border: 1px solid var(--run-line);
+border-radius: 8px;
+background: rgba(2, 6, 12, 0.36);
+}
+
+.run-flow .run-trait strong {
+display: block;
+color: var(--run-cyan);
+font-size: 9px;
+}
+
+.run-flow .run-trait span {
+display: block;
+margin-top: 2px;
+color: var(--run-muted);
+font-size: 9px;
+}
+
+.run-flow .run-confirm {
+display: none;
+width: 100%;
+margin-top: 7px;
+padding: 10px 9px;
+cursor: pointer;
+color: #041014;
+border: 1px solid rgba(72, 217, 239, 0.66);
+border-radius: 10px;
+background: linear-gradient(180deg, #77e8f7, #45d2e8);
+box-shadow: 0 8px 20px rgba(72, 217, 239, 0.17);
+font: inherit;
+font-size: 10px;
+font-weight: 900;
+}
+
+.run-flow .run-choice-state:checked ~ .run-confirm {
+display: block;
+}
+
+.run-flow .run-confirm:hover,
+.run-flow .run-continue:hover {
+filter: brightness(1.06);
+}
+
+.run-flow .run-confirm:focus-visible,
+.run-flow .run-continue:focus-visible {
+outline: 3px solid rgba(72, 217, 239, 0.5);
+outline-offset: 3px;
+}
+
+.run-flow .run-none-reward,
+.run-flow .run-ready,
+.run-flow .run-fallback {
+padding: clamp(25px, 6vw, 44px) clamp(17px, 5vw, 32px);
+border: 1px solid var(--run-line);
+border-radius: 15px;
+background: var(--run-panel-soft);
+text-align: center;
+}
+
+.run-flow .run-none-mark,
+.run-flow .run-ready-mark,
+.run-flow .run-fallback-mark {
+display: grid;
+width: 54px;
+height: 54px;
+margin: 0 auto 13px;
+place-items: center;
+color: var(--run-cyan);
+border: 1px solid rgba(72, 217, 239, 0.34);
+border-radius: 50%;
+background: var(--run-cyan-soft);
+font-size: 22px;
+font-weight: 900;
+}
+
+.run-flow .run-none-title,
+.run-flow .run-ready-title,
+.run-flow .run-fallback-title {
+margin: 0;
+color: #fff;
+font-size: clamp(19px, 4vw, 26px);
+font-weight: 900;
+letter-spacing: -0.04em;
+}
+
+.run-flow .run-none-copy,
+.run-flow .run-ready-copy,
+.run-flow .run-fallback-copy {
+max-width: 540px;
+margin: 8px auto 0;
+color: var(--run-muted);
+font-size: 11px;
+}
+
+.run-flow .run-continue {
+display: inline-flex;
+margin-top: 16px;
+padding: 11px 18px;
+cursor: pointer;
+color: #041014;
+border: 1px solid rgba(72, 217, 239, 0.66);
+border-radius: 10px;
+background: linear-gradient(180deg, #77e8f7, #45d2e8);
+box-shadow: 0 8px 20px rgba(72, 217, 239, 0.17);
+font: inherit;
+font-size: 11px;
+font-weight: 900;
+}
+
+.run-flow .run-ready-chip {
+display: inline-flex;
+margin-top: 14px;
+padding: 6px 10px;
+color: var(--run-cyan);
+border: 1px solid rgba(72, 217, 239, 0.26);
+border-radius: 999px;
+background: var(--run-cyan-soft);
+font-size: 9px;
+font-weight: 900;
+letter-spacing: 0.08em;
+}
+
+.run-flow .run-fallback {
+margin: clamp(14px, 3vw, 24px);
+}
+
+@media (max-width: 720px) {
+.run-flow .run-topbar {
+align-items: start;
+flex-direction: column;
+}
+
+.run-flow .run-scorebar {
+width: 100%;
+}
+
+.run-flow .run-result-main {
+grid-template-columns: 1fr;
+}
+
+.run-flow .run-resource {
+min-height: 72px;
+}
+
+.run-flow .run-route {
+grid-template-columns: 1fr;
+}
+
+.run-flow .run-environment {
+text-align: left;
+}
+
+.run-flow .run-card-grid,
+.run-flow .run-target-grid {
+grid-template-columns: 1fr;
+}
+
+.run-flow .run-reward-card,
+.run-flow .run-target-card {
+min-height: 0;
+}
+
+.run-flow .run-section-head {
+align-items: start;
+flex-direction: column;
+}
+
+.run-flow .run-instruction {
+text-align: left;
+}
+}
+
+@media (max-width: 430px) {
+.run-flow {
+border-right: 0;
+border-left: 0;
+border-radius: 0;
+}
+
+.run-flow .run-scorebar {
+grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.run-flow .run-stations {
+grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.run-flow .run-station.run-station-destination,
+.run-flow .run-route-arrow.run-route-arrow-last {
+display: none;
+}
+}
+
+@media (prefers-reduced-motion: reduce) {
+.run-flow *,
+.run-flow *::before,
+.run-flow *::after {
+scroll-behavior: auto !important;
+transition-duration: 0.01ms !important;
+animation-duration: 0.01ms !important;
+animation-iteration-count: 1 !important;
+}
+}
+</style>
+
+{{settempvar::run_progression_view::{{getvar::runProgressionView}}}}
+
+{{#when::keep::{{dictelement::{{tempvar::run_progression_view}}::kind}}::is::runProgressionView}}
+{{settempvar::run_progression_stats::{{dictelement::{{tempvar::run_progression_view}}::stats}}}}
+{{settempvar::run_progression_deck::{{dictelement::{{tempvar::run_progression_view}}::deck}}}}
+{{settempvar::run_progression_result::{{dictelement::{{tempvar::run_progression_view}}::result}}}}
+{{settempvar::run_progression_character::{{dictelement::{{tempvar::run_progression_result}}::character}}}}
+{{settempvar::run_progression_environment::{{dictelement::{{tempvar::run_progression_result}}::environment}}}}
+{{settempvar::run_progression_route::{{dictelement::{{tempvar::run_progression_result}}::route}}}}
+{{settempvar::run_progression_start::{{dictelement::{{tempvar::run_progression_route}}::startStation}}}}
+{{settempvar::run_progression_reached::{{dictelement::{{tempvar::run_progression_route}}::reachedStation}}}}
+{{settempvar::run_progression_destination::{{dictelement::{{tempvar::run_progression_route}}::destinationStation}}}}
+<section class="run-flow" aria-label="전투 결과와 다음 진행">
+<div class="run-shell">
+<header class="run-topbar">
+<div>
+<div class="run-kicker">INFINITE HELLTRAIN · RUN PROGRESSION</div>
+<h2 class="run-stage-title">전투 정산 · SESSION {{dictelement::{{tempvar::run_progression_result}}::sessionNumber}}</h2>
+</div>
+<div class="run-scorebar" aria-label="누적 진행 현황">
+<div class="run-score">
+<span class="run-score-label">완료</span>
+<strong>{{dictelement::{{tempvar::run_progression_stats}}::completed}}</strong>
+</div>
+<div class="run-score run-score-win">
+<span class="run-score-label">승리</span>
+<strong>{{dictelement::{{tempvar::run_progression_stats}}::victories}}</strong>
+</div>
+<div class="run-score run-score-loss">
+<span class="run-score-label">패배</span>
+<strong>{{dictelement::{{tempvar::run_progression_stats}}::defeats}}</strong>
+</div>
+<div class="run-score">
+<span class="run-score-label">덱</span>
+<strong>{{dictelement::{{tempvar::run_progression_deck}}::count}} / {{dictelement::{{tempvar::run_progression_deck}}::limit}}</strong>
+</div>
+</div>
+</header>
+
+<article class="run-result{{#when::keep::{{dictelement::{{tempvar::run_progression_result}}::status}}::is::victory}} run-is-victory{{/when}}{{#when::keep::{{dictelement::{{tempvar::run_progression_result}}::status}}::is::defeat}} run-is-defeat{{/when}}" aria-label="최근 전투 결과">
+<div class="run-result-main">
+<div>
+<div class="run-outcome-row">
+<span class="run-outcome">{{dictelement::{{tempvar::run_progression_result}}::statusLabel}}</span>
+<span class="run-session-chip">TURN {{dictelement::{{tempvar::run_progression_result}}::turnNumber}} / {{dictelement::{{tempvar::run_progression_result}}::turnLimit}}</span>
+</div>
+<h3 class="run-headline">{{dictelement::{{tempvar::run_progression_result}}::headline}}</h3>
+<p class="run-result-copy">상대 <strong>{{dictelement::{{tempvar::run_progression_character}}::name}}</strong> · 전투 ID {{dictelement::{{tempvar::run_progression_result}}::battleId}}</p>
+<span class="run-reason">종료 사유 · {{dictelement::{{tempvar::run_progression_result}}::reasonLabel}}</span>
+</div>
+<div class="run-resources" aria-label="전투 종료 자원">
+<div class="run-resource run-resource-stealth">
+<span class="run-resource-label">FINAL STEALTH</span>
+<strong>{{dictelement::{{tempvar::run_progression_result}}::finalStealth}}</strong>
+</div>
+<div class="run-resource run-resource-resistance">
+<span class="run-resource-label">FINAL RESISTANCE</span>
+<strong>{{dictelement::{{tempvar::run_progression_result}}::finalResistance}}</strong>
+</div>
+</div>
+</div>
+<div class="run-route" style="--run-route-color: {{dictelement::{{tempvar::run_progression_route}}::lineColor}};" aria-label="전투 지하철 구간">
+<div class="run-line-badge">
+<span class="run-line-dot" aria-hidden="true"></span>
+<span class="run-line-code">{{dictelement::{{tempvar::run_progression_route}}::lineCode}}</span>
+<span>{{dictelement::{{tempvar::run_progression_route}}::lineName}}</span>
+</div>
+<div class="run-stations">
+<span class="run-station">
+<span>START</span>
+<strong>{{dictelement::{{tempvar::run_progression_start}}::code}} · {{dictelement::{{tempvar::run_progression_start}}::name}}</strong>
+</span>
+<span class="run-route-arrow" aria-hidden="true">→</span>
+<span class="run-station run-station-current">
+<span>REACHED</span>
+<strong>{{dictelement::{{tempvar::run_progression_reached}}::code}} · {{dictelement::{{tempvar::run_progression_reached}}::name}}</strong>
+</span>
+<span class="run-route-arrow run-route-arrow-last" aria-hidden="true">→</span>
+<span class="run-station run-station-destination">
+<span>DESTINATION</span>
+<strong>{{dictelement::{{tempvar::run_progression_destination}}::code}} · {{dictelement::{{tempvar::run_progression_destination}}::name}}</strong>
+</span>
+</div>
+<div class="run-environment">
+{{dictelement::{{tempvar::run_progression_route}}::operatorName}}
+<strong>{{dictelement::{{tempvar::run_progression_environment}}::name}}</strong>
+</div>
+</div>
+</article>
+
+{{#when::keep::{{dictelement::{{tempvar::run_progression_view}}::phase}}::is::reward}}
+{{settempvar::run_progression_reward::{{dictelement::{{tempvar::run_progression_view}}::rewardOffer}}}}
+<div class="run-section-head">
+<h3 class="run-section-title">전투 보상을 선택하세요</h3>
+<span class="run-instruction">첫 클릭: 상세 확인 · 열린 카드 아래 버튼: 보상 확정</span>
+</div>
+{{#when::keep::{{dictelement::{{tempvar::run_progression_reward}}::kind}}::is::card}}
+<input class="run-choice-none" type="radio" name="run-reward-choice" id="run-reward-none" checked aria-hidden="true">
+<div class="run-card-grid" role="list" aria-label="전투 보상 카드">
+{{#each::keep {{dictelement::{{tempvar::run_progression_reward}}::cards}} as run_reward_card}}
+{{settempvar::run_reward_action::{{dictelement::{{slot::run_reward_card}}::actionTag}}}}
+<article class="run-choice-slot" role="listitem">
+<input
+class="run-choice-state"
+type="radio"
+name="run-reward-choice"
+id="run-reward-card-{{dictelement::{{slot::run_reward_card}}::slot}}"
+aria-label="{{dictelement::{{slot::run_reward_card}}::name}} 상세 보기"
+>
+<label class="run-reward-card" for="run-reward-card-{{dictelement::{{slot::run_reward_card}}::slot}}">
+<span class="run-card-inner">
+<span class="run-card-top">
+<span class="run-slot-index">{{dictelement::{{slot::run_reward_card}}::slot}}</span>
+<span class="run-owned">보유 {{dictelement::{{slot::run_reward_card}}::ownedCopies}} / 2</span>
+</span>
+<span class="run-card-name">{{dictelement::{{slot::run_reward_card}}::name}}</span>
+<span class="run-tags" aria-label="카드 태그">
+<span class="run-tag" tabindex="0">
+{{dictelement::{{tempvar::run_reward_action}}::label}}
+<span class="run-tooltip" role="tooltip">{{dictelement::{{tempvar::run_reward_action}}::tooltip}}</span>
+</span>
+{{#each::keep {{dictelement::{{slot::run_reward_card}}::mechanisms}} as run_reward_mechanism}}
+<span class="run-tag run-is-mechanism" tabindex="0">
+{{dictelement::{{slot::run_reward_mechanism}}::label}}
+<span class="run-tooltip" role="tooltip">{{dictelement::{{slot::run_reward_mechanism}}::tooltip}}</span>
+</span>
+{{/each}}
+</span>
+<span class="run-card-details">
+<span class="run-card-details-inner">
+<span class="run-description">
+{{#each::keep {{dictelement::{{slot::run_reward_card}}::descriptionSegments}} as run_reward_segment}}{{#when::keep::{{dictelement::{{slot::run_reward_segment}}::kind}}::is::text}}{{dictelement::{{slot::run_reward_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::run_reward_segment}}::kind}}::isnot::text}}{{#when::keep::{{dictelement::{{slot::run_reward_segment}}::tagKind}}::is::mechanism}}<span class="run-inline-tag run-is-mechanism" tabindex="0">{{dictelement::{{slot::run_reward_segment}}::label}}<span class="run-tooltip" role="tooltip">{{dictelement::{{slot::run_reward_segment}}::tooltip}}</span></span>{{/when}}{{#when::keep::{{dictelement::{{slot::run_reward_segment}}::tagKind}}::isnot::mechanism}}<span class="run-inline-tag" tabindex="0">{{dictelement::{{slot::run_reward_segment}}::label}}<span class="run-tooltip" role="tooltip">{{dictelement::{{slot::run_reward_segment}}::tooltip}}</span></span>{{/when}}{{/when}}{{/each}}
+</span>
+<span class="run-rule-lines">
+{{#each::keep {{dictelement::{{slot::run_reward_card}}::ruleLines}} as run_reward_rule}}
+<span class="run-rule-line">{{#each::keep {{dictelement::{{slot::run_reward_rule}}::segments}} as run_reward_rule_segment}}{{#when::keep::{{dictelement::{{slot::run_reward_rule_segment}}::kind}}::is::text}}{{dictelement::{{slot::run_reward_rule_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::run_reward_rule_segment}}::kind}}::isnot::text}}{{#when::keep::{{dictelement::{{slot::run_reward_rule_segment}}::tagKind}}::is::mechanism}}<span class="run-inline-tag run-is-mechanism" tabindex="0">{{dictelement::{{slot::run_reward_rule_segment}}::label}}<span class="run-tooltip" role="tooltip">{{dictelement::{{slot::run_reward_rule_segment}}::tooltip}}</span></span>{{/when}}{{#when::keep::{{dictelement::{{slot::run_reward_rule_segment}}::tagKind}}::isnot::mechanism}}<span class="run-inline-tag" tabindex="0">{{dictelement::{{slot::run_reward_rule_segment}}::label}}<span class="run-tooltip" role="tooltip">{{dictelement::{{slot::run_reward_rule_segment}}::tooltip}}</span></span>{{/when}}{{/when}}{{/each}}</span>
+{{/each}}
+</span>
+</span>
+</span>
+<span class="run-card-stats">
+<span class="run-card-stat">
+<span class="run-card-stat-label">은폐 비용</span>
+<strong>{{dictelement::{{slot::run_reward_card}}::baseStealthCost}}</strong>
+</span>
+<span class="run-card-stat">
+<span class="run-card-stat-label">저항 피해</span>
+<strong>{{dictelement::{{slot::run_reward_card}}::baseResistanceDamage}}</strong>
+</span>
+</span>
+</span>
+</label>
+<button
+class="run-confirm"
+type="button"
+risu-btn="init|choose|{{dictelement::{{slot::run_reward_card}}::cardId}}|{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}"
+aria-label="{{dictelement::{{slot::run_reward_card}}::name}} 카드를 전투 보상으로 확정"
+>이 카드를 획득 · 클릭해 확정</button>
+</article>
+{{/each}}
+</div>
+{{/when}}
+{{#when::keep::{{dictelement::{{tempvar::run_progression_reward}}::kind}}::is::none}}
+<div class="run-none-reward" aria-live="polite">
+<div class="run-none-mark" aria-hidden="true">20</div>
+<h3 class="run-none-title">획득 가능한 카드가 없습니다</h3>
+<p class="run-none-copy">덱이 20장에 도달했거나 모든 카드가 보유 한도에 도달했습니다. 현재 덱을 유지하고 다음 상대 선택으로 이동합니다.</p>
+<button
+class="run-continue"
+type="button"
+risu-btn="init|choose|continue|{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}"
+aria-label="카드 보상 없이 다음 상대 선택으로 이동"
+>현재 덱으로 계속</button>
+</div>
+{{/when}}
+{{/when}}
+
+{{#when::keep::{{dictelement::{{tempvar::run_progression_view}}::phase}}::is::characterSelect}}
+{{settempvar::run_progression_offer::{{dictelement::{{tempvar::run_progression_view}}::characterOffer}}}}
+<div class="run-section-head">
+<h3 class="run-section-title">다음 전투 대상을 선택하세요</h3>
+<span class="run-instruction">첫 클릭: 공개 정보 확인 · 열린 카드 아래 버튼: 상대 확정</span>
+</div>
+<input class="run-choice-none" type="radio" name="run-target-choice" id="run-target-none" checked aria-hidden="true">
+<div class="run-target-grid" role="list" aria-label="다음 전투 대상 세 명">
+{{#each::keep {{dictelement::{{tempvar::run_progression_offer}}::characters}} as run_target}}
+{{settempvar::run_target_mood::{{dictelement::{{slot::run_target}}::startingMood}}}}
+<article class="run-choice-slot" role="listitem">
+<input
+class="run-choice-state"
+type="radio"
+name="run-target-choice"
+id="run-target-{{dictelement::{{slot::run_target}}::slot}}"
+aria-label="{{dictelement::{{slot::run_target}}::name}} 상세 보기"
+>
+<label class="run-target-card" for="run-target-{{dictelement::{{slot::run_target}}::slot}}">
+<span class="run-target-inner">
+<span class="run-target-top">
+<span class="run-slot-index">{{dictelement::{{slot::run_target}}::slot}}</span>
+<span class="run-mood">시작 무드 · {{dictelement::{{tempvar::run_target_mood}}::label}}</span>
+</span>
+<span class="run-target-name">{{dictelement::{{slot::run_target}}::name}}</span>
+<span class="run-target-meta">{{dictelement::{{slot::run_target}}::age}}세 · {{dictelement::{{slot::run_target}}::occupation}}</span>
+<span class="run-target-summary">{{dictelement::{{slot::run_target}}::appearanceSummary}}</span>
+<span class="run-target-details">
+<span class="run-target-details-inner">
+<span class="run-traits" aria-label="공개 특징">
+{{#each::keep {{dictelement::{{slot::run_target}}::traits}} as run_target_trait}}
+<span class="run-trait">
+<strong>{{dictelement::{{slot::run_target_trait}}::name}}</strong>
+<span>{{dictelement::{{slot::run_target_trait}}::description}}</span>
+</span>
+{{/each}}
+</span>
+</span>
+</span>
+<span class="run-target-stats" aria-label="전투 시작 수치">
+<span class="run-target-stat">
+<span class="run-target-stat-label">저항</span>
+<strong>{{dictelement::{{slot::run_target}}::startingResistance}}</strong>
+</span>
+<span class="run-target-stat">
+<span class="run-target-stat-label">드로우</span>
+<strong>{{dictelement::{{slot::run_target}}::baseDrawCount}}</strong>
+</span>
+<span class="run-target-stat">
+<span class="run-target-stat-label">손패 상한</span>
+<strong>{{dictelement::{{slot::run_target}}::maxHandSize}}</strong>
+</span>
+</span>
+</span>
+</label>
+<button
+class="run-confirm"
+type="button"
+risu-btn="init|chooseCharacter|{{dictelement::{{slot::run_target}}::characterId}}|{{dictelement::{{tempvar::run_progression_offer}}::interactionToken}}"
+aria-label="{{dictelement::{{slot::run_target}}::name}}을 다음 전투 상대로 확정"
+>이 캐릭터와 전투 · 클릭해 확정</button>
+</article>
+{{/each}}
+</div>
+{{/when}}
+
+{{#when::keep::{{dictelement::{{tempvar::run_progression_view}}::phase}}::is::battleReady}}
+{{settempvar::run_progression_selected::{{dictelement::{{tempvar::run_progression_view}}::selectedCharacter}}}}
+<div class="run-section-head">
+<h3 class="run-section-title">다음 전투 준비</h3>
+<span class="run-instruction">선택 내용이 저장되었습니다</span>
+</div>
+<div class="run-ready" aria-live="polite">
+<div class="run-ready-mark" aria-hidden="true">✓</div>
+<h3 class="run-ready-title">{{dictelement::{{tempvar::run_progression_selected}}::name}} 선택 완료</h3>
+<p class="run-ready-copy">보상과 다음 상대가 확정되었습니다. 다음 전투 상태로 안전하게 전환하고 있습니다. 화면 전환이 지연되어도 선택을 다시 입력할 필요는 없습니다.</p>
+<span class="run-ready-chip">BATTLE READY · SESSION {{dictelement::{{tempvar::run_progression_view}}::sessionIndex}}</span>
+</div>
+{{/when}}
+
+{{#when::keep::{{dictelement::{{tempvar::run_progression_view}}::phase}}::isnot::reward}}
+{{#when::keep::{{dictelement::{{tempvar::run_progression_view}}::phase}}::isnot::characterSelect}}
+{{#when::keep::{{dictelement::{{tempvar::run_progression_view}}::phase}}::isnot::battleReady}}
+<div class="run-fallback" aria-live="polite">
+<div class="run-fallback-mark" aria-hidden="true">!</div>
+<h3 class="run-fallback-title">지원하지 않는 진행 단계</h3>
+<p class="run-fallback-copy">진행 데이터가 갱신되면 전투 보상 또는 다음 상대 선택 화면이 표시됩니다.</p>
+</div>
+{{/when}}
+{{/when}}
+{{/when}}
+</div>
+</section>
+{{/when}}
+
+{{#when::keep::{{dictelement::{{tempvar::run_progression_view}}::kind}}::isnot::runProgressionView}}
+<section class="run-flow" aria-label="전투 결과 데이터 대기">
+<div class="run-fallback" aria-live="polite">
+<div class="run-kicker">RUN PROGRESSION</div>
+<div class="run-fallback-mark" aria-hidden="true">…</div>
+<h2 class="run-fallback-title">전투 정산 데이터를 기다리는 중</h2>
+<p class="run-fallback-copy">유효한 runProgressionView가 게시되면 승패 결과와 다음 진행 선택지가 이곳에 표시됩니다.</p>
+</div>
+</section>
+{{/when}}
