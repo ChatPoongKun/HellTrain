@@ -191,7 +191,7 @@ end
 -- 생략한다. 개발 중에는 setRunScriptCacheDevelopmentMode(true)를 사용하면 매
 -- 이벤트의 첫 모듈 호출에서 source를 다시 확인한다.
 RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION
-    or "runtime-bundle-post-battle-loop-v1-one-click-cards-approach-transition-v1-20260729"
+    or "runtime-bundle-character-memory-v1-20260730"
 RUNTIME_CACHE_DEVELOPMENT_BYPASS = RUNTIME_CACHE_DEVELOPMENT_BYPASS == true
 
 local RUN_SCRIPT_SOURCE_CACHE_MAX_ENTRIES = 64
@@ -781,6 +781,7 @@ local UI_POPUP_VAR = "helltrainUiPopupV1"
 local UI_ANCHOR_INDEX_VAR = "helltrainUiAnchorIndexV1"
 local UI_READY_VAR = "gameSetupReady"
 local APPROACH_RETRY_VAR = "helltrainApproachRetryV1"
+local RUN_PROGRESSION_AUTHORITY_KEY = "runProgressionV1.authority"
 local APPROACH_REQUEST_ATTEMPTS = 1
 local SETUP_START_MARKUP = [[<section class="helltrain-setup" aria-labelledby="helltrain-start-title">
 <p class="helltrain-setup-label">BOARDING PROTOCOL</p>
@@ -1064,25 +1065,66 @@ local function selectedApproachCharacter(triggerId, report, characterId)
     return name, profile
 end
 
-local function buildApproachPrompt(characterName, profile)
-    local encodedProfile = "{}"
-    if type(profile) == "table" and type(json) == "table" and type(json.encode) == "function" then
-        local encodeOk, result = pcall(json.encode, profile)
-        if encodeOk and type(result) == "string" then
-            encodedProfile = result
+local function pastApproachEncounters(triggerId, report, characterId)
+    local runState = type(report) == "table"
+        and type(report.state) == "table"
+        and report.state.kind == "runProgressionV1"
+        and report.state
+        or nil
+    if runState == nil and type(getState) == "function" then
+        local readOk, stored = pcall(getState, triggerId, RUN_PROGRESSION_AUTHORITY_KEY)
+        if readOk and type(stored) == "table" and stored.kind == "runProgressionV1" then
+            runState = stored
         end
     end
+
+    local encounters = {}
+    for sessionNumber, session in ipairs(
+        type(runState) == "table" and type(runState.sessions) == "table" and runState.sessions or {}
+    ) do
+        if type(session) == "table" and session.characterId == characterId then
+            encounters[#encounters + 1] = {
+                sessionNumber = sessionNumber,
+                result = session.status,
+                reasonCode = session.reasonCode,
+                turnNumber = session.turnNumber,
+                turnLimit = session.turnLimit,
+                finalStealth = session.finalStealth,
+                finalResistance = session.finalResistance,
+                environmentId = session.environmentId,
+                transit = session.transit,
+            }
+        end
+    end
+    return encounters
+end
+
+local function encodeApproachData(value, fallback)
+    if type(value) == "table" and type(json) == "table" and type(json.encode) == "function" then
+        local encodeOk, result = pcall(json.encode, value)
+        if encodeOk and type(result) == "string" then return result end
+    end
+    return fallback
+end
+
+local function buildApproachPrompt(characterName, profile, encounters)
+    local encodedProfile = encodeApproachData(profile, "{}")
+    local encodedEncounters = encodeApproachData(encounters, "[]")
     return {
         {
             role = "system",
             content = table.concat({
                 "당신은 성인용 한국어 다크 픽션 롤플레이의 장면 서술자다.",
-                "무한히 반복되는 지하철 안에서 플레이어가 선택한 성인 캐릭터에게 다가가는 첫 순간을 2~4문단으로 묘사하라.",
+                "무한히 반복되는 지하철 안에서 플레이어가 선택한 성인 캐릭터에게 다가가는 순간을 2~4문단으로 묘사하라.",
                 "캐릭터의 성격과 배경을 지키고, 아직 카드·수치·전투 UI나 게임 규칙은 언급하지 마라.",
                 "플레이어가 입력하지 않은 추가 행동·대사·생각은 만들어내지 마라.",
                 "선택한 캐릭터의 자연스러운 행동과 반응, 객실의 분위기에 집중하라.",
+                "과거 조우 정보가 있으면 캐릭터는 플레이어를 분명히 알아보고, 이전 결과에 맞는 기억과 태도를 자연스럽게 드러내라. 정보가 없으면 초면으로 묘사하라.",
+                "과거 결과의 victory는 플레이어가 캐릭터의 저항을 무너뜨린 경우이고, defeat는 캐릭터가 플레이어를 물리친 경우다.",
+                "과거 조우 정보의 내부 ID와 수치는 직접 나열하지 말고 관계의 기억으로만 반영하라.",
                 "대상 캐릭터: " .. characterName,
                 "캐릭터 자료(JSON): " .. encodedProfile,
+                "과거 조우 정보(JSON): " .. encodedEncounters,
             }, "\n"),
         },
         {
@@ -1136,7 +1178,8 @@ local function generateApproachScene(triggerId, report, characterId)
         appendChatVerified(triggerId, "user", approachMessage)
     end
 
-    local prompt = buildApproachPrompt(characterName, profile)
+    local encounters = pastApproachEncounters(triggerId, report, characterId)
+    local prompt = buildApproachPrompt(characterName, profile, encounters)
     local lastError = "알 수 없는 LLM 오류"
     for _ = 1, APPROACH_REQUEST_ATTEMPTS do
         local requestOk, response = pcall(LLM, triggerId, prompt, false, { streaming = true })
