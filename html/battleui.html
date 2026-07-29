@@ -79,9 +79,14 @@ pointer-events: none;
 .ht-popover:popover-open {
 display: block;
 }
-.ht-battle:has(.ht-popover:popover-open) button:not(.ht-popover-dismiss),
-.ht-battle:has(.ht-popover:popover-open) summary {
+.ht-battle:has(.ht-popover:popover-open) .ht-tip-trigger,
+.ht-battle:has(.ht-popover:popover-open) .ht-card-action,
+.ht-battle:has(.ht-popover:popover-open) .ht-log > summary {
 pointer-events: none;
+}
+.ht-battle:has(.ht-popover:popover-open) .ht-popover:popover-open .ht-popover-dismiss,
+.ht-battle:has(.ht-popover:popover-open) .ht-popover:popover-open summary {
+pointer-events: auto;
 }
 .ht-popover::backdrop {
 background: rgba(4, 4, 6, .30);
@@ -181,6 +186,81 @@ margin-top: 11px;
 color: #716b66;
 font-size: 7px;
 text-align: right;
+}
+.ht-popover-dialog {
+position: relative;
+max-height: min(70vh, 420px);
+padding: 15px 16px 13px;
+overflow-y: auto;
+overscroll-behavior: contain;
+}
+.ht-popover-dismiss.ht-popover-close {
+position: absolute;
+top: 8px;
+right: 8px;
+display: flex;
+align-items: center;
+justify-content: center;
+width: 25px;
+height: 25px;
+min-height: 0;
+margin: 0;
+padding: 0;
+overflow: visible;
+border: 1px solid rgba(255, 255, 255, .13);
+border-radius: 50%;
+color: #aaa39d;
+background: rgba(255, 255, 255, .04);
+font-size: 15px;
+line-height: 1;
+text-align: center;
+}
+.ht-popover-details {
+margin-top: 10px;
+padding-top: 8px;
+border-top: 1px solid rgba(255, 255, 255, .09);
+}
+.ht-popover-details summary {
+color: #aaa39d;
+font-size: 9px;
+font-weight: 800;
+cursor: pointer;
+list-style: none;
+}
+.ht-popover-details summary::-webkit-details-marker {
+display: none;
+}
+.ht-popover-details summary::before {
+content: "＋";
+display: inline-block;
+margin-right: 5px;
+}
+.ht-popover-details[open] summary::before {
+content: "−";
+}
+.ht-popover-tag-details {
+display: grid;
+gap: 6px;
+margin-top: 7px;
+}
+.ht-popover-tag-detail {
+display: grid;
+gap: 2px;
+padding: 6px 7px;
+border-radius: 6px;
+background: rgba(255, 255, 255, .035);
+}
+.ht-popover-tag-detail strong {
+color: #e49a9a;
+font-size: 9px;
+}
+.ht-popover-tag-detail[data-kind="mechanism"] strong {
+color: #a8caf1;
+}
+.ht-popover-tag-detail span {
+color: #aaa39d;
+font-size: 8px;
+line-height: 1.45;
 }
 .ht-popover-bank {
 display: contents;
@@ -552,16 +632,21 @@ display: grid;
 grid-template-columns: repeat(2, minmax(0, 1fr));
 gap: 5px;
 }
+.ht-resource-panel {
+min-width: 0;
+overflow: hidden;
+border: 1px solid rgba(255, 255, 255, .08);
+border-radius: 7px;
+background: rgba(255, 255, 255, .025);
+}
 .ht-resource {
 display: flex;
 align-items: center;
 gap: 7px;
+width: 100%;
 min-width: 0;
 min-height: 43px;
 padding: 6px 8px;
-border: 1px solid rgba(255, 255, 255, .08);
-border-radius: 7px;
-background: rgba(255, 255, 255, .025);
 }
 .ht-resource::before {
 content: "";
@@ -591,6 +676,55 @@ margin-left: auto;
 color: #f2ece6;
 font-size: 19px;
 line-height: 1;
+}
+.ht-resource-changes {
+display: grid;
+}
+.ht-resource-change {
+display: grid;
+grid-template-columns: auto minmax(0, 1fr) auto;
+align-items: center;
+gap: 5px;
+width: 100%;
+min-width: 0;
+padding: 5px 7px;
+border: 0;
+border-top: 1px solid rgba(255, 255, 255, .07);
+color: #b9b2ac;
+background: rgba(0, 0, 0, .10);
+font: inherit;
+text-align: left;
+cursor: pointer;
+}
+.ht-resource-change:hover {
+background: rgba(255, 255, 255, .045);
+}
+.ht-resource-change:focus-visible {
+outline: 2px solid rgba(255, 255, 255, .88);
+outline-offset: -2px;
+}
+.ht-resource-change b {
+font-size: 10px;
+font-variant-numeric: tabular-nums;
+}
+.ht-resource-change[data-direction="increase"] b {
+color: #7fc795;
+}
+.ht-resource-change[data-direction="decrease"] b {
+color: #ed8585;
+}
+.ht-resource-change span {
+min-width: 0;
+overflow: hidden;
+font-size: 8px;
+font-weight: 750;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+.ht-resource-change small {
+color: var(--dim);
+font-size: 7px;
+white-space: nowrap;
 }
 .ht-plan-owners {
 margin-top: 5px;
@@ -1147,6 +1281,57 @@ font-size: 10px;
 font-weight: 800;
 text-align: center;
 }
+.ht-aftermath {
+display: none;
+margin: 10px;
+padding: 24px 18px;
+align-items: center;
+flex-direction: column;
+border: 1px solid rgba(239, 213, 143, .28);
+border-radius: 12px;
+background:
+radial-gradient(circle at 50% 0%, rgba(239, 213, 143, .12), transparent 58%),
+rgba(18, 16, 21, .96);
+text-align: center;
+}
+.ht-battle.is-aftermath .ht-layout,
+.ht-battle.is-aftermath .ht-subrow,
+.ht-battle.is-aftermath .ht-hand,
+.ht-battle.is-aftermath .ht-footer,
+.ht-battle.is-aftermath .ht-log {
+display: none;
+}
+.ht-battle.is-aftermath .ht-aftermath {
+display: flex;
+}
+.ht-aftermath-kicker {
+color: #efd58f;
+font-size: 8px;
+font-weight: 900;
+letter-spacing: .18em;
+}
+.ht-aftermath h2 {
+margin: 6px 0 8px;
+color: #f2ece4;
+font-size: 23px;
+letter-spacing: -.04em;
+}
+.ht-aftermath-copy {
+margin: 0;
+color: #c8c0b8;
+font-size: 11px;
+line-height: 1.65;
+}
+.ht-aftermath-final {
+margin: 10px 0 0;
+color: #e7c978;
+font-size: 9px;
+font-weight: 800;
+}
+.ht-aftermath .ht-processing {
+width: 100%;
+margin-top: 16px;
+}
 @media (max-width: 520px) {
 .ht-battle {
 margin: 4px auto;
@@ -1330,7 +1515,7 @@ animation: none;
 }
 </style>
 
-<section class="ht-battle" aria-label="함락! 무한의 지옥철 전투 화면">
+<section class="ht-battle {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::aftermath}}::active}}::true}}}}is-aftermath{{/if}}" aria-label="함락! 무한의 지옥철 전투 화면">
 <header class="ht-topbar">
 <div class="ht-brand">
 <i class="ht-brand-mark" aria-hidden="true"></i>
@@ -1390,6 +1575,21 @@ animation: none;
 </div>
 </section>
 
+<section class="ht-aftermath" aria-labelledby="ht-aftermath-title">
+<span class="ht-aftermath-kicker">VICTORY CONFIRMED</span>
+<h2 id="ht-aftermath-title">함락 성공!</h2>
+<p class="ht-aftermath-copy">도착할 때까지 원하는 행위를 자유롭게 서술하세요.</p>
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::aftermath}}::finalTurn}}::true}}}}
+<p class="ht-aftermath-final">다음 장면에서 열차가 목적지에 도착합니다.</p>
+{{/if}}
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::aftermath}}::awaitingOutput}}::true}}}}
+<div class="ht-processing" role="status" aria-live="polite" aria-label="처리중...">
+<span class="ht-processing-spinner" aria-hidden="true"></span>
+<span>장면을 이어가는 중<span aria-hidden="true"><span class="ht-processing-dot">.</span><span class="ht-processing-dot">.</span><span class="ht-processing-dot">.</span></span></span>
+</div>
+{{/if}}
+</section>
+
 <div class="ht-layout">
 <aside class="ht-character" aria-label="캐릭터 상태">
 <div class="ht-portrait">
@@ -1442,10 +1642,23 @@ animation: none;
 </div>
 </div>
 <div class="ht-resource-grid">
+<section class="ht-resource-panel" aria-label="저항과 직전 변화">
 <button type="button" class="ht-resource ht-resource--enemy ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-resistance" aria-haspopup="dialog" aria-label="저항 {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}}, 설명 보기">
 <span class="ht-resource-label">저항</span>
 <strong>{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}}</strong>
 </button>
+<div class="ht-resource-changes">
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::available}}::true}}}}
+{{#each {{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::resourceChanges}}::resistance}} resistanceChange}}
+<button type="button" class="ht-resource-change ht-tip-trigger" data-direction="{{dict_element::{{slot::resistanceChange}}::direction}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-change-{{dict_element::{{slot::resistanceChange}}::sequence}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::resistanceChange}}::source}}::name}}, 저항 변화 {{dict_element::{{slot::resistanceChange}}::amountLabel}} 상세정보 보기">
+<b>{{dict_element::{{slot::resistanceChange}}::amountLabel}}</b>
+<span>{{dict_element::{{dict_element::{{slot::resistanceChange}}::source}}::name}}</span>
+<small>{{dict_element::{{dict_element::{{slot::resistanceChange}}::source}}::kindLabel}}</small>
+</button>
+{{/each}}
+{{/if}}
+</div>
+</section>
 <div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-resistance" class="ht-popover" popover="auto" role="dialog" aria-label="저항 설명">
 <button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-resistance" popovertargetaction="hide">
 <span class="ht-popover-kicker">ENEMY · 교전 수치</span>
@@ -1455,10 +1668,23 @@ animation: none;
 <span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
 </button>
 </div>
+<section class="ht-resource-panel" aria-label="은폐와 직전 변화">
 <button type="button" class="ht-resource ht-resource--player ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-stealth" aria-haspopup="dialog" aria-label="은폐 {{dict_element::{{dict_element::{{getvar::battleView}}::player}}::stealth}}, 설명 보기">
 <span class="ht-resource-label">은폐</span>
 <strong>{{dict_element::{{dict_element::{{getvar::battleView}}::player}}::stealth}}</strong>
 </button>
+<div class="ht-resource-changes">
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::available}}::true}}}}
+{{#each {{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::resourceChanges}}::stealth}} stealthChange}}
+<button type="button" class="ht-resource-change ht-tip-trigger" data-direction="{{dict_element::{{slot::stealthChange}}::direction}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-change-{{dict_element::{{slot::stealthChange}}::sequence}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::stealthChange}}::source}}::name}}, 은폐 변화 {{dict_element::{{slot::stealthChange}}::amountLabel}} 상세정보 보기">
+<b>{{dict_element::{{slot::stealthChange}}::amountLabel}}</b>
+<span>{{dict_element::{{dict_element::{{slot::stealthChange}}::source}}::name}}</span>
+<small>{{dict_element::{{dict_element::{{slot::stealthChange}}::source}}::kindLabel}}</small>
+</button>
+{{/each}}
+{{/if}}
+</div>
+</section>
 <div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-stealth" class="ht-popover" popover="auto" role="dialog" aria-label="은폐 설명">
 <button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-stealth" popovertargetaction="hide">
 <span class="ht-popover-kicker">PLAYER · 교전 수치</span>
@@ -1718,6 +1944,50 @@ animation: none;
 </div>
 
 <div class="ht-popover-bank">
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::available}}::true}}}}
+{{#each {{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::resourceChanges}}::resistance}} resistanceChangePopup}}
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-change-{{dict_element::{{slot::resistanceChangePopup}}::sequence}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{dict_element::{{slot::resistanceChangePopup}}::source}}::name}} 상세정보">
+<div class="ht-popover-dialog">
+<button type="button" class="ht-popover-dismiss ht-popover-close" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-change-{{dict_element::{{slot::resistanceChangePopup}}::sequence}}" popovertargetaction="hide" aria-label="상세정보 닫기">×</button>
+<span class="ht-popover-kicker">{{dict_element::{{dict_element::{{slot::resistanceChangePopup}}::source}}::kindLabel}} · 저항 {{dict_element::{{slot::resistanceChangePopup}}::amountLabel}}</span>
+<span class="ht-popover-title">{{dict_element::{{dict_element::{{slot::resistanceChangePopup}}::source}}::name}}</span>
+<span class="ht-popover-copy">{{#each {{dict_element::{{dict_element::{{slot::resistanceChangePopup}}::source}}::descriptionSegments}} resistanceDescriptionSegment}}{{#if {{equal::{{dict_element::{{slot::resistanceDescriptionSegment}}::kind}}::text}}}}{{dict_element::{{slot::resistanceDescriptionSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::resistanceDescriptionSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::resistanceDescriptionSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::resistanceDescriptionSegment}}::label}}</span>{{/if}}{{/each}}</span>
+<span class="ht-popover-rules">{{#each {{dict_element::{{dict_element::{{slot::resistanceChangePopup}}::source}}::ruleLines}} resistanceRule}}<span class="ht-popover-rule">{{#each {{dict_element::{{slot::resistanceRule}}::segments}} resistanceRuleSegment}}{{#if {{equal::{{dict_element::{{slot::resistanceRuleSegment}}::kind}}::text}}}}{{dict_element::{{slot::resistanceRuleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::resistanceRuleSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::resistanceRuleSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::resistanceRuleSegment}}::label}}</span>{{/if}}{{/each}}</span>{{/each}}</span>
+{{#if {{equal::{{dict_element::{{dict_element::{{slot::resistanceChangePopup}}::source}}::hasRelatedTags}}::true}}}}
+<details class="ht-popover-details">
+<summary>태그 상세설명 펼치기</summary>
+<span class="ht-popover-tag-details">
+{{#each {{dict_element::{{dict_element::{{slot::resistanceChangePopup}}::source}}::relatedTags}} resistanceRelatedTag}}
+<span class="ht-popover-tag-detail" data-kind="{{dict_element::{{slot::resistanceRelatedTag}}::tagKind}}"><strong>{{dict_element::{{slot::resistanceRelatedTag}}::label}}</strong><span>{{dict_element::{{slot::resistanceRelatedTag}}::tooltip}}</span></span>
+{{/each}}
+</span>
+</details>
+{{/if}}
+</div>
+</div>
+{{/each}}
+{{#each {{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::resourceChanges}}::stealth}} stealthChangePopup}}
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-change-{{dict_element::{{slot::stealthChangePopup}}::sequence}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{dict_element::{{slot::stealthChangePopup}}::source}}::name}} 상세정보">
+<div class="ht-popover-dialog">
+<button type="button" class="ht-popover-dismiss ht-popover-close" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-change-{{dict_element::{{slot::stealthChangePopup}}::sequence}}" popovertargetaction="hide" aria-label="상세정보 닫기">×</button>
+<span class="ht-popover-kicker">{{dict_element::{{dict_element::{{slot::stealthChangePopup}}::source}}::kindLabel}} · 은폐 {{dict_element::{{slot::stealthChangePopup}}::amountLabel}}</span>
+<span class="ht-popover-title">{{dict_element::{{dict_element::{{slot::stealthChangePopup}}::source}}::name}}</span>
+<span class="ht-popover-copy">{{#each {{dict_element::{{dict_element::{{slot::stealthChangePopup}}::source}}::descriptionSegments}} stealthDescriptionSegment}}{{#if {{equal::{{dict_element::{{slot::stealthDescriptionSegment}}::kind}}::text}}}}{{dict_element::{{slot::stealthDescriptionSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::stealthDescriptionSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::stealthDescriptionSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::stealthDescriptionSegment}}::label}}</span>{{/if}}{{/each}}</span>
+<span class="ht-popover-rules">{{#each {{dict_element::{{dict_element::{{slot::stealthChangePopup}}::source}}::ruleLines}} stealthRule}}<span class="ht-popover-rule">{{#each {{dict_element::{{slot::stealthRule}}::segments}} stealthRuleSegment}}{{#if {{equal::{{dict_element::{{slot::stealthRuleSegment}}::kind}}::text}}}}{{dict_element::{{slot::stealthRuleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::stealthRuleSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::stealthRuleSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::stealthRuleSegment}}::label}}</span>{{/if}}{{/each}}</span>{{/each}}</span>
+{{#if {{equal::{{dict_element::{{dict_element::{{slot::stealthChangePopup}}::source}}::hasRelatedTags}}::true}}}}
+<details class="ht-popover-details">
+<summary>태그 상세설명 펼치기</summary>
+<span class="ht-popover-tag-details">
+{{#each {{dict_element::{{dict_element::{{slot::stealthChangePopup}}::source}}::relatedTags}} stealthRelatedTag}}
+<span class="ht-popover-tag-detail" data-kind="{{dict_element::{{slot::stealthRelatedTag}}::tagKind}}"><strong>{{dict_element::{{slot::stealthRelatedTag}}::label}}</strong><span>{{dict_element::{{slot::stealthRelatedTag}}::tooltip}}</span></span>
+{{/each}}
+</span>
+</details>
+{{/if}}
+</div>
+</div>
+{{/each}}
+{{/if}}
 {{#each {{dict_element::{{getvar::battleView}}::tagGlossary}} glossaryTag}}
 <div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{slot::glossaryTag}}::id}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{slot::glossaryTag}}::label}} 태그 정보">
 <button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{slot::glossaryTag}}::id}}" popovertargetaction="hide">

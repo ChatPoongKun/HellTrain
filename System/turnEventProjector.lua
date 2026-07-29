@@ -91,6 +91,14 @@
         force_mood = true,
     }
 
+    local RESOURCE_EFFECT_OPS = {
+        pay_stealth_cost = true,
+        damage_resistance = true,
+        recover_resistance = true,
+        lose_stealth = true,
+        recover_stealth = true,
+    }
+
     local CATEGORY_ORDER = {
         plan = 1,
         trait = 2,
@@ -1484,8 +1492,28 @@
                 .. "|" .. tostring(source.id or "")
         end
 
-        local function emitEffect(effect)
-            emit(publicResult, "effect_applied", effect)
+        local function publicEffectSource(event)
+            local source = {
+                kind = event.source.kind,
+                id = event.source.id,
+            }
+            if event.source.side ~= nil then
+                source.side = event.source.side
+            end
+            return source
+        end
+
+        local function emitEffect(effect, source)
+            local publicEffect, cloneError = cloneData(effect, "$.publicEffect", {})
+            if cloneError then
+                return nil, cloneError
+            end
+            if RESOURCE_EFFECT_OPS[effect.op] == true
+                and effect.changed == true
+                and effect.amount > 0 then
+                publicEffect.source = source
+            end
+            emit(publicResult, "effect_applied", publicEffect)
             if effect.changed == true or effect.blocked == true then
                 local llmCopy, cloneError = cloneData(effect, "$.llmEffect", {})
                 if cloneError then
@@ -1582,7 +1610,7 @@
             local records = pendingTriggerEffects[key] or {}
             pendingTriggerEffects[key] = nil
             for _, record in ipairs(records) do
-                local ok, effectError = emitEffect(record.effect)
+                local ok, effectError = emitEffect(record.effect, record.source)
                 if not ok then
                     return nil, effectError
                 end
@@ -1872,6 +1900,7 @@
                     end
                     pendingCosts[event.resolutionId] = {
                         effect = effect,
+                        source = publicEffectSource(event),
                         cardId = event.source.id,
                         instanceId = event.source.instanceId,
                     }
@@ -1880,6 +1909,7 @@
                     pendingTriggerEffects[key] = pendingTriggerEffects[key] or {}
                     pendingTriggerEffects[key][#pendingTriggerEffects[key] + 1] = {
                         effect = effect,
+                        source = publicEffectSource(event),
                         index = payload.index,
                         cause = payload.cause,
                     }
@@ -1894,7 +1924,7 @@
                         }
                     end
                 else
-                    local ok, emitError = emitEffect(effect)
+                    local ok, emitError = emitEffect(effect, publicEffectSource(event))
                     if not ok then
                         return failure({ emitError })
                     end
@@ -1958,7 +1988,7 @@
                         return failure({ makeError("card_cost_mismatch", path, "은폐 비용 사건이 선언 카드와 일치하지 않습니다.") })
                     end
                     pendingCosts[event.resolutionId] = nil
-                    local ok, emitError = emitEffect(costReceipt.effect)
+                    local ok, emitError = emitEffect(costReceipt.effect, costReceipt.source)
                     if not ok then
                         return failure({ emitError })
                     end

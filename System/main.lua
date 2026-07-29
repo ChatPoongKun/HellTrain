@@ -1314,7 +1314,7 @@ listenEdit("editDisplay", function(triggerId, data, meta)
         .. string.sub(data, markerEnd + 1)
 end)
 
---전투 중 비어 있지 않은 입력도 빈 전송 filler로 정규화
+--전투 중 입력은 filler로 정규화하되, 조기 승리 뒤 자유행동은 원문을 보존
 listenEdit("editInput", function(triggerId, data)
     beginRunScriptEvent(triggerId, "editInput")
     local readOk, authority = pcall(
@@ -1325,6 +1325,18 @@ listenEdit("editInput", function(triggerId, data)
     if readOk
         and type(authority) == "table"
         and authority.kind == "battleState" then
+        local aftermathOk, aftermath = pcall(
+            getState,
+            triggerId,
+            "battleRuntimeV1.aftermath"
+        )
+        if aftermathOk
+            and type(aftermath) == "table"
+            and aftermath.kind == "battleAftermath"
+            and aftermath.battleId == authority.battleId
+            and aftermath.phase == "ready" then
+            return data
+        end
         return "*says nothing*"
     end
     return data

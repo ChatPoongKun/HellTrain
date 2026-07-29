@@ -1,6 +1,7 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
     local ACTIVE_REQUEST_SCHEMA_VERSION = 3
+    local AFTERMATH_SCHEMA_VERSION = 1
     local VIEW_NAME = "battleView"
     local UI_BODY_NAME = "🔯🔯🔯"
     local UI_ANCHOR_MARKER = "@@HELLTRAIN_UI_ANCHOR_V1@@"
@@ -13,6 +14,7 @@
         pending = "battleRuntimeV1.pending",
         lastCommittedPending = "battleRuntimeV1.lastCommittedPending",
         activeRequest = "battleRuntimeV1.activeRequest",
+        aftermath = "battleRuntimeV1.aftermath",
     }
 
     local function permitCanonicalBattleView(purpose, viewName)
@@ -329,6 +331,107 @@
             end
         end
         return #errors == 0
+    end
+
+    local function validateAftermath(value, authority)
+        local errors = {}
+        local path = "$.aftermath"
+        if type(value) ~= "table" or getmetatable(value) ~= nil then
+            return {
+                makeError("invalid_aftermath", path, "승리 후 자유행동 상태가 일반 객체가 아닙니다."),
+            }
+        end
+        local allowed = {
+            schemaVersion = true,
+            kind = true,
+            battleId = true,
+            victoryTurnNumber = true,
+            completedTurnNumber = true,
+            phase = true,
+            request = true,
+        }
+        for key in pairs(value) do
+            if type(key) ~= "string" or not allowed[key] then
+                errors[#errors + 1] = makeError(
+                    "unknown_aftermath_field",
+                    path .. "." .. tostring(key),
+                    "승리 후 자유행동 상태에 알 수 없는 필드가 있습니다."
+                )
+            end
+        end
+        if value.schemaVersion ~= AFTERMATH_SCHEMA_VERSION or value.kind ~= "battleAftermath" then
+            errors[#errors + 1] = makeError("invalid_aftermath_schema", path, "승리 후 자유행동 상태 형식이 올바르지 않습니다.")
+        end
+        if not isRuntimeId(value.battleId) then
+            errors[#errors + 1] = makeError("invalid_aftermath_battle", path .. ".battleId", "자유행동 battleId가 올바르지 않습니다.")
+        end
+        if not isInteger(value.victoryTurnNumber, 1)
+            or not isInteger(value.completedTurnNumber, 1)
+            or value.completedTurnNumber < value.victoryTurnNumber then
+            errors[#errors + 1] = makeError("invalid_aftermath_turn", path, "자유행동 턴 범위가 올바르지 않습니다.")
+        end
+        if value.phase ~= "ready"
+            and value.phase ~= "inFlight"
+            and value.phase ~= "requestInjected"
+            and value.phase ~= "settling"
+            and value.phase ~= "complete" then
+            errors[#errors + 1] = makeError("invalid_aftermath_phase", path .. ".phase", "자유행동 phase가 올바르지 않습니다.")
+        end
+        if type(authority) ~= "table"
+            or authority.status ~= "victory"
+            or authority.battleId ~= value.battleId
+            or authority.turnNumber ~= value.victoryTurnNumber
+            or not isInteger(authority.turnLimit, 1) then
+            errors[#errors + 1] = makeError("aftermath_authority_mismatch", path, "자유행동 상태가 조기 승리 전투와 일치하지 않습니다.")
+        elseif value.phase == "complete" then
+            if value.completedTurnNumber ~= authority.turnLimit then
+                errors[#errors + 1] = makeError("incomplete_aftermath", path .. ".completedTurnNumber", "완료된 자유행동이 도착 턴에 이르지 않았습니다.")
+            end
+        elseif value.phase == "settling" then
+            if value.completedTurnNumber ~= authority.turnLimit then
+                errors[#errors + 1] = makeError("invalid_aftermath_settlement", path .. ".completedTurnNumber", "정산 중인 자유행동이 도착 턴에 이르지 않았습니다.")
+            end
+        elseif value.completedTurnNumber >= authority.turnLimit then
+            errors[#errors + 1] = makeError("aftermath_over_limit", path .. ".completedTurnNumber", "진행 중인 자유행동이 턴 제한을 넘었습니다.")
+        end
+
+        local needsRequest = value.phase == "inFlight"
+            or value.phase == "requestInjected"
+            or value.phase == "settling"
+        if needsRequest then
+            local request = value.request
+            if type(request) ~= "table" or getmetatable(request) ~= nil then
+                errors[#errors + 1] = makeError("missing_aftermath_request", path .. ".request", "생성 중인 자유행동 요청 영수증이 없습니다.")
+            else
+                local requestAllowed = {
+                    turnNumber = true,
+                    userLuaIndex = true,
+                    userFingerprint = true,
+                }
+                for key in pairs(request) do
+                    if type(key) ~= "string" or not requestAllowed[key] then
+                        errors[#errors + 1] = makeError(
+                            "unknown_aftermath_request_field",
+                            path .. ".request." .. tostring(key),
+                            "자유행동 요청 영수증에 알 수 없는 필드가 있습니다."
+                        )
+                    end
+                end
+                local expectedTurnNumber = value.phase == "settling"
+                    and value.completedTurnNumber
+                    or value.completedTurnNumber + 1
+                if request.turnNumber ~= expectedTurnNumber then
+                    errors[#errors + 1] = makeError("aftermath_request_turn_mismatch", path .. ".request.turnNumber", "자유행동 요청 턴이 현재 진행과 다릅니다.")
+                end
+                if not isInteger(request.userLuaIndex, 1) then
+                    errors[#errors + 1] = makeError("invalid_aftermath_user_index", path .. ".request.userLuaIndex", "자유행동 사용자 메시지 위치가 올바르지 않습니다.")
+                end
+                validateFingerprint(request.userFingerprint, path .. ".request.userFingerprint", errors)
+            end
+        elseif value.request ~= nil then
+            errors[#errors + 1] = makeError("unexpected_aftermath_request", path .. ".request", "대기 또는 완료 상태에 생성 요청이 남아 있습니다.")
+        end
+        return errors
     end
 
     local function appendNestedErrors(target, moduleName, report)
@@ -1010,12 +1113,15 @@
         return topology, nil
     end
 
-    local function removeTrailingSayNothing(chat)
+    local function removeTrailingSayNothing(chat, minimumLength)
         local current = chat
         local removedCount = 0
         while true do
             local last = current[#current]
-            if type(last) ~= "table" or last.role ~= "user" or last.data ~= SAY_NOTHING then
+            if #current <= (minimumLength or 0)
+                or type(last) ~= "table"
+                or last.role ~= "user"
+                or last.data ~= SAY_NOTHING then
                 return current, removedCount, nil
             end
             if type(removeChat) ~= "function" then
@@ -1180,6 +1286,24 @@
             local activeValidationErrors = validateBinding(activeRequest, nil)
             if #activeValidationErrors > 0 then
                 return nil, activeValidationErrors
+            end
+        end
+        local aftermath, aftermathErrors = readStored(KEYS.aftermath, false)
+        if aftermathErrors then
+            return nil, aftermathErrors
+        end
+        if aftermath ~= nil then
+            local aftermathValidationErrors = validateAftermath(aftermath, authority)
+            if #aftermathValidationErrors > 0 then
+                return nil, aftermathValidationErrors
+            end
+            if aftermath.phase == "ready"
+                or aftermath.phase == "inFlight"
+                or aftermath.phase == "requestInjected" then
+                context.aftermath = {
+                    completedTurnNumber = aftermath.completedTurnNumber,
+                    phase = aftermath.phase,
+                }
             end
         end
         if authority.status == "active" then
@@ -1417,6 +1541,7 @@
             pending = nil,
             lastCommittedPending = nil,
             activeRequest = nil,
+            aftermath = nil,
             turnId = turnId,
         }, nil
     end
@@ -1429,6 +1554,7 @@
             "pending",
             "lastCommittedPending",
             "activeRequest",
+            "aftermath",
         }) do
             local value, errors = readStored(KEYS[name], false)
             if errors then
@@ -1552,6 +1678,265 @@
         }, nil
     end
 
+    local function buildAftermathInstruction(authority, aftermath)
+        local finalTurn = aftermath.completedTurnNumber + 1 == authority.turnLimit
+        local lines = {
+            "[함락 후 자유행동]",
+            "전투 승리는 이미 확정되었다. 카드, 저항, 은폐, 무드, 전투 판정이나 보상을 언급하지 마라.",
+            "사용자가 방금 입력한 행위를 그대로 존중하여 캐릭터의 반응과 열차 안의 장면을 자연스럽게 이어서 묘사하라.",
+            "사용자가 입력하지 않은 추가 행동, 대사, 생각을 플레이어에게 부여하지 마라.",
+        }
+        if finalTurn then
+            lines[#lines + 1] = "이번 자유행동은 마지막이다. 응답의 끝에서 반드시 열차가 목적지 역에 도착하고 캐릭터가 황급히 열차에서 내리는 장면으로 마무리하라."
+        end
+        return {
+            role = "system",
+            content = table.concat(lines, "\n"),
+        }
+    end
+
+    local function validateAftermathRequestChat(aftermath, chat, requireResponse)
+        local request = aftermath.request
+        local user = type(request) == "table" and chat[request.userLuaIndex] or nil
+        if type(user) ~= "table" or user.role ~= "user" or isExactUiAnchor(user) then
+            return nil, {
+                makeError("aftermath_user_missing", "$.chat", "자유행동 요청에 연결된 사용자 입력이 없습니다."),
+            }
+        end
+        local fingerprint, fingerprintError = fingerprintChatRange(
+            chat,
+            request.userLuaIndex,
+            1,
+            "$.aftermath.request.user"
+        )
+        if fingerprintError then return nil, { fingerprintError } end
+        if not fingerprintsEqual(fingerprint, request.userFingerprint) then
+            return nil, {
+                makeError("aftermath_user_changed", "$.chat", "생성 중인 자유행동 사용자 입력이 변경되었습니다."),
+            }
+        end
+        local response = chat[request.userLuaIndex + 1]
+        if response ~= nil and (type(response) ~= "table" or response.role ~= "char") then
+            return nil, {
+                makeError("aftermath_response_role_mismatch", "$.chat", "자유행동 응답 위치에 캐릭터 메시지가 아닌 항목이 있습니다."),
+            }
+        end
+        local expectedLength = request.userLuaIndex + (response ~= nil and 1 or 0)
+        if #chat ~= expectedLength then
+            return nil, {
+                makeError("aftermath_chat_topology_mismatch", "$.chat", "자유행동 요청 뒤에 소유권을 확인할 수 없는 메시지가 있습니다."),
+            }
+        end
+        if requireResponse and response == nil then
+            return nil, {
+                makeError("aftermath_output_missing", "$.chat", "확정할 자유행동 응답이 없습니다."),
+            }
+        end
+        return response, nil
+    end
+
+    local function commitAftermathOutput(authority, aftermath, staticData)
+        local chat, chatErrors = readChat()
+        if chatErrors then return failure(chatErrors) end
+        local _, topologyErrors = validateAftermathRequestChat(aftermath, chat, true)
+        if topologyErrors then return failure(topologyErrors) end
+        if aftermath.phase ~= "requestInjected" and aftermath.phase ~= "settling" then
+            return failure({
+                makeError("aftermath_request_not_injected", "$.aftermath.phase", "장면 지시가 주입되지 않은 자유행동 출력은 확정할 수 없습니다."),
+            })
+        end
+
+        local completedTurnNumber = aftermath.phase == "settling"
+            and aftermath.completedTurnNumber
+            or aftermath.completedTurnNumber + 1
+        if completedTurnNumber == authority.turnLimit then
+            if aftermath.phase ~= "settling" then
+                aftermath.completedTurnNumber = completedTurnNumber
+                aftermath.phase = "settling"
+                local settlingWriteErrors = writeStored(KEYS.aftermath, aftermath)
+                if settlingWriteErrors then return failure(settlingWriteErrors) end
+            end
+            local lastCommitted, lastErrors = readStored(KEYS.lastCommittedPending, true)
+            if lastErrors then return failure(lastErrors) end
+            local summary, summaryErrors = buildTerminalSummary(authority, lastCommitted, staticData)
+            if summaryErrors then return failure(summaryErrors) end
+            local settled, settlementErrors = callModule(
+                "gameSetupController",
+                "completeBattle",
+                summary
+            )
+            if settlementErrors then return failure(settlementErrors) end
+            if type(settled.view) ~= "table" or type(settled.state) ~= "table" then
+                return failure({
+                    makeError("invalid_settlement_result", "$.runtime.gameSetupController.completeBattle", "자유행동 종료 정산이 진행 상태와 보상 View를 반환하지 않았습니다."),
+                })
+            end
+            aftermath.phase = "complete"
+            aftermath.request = nil
+            local writeErrors = writeStored(KEYS.aftermath, aftermath)
+            if writeErrors then return failure(writeErrors) end
+            return success({
+                generationReady = false,
+                outputCommitted = true,
+                aftermathComplete = true,
+                status = authority.status,
+                view = settled.view,
+                progressionState = settled.state,
+            })
+        end
+
+        aftermath.completedTurnNumber = completedTurnNumber
+        aftermath.phase = "ready"
+        aftermath.request = nil
+        local writeErrors = writeStored(KEYS.aftermath, aftermath)
+        if writeErrors then return failure(writeErrors) end
+        local published, publishErrors = publishCurrentViewInternal(staticData, true)
+        if publishErrors then return failure(publishErrors) end
+        return success({
+            generationReady = false,
+            outputCommitted = true,
+            aftermathComplete = false,
+            status = authority.status,
+            view = published.view,
+        })
+    end
+
+    local function prepareAftermathGeneration(authority, aftermath, staticData)
+        if aftermath.phase == "complete" then
+            return success({
+                generationReady = false,
+                outputCommitted = false,
+                aftermathComplete = true,
+            })
+        end
+        if aftermath.phase == "inFlight"
+            or aftermath.phase == "requestInjected"
+            or aftermath.phase == "settling" then
+            local chat, chatErrors = readChat()
+            if chatErrors then return failure(chatErrors) end
+            if type(aftermath.request) == "table"
+                and #chat > aftermath.request.userLuaIndex
+                and isExactFiller(chat[#chat]) then
+                local cleaned, _, cleanupErrors = removeTrailingSayNothing(
+                    chat,
+                    aftermath.request.userLuaIndex
+                )
+                if cleanupErrors then return failure(cleanupErrors) end
+                chat = cleaned
+            end
+            local response, topologyErrors = validateAftermathRequestChat(aftermath, chat, false)
+            if topologyErrors then return failure(topologyErrors) end
+            if response ~= nil then
+                local committed = commitAftermathOutput(authority, aftermath, staticData)
+                if type(committed) ~= "table" or committed.ok ~= true then return committed end
+                committed.commitRecovered = true
+                committed.generationReady = false
+                return committed
+            end
+            return success({
+                generationReady = true,
+                aftermath = true,
+                reused = true,
+                turnNumber = aftermath.request.turnNumber,
+            })
+        end
+
+        local chat, chatErrors = readChat()
+        if chatErrors then return failure(chatErrors) end
+        local userLuaIndex = #chat
+        local user = chat[userLuaIndex]
+        if type(user) ~= "table" or user.role ~= "user" or isExactUiAnchor(user) then
+            return failure({
+                makeError("missing_aftermath_input", "$.chat", "함락 후에는 원하는 행위를 입력한 뒤 전송해야 합니다."),
+            })
+        end
+        if userLuaIndex > 1 and isExactUiAnchor(chat[userLuaIndex - 1]) then
+            local after, _, removeErrors = removeUiAnchorAt(chat, userLuaIndex - 1)
+            if removeErrors then return failure(removeErrors) end
+            chat = after
+            userLuaIndex = #chat
+        end
+        local fingerprint, fingerprintError = fingerprintChatRange(
+            chat,
+            userLuaIndex,
+            1,
+            "$.aftermath.request.user"
+        )
+        if fingerprintError then return failure({ fingerprintError }) end
+        aftermath.phase = "inFlight"
+        aftermath.request = {
+            turnNumber = aftermath.completedTurnNumber + 1,
+            userLuaIndex = userLuaIndex,
+            userFingerprint = fingerprint,
+        }
+        local writeErrors = writeStored(KEYS.aftermath, aftermath)
+        if writeErrors then return failure(writeErrors) end
+        return success({
+            generationReady = true,
+            aftermath = true,
+            reused = false,
+            turnNumber = aftermath.request.turnNumber,
+        })
+    end
+
+    local function injectAftermathRequest(promptArray, authority, aftermath)
+        if aftermath.phase ~= "inFlight" and aftermath.phase ~= "requestInjected" then
+            return failure({
+                makeError("aftermath_request_not_in_flight", "$.aftermath.phase", "생성 중인 자유행동 요청이 없습니다."),
+            })
+        end
+        local promptCopy, cloneError = cloneJson(promptArray, "$.promptArray")
+        if cloneError then return failure({ cloneError }) end
+        if type(promptCopy) ~= "table" then
+            return failure({
+                makeError("invalid_prompt_array", "$.promptArray", "editRequest 값은 메시지 배열이어야 합니다."),
+            })
+        end
+        local promptCount = 0
+        for key, message in pairs(promptCopy) do
+            if type(key) ~= "number" or not isInteger(key, 1) or type(message) ~= "table" then
+                return failure({
+                    makeError("invalid_prompt_array", "$.promptArray", "editRequest 값은 1부터 이어지는 메시지 객체 배열이어야 합니다."),
+                })
+            end
+            promptCount = promptCount + 1
+        end
+        if promptCount ~= #promptCopy then
+            return failure({
+                makeError("invalid_prompt_array", "$.promptArray", "editRequest 메시지 배열에 빈 인덱스가 있습니다."),
+            })
+        end
+        local chat, chatErrors = readChat()
+        if chatErrors then return failure(chatErrors) end
+        local _, topologyErrors = validateAftermathRequestChat(aftermath, chat, false)
+        if topologyErrors then return failure(topologyErrors) end
+
+        local instruction = buildAftermathInstruction(authority, aftermath)
+        local normalized = {}
+        local removed = 0
+        for _, message in ipairs(promptCopy) do
+            if deepEqual(message, instruction) then
+                removed = removed + 1
+            elseif not (message.role == "user" and message.content == UI_ANCHOR_MARKER) then
+                normalized[#normalized + 1] = message
+            end
+        end
+        normalized[#normalized + 1] = instruction
+        if aftermath.phase == "inFlight" then
+            aftermath.phase = "requestInjected"
+            local writeErrors = writeStored(KEYS.aftermath, aftermath)
+            if writeErrors then return failure(writeErrors) end
+        end
+        return success({
+            promptArray = normalized,
+            injected = removed == 0,
+            deduplicated = removed > 1,
+            aftermath = true,
+            finalTurn = aftermath.completedTurnNumber + 1 == authority.turnLimit,
+            requestPhase = aftermath.phase,
+        })
+    end
+
     local function getTerminalSummary()
         local staticData, staticErrors = loadStaticData()
         if staticErrors then return failure(staticErrors) end
@@ -1567,6 +1952,28 @@
         if current.authority.status == "active" then
             return success({
                 terminal = false,
+                hasBattle = true,
+                settlementAvailable = false,
+                battleId = current.authority.battleId,
+                status = current.authority.status,
+            })
+        end
+        if current.aftermath ~= nil then
+            local aftermathErrors = validateAftermath(current.aftermath, current.authority)
+            if #aftermathErrors > 0 then return failure(aftermathErrors) end
+            if current.aftermath.phase ~= "complete" then
+                return success({
+                    terminal = true,
+                    hasBattle = true,
+                    settlementAvailable = false,
+                    battleId = current.authority.battleId,
+                    status = current.authority.status,
+                })
+            end
+        elseif current.authority.status == "victory"
+            and current.authority.turnNumber < current.authority.turnLimit then
+            return success({
+                terminal = true,
                 hasBattle = true,
                 settlementAvailable = false,
                 battleId = current.authority.battleId,
@@ -1612,6 +2019,7 @@
             "pending",
             "lastCommittedPending",
             "activeRequest",
+            "aftermath",
         }) do
             local writeErrors = writeStored(KEYS[name], expected[name])
             if writeErrors then
@@ -1730,6 +2138,7 @@
                 and current.pending == nil
                 and current.lastCommittedPending == nil
                 and current.activeRequest == nil
+                and current.aftermath == nil
             if not looksLikeInitialPartial then
                 local published, publishErrors = publishCurrentViewInternal(staticData, true)
                 if publishErrors then
@@ -1759,6 +2168,7 @@
             "pending",
             "lastCommittedPending",
             "activeRequest",
+            "aftermath",
         }) do
             local existing = current[name]
             if existing ~= nil and not deepEqual(existing, expected[name]) then
@@ -1909,6 +2319,19 @@
                 ),
             }
         end
+        if current.aftermath ~= nil then
+            local aftermathErrors = validateAftermath(current.aftermath, authority)
+            if #aftermathErrors > 0 then return aftermathErrors end
+            if current.aftermath.phase ~= "complete" then
+                return {
+                    makeError(
+                        "aftermath_not_complete",
+                        "$.state.aftermath",
+                        "승리 후 자유행동이 끝나기 전에는 전투를 퇴역시킬 수 없습니다."
+                    ),
+                }
+            end
+        end
 
         if current.lastCommittedPending ~= nil then
             local summary, summaryErrors = buildTerminalSummary(
@@ -1928,7 +2351,8 @@
             end
         elseif current.draft ~= nil
             or current.pending ~= nil
-            or current.activeRequest ~= nil then
+            or current.activeRequest ~= nil
+            or current.aftermath ~= nil then
             return {
                 makeError(
                     "unsafe_retirement_partial",
@@ -1945,6 +2369,7 @@
             "draft",
             "pending",
             "activeRequest",
+            "aftermath",
             "lastCommittedPending",
         }) do
             local writeErrors = writeStored(KEYS[name], nil)
@@ -1976,6 +2401,7 @@
             current.pending = nil
             current.activeRequest = nil
             current.lastCommittedPending = nil
+            current.aftermath = nil
             retired = true
         end
 
@@ -2006,6 +2432,7 @@
                 and current.pending == nil
                 and current.lastCommittedPending == nil
                 and current.activeRequest == nil
+                and current.aftermath == nil
             if not looksLikeInitialPartial then
                 local published, publishErrors = publishCurrentViewInternal(
                     staticData,
@@ -2030,6 +2457,7 @@
             "pending",
             "lastCommittedPending",
             "activeRequest",
+            "aftermath",
         }) do
             local existing = current[name]
             if name == "authority"
@@ -2055,6 +2483,7 @@
             or current.pending ~= nil
             or current.lastCommittedPending ~= nil
             or current.activeRequest ~= nil
+            or current.aftermath ~= nil
         local writeErrors = writeInitialRuntime(expected)
         if writeErrors then return failure(writeErrors) end
         local published, publishErrors = publishCurrentViewInternal(
@@ -2119,6 +2548,7 @@
             { KEYS.pending, nil },
             { KEYS.lastCommittedPending, nil },
             { KEYS.activeRequest, nil },
+            { KEYS.aftermath, nil },
         }) do
             local writeErrors = writeStored(write[1], write[2])
             if writeErrors then
@@ -2542,6 +2972,13 @@
         if staticErrors then return failure(staticErrors) end
         local authority, authorityErrors = readStored(KEYS.authority, true)
         if authorityErrors then return failure(authorityErrors) end
+        local aftermath, aftermathReadErrors = readStored(KEYS.aftermath, false)
+        if aftermathReadErrors then return failure(aftermathReadErrors) end
+        if aftermath ~= nil then
+            local aftermathErrors = validateAftermath(aftermath, authority)
+            if #aftermathErrors > 0 then return failure(aftermathErrors) end
+            return prepareAftermathGeneration(authority, aftermath, staticData)
+        end
         local chat, chatErrors = readChat()
         if chatErrors then return failure(chatErrors) end
         local freshSend = hasFreshSubmitSuffix(chat)
@@ -2862,6 +3299,15 @@
     end
 
     local function injectRequest(promptArray)
+        local authority, authorityErrors = readStored(KEYS.authority, true)
+        if authorityErrors then return failure(authorityErrors) end
+        local aftermath, aftermathReadErrors = readStored(KEYS.aftermath, false)
+        if aftermathReadErrors then return failure(aftermathReadErrors) end
+        if aftermath ~= nil then
+            local aftermathErrors = validateAftermath(aftermath, authority)
+            if #aftermathErrors > 0 then return failure(aftermathErrors) end
+            return injectAftermathRequest(promptArray, authority, aftermath)
+        end
         local promptCopy, cloneError = cloneJson(promptArray, "$.promptArray")
         if cloneError then
             return failure({ cloneError })
@@ -3033,6 +3479,31 @@
         if authorityErrors then
             return failure(authorityErrors)
         end
+        local aftermath, aftermathReadErrors = readStored(KEYS.aftermath, false)
+        if aftermathReadErrors then return failure(aftermathReadErrors) end
+        if aftermath ~= nil then
+            local aftermathErrors = validateAftermath(aftermath, authority)
+            if #aftermathErrors > 0 then return failure(aftermathErrors) end
+            if aftermath.phase == "ready" then
+                local published, publishErrors = publishCurrentViewInternal(staticData, true)
+                if publishErrors then return failure(publishErrors) end
+                return success({
+                    generationReady = false,
+                    outputCommitted = true,
+                    aftermathComplete = false,
+                    status = authority.status,
+                    view = published.view,
+                })
+            elseif aftermath.phase == "complete" then
+                return success({
+                    generationReady = false,
+                    outputCommitted = true,
+                    aftermathComplete = true,
+                    status = authority.status,
+                })
+            end
+            return commitAftermathOutput(authority, aftermath, staticData)
+        end
         local binding, bindingErrors = readStored(KEYS.activeRequest, true)
         if bindingErrors then
             return failure(bindingErrors)
@@ -3177,6 +3648,27 @@
             local publishErrors
             published, publishErrors = publishCurrentViewInternal(staticData, true)
             if publishErrors then return failure(publishErrors) end
+        elseif nextState.status == "victory" and nextState.turnNumber < nextState.turnLimit then
+            local currentAftermath, aftermathErrors = readStored(KEYS.aftermath, false)
+            if aftermathErrors then return failure(aftermathErrors) end
+            if currentAftermath == nil then
+                currentAftermath = {
+                    schemaVersion = AFTERMATH_SCHEMA_VERSION,
+                    kind = "battleAftermath",
+                    battleId = nextState.battleId,
+                    victoryTurnNumber = nextState.turnNumber,
+                    completedTurnNumber = nextState.turnNumber,
+                    phase = "ready",
+                }
+                local writeErrors = writeStored(KEYS.aftermath, currentAftermath)
+                if writeErrors then return failure(writeErrors) end
+            else
+                local validationErrors = validateAftermath(currentAftermath, nextState)
+                if #validationErrors > 0 then return failure(validationErrors) end
+            end
+            local publishErrors
+            published, publishErrors = publishCurrentViewInternal(staticData, true)
+            if publishErrors then return failure(publishErrors) end
         else
             local summary, summaryErrors = buildTerminalSummary(
                 nextState,
@@ -3224,6 +3716,7 @@
                 pending = KEYS.pending,
                 lastCommittedPending = KEYS.lastCommittedPending,
                 activeRequest = KEYS.activeRequest,
+                aftermath = KEYS.aftermath,
             },
         }
         local authority, authorityErrors = readStored(KEYS.authority, false)
@@ -3236,6 +3729,8 @@
         if lastErrors then return failure(lastErrors) end
         local activeRequest, requestErrors = readStored(KEYS.activeRequest, false)
         if requestErrors then return failure(requestErrors) end
+        local aftermath, aftermathErrors = readStored(KEYS.aftermath, false)
+        if aftermathErrors then return failure(aftermathErrors) end
 
         snapshot.hasBattle = authority ~= nil
         snapshot.authorityState = authority
@@ -3243,6 +3738,7 @@
         snapshot.pendingTurn = pending
         snapshot.lastCommittedPending = lastCommitted
         snapshot.activeRequest = activeRequest
+        snapshot.aftermath = aftermath
         if type(lastCommitted) == "table" and type(lastCommitted.turnResult) == "table" then
             snapshot.lastPublicResult = lastCommitted.turnResult.publicResult
         end

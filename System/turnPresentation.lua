@@ -26,11 +26,19 @@
     }
 
     local RESOURCE_EFFECTS = {
-        pay_stealth_cost = { target = "player", direction = -1, noun = "은폐" },
-        damage_resistance = { target = "character", direction = -1, noun = "상대의 저항" },
-        recover_resistance = { target = "character", direction = 1, noun = "상대의 저항" },
-        lose_stealth = { target = "player", direction = -1, noun = "은폐" },
-        recover_stealth = { target = "player", direction = 1, noun = "은폐" },
+        pay_stealth_cost = { target = "player", resource = "stealth", direction = -1, noun = "은폐" },
+        damage_resistance = { target = "character", resource = "resistance", direction = -1, noun = "상대의 저항" },
+        recover_resistance = { target = "character", resource = "resistance", direction = 1, noun = "상대의 저항" },
+        lose_stealth = { target = "player", resource = "stealth", direction = -1, noun = "은폐" },
+        recover_stealth = { target = "player", resource = "stealth", direction = 1, noun = "은폐" },
+    }
+
+    local SOURCE_COLLECTIONS = {
+        card = "cards",
+        plan = "cards",
+        trait = "traits",
+        perk = "perks",
+        environment = "environments",
     }
 
     local ACTION_STOP_REASONS = {
@@ -86,6 +94,11 @@
 
     local function isSide(value)
         return value == "player" or value == "character"
+    end
+
+    local function isAsciiId(value)
+        return type(value) == "string"
+            and string.match(value, "^[a-z][a-z0-9_]*$") ~= nil
     end
 
     local function getArrayLength(value)
@@ -245,6 +258,72 @@
         return card.name, card, nil
     end
 
+    local function buildEffectSource(source, staticData, path)
+        local keyError = checkAllowedKeys(source, {
+            kind = true,
+            id = true,
+            side = true,
+        }, path)
+        if keyError then return nil, keyError end
+
+        local collectionName = SOURCE_COLLECTIONS[source.kind]
+        local collection = collectionName and staticData[collectionName] or nil
+        local definition = type(collection) == "table" and collection[source.id] or nil
+        if not isAsciiId(source.id)
+            or type(definition) ~= "table"
+            or definition.id ~= source.id then
+            return nil, makeError("unknown_effect_source", path, "효과 원인의 공개 정보를 확인할 수 없습니다.")
+        end
+
+        if source.kind == "environment" then
+            if source.side ~= nil then
+                return nil, makeError("invalid_effect_source_side", path .. ".side", "환경 효과 원인에는 진영이 없어야 합니다.")
+            end
+        else
+            local owner = definition.owner
+            if source.kind == "perk" and owner == nil then owner = "player" end
+            if not isSide(source.side) or owner ~= source.side then
+                return nil, makeError("invalid_effect_source_side", path .. ".side", "효과 원인과 진영이 일치하지 않습니다.")
+            end
+        end
+        if source.kind == "plan" and not hasMechanism(definition, "plan") then
+            return nil, makeError("invalid_plan_source", path, "계획 효과 원인이 계획 카드가 아닙니다.")
+        end
+        if type(definition.name) ~= "string" or definition.name == ""
+            or type(definition.description) ~= "string" or definition.description == "" then
+            return nil, makeError("invalid_effect_source_detail", path, "효과 원인의 이름과 설명이 필요합니다.")
+        end
+        local ruleCount = getArrayLength(definition.rules)
+        if ruleCount == nil or ruleCount == 0 then
+            return nil, makeError("invalid_effect_source_rules", path, "효과 원인의 규칙 목록이 올바르지 않습니다.")
+        end
+
+        local rules = {}
+        for index = 1, ruleCount do
+            if type(definition.rules[index]) ~= "string" or definition.rules[index] == "" then
+                return nil, makeError("invalid_effect_source_rule", path, "효과 원인의 규칙 문장이 올바르지 않습니다.")
+            end
+            rules[index] = definition.rules[index]
+        end
+        local tags = {}
+        if source.kind == "card" or source.kind == "plan" then
+            tags[1] = definition.actionTag
+            for _, mechanismId in ipairs(definition.mechanisms or {}) do
+                tags[#tags + 1] = mechanismId
+            end
+        end
+
+        local safe = {
+            kind = source.kind,
+            name = definition.name,
+            description = definition.description,
+            rules = rules,
+            tags = tags,
+        }
+        if source.side ~= nil then safe.side = source.side end
+        return safe, nil
+    end
+
     local function summary(sequence, eventType, text)
         return {
             sequence = sequence,
@@ -253,7 +332,7 @@
         }
     end
 
-    local function validateResourceEffect(payload, path, spec)
+    local function validateResourceEffect(payload, path, spec, staticData)
         local keyError = checkAllowedKeys(payload, {
             op = true,
             target = true,
@@ -261,6 +340,7 @@
             amount = true,
             before = true,
             after = true,
+            source = true,
         }, path)
         if keyError then return nil, keyError end
         if payload.target ~= spec.target
@@ -273,13 +353,21 @@
             or payload.changed ~= (payload.before ~= payload.after) then
             return nil, makeError("invalid_effect_payload", path, "자원 변화 표시값이 서로 일치하지 않습니다.")
         end
+        local source = nil
+        if payload.changed == true and payload.amount > 0 then
+            local sourceError
+            source, sourceError = buildEffectSource(payload.source, staticData, path .. ".source")
+            if sourceError then return nil, sourceError end
+        elseif payload.source ~= nil then
+            return nil, makeError("unexpected_effect_source", path .. ".source", "변화가 없는 자원 효과에는 원인 상세정보를 넣을 수 없습니다.")
+        end
         local verb = spec.direction < 0 and "감소" or "회복"
         local text = spec.noun .. "이(가) " .. numberText(payload.amount) .. " " .. verb .. "했습니다. ("
             .. numberText(payload.before) .. " → " .. numberText(payload.after) .. ")"
         if payload.changed ~= true then
             text = spec.noun .. "에 변화가 없습니다. (" .. numberText(payload.before) .. ")"
         end
-        return text, nil
+        return text, nil, source
     end
 
     local function validateEffect(payload, path, staticData)
@@ -288,7 +376,7 @@
         end
         local spec = RESOURCE_EFFECTS[payload.op]
         if spec then
-            return validateResourceEffect(payload, path, spec)
+            return validateResourceEffect(payload, path, spec, staticData)
         elseif payload.op == "draw_cards" then
             local keyError = checkAllowedKeys(payload, {
                 op = true,
@@ -465,9 +553,19 @@
             return summary(index, event.type, "플레이어가 ‘" .. cardName .. "’(" .. tagLabel
                 .. ")을(를) 사용했습니다. 은폐 비용 " .. numberText(payload.stealthCost) .. "."), nil
         elseif event.type == "effect_applied" then
-            local text, effectError = validateEffect(payload, payloadPath, staticData)
+            local text, effectError, source = validateEffect(payload, payloadPath, staticData)
             if effectError then return nil, effectError end
-            return summary(index, event.type, text), nil
+            local resourceChange = nil
+            local spec = RESOURCE_EFFECTS[payload.op]
+            if spec and payload.changed == true and payload.amount > 0 then
+                resourceChange = {
+                    sequence = index,
+                    resource = spec.resource,
+                    amount = spec.direction * payload.amount,
+                    source = source,
+                }
+            end
+            return summary(index, event.type, text), nil, resourceChange
         elseif event.type == "trigger_suppressed" then
             local keyError = checkAllowedKeys(payload, {
                 side = true,
@@ -692,14 +790,22 @@
         end
 
         local summaries = {}
+        local resourceChanges = {
+            stealth = {},
+            resistance = {},
+        }
         local counts = {}
         local outcomeStatus = nil
         local sessionStatus = nil
         for index = 1, eventCount do
             local event = envelope.events[index]
-            local item, eventError = presentEvent(event, index, turnNumber, staticData)
+            local item, eventError, resourceChange = presentEvent(event, index, turnNumber, staticData)
             if eventError then return failure({ eventError }) end
             summaries[index] = item
+            if resourceChange ~= nil then
+                local entries = resourceChanges[resourceChange.resource]
+                entries[#entries + 1] = resourceChange
+            end
             counts[event.type] = (counts[event.type] or 0) + 1
             if event.type == "outcome" then outcomeStatus = event.payload.status end
             if event.type == "session_ended" then sessionStatus = event.payload.status end
@@ -742,6 +848,7 @@
             available = true,
             turnNumber = turnNumber,
             summaries = summaries,
+            resourceChanges = resourceChanges,
         })
     end
 

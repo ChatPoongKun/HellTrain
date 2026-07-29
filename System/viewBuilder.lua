@@ -471,6 +471,123 @@
         return lines
     end
 
+    local SOURCE_KIND_LABELS = {
+        card = "카드",
+        plan = "계획",
+        trait = "특징",
+        perk = "퍽",
+        environment = "환경",
+    }
+
+    local function collectRelatedTags(explicitTags, descriptionSegments, ruleLines)
+        local tags = {}
+        local seen = {}
+        local function append(tag)
+            if type(tag) == "table" and tag.kind == "tag" and not seen[tag.id] then
+                seen[tag.id] = true
+                tags[#tags + 1] = tag
+            end
+        end
+        for _, tag in ipairs(explicitTags or {}) do append(tag) end
+        for _, segment in ipairs(descriptionSegments or {}) do append(segment) end
+        for _, line in ipairs(ruleLines or {}) do
+            for _, segment in ipairs(line.segments or {}) do append(segment) end
+        end
+        return tags
+    end
+
+    local function buildEffectSourceView(source, registry, path, errors)
+        if type(source) ~= "table" then
+            addError(errors, "invalid_effect_source", path, "효과 원인 정보가 테이블이 아닙니다.")
+            return nil
+        end
+        local kindLabel = SOURCE_KIND_LABELS[source.kind]
+        if kindLabel == nil
+            or (source.side ~= nil and source.side ~= "player" and source.side ~= "character")
+            or type(source.name) ~= "string" or source.name == ""
+            or type(source.description) ~= "string" or source.description == ""
+            or type(source.rules) ~= "table"
+            or type(source.tags) ~= "table" then
+            addError(errors, "invalid_effect_source", path, "효과 원인 표시값이 올바르지 않습니다.")
+            return nil
+        end
+
+        local explicitTags = {}
+        for index, tagId in ipairs(source.tags) do
+            local tag = lookupTag(registry, tagId, path .. ".tags[" .. index .. "]", errors)
+            if tag then explicitTags[#explicitTags + 1] = tag end
+        end
+        local descriptionSegments = tokenizeForBuild(
+            source.description,
+            registry,
+            path .. ".description",
+            errors
+        )
+        local ruleLines = buildRuleLines(source.rules, registry, path .. ".rules", errors)
+        local relatedTags = collectRelatedTags(explicitTags, descriptionSegments, ruleLines)
+        local view = {
+            kind = source.kind,
+            kindLabel = kindLabel,
+            name = source.name,
+            descriptionSegments = descriptionSegments,
+            ruleLines = ruleLines,
+            relatedTags = relatedTags,
+            hasRelatedTags = #relatedTags > 0,
+        }
+        if source.side ~= nil then view.side = source.side end
+        return view
+    end
+
+    local function signedNumber(value)
+        local text = value % 1 == 0 and string.format("%.0f", value) or tostring(value)
+        return value > 0 and ("+" .. text) or text
+    end
+
+    local function buildLastTurnView(lastTurn, registry, errors)
+        if type(lastTurn) ~= "table" or lastTurn.available ~= true then
+            return { available = false }
+        end
+        local view = {
+            available = true,
+            turnNumber = lastTurn.turnNumber,
+            summaries = lastTurn.summaries,
+            resourceChanges = {
+                stealth = {},
+                resistance = {},
+            },
+        }
+        for _, resource in ipairs({ "stealth", "resistance" }) do
+            local sourceEntries = type(lastTurn.resourceChanges) == "table"
+                and lastTurn.resourceChanges[resource]
+                or nil
+            if type(sourceEntries) ~= "table" then
+                addError(errors, "invalid_resource_changes", "$.lastTurn.resourceChanges." .. resource, "자원 변화 목록이 배열이 아닙니다.")
+            else
+                for index, entry in ipairs(sourceEntries) do
+                    local path = "$.lastTurn.resourceChanges." .. resource .. "[" .. index .. "]"
+                    local source = type(entry) == "table"
+                        and buildEffectSourceView(entry.source, registry, path .. ".source", errors)
+                        or nil
+                    if type(entry) ~= "table"
+                        or not isInteger(entry.sequence, 1)
+                        or not isFinite(entry.amount)
+                        or entry.amount == 0 then
+                        addError(errors, "invalid_resource_change", path, "자원 변화 표시값이 올바르지 않습니다.")
+                    elseif source then
+                        view.resourceChanges[resource][#view.resourceChanges[resource] + 1] = {
+                            sequence = entry.sequence,
+                            amount = entry.amount,
+                            amountLabel = signedNumber(entry.amount),
+                            direction = entry.amount > 0 and "increase" or "decrease",
+                            source = source,
+                        }
+                    end
+                end
+            end
+        end
+        return view
+    end
+
     local function buildSafeCardSummaryUncached(card, registry, path, errors)
         if type(card) ~= "table" then
             addError(errors, "missing_card", path, "카드 정의를 찾을 수 없습니다.")
@@ -689,7 +806,7 @@
         return nil
     end
 
-    local function buildSubwayView(state, data, errors)
+    local function buildSubwayView(state, data, errors, completedTurnsOverride)
         local transit = state.transit
         local line = type(transit) == "table"
             and type(data.subwayLines) == "table"
@@ -700,9 +817,12 @@
             return nil
         end
 
-        local completedTurns = state.status == "active"
-            and state.turnNumber - 1
-            or state.turnNumber
+        local completedTurns = completedTurnsOverride
+        if completedTurns == nil then
+            completedTurns = state.status == "active"
+                and state.turnNumber - 1
+                or state.turnNumber
+        end
         if completedTurns < 0 then completedTurns = 0 end
         if completedTurns > state.turnLimit then completedTurns = state.turnLimit end
         local currentIndex = completedTurns + 1
@@ -776,11 +896,13 @@
             pendingTurn = true,
             lastCommittedPending = true,
             generationLocked = true,
+            aftermath = true,
         }, "$.context", errors)
         local draftInput = rawget(context, "draft")
         local pendingInput = rawget(context, "pendingTurn")
         local lastCommittedInput = rawget(context, "lastCommittedPending")
         local generationLocked = rawget(context, "generationLocked")
+        local aftermathInput = rawget(context, "aftermath")
         if generationLocked ~= nil and generationLocked ~= true then
             addError(
                 errors,
@@ -802,6 +924,30 @@
                 "pendingTurn 자체가 이미 출력 대기 잠금을 나타내므로 generationLocked를 함께 사용할 수 없습니다."
             )
             return failure(errors)
+        end
+        if aftermathInput ~= nil then
+            if type(aftermathInput) ~= "table" or getmetatable(aftermathInput) ~= nil then
+                addError(errors, "invalid_aftermath_context", "$.context.aftermath", "승리 후 자유행동 View context가 일반 객체가 아닙니다.")
+                return failure(errors)
+            end
+            checkAllowedKeys(aftermathInput, {
+                completedTurnNumber = true,
+                phase = true,
+            }, "$.context.aftermath", errors)
+            if state.status ~= "victory"
+                or not isInteger(aftermathInput.completedTurnNumber, state.turnNumber)
+                or aftermathInput.completedTurnNumber >= state.turnLimit then
+                addError(errors, "invalid_aftermath_context", "$.context.aftermath", "자유행동 진행이 조기 승리 전투 범위와 다릅니다.")
+            end
+            if aftermathInput.phase ~= "ready"
+                and aftermathInput.phase ~= "inFlight"
+                and aftermathInput.phase ~= "requestInjected" then
+                addError(errors, "invalid_aftermath_phase", "$.context.aftermath.phase", "자유행동 View phase가 올바르지 않습니다.")
+            end
+            if draftInput ~= nil or pendingInput ~= nil or generationLocked then
+                addError(errors, "ambiguous_aftermath_context", "$.context", "자유행동과 전투 선택 또는 생성 잠금을 함께 표시할 수 없습니다.")
+            end
+            if #errors > 0 then return failure(errors) end
         end
 
         local displayState = state
@@ -897,7 +1043,10 @@
             end
             phase = "ended"
             locked = true
-            turnId = state.lastCommittedTurnId or string.format("%s-turn-%03d", state.battleId, state.turnNumber)
+            turnId = aftermathInput ~= nil
+                and string.format("%s-aftermath-%03d", state.battleId, aftermathInput.completedTurnNumber)
+                or state.lastCommittedTurnId
+                or string.format("%s-turn-%03d", state.battleId, state.turnNumber)
         end
 
         local lastTurn = { available = false }
@@ -945,7 +1094,7 @@
                 )
                 return failure(errors)
             end
-            lastTurn = presented.lastTurn
+            lastTurn = buildLastTurnView(presented.lastTurn, data.registry, errors)
         end
 
         local characterDefinition = data.characters[displayState.character.characterId]
@@ -1082,7 +1231,12 @@
             victory = "승리",
             defeat = "패배",
         }
-        local subwayView = buildSubwayView(displayState, data, errors)
+        local subwayView = buildSubwayView(
+            displayState,
+            data,
+            errors,
+            aftermathInput and aftermathInput.completedTurnNumber or nil
+        )
         if subwayView == nil then
             return failure(errors)
         end
@@ -1153,6 +1307,11 @@
             outcome = {
                 status = displayState.status,
                 label = outcomeLabels[displayState.status],
+            },
+            aftermath = aftermathInput == nil and { active = false } or {
+                active = true,
+                awaitingOutput = aftermathInput.phase ~= "ready",
+                finalTurn = aftermathInput.completedTurnNumber + 1 == state.turnLimit,
             },
         }
         if interactionToken ~= nil then
@@ -1270,6 +1429,86 @@
         validateRuleLines(value.ruleLines, path .. ".ruleLines", errors)
         validateTagView(value.actionTag, path .. ".actionTag", errors, "action")
         validateTagArray(value.mechanisms, path .. ".mechanisms", errors, "mechanism")
+    end
+
+    local function validateEffectSourceView(value, path, errors)
+        if type(value) ~= "table" then
+            addError(errors, "invalid_effect_source", path, "효과 원인 View가 테이블이 아닙니다.")
+            return
+        end
+        checkAllowedKeys(value, {
+            kind = true,
+            kindLabel = true,
+            side = true,
+            name = true,
+            descriptionSegments = true,
+            ruleLines = true,
+            relatedTags = true,
+            hasRelatedTags = true,
+        }, path, errors)
+        if SOURCE_KIND_LABELS[value.kind] ~= value.kindLabel then
+            addError(errors, "invalid_effect_source_kind", path .. ".kind", "효과 원인 종류와 표시명이 일치하지 않습니다.")
+        end
+        if value.side ~= nil and value.side ~= "player" and value.side ~= "character" then
+            addError(errors, "invalid_effect_source_side", path .. ".side", "효과 원인 진영이 올바르지 않습니다.")
+        end
+        if type(value.name) ~= "string" or value.name == "" then
+            addError(errors, "invalid_effect_source_name", path .. ".name", "효과 원인 이름이 필요합니다.")
+        end
+        validateSegments(value.descriptionSegments, path .. ".descriptionSegments", errors)
+        validateRuleLines(value.ruleLines, path .. ".ruleLines", errors)
+        local tagCount = getArrayLength(value.relatedTags, path .. ".relatedTags", errors)
+        if tagCount then
+            validateTagArray(value.relatedTags, path .. ".relatedTags", errors)
+            if value.hasRelatedTags ~= (tagCount > 0) then
+                addError(errors, "effect_source_tag_flag_mismatch", path .. ".hasRelatedTags", "관련 태그 표시 여부가 태그 목록과 다릅니다.")
+            end
+        end
+        if value.hasRelatedTags ~= true and value.hasRelatedTags ~= false then
+            addError(errors, "invalid_effect_source_tag_flag", path .. ".hasRelatedTags", "관련 태그 표시 여부는 불리언이어야 합니다.")
+        end
+    end
+
+    local function validateResourceChanges(value, path, errors)
+        if type(value) ~= "table" then
+            addError(errors, "invalid_resource_changes", path, "자원 변화 View가 테이블이 아닙니다.")
+            return
+        end
+        checkAllowedKeys(value, { stealth = true, resistance = true }, path, errors)
+        local seenSequences = {}
+        for _, resource in ipairs({ "stealth", "resistance" }) do
+            local entries = value[resource]
+            local length = getArrayLength(entries, path .. "." .. resource, errors)
+            if length then
+                for index = 1, length do
+                    local entry = entries[index]
+                    local entryPath = path .. "." .. resource .. "[" .. index .. "]"
+                    if type(entry) ~= "table" then
+                        addError(errors, "invalid_resource_change", entryPath, "자원 변화 항목이 테이블이 아닙니다.")
+                    else
+                        checkAllowedKeys(entry, {
+                            sequence = true,
+                            amount = true,
+                            amountLabel = true,
+                            direction = true,
+                            source = true,
+                        }, entryPath, errors)
+                        if not isInteger(entry.sequence, 1) or seenSequences[entry.sequence] then
+                            addError(errors, "invalid_resource_change_sequence", entryPath .. ".sequence", "자원 변화 사건 순번이 올바르지 않습니다.")
+                        else
+                            seenSequences[entry.sequence] = true
+                        end
+                        if not isFinite(entry.amount)
+                            or entry.amount == 0
+                            or entry.amountLabel ~= signedNumber(entry.amount)
+                            or entry.direction ~= (entry.amount > 0 and "increase" or "decrease") then
+                            addError(errors, "invalid_resource_change_amount", entryPath, "자원 변화량 표시가 올바르지 않습니다.")
+                        end
+                        validateEffectSourceView(entry.source, entryPath .. ".source", errors)
+                    end
+                end
+            end
+        end
     end
 
     local function validatePlanView(value, path, errors)
@@ -1550,6 +1789,31 @@
         end
     end
 
+    local function validateAftermathView(value, path, errors)
+        if value == nil then return end
+        if type(value) ~= "table" then
+            addError(errors, "invalid_aftermath_view", path, "승리 후 자유행동 View가 테이블이 아닙니다.")
+            return
+        end
+        if value.active == false then
+            checkAllowedKeys(value, { active = true }, path, errors)
+            return
+        end
+        checkAllowedKeys(value, {
+            active = true,
+            awaitingOutput = true,
+            finalTurn = true,
+        }, path, errors)
+        if value.active ~= true then
+            addError(errors, "invalid_aftermath_active", path .. ".active", "자유행동 active는 불리언이어야 합니다.")
+        end
+        for _, field in ipairs({ "awaitingOutput", "finalTurn" }) do
+            if value[field] ~= true and value[field] ~= false then
+                addError(errors, "invalid_aftermath_flag", path .. "." .. field, "자유행동 표시 플래그는 불리언이어야 합니다.")
+            end
+        end
+    end
+
     local function validateBattleView(view)
         local errors = {}
         if type(view) ~= "table" then
@@ -1578,6 +1842,7 @@
             zones = true,
             lastTurn = true,
             outcome = true,
+            aftermath = true,
         }, "$", errors)
         if view.schemaVersion ~= SCHEMA_VERSION then
             addError(errors, "unsupported_schema", "$.schemaVersion", "지원하지 않는 battleView 스키마입니다.")
@@ -1605,6 +1870,7 @@
         elseif view.phase == "ended" and view.interactionToken ~= nil then
             addError(errors, "ended_interaction_token", "$.interactionToken", "종료 View에는 상호작용 토큰을 넣을 수 없습니다.")
         end
+        validateAftermathView(view.aftermath, "$.aftermath", errors)
 
         local glossaryLength = getArrayLength(view.tagGlossary, "$.tagGlossary", errors)
         if glossaryLength then
@@ -1915,6 +2181,7 @@
                     available = true,
                     turnNumber = true,
                     summaries = true,
+                    resourceChanges = true,
                 }, "$.lastTurn", errors)
                 if not isInteger(view.lastTurn.turnNumber, 1) then
                     addError(errors, "invalid_last_turn_number", "$.lastTurn.turnNumber", "직전 공개 턴 번호가 올바르지 않습니다.")
@@ -1941,6 +2208,7 @@
                         end
                     end
                 end
+                validateResourceChanges(view.lastTurn.resourceChanges, "$.lastTurn.resourceChanges", errors)
             else
                 addError(errors, "invalid_last_turn_availability", "$.lastTurn.available", "lastTurn.available은 불리언이어야 합니다.")
             end
@@ -1960,6 +2228,13 @@
                 addError(errors, "ended_outcome_mismatch", "$.outcome.status", "종료 View의 결과는 active일 수 없습니다.")
             elseif view.phase ~= "ended" and view.outcome.status ~= "active" then
                 addError(errors, "active_phase_outcome_mismatch", "$.outcome.status", "선택 또는 출력 대기 View의 결과는 active여야 합니다.")
+            end
+        end
+        if type(view.aftermath) == "table" and view.aftermath.active == true then
+            if view.phase ~= "ended"
+                or type(view.outcome) ~= "table"
+                or view.outcome.status ~= "victory" then
+                addError(errors, "aftermath_view_mismatch", "$.aftermath", "자유행동 View는 확정된 승리 화면에서만 표시할 수 있습니다.")
             end
         end
 

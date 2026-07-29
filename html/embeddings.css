@@ -2,6 +2,9 @@
 #app textarea {
 display: none !important;
 }
+#app:has(.ht-battle.is-aftermath) textarea {
+display: block !important;
+}
 p:first-child {
 margin-top: 0.5rem;
 margin-bottom: 0.5em;
