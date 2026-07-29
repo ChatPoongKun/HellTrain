@@ -1132,10 +1132,7 @@
         if registeredSet(validated.draft.registeredCardInstanceIds)[instanceId] then
             return cancelValidated(validated, instanceId)
         end
-        if validated.draft.focusedInstanceId == instanceId then
-            return registerValidated(validated, instanceId)
-        end
-        return focusValidated(validated, instanceId)
+        return registerValidated(validated, instanceId)
     end
 
     local function runValidatedTransition(validated, interactionAction, instanceId)
