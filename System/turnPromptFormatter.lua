@@ -652,7 +652,7 @@
             return failure({ makeError("prompt_encoding_failed", "$.pendingTurn.turnResult.llmEvent", "LLM 사건 직렬화에 실패했습니다.") })
         end
 
-        local content = table.concat({
+        local instructions = {
             "[전투 사건 전달]",
             "기존 프리셋의 문체, 시점, 인물 표현과 응답 형식을 그대로 유지하십시오.",
             "아래 JSON은 이번 응답에 반영해야 하는, 이미 확정된 시간순 사건입니다.",
@@ -660,9 +660,19 @@
             "actorAction은 장면 속 실제 행동으로 자연스럽게 반영하고, actorThought가 있을 때만 캐릭터의 내면에 반영하십시오.",
             "type, action, op, reasonCode 같은 기계 필드명을 독자에게 그대로 나열하지 마십시오.",
             "이 지침은 기존 프리셋을 대체하지 않고 이번 턴의 확정 사실만 추가합니다.",
-            "사건 JSON:",
-            encoded,
-        }, "\n")
+        }
+        if pending.beforeState.turnNumber == 1
+            and string.find(pending.beforeState.battleId, "-session-", 1, true) then
+            local character = staticData.characters[pending.beforeState.character.characterId]
+            instructions[#instructions + 1] = "다음 세션의 첫 장면이므로, 경찰에 연행되던 플레이어가 문밖으로 한 발을 내딛는 순간 시야가 검게 끊기며 의식을 잃고, 다시 정신을 차리자 눈앞에 "
+                .. character.name .. "이 보이는 모습으로 시작한 뒤 이번 턴 사건을 이어서 묘사하십시오."
+        end
+        if pending.afterState.status == "defeat" then
+            instructions[#instructions + 1] = "패배 장면의 끝에서 경찰이 다가와 플레이어를 연행하는 모습으로 마무리하십시오."
+        end
+        instructions[#instructions + 1] = "사건 JSON:"
+        instructions[#instructions + 1] = encoded
+        local content = table.concat(instructions, "\n")
 
         return success(
             { role = "system", content = content },
