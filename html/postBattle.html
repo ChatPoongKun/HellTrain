@@ -351,6 +351,51 @@ color: var(--run-text);
 font-size: 9px;
 }
 
+.run-flow .run-battle-log {
+margin-top: 8px;
+padding: 8px 10px;
+border: 1px solid rgba(223, 174, 63, .24);
+border-radius: 8px;
+background: rgba(223, 174, 63, .045);
+}
+
+.run-flow .run-battle-log > summary {
+cursor: pointer;
+color: #e7cf8f;
+font-size: 9px;
+font-weight: 900;
+list-style: none;
+}
+
+.run-flow .run-battle-log > summary::-webkit-details-marker {
+display: none;
+}
+
+.run-flow .run-battle-log > summary::before {
+display: inline-block;
+margin-right: 6px;
+content: "＋";
+color: #f0dfae;
+}
+
+.run-flow .run-battle-log[open] > summary::before {
+content: "−";
+}
+
+.run-flow .run-battle-log-list {
+display: grid;
+max-height: 300px;
+gap: 4px;
+margin: 8px 0 0;
+padding: 8px 6px 0 22px;
+overflow-y: auto;
+color: #aaa39d;
+border-top: 1px solid var(--run-line);
+font-size: 8px;
+line-height: 1.5;
+overscroll-behavior: contain;
+}
+
 .run-flow .run-section-head {
 display: flex;
 align-items: baseline;
@@ -972,6 +1017,7 @@ animation-iteration-count: 1 !important;
 {{settempvar::run_progression_start::{{dictelement::{{tempvar::run_progression_route}}::startStation}}}}
 {{settempvar::run_progression_reached::{{dictelement::{{tempvar::run_progression_route}}::reachedStation}}}}
 {{settempvar::run_progression_destination::{{dictelement::{{tempvar::run_progression_route}}::destinationStation}}}}
+{{settempvar::battle_log_view::{{getvar::battleLogView}}}}
 <section class="run-flow" aria-label="전투 결과와 다음 진행">
 <div class="run-shell">
 <header class="run-topbar">
@@ -1049,6 +1095,17 @@ animation-iteration-count: 1 !important;
 </div>
 </div>
 </article>
+
+{{#when::keep::{{dictelement::{{tempvar::battle_log_view}}::available}}::is::true}}
+<details class="run-battle-log">
+<summary>상세 전투 로그 펼쳐보기 · {{dictelement::{{tempvar::battle_log_view}}::turnCount}}턴</summary>
+<ol class="run-battle-log-list">
+{{#each::keep {{dictelement::{{tempvar::battle_log_view}}::entries}} as battle_log_entry}}
+<li>{{dictelement::{{slot::battle_log_entry}}::label}}</li>
+{{/each}}
+</ol>
+</details>
+{{/when}}
 
 {{#when::keep::{{dictelement::{{tempvar::run_progression_view}}::phase}}::is::reward}}
 {{settempvar::run_progression_reward::{{dictelement::{{tempvar::run_progression_view}}::rewardOffer}}}}

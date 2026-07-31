@@ -2707,6 +2707,22 @@
         return true
     end
 
+    local function dataEqual(left, right, seen)
+        if type(left) ~= type(right) then return false end
+        if type(left) ~= "table" then return left == right end
+        if getmetatable(left) ~= nil or getmetatable(right) ~= nil then return false end
+        seen = seen or {}
+        if seen[left] ~= nil then return seen[left] == right end
+        seen[left] = right
+        for key, value in pairs(left) do
+            if not dataEqual(value, right[key], seen) then return false end
+        end
+        for key in pairs(right) do
+            if left[key] == nil then return false end
+        end
+        return true
+    end
+
     local function fingerprintsEqual(left, right)
         return type(left) == "table"
             and type(right) == "table"
@@ -2933,6 +2949,17 @@
             getArrayLength(pending.turnResult.events, "$.turnResult.events", errors)
             validateEventEnvelope(pending.turnResult.publicResult, "$.turnResult.publicResult", errors)
             validateEventEnvelope(pending.turnResult.llmEvent, "$.turnResult.llmEvent", errors)
+        end
+
+        if type(pending.turnResult) == "table" and type(pending.afterState) == "table" then
+            local history = pending.afterState.history
+            local turns = type(history) == "table" and history.turns or nil
+            local lastEntry = type(turns) == "table" and turns[#turns] or nil
+            if type(lastEntry) ~= "table" or lastEntry.turnId ~= pending.turnId then
+                addError(errors, "pending_history_turn_mismatch", "$.afterState.history.turns", "afterState 전투 이력의 마지막 턴이 pendingTurn과 다릅니다.")
+            elseif not dataEqual(lastEntry.publicResult, pending.turnResult.publicResult) then
+                addError(errors, "pending_history_public_result_mismatch", "$.afterState.history.turns", "전투 이력의 공개 로그와 pendingTurn 공개 결과가 다릅니다.")
+            end
         end
 
         if type(pending.beforeState) == "table" and type(pending.afterState) == "table" then
