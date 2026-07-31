@@ -6,6 +6,7 @@ local function loadModule(path)
 end
 
 local historyModule = loadModule("System/battleHistory.lua")
+local dataBridgeModule = loadModule("System/dataBridge.lua")
 local staticData = {
     registry = {
         moods = {
@@ -148,6 +149,15 @@ assert(view.view.turnCount == 1)
 assert(#view.view.entries >= 4)
 local viewValidation = historyModule(nil, "validatePublicView", view.view)
 assert(viewValidation.ok)
+_G.runScript = function(triggerId, moduleName, action, ...)
+    assert(moduleName == "battleHistory")
+    return historyModule(triggerId, action, ...)
+end
+local bridgeValidation = dataBridgeModule(nil, "validate", "battleLogView", view.view)
+assert(bridgeValidation.ok)
+local bridgeEncoding = dataBridgeModule(nil, "encode", "battleLogView", view.view)
+assert(bridgeEncoding.ok)
+assert(type(bridgeEncoding.encoded) == "string" and #bridgeEncoding.encoded > 0)
 local invalidView = {
     available = true,
     turnCount = 1,
@@ -158,5 +168,7 @@ local invalidView = {
 local invalidValidation = historyModule(nil, "validatePublicView", invalidView)
 assert(invalidValidation.ok == false)
 assert(invalidValidation.errors[1].code == "battle_log_entry_label_mismatch")
+local invalidBridgeValidation = dataBridgeModule(nil, "validate", "battleLogView", invalidView)
+assert(invalidBridgeValidation.ok == false)
 
 print("battle-history-check: ok")
