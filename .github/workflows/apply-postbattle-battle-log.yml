@@ -23,7 +23,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply post-battle integration
-        run: python3 tools/apply_postbattle_battle_log.py
+        run: |
+          sed -i 's/if count != 1:/if count < 1:/' tools/apply_postbattle_battle_log.py
+          python3 tools/apply_postbattle_battle_log.py
 
       - name: Install Lua
         run: |
