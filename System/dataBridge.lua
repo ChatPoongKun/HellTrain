@@ -8,6 +8,13 @@
             errorMessage = "battleView 스키마 검증에 실패했습니다.",
             validatorMessage = "viewBuilder.validateBattleView 검증을 통과하지 못했습니다.",
         },
+        battleLogView = {
+            moduleName = "battleHistory",
+            action = "validatePublicView",
+            errorCode = "battle_log_view_invalid",
+            errorMessage = "battleLogView 스키마 검증에 실패했습니다.",
+            validatorMessage = "battleHistory.validatePublicView 검증을 통과하지 못했습니다.",
+        },
         gameSetupView = {
             moduleName = "gameSetupView",
             action = "validate",
