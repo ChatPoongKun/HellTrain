@@ -1,0 +1,81 @@
+name: Close battle log validation
+
+on:
+  push:
+    branches:
+      - feature/battle-history-log
+
+permissions:
+  contents: write
+
+jobs:
+  close:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/battle-history-log
+          fetch-depth: 0
+
+      - name: Apply validation closure
+        run: python3 tools/close_battle_log_validation.py
+
+      - name: Install Lua
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4
+
+      - name: Check Lua module syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          files = [
+              'System/battleHistory.lua',
+              'System/battleController.lua',
+              'System/dataBridge.lua',
+              'System/stateSchema.lua',
+              'System/turnResolver.lua',
+              'System/triggerPipeline.lua',
+              'System/characterSelector.lua',
+              'System/battleRuntime.lua',
+              'System/viewBuilder.lua',
+          ]
+          for path in files:
+              source = Path(path).read_text(encoding='utf-8')
+              wrapper = Path('/tmp/check.lua')
+              wrapper.write_text(
+                  'local chunk, err = load([====[return ' + source + ']====], "@' + path + '")\nassert(chunk, err)\n',
+                  encoding='utf-8',
+              )
+              subprocess.run(['lua5.4', str(wrapper)], check=True)
+          PY
+
+      - name: Run bridge-integrated history test
+        run: lua5.4 Tests/battle-history-check.lua
+
+      - name: Verify validation closure
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          history = Path('System/battleHistory.lua').read_text(encoding='utf-8')
+          test = Path('Tests/battle-history-check.lua').read_text(encoding='utf-8')
+          assert 'local viewValidation = validatePublicView(view)' in history
+          assert 'local emptyValidation = validatePublicView(emptyView)' in history
+          assert 'dataBridgeModule(nil, "validate", "battleLogView", view.view)' in test
+          assert 'dataBridgeModule(nil, "encode", "battleLogView", view.view)' in test
+          PY
+
+      - name: Remove temporary files
+        run: rm -f tools/close_battle_log_validation.py .github/workflows/close-battle-log-validation.yml
+
+      - name: Commit validation closure
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "test: verify battle log through the data bridge"
+          git push origin HEAD:feature/battle-history-log
