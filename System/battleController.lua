@@ -3731,7 +3731,7 @@
                 staticData
             )
             if summaryErrors then return failure(summaryErrors) end
-            local _, battleLogErrors = publishTerminalBattleLog(authority, staticData)
+            local _, battleLogErrors = publishTerminalBattleLog(nextState, staticData)
             if battleLogErrors then return failure(battleLogErrors) end
             local settled, settlementErrors = callModule(
                 "gameSetupController",
