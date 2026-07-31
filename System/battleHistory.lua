@@ -915,7 +915,10 @@
         if not validation.ok then return validation end
         local turns = validation.history.turns
         if #turns == 0 then
-            return success({ view = { available = false, turnCount = 0, entries = {} } })
+            local emptyView = { available = false, turnCount = 0, entries = {} }
+            local emptyValidation = validatePublicView(emptyView)
+            if not emptyValidation.ok then return emptyValidation end
+            return success({ view = emptyView })
         end
 
         local entries = {}
@@ -1017,13 +1020,14 @@
                     .. " / 무드 " .. moodLabel(staticData, entry.finish.mood)
             )
         end
-        return success({
-            view = {
-                available = true,
-                turnCount = #turns,
-                entries = entries,
-            },
-        })
+        local view = {
+            available = true,
+            turnCount = #turns,
+            entries = entries,
+        }
+        local viewValidation = validatePublicView(view)
+        if not viewValidation.ok then return viewValidation end
+        return success({ view = view })
     end
 
     local arguments = { ... }
