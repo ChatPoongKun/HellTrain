@@ -23,7 +23,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply patch
-        run: python3 tools/apply_battle_history.py
+        run: |
+          mkdir -p .agents/Tests docs
+          python3 tools/apply_battle_history.py
 
       - name: Install Lua
         run: |
