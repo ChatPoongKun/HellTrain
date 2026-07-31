@@ -1,0 +1,85 @@
+name: Apply post-battle log integration
+
+on:
+  push:
+    branches:
+      - feature/battle-history-log
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/battle-history-log
+          fetch-depth: 0
+
+      - name: Apply post-battle integration
+        run: python3 tools/apply_postbattle_battle_log.py
+
+      - name: Install Lua
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4
+
+      - name: Check Lua module syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          files = [
+              'System/battleHistory.lua',
+              'System/battleController.lua',
+              'System/stateSchema.lua',
+              'System/turnResolver.lua',
+              'System/triggerPipeline.lua',
+              'System/characterSelector.lua',
+              'System/battleRuntime.lua',
+              'System/viewBuilder.lua',
+          ]
+          for path in files:
+              source = Path(path).read_text(encoding='utf-8')
+              wrapper = Path('/tmp/check.lua')
+              wrapper.write_text(
+                  'local chunk, err = load([====[return ' + source + ']====], "@' + path + '")\nassert(chunk, err)\n',
+                  encoding='utf-8',
+              )
+              subprocess.run(['lua5.4', str(wrapper)], check=True)
+          PY
+
+      - name: Run battle history test
+        run: lua5.4 Tests/battle-history-check.lua
+
+      - name: Verify post-battle binding
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          controller = Path('System/battleController.lua').read_text(encoding='utf-8')
+          schema = Path('System/stateSchema.lua').read_text(encoding='utf-8')
+          html = Path('html/postBattle.html').read_text(encoding='utf-8')
+          assert controller.count('publishTerminalBattleLog(authority, staticData)') == 3
+          assert 'BATTLE_LOG_VIEW_NAME = "battleLogView"' in controller
+          assert 'pending_history_public_result_mismatch' in schema
+          assert '{{getvar::battleLogView}}' in html
+          assert '상세 전투 로그 펼쳐보기' in html
+          PY
+
+      - name: Remove temporary applicator
+        run: rm -f tools/apply_postbattle_battle_log.py .github/workflows/apply-postbattle-battle-log.yml
+
+      - name: Commit generated implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat: expose detailed log on post-battle screen"
+          git push origin HEAD:feature/battle-history-log
