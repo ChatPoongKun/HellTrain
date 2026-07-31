@@ -1165,17 +1165,17 @@
         if deckErrors then
             return nil, deckErrors
         end
-        if offer.kind == "none" then
-            if choice.kind ~= "none" then
-                return nil, {
-                    makeError(
-                        "reward_choice_mismatch",
-                        path .. ".kind",
-                        "보상 카드가 없을 때는 continue 선택만 사용할 수 있습니다."
-                    ),
-                }
-            end
+        if choice.kind == "none" then
             return copyArray(deck), nil
+        end
+        if offer.kind == "none" then
+            return nil, {
+                makeError(
+                    "reward_choice_mismatch",
+                    path .. ".kind",
+                    "보상 카드가 없을 때는 continue 선택만 사용할 수 있습니다."
+                ),
+            }
         end
         if choice.kind ~= "card" or not contains(offer.cardIds, choice.cardId) then
             return nil, {
@@ -1391,61 +1391,86 @@
                 stats.defeats = stats.defeats + 1
             end
 
-            local rewardOffer, afterRewardRng, rewardErrors = generateRewardOffer(
-                setup.setupId,
-                sessionIndex,
-                rng,
-                settlement,
-                deck,
-                playerPool
-            )
-            if rewardErrors then
-                return nil, rewardErrors
-            end
-            rng = afterRewardRng
             local canonicalRecord = makeSessionRecord(settlement)
             canonicalSessions[sessionIndex] = canonicalRecord
 
-            if inputRecord.rewardChoice == nil then
-                if sessionIndex ~= sessionCount then
-                    return nil, {
-                        makeError(
-                            "incomplete_historical_session",
-                            recordPath .. ".rewardChoice",
-                            "마지막 항목이 아닌 정산 이력에는 보상 선택이 필요합니다."
-                        ),
-                    }
-                end
-                return buildState(
+            if settlement.status == "victory" then
+                local rewardOffer, afterRewardRng, rewardErrors = generateRewardOffer(
                     setup.setupId,
-                    "reward",
-                    canonicalSessions,
+                    sessionIndex,
                     rng,
+                    settlement,
                     deck,
-                    stats,
-                    rewardOffer
-                ), nil
-            end
+                    playerPool
+                )
+                if rewardErrors then
+                    return nil, rewardErrors
+                end
+                rng = afterRewardRng
 
-            local rewardChoice, choiceErrors = validateRewardChoice(
-                inputRecord.rewardChoice,
-                recordPath .. ".rewardChoice"
-            )
-            if choiceErrors then
-                return nil, choiceErrors
+                if inputRecord.rewardChoice == nil then
+                    if sessionIndex ~= sessionCount then
+                        return nil, {
+                            makeError(
+                                "incomplete_historical_session",
+                                recordPath .. ".rewardChoice",
+                                "마지막 항목이 아닌 승리 정산 이력에는 보상 선택이 필요합니다."
+                            ),
+                        }
+                    end
+                    return buildState(
+                        setup.setupId,
+                        "reward",
+                        canonicalSessions,
+                        rng,
+                        deck,
+                        stats,
+                        rewardOffer
+                    ), nil
+                end
+
+                local rewardChoice, choiceErrors = validateRewardChoice(
+                    inputRecord.rewardChoice,
+                    recordPath .. ".rewardChoice"
+                )
+                if choiceErrors then
+                    return nil, choiceErrors
+                end
+                local nextDeck, applyErrors = applyRewardChoice(
+                    rewardOffer,
+                    rewardChoice,
+                    deck,
+                    playerPool,
+                    recordPath .. ".rewardChoice"
+                )
+                if applyErrors then
+                    return nil, applyErrors
+                end
+                deck = nextDeck
+                canonicalRecord.rewardChoice = rewardChoice
+            else
+                if inputRecord.rewardChoice ~= nil then
+                    local rewardChoice, choiceErrors = validateRewardChoice(
+                        inputRecord.rewardChoice,
+                        recordPath .. ".rewardChoice"
+                    )
+                    if choiceErrors then
+                        return nil, choiceErrors
+                    end
+                    if rewardChoice.kind ~= "none" then
+                        return nil, {
+                            makeError(
+                                "reward_not_allowed_after_defeat",
+                                recordPath .. ".rewardChoice",
+                                "패배한 세션에서는 카드 보상을 획득할 수 없습니다."
+                            ),
+                        }
+                    end
+                end
+                canonicalRecord.rewardChoice = {
+                    kind = "none",
+                }
             end
-            local nextDeck, applyErrors = applyRewardChoice(
-                rewardOffer,
-                rewardChoice,
-                deck,
-                playerPool,
-                recordPath .. ".rewardChoice"
-            )
-            if applyErrors then
-                return nil, applyErrors
-            end
-            deck = nextDeck
-            canonicalRecord.rewardChoice = rewardChoice
 
             local characterOffer, afterCharacterRng, characterErrors = generateCharacterOffer(
                 setup.setupId,
@@ -1870,7 +1895,7 @@
         end
 
         local choice
-        if current.rewardOffer.kind == "none" and command.cardId == "continue" then
+        if command.cardId == "continue" then
             choice = {
                 kind = "none",
             }
