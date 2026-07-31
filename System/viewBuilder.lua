@@ -543,6 +543,30 @@
         return value > 0 and ("+" .. text) or text
     end
 
+    local function buildBattleLogView(state, staticData, errors)
+        if type(state) ~= "table" or state.status == "active" then
+            return { available = false, turnCount = 0, entries = {} }
+        end
+        if type(runScript) ~= "function" then
+            addError(errors, "history_view_runtime_unavailable", "$.history", "상세 전투 로그 빌더를 찾을 수 없습니다.")
+            return { available = false, turnCount = 0, entries = {} }
+        end
+        local ok, report = pcall(runScript, triggerId, "battleHistory", "buildPublicView", state.history, staticData)
+        if not ok or type(report) ~= "table" then
+            addError(errors, "history_view_failed", "$.history", "상세 전투 로그 생성 호출에 실패했습니다.")
+            return { available = false, turnCount = 0, entries = {} }
+        end
+        if report.ok ~= true then
+            appendNestedErrors(errors, "$.history", report)
+            return { available = false, turnCount = 0, entries = {} }
+        end
+        if type(report.view) ~= "table" then
+            addError(errors, "invalid_history_view", "$.history", "상세 전투 로그 View가 없습니다.")
+            return { available = false, turnCount = 0, entries = {} }
+        end
+        return report.view
+    end
+
     local function buildLastTurnView(lastTurn, registry, errors)
         if type(lastTurn) ~= "table" or lastTurn.available ~= true then
             return { available = false }
@@ -1304,6 +1328,7 @@
             selection = selectionView,
             zones = countZones(displayState.cardInstances),
             lastTurn = lastTurn,
+            battleLog = buildBattleLogView(displayState, data, errors),
             outcome = {
                 status = displayState.status,
                 label = outcomeLabels[displayState.status],
@@ -1841,6 +1866,7 @@
             selection = true,
             zones = true,
             lastTurn = true,
+            battleLog = true,
             outcome = true,
             aftermath = true,
         }, "$", errors)

@@ -337,6 +337,24 @@
             })
         end
 
+        local historyReport, historyErrors = callModule(
+            "battleHistory",
+            "attachPublicResult",
+            resolution.afterState,
+            resolution.turnId,
+            projected.publicResult,
+            staticData
+        )
+        if historyErrors then
+            return failure(historyErrors)
+        end
+        if type(historyReport.state) ~= "table" then
+            return failure({
+                makeError("invalid_public_history_result", "$.runtime.battleHistory", "공개 전투 로그 연결 결과에 상태가 없습니다."),
+            })
+        end
+        resolution.afterState = historyReport.state
+
         local constructed, constructErrors = callModule(
             "stateSchema",
             "newPendingTurn",

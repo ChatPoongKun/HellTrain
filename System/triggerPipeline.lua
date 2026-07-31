@@ -397,12 +397,24 @@
         return count
     end
 
+    local function buildHistoryContext(history)
+        if type(runScript) ~= "function" then
+            error("battleHistory.context runtime is unavailable", 0)
+        end
+        local ok, report = pcall(runScript, triggerId, "battleHistory", "context", history)
+        if not ok or type(report) ~= "table" or report.ok ~= true or type(report.context) ~= "table" then
+            error("battleHistory.context failed", 0)
+        end
+        return report.context
+    end
+
     local function buildContext(state, options, planState)
         local intent = type(state.characterIntent) == "table" and state.characterIntent or {}
         local context = {
             turn = state.turnNumber,
             phase = options.phase,
             mood = state.character.mood,
+            history = buildHistoryContext(state.history),
             player = {
                 stealth = state.player.stealth,
                 handCount = countZone(state, "player", "hand"),
