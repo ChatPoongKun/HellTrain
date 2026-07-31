@@ -228,6 +228,21 @@
         return hand
     end
 
+    local function buildHistoryContext(state)
+        if type(state) == "table" and type(state.historyContextOverride) == "table" then
+            return state.historyContextOverride
+        end
+        local report, errors = callModule(
+            "battleHistory",
+            "context",
+            type(state) == "table" and state.history or nil
+        )
+        if errors or type(report) ~= "table" or type(report.context) ~= "table" then
+            error("battleHistory.context failed", 0)
+        end
+        return report.context
+    end
+
     local function buildSelectionContext(state, staticData, hand)
         local characterHand = {}
         for index, entry in ipairs(hand) do
@@ -242,6 +257,7 @@
         end
         return {
             turnNumber = state.turnNumber,
+            history = buildHistoryContext(state),
             player = {
                 stealth = state.player.stealth,
                 handCount = countZone(state, "player", "hand"),
@@ -259,6 +275,7 @@
             turn = state.turnNumber,
             phase = "character_selection",
             mood = state.character.mood,
+            history = buildHistoryContext(state),
             player = {
                 stealth = state.player.stealth,
                 handCount = countZone(state, "player", "hand"),
@@ -549,6 +566,7 @@
             or not isFinite(context.player.stealth)
             or not isInteger(context.player.handCount, 0)
             or type(context.character) ~= "table"
+            or type(context.history) ~= "table"
             or not isFinite(context.character.resistance)
             or type(context.character.mood) ~= "string"
             or context.character.mood == ""
@@ -566,6 +584,7 @@
 
         local syntheticState = {
             turnNumber = context.turnNumber,
+            historyContextOverride = context.history,
             player = {
                 stealth = context.player.stealth,
             },

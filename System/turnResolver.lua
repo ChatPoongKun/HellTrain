@@ -203,11 +203,23 @@
         return { turnId = options.turnId }, nil
     end
 
+    local function buildHistoryContext(history)
+        if type(runScript) ~= "function" then
+            error("battleHistory.context runtime is unavailable", 0)
+        end
+        local ok, report = pcall(runScript, triggerId, "battleHistory", "context", history)
+        if not ok or type(report) ~= "table" or report.ok ~= true or type(report.context) ~= "table" then
+            error("battleHistory.context failed", 0)
+        end
+        return report.context
+    end
+
     local function buildContext(state, phase, card, instance, plan)
         local context = {
             turn = state.turnNumber,
             phase = phase,
             mood = state.character.mood,
+            history = buildHistoryContext(state.history),
             player = {
                 stealth = state.player.stealth,
                 handCount = countZone(state, "player", "hand"),
@@ -1426,6 +1438,44 @@
             )
         end
         working.state.lastCommittedTurnId = turnId
+
+        local historyReport, historyErrors = callModule(
+            "battleHistory",
+            "appendResolvedTurn",
+            authorityState,
+            working.state,
+            {
+                turnId = turnId,
+                turnNumber = resolvedTurnNumber,
+                selectedCards = {
+                    player = playerSelection,
+                    character = characterSelection,
+                },
+                events = events,
+                start = {
+                    stealth = startValues.stealth,
+                    resistance = startValues.resistance,
+                    mood = startValues.mood,
+                },
+                finish = {
+                    stealth = endingStealth,
+                    resistance = endingResistance,
+                    mood = working.state.character.mood,
+                    status = working.state.status,
+                },
+                mood = moodPayload,
+            },
+            staticData
+        )
+        if historyErrors then
+            return failure(historyErrors)
+        end
+        if type(historyReport.state) ~= "table" then
+            return failure({
+                makeError("invalid_history_append_result", "$.runtime.battleHistory", "전투 이력 추가 결과에 상태가 없습니다."),
+            })
+        end
+        working.state = historyReport.state
 
         local stateReport, stateErrors = callModule(
             "stateSchema",
