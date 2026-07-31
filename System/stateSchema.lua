@@ -981,6 +981,28 @@
         end
     end
 
+    local function projectHistoryContext(history)
+        if type(runScript) ~= "function" then return nil end
+        local ok, report = pcall(runScript, triggerId, "battleHistory", "context", history)
+        if not ok or type(report) ~= "table" or report.ok ~= true or type(report.context) ~= "table" then
+            return nil
+        end
+        return report.context
+    end
+
+    local function validateHistoryContext(value, path, errors)
+        if type(runScript) ~= "function" then
+            addError(errors, "history_context_validation_unavailable", path, "전투 이력 컨텍스트 검증기를 찾을 수 없습니다.")
+            return
+        end
+        local ok, report = pcall(runScript, triggerId, "battleHistory", "validateContext", value)
+        if not ok or type(report) ~= "table" then
+            addError(errors, "history_context_validation_failed", path, "전투 이력 컨텍스트 검증 호출에 실패했습니다.")
+        elseif report.ok ~= true then
+            appendNestedErrors(errors, path, report)
+        end
+    end
+
     local function validateSelectionContext(context, path, errors)
         if type(context) ~= "table" then
             addError(errors, "invalid_selection_context", path, "선택 시점 컨텍스트가 객체가 아닙니다.")
@@ -991,10 +1013,12 @@
             player = true,
             character = true,
             characterHand = true,
+            history = true,
         }, path, errors)
         if not isInteger(context.turnNumber, 1) then
             addError(errors, "invalid_turn_number", path .. ".turnNumber", "선택 시점 턴 번호는 1 이상의 정수여야 합니다.")
         end
+        validateHistoryContext(context.history, path .. ".history", errors)
 
         if type(context.player) ~= "table" then
             addError(errors, "invalid_selection_context", path .. ".player", "선택 시점 플레이어 컨텍스트가 객체가 아닙니다.")
@@ -1267,7 +1291,23 @@
                 mood = characterMood,
             },
             characterHand = characterHand,
+            history = projectHistoryContext(state.history),
         }
+    end
+
+    local function historyContextEqual(left, right, seen)
+        if type(left) ~= type(right) then return false end
+        if type(left) ~= "table" then return left == right end
+        seen = seen or {}
+        if seen[left] ~= nil then return seen[left] == right end
+        seen[left] = right
+        for key, value in pairs(left) do
+            if not historyContextEqual(value, right[key], seen) then return false end
+        end
+        for key in pairs(right) do
+            if left[key] == nil then return false end
+        end
+        return true
     end
 
     local function selectionContextEqual(left, right)
@@ -1279,6 +1319,7 @@
             or type(left.character) ~= "table" or type(right.character) ~= "table"
             or left.character.resistance ~= right.character.resistance
             or left.character.mood ~= right.character.mood
+            or not historyContextEqual(left.history, right.history)
             or type(left.characterHand) ~= "table" or type(right.characterHand) ~= "table"
             or #left.characterHand ~= #right.characterHand then
             return false
@@ -2103,6 +2144,7 @@
             cardInstances = true,
             selection = true,
             characterIntent = true,
+            history = true,
             turnStartReceipt = true,
         }, "$", errors)
 
@@ -2472,6 +2514,19 @@
                     end
                 end
             end
+        end
+
+        local historyReport, historyCallError = callReceiptValidator(
+            "battleHistory",
+            "validate",
+            state.history,
+            state,
+            staticData
+        )
+        if historyCallError ~= nil then
+            addError(errors, "history_validation_unavailable", "$.history", "전투 이력 검증을 실행할 수 없습니다: " .. historyCallError)
+        elseif historyReport.ok ~= true then
+            appendNestedErrors(errors, "$.history", historyReport)
         end
 
         if state.turnStartReceipt ~= nil then
@@ -3066,6 +3121,13 @@
                 for moodId in pairs(normalizedStaticData.registry.moods) do
                     value.character.moodTokens[moodId] = 0
                 end
+            end
+            if value.history == nil then
+                value.history = {
+                    schemaVersion = SCHEMA_VERSION,
+                    kind = "battleHistory",
+                    turns = {},
+                }
             end
             return value
         end)

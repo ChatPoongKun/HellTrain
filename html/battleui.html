@@ -1270,6 +1270,26 @@ padding: 0 0 0 13px;
 color: #9f9892;
 font-size: 8px;
 }
+.ht-log--battle {
+margin-top: 8px;
+padding: 7px 8px 8px;
+border: 1px solid rgba(239, 213, 143, .20);
+border-radius: 8px;
+background: rgba(239, 213, 143, .035);
+}
+.ht-log--battle > summary {
+padding-top: 0;
+color: #e5cf91;
+font-size: 9px;
+font-weight: 850;
+}
+.ht-log--battle .ht-log-list {
+max-height: 260px;
+padding-right: 5px;
+overflow-y: auto;
+overscroll-behavior: contain;
+line-height: 1.5;
+}
 .ht-outcome {
 margin-bottom: 7px;
 padding: 7px 9px;
@@ -1929,6 +1949,17 @@ animation: none;
 <ol class="ht-log-list">
 {{#each {{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::summaries}} summary}}
 <li>{{dict_element::{{slot::summary}}::text}}</li>
+{{/each}}
+</ol>
+</details>
+{{/if}}
+
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::battleLog}}::available}}::true}}}}
+<details class="ht-log ht-log--battle">
+<summary>상세 전투 로그 펼쳐보기 · {{dict_element::{{dict_element::{{getvar::battleView}}::battleLog}}::turnCount}}턴</summary>
+<ol class="ht-log-list">
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::battleLog}}::entries}} battleLogEntry}}
+<li>{{dict_element::{{slot::battleLogEntry}}::label}}</li>
 {{/each}}
 </ol>
 </details>
