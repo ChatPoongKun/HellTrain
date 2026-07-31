@@ -30,13 +30,24 @@ jobs:
           import re
           import textwrap
 
-          def sub_once(path: str, pattern: str, replacement: str, flags: int = 0) -> None:
+          def replace_literal_once(path: str, old: str, new: str) -> None:
               file_path = Path(path)
               text = file_path.read_text(encoding="utf-8")
-              updated, count = re.subn(pattern, replacement, text, count=1, flags=flags)
+              count = text.count(old)
               if count != 1:
-                  raise SystemExit(f"{path}: expected one replacement target, found {count}")
-              file_path.write_text(updated, encoding="utf-8")
+                  raise SystemExit(f"{path}: expected one literal target, found {count}: {old[:80]!r}")
+              file_path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          def replace_between(path: str, start_marker: str, end_marker: str, replacement: str) -> None:
+              file_path = Path(path)
+              text = file_path.read_text(encoding="utf-8")
+              start = text.find(start_marker)
+              if start < 0:
+                  raise SystemExit(f"{path}: start marker not found: {start_marker!r}")
+              end = text.find(end_marker, start + len(start_marker))
+              if end < 0:
+                  raise SystemExit(f"{path}: end marker not found: {end_marker!r}")
+              file_path.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
 
           progression = "System/runProgression.lua"
 
@@ -81,13 +92,12 @@ jobs:
               return nextDeck, nil
           end
 
-          local SUMMARY_FIELDS = {
           '''), "    ")
-          sub_once(
+          replace_between(
               progression,
-              r'    local function applyRewardChoice\(offer, choice, deck, playerPool, path\)\n.*?\n    end\n\n    local SUMMARY_FIELDS = \{\n',
+              "    local function applyRewardChoice(offer, choice, deck, playerPool, path)",
+              "    local SUMMARY_FIELDS = {",
               reward_function,
-              re.DOTALL,
           )
 
           replay_block = textwrap.indent(textwrap.dedent('''\
@@ -172,33 +182,33 @@ jobs:
               }
           end
 
-          local characterOffer
           '''), "            ")
-          sub_once(
+          replace_between(
               progression,
-              r'            local rewardOffer, afterRewardRng, rewardErrors = generateRewardOffer\(\n.*?\n            canonicalRecord\.rewardChoice = rewardChoice\n\n            local characterOffer\n',
+              "            local rewardOffer, afterRewardRng, rewardErrors = generateRewardOffer(",
+              "            local characterOffer, afterCharacterRng, characterErrors = generateCharacterOffer(",
               replay_block,
-              re.DOTALL,
           )
 
-          sub_once(
+          replace_literal_once(
               progression,
-              r'        if current\.rewardOffer\.kind == "none" and command\.cardId == "continue" then\n',
-              '        if command.cardId == "continue" then\n',
+              '        if current.rewardOffer.kind == "none" and command.cardId == "continue" then',
+              '        if command.cardId == "continue" then',
           )
 
           post_battle = "html/postBattle.html"
-          sub_once(
+          replace_literal_once(
               post_battle,
-              r'(\.run-flow \.run-confirm:focus-visible,\n\.run-flow \.run-continue:focus-visible \{\noutline: 2px solid #fff;\noutline-offset: 2px;\n\}\n\n)(\.run-flow \.run-none-reward,)',
-              r'\1.run-flow .run-reward-skip {\ntext-align: center;\n}\n\n\2',
+              ".run-flow .run-none-reward,",
+              ".run-flow .run-reward-skip {\ntext-align: center;\n}\n\n.run-flow .run-none-reward,",
           )
-          sub_once(
+          replace_literal_once(
               post_battle,
-              re.escape('<span class="run-instruction">첫 클릭: 상세 확인 · 열린 카드 아래 버튼: 보상 확정</span>'),
+              '<span class="run-instruction">첫 클릭: 상세 확인 · 열린 카드 아래 버튼: 보상 확정</span>',
               '<span class="run-instruction">첫 클릭: 상세 확인 · 열린 카드 아래 버튼: 보상 확정 · 원치 않으면 선택하지 않기</span>',
           )
-          skip_markup = textwrap.dedent('''\
+          reward_end = '{{/each}}\n</div>\n{{/when}}\n{{#when::keep::{{dictelement::{{tempvar::run_progression_reward}}::kind}}::is::none}}'
+          reward_end_with_skip = textwrap.dedent('''\
           {{/each}}
           </div>
           <div class="run-reward-skip">
@@ -211,12 +221,8 @@ jobs:
           </div>
           {{/when}}
           {{#when::keep::{{dictelement::{{tempvar::run_progression_reward}}::kind}}::is::none}}
-          ''')
-          sub_once(
-              post_battle,
-              re.escape('{{/each}}\n</div>\n{{/when}}\n{{#when::keep::{{dictelement::{{tempvar::run_progression_reward}}::kind}}::is::none}}\n'),
-              skip_markup,
-          )
+          ''').rstrip("\n")
+          replace_literal_once(post_battle, reward_end, reward_end_with_skip)
 
           design_path = Path("Design.txt")
           design = design_path.read_text(encoding="utf-8")
