@@ -146,5 +146,17 @@ assert(view.ok)
 assert(view.view.available == true)
 assert(view.view.turnCount == 1)
 assert(#view.view.entries >= 4)
+local viewValidation = historyModule(nil, "validatePublicView", view.view)
+assert(viewValidation.ok)
+local invalidView = {
+    available = true,
+    turnCount = 1,
+    entries = {
+        { turnNumber = 1, sequence = 0, type = "turn_start", text = "시작", label = "손상된 라벨" },
+    },
+}
+local invalidValidation = historyModule(nil, "validatePublicView", invalidView)
+assert(invalidValidation.ok == false)
+assert(invalidValidation.errors[1].code == "battle_log_entry_label_mismatch")
 
 print("battle-history-check: ok")
