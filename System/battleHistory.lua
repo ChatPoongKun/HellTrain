@@ -647,11 +647,39 @@
             startMood = entry.start.mood,
             endMood = entry.finish.mood,
             status = entry.finish.status,
+            start = {
+                stealth = entry.start.stealth,
+                resistance = entry.start.resistance,
+                mood = entry.start.mood,
+            },
+            finish = {
+                stealth = entry.finish.stealth,
+                resistance = entry.finish.resistance,
+                mood = entry.finish.mood,
+                status = entry.finish.status,
+            },
+            mood = {
+                before = entry.mood.before,
+                after = entry.mood.after,
+                applied = entry.mood.applied,
+                forcedCount = entry.mood.forcedCount,
+                forceCancelled = entry.mood.forceCancelled,
+                resolution = entry.mood.resolution,
+                tokensBefore = copyCounts(entry.mood.tokensBefore),
+                tokensAfter = copyCounts(entry.mood.tokensAfter),
+            },
             playerCards = {},
             characterCards = {},
             playerActionTags = {},
             characterActionTags = {},
         }
+        if entry.mood.targetMood ~= nil then value.mood.targetMood = entry.mood.targetMood end
+        if type(entry.mood.tiedMoods) == "table" then
+            value.mood.tiedMoods = {}
+            for index, moodId in ipairs(entry.mood.tiedMoods) do
+                value.mood.tiedMoods[index] = moodId
+            end
+        end
         for _, side in ipairs({ "player", "character" }) do
             local outputCards = side == "player" and value.playerCards or value.characterCards
             local outputTags = side == "player" and value.playerActionTags or value.characterActionTags
@@ -698,9 +726,11 @@
             context.previousTurn = turnContext(turns[#turns])
         end
 
-        for window = 1, #turns do
+        for window = 1, MAX_TURNS do
+            local availableTurns = math.min(window, #turns)
             local windowValue = {
-                turns = window,
+                requestedTurns = window,
+                availableTurns = availableTurns,
                 player = { declaredTagCounts = {}, resolvedTagCounts = {} },
                 character = { declaredTagCounts = {}, resolvedTagCounts = {} },
             }
@@ -730,8 +760,26 @@
         end
         if not isDenseArray(value.turns) or not isDenseArray(value.windows) then
             addError(errors, "invalid_history_context_arrays", "$", "컨텍스트 턴 또는 기간 집계가 연속 배열이 아닙니다.")
-        elseif #value.turns ~= value.completedTurns or #value.windows ~= value.completedTurns then
-            addError(errors, "history_context_count_mismatch", "$", "컨텍스트 완료 턴 수와 배열 길이가 다릅니다.")
+        elseif #value.turns ~= value.completedTurns or #value.windows ~= MAX_TURNS then
+            addError(errors, "history_context_count_mismatch", "$", "컨텍스트 완료 턴 수 또는 기간 창 개수가 다릅니다.")
+        else
+            for window = 1, MAX_TURNS do
+                local current = value.windows[window]
+                if type(current) ~= "table"
+                    or current.requestedTurns ~= window
+                    or current.availableTurns ~= math.min(window, value.completedTurns) then
+                    addError(errors, "invalid_history_window", "$.windows[" .. window .. "]", "기간 창의 요청·가용 턴 수가 올바르지 않습니다.")
+                else
+                    for _, side in ipairs({ "player", "character" }) do
+                        local sideValue = current[side]
+                        if type(sideValue) ~= "table"
+                            or type(sideValue.declaredTagCounts) ~= "table"
+                            or type(sideValue.resolvedTagCounts) ~= "table" then
+                            addError(errors, "invalid_history_window_side", "$.windows[" .. window .. "]." .. side, "기간 창의 진영별 태그 집계가 올바르지 않습니다.")
+                        end
+                    end
+                end
+            end
         end
         for _, side in ipairs({ "player", "character" }) do
             if type(value[side]) ~= "table"
