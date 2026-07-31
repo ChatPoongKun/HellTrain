@@ -191,7 +191,7 @@ end
 -- 생략한다. 개발 중에는 setRunScriptCacheDevelopmentMode(true)를 사용하면 매
 -- 이벤트의 첫 모듈 호출에서 source를 다시 확인한다.
 RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION
-    or "runtime-bundle-battle-history-v1-20260731"
+    or "runtime-bundle-battle-history-v2-20260731"
 RUNTIME_CACHE_DEVELOPMENT_BYPASS = RUNTIME_CACHE_DEVELOPMENT_BYPASS == true
 
 local RUN_SCRIPT_SOURCE_CACHE_MAX_ENTRIES = 64

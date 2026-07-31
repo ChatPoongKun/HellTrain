@@ -3,6 +3,7 @@
     local ACTIVE_REQUEST_SCHEMA_VERSION = 3
     local AFTERMATH_SCHEMA_VERSION = 1
     local VIEW_NAME = "battleView"
+    local BATTLE_LOG_VIEW_NAME = "battleLogView"
     local UI_BODY_NAME = "🔯🔯🔯"
     local UI_ANCHOR_MARKER = "@@HELLTRAIN_UI_ANCHOR_V1@@"
     local SAY_NOTHING = "*says nothing*"
@@ -18,7 +19,8 @@
     }
 
     local function permitCanonicalBattleView(purpose, viewName)
-        return purpose == "dataBridgeCanonicalV1" and viewName == VIEW_NAME
+        return purpose == "dataBridgeCanonicalV1"
+            and (viewName == VIEW_NAME or viewName == BATTLE_LOG_VIEW_NAME)
     end
 
     local function makeError(code, path, message)
@@ -1440,6 +1442,57 @@
         }, nil
     end
 
+    local function publishTerminalBattleLog(authority, staticData)
+        if type(authority) ~= "table"
+            or (authority.status ~= "victory" and authority.status ~= "defeat") then
+            return nil, {
+                makeError("battle_log_requires_terminal", "$.authority.status", "종료된 전투에서만 상세 로그를 게시할 수 있습니다."),
+            }
+        end
+        local built, buildErrors = callModule(
+            "battleHistory",
+            "buildPublicView",
+            authority.history,
+            staticData
+        )
+        if buildErrors then return nil, buildErrors end
+        if type(built.view) ~= "table" or built.view.available ~= true then
+            return nil, {
+                makeError("missing_terminal_battle_log", "$.runtime.battleHistory.view", "종료 전투의 공개 상세 로그를 만들지 못했습니다."),
+            }
+        end
+        local published, publishErrors = callModule(
+            "dataBridge",
+            "_publishCanonical",
+            BATTLE_LOG_VIEW_NAME,
+            built.view,
+            permitCanonicalBattleView
+        )
+        if publishErrors then return nil, publishErrors end
+        if type(published.encoded) ~= "string" or published.encoded == "" then
+            return nil, {
+                makeError("missing_published_battle_log", "$.runtime.dataBridge.encoded", "상세 전투 로그 게시 문자열이 없습니다."),
+            }
+        end
+        if type(getChatVar) ~= "function" then
+            return nil, {
+                makeError("battle_log_verify_unavailable", "$.host.getChatVar", "게시한 상세 전투 로그를 검증할 수 없습니다."),
+            }
+        end
+        local readOk, storedWire = pcall(getChatVar, triggerId, BATTLE_LOG_VIEW_NAME)
+        if not readOk then
+            return nil, {
+                makeError("battle_log_verify_failed", "$.chatVar.battleLogView", "게시한 상세 전투 로그를 다시 읽지 못했습니다: " .. tostring(storedWire)),
+            }
+        end
+        if storedWire ~= published.encoded then
+            return nil, {
+                makeError("battle_log_write_not_persisted", "$.chatVar.battleLogView", "게시 뒤 읽은 상세 전투 로그가 인코딩 결과와 다릅니다."),
+            }
+        end
+        return built.view, nil
+    end
+
     local function validateBattleReadySetup(setupState, staticData)
         local setupCopy, setupCopyError = cloneJson(setupState, "$.setupState")
         if setupCopyError then
@@ -1760,6 +1813,8 @@
             if lastErrors then return failure(lastErrors) end
             local summary, summaryErrors = buildTerminalSummary(authority, lastCommitted, staticData)
             if summaryErrors then return failure(summaryErrors) end
+            local _, battleLogErrors = publishTerminalBattleLog(authority, staticData)
+            if battleLogErrors then return failure(battleLogErrors) end
             local settled, settlementErrors = callModule(
                 "gameSetupController",
                 "completeBattle",
@@ -3676,6 +3731,8 @@
                 staticData
             )
             if summaryErrors then return failure(summaryErrors) end
+            local _, battleLogErrors = publishTerminalBattleLog(authority, staticData)
+            if battleLogErrors then return failure(battleLogErrors) end
             local settled, settlementErrors = callModule(
                 "gameSetupController",
                 "completeBattle",
