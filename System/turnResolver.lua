@@ -1136,11 +1136,6 @@
             latchOutcome("turn_end_checkpoint", "turn_end", nil)
         end
 
-        local endingStealth = working.state.player.stealth
-        local endingResistance = working.state.character.resistance
-        local resistancePerformance = startValues.resistance - endingResistance
-        local stealthSpent = math.max(0, startValues.stealth - endingStealth)
-
         local function moodOrder()
             local order = {}
             local count = 0
@@ -1248,6 +1243,61 @@
             "character",
             { kind = "turn_rule" }
         )
+
+        if working.state.status == "active" then
+            local repeatedNegativeMood = resolvedTurnNumber > 1
+                and moodPayload.before == moodPayload.after
+            local moodCommand = nil
+            if moodPayload.after == "suspicion" then
+                moodCommand = {
+                    op = "lose_stealth",
+                    target = "player",
+                    amount = repeatedNegativeMood and 2 or 1,
+                    cause = "moodState",
+                }
+            elseif moodPayload.after == "rejection" then
+                moodCommand = {
+                    op = "lose_stealth",
+                    target = "player",
+                    amount = repeatedNegativeMood and 6 or 3,
+                    cause = "moodState",
+                }
+            elseif moodPayload.after == "confusion" then
+                moodCommand = {
+                    op = "recover_stealth",
+                    target = "player",
+                    amount = 1,
+                    cause = "moodState",
+                }
+            elseif moodPayload.after == "compliance" then
+                moodCommand = {
+                    op = "recover_stealth",
+                    target = "player",
+                    amount = 2,
+                    cause = "moodState",
+                }
+            end
+
+            if moodCommand ~= nil then
+                local moodApplied, moodApplyErrors = applyCommands(
+                    { moodCommand },
+                    source("system", "mood_state"),
+                    "turn_end",
+                    nil,
+                    "player",
+                    "mood_state"
+                )
+                if not moodApplied then
+                    return failure(moodApplyErrors)
+                end
+                latchOutcome("mood_state_checkpoint", "turn_end", nil)
+            end
+        end
+
+        local endingStealth = working.state.player.stealth
+        local endingResistance = working.state.character.resistance
+        local resistancePerformance = startValues.resistance - endingResistance
+        local stealthSpent = math.max(0, startValues.stealth - endingStealth)
 
         local function orderedZoneIds(state, owner, zone)
             local entries = {}
