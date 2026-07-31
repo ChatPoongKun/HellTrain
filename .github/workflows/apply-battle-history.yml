@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feature/battle-history-log
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -31,6 +34,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import subprocess
           files = [
               'System/battleHistory.lua',
               'System/stateSchema.lua',
@@ -43,8 +47,10 @@ jobs:
           for path in files:
               source = Path(path).read_text(encoding='utf-8')
               wrapper = Path('/tmp/check.lua')
-              wrapper.write_text('local chunk, err = load([====[return ' + source + ']====], "@' + path + '")\nassert(chunk, err)\n', encoding='utf-8')
-              import subprocess
+              wrapper.write_text(
+                  'local chunk, err = load([====[return ' + source + ']====], "@' + path + '")\nassert(chunk, err)\n',
+                  encoding='utf-8',
+              )
               subprocess.run(['lua5.4', str(wrapper)], check=True)
           PY
 
