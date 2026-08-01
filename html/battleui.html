@@ -348,11 +348,9 @@
 </div>
 
 <div class="ht-cards">
-{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::hand}}::items}} card}}<article class="{{dict_element::{{slot::card}}::className}}" aria-label="{{dict_element::{{slot::card}}::name}} 카드">
-{{#if {{equal::{{dict_element::{{slot::card}}::actionKind}}::toggle}}}}<button type="button" class="ht-card-action" risu-btn="{{dict_element::{{slot::card}}::actionCommand}}" aria-label="{{dict_element::{{slot::card}}::actionAriaLabel}}" aria-expanded="{{dict_element::{{slot::card}}::actionAriaExpanded}}" aria-pressed="{{dict_element::{{slot::card}}::actionAriaPressed}}" {{#if {{equal::{{dict_element::{{slot::card}}::actionDisabled}}::true}}}}disabled{{/if}}></button>{{/if}}
-{{#if {{equal::{{dict_element::{{slot::card}}::actionKind}}::choose}}}}<button type="button" class="ht-card-action" popovertarget="{{dict_element::{{slot::card}}::actionTarget}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::card}}::actionAriaLabel}}" aria-pressed="{{dict_element::{{slot::card}}::actionAriaPressed}}" {{#if {{equal::{{dict_element::{{slot::card}}::actionDisabled}}::true}}}}disabled{{/if}}></button>{{/if}}
-{{#if {{equal::{{dict_element::{{slot::card}}::showPreviewFlag}}::true}}}}<span class="ht-preview-flag">DRAW PREVIEW</span>{{/if}}<span class="ht-card-top">
-<span class="ht-order">{{dict_element::{{slot::card}}::orderLabel}}</span>
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::hand}}::items}} card}}<article class="ht-card {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}is-focused{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}is-selected{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::origin}}::preview}}}}is-preview{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::playable}}::false}}}}is-unplayable{{/if}}" aria-label="{{dict_element::{{slot::card}}::name}} 카드">
+{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}<button type="button" class="ht-card-action" risu-btn="battleController|clickCard|{{dict_element::{{slot::card}}::instanceId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-label="{{dict_element::{{slot::card}}::name}} 카드 상세 보기 및 선택" aria-expanded="{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}true{{/if}}{{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}}}false{{/if}}" aria-pressed="{{dict_element::{{slot::card}}::selected}}" {{#if {{equal::{{dict_element::{{getvar::battleView}}::locked}}::true}}}}disabled{{/if}}></button>{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::false}}}}{{#if {{equal::{{dict_element::{{slot::card}}::hasEffectChoices}}::true}}}}<button type="button" class="ht-card-action" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-choice-{{dict_element::{{slot::card}}::instanceId}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::card}}::name}} 효과 선택" aria-pressed="false" {{#if {{equal::{{dict_element::{{getvar::battleView}}::locked}}::true}}}}disabled{{/if}}></button>{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::hasEffectChoices}}::false}}}}<button type="button" class="ht-card-action" risu-btn="battleController|clickCard|{{dict_element::{{slot::card}}::instanceId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-label="{{dict_element::{{slot::card}}::name}} 카드 상세 보기 및 선택" aria-pressed="false" {{#if {{equal::{{dict_element::{{getvar::battleView}}::locked}}::true}}}}disabled{{/if}}></button>{{/if}}{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::origin}}::preview}}}}<span class="ht-preview-flag">DRAW PREVIEW</span>{{/if}}<span class="ht-card-top">
+<span class="ht-order">{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}{{dict_element::{{slot::card}}::selectionOrder}}{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::false}}}}＋{{/if}}</span>
 <span class="ht-card-name">
 <strong>{{dict_element::{{slot::card}}::name}}</strong>
 <span class="ht-card-tags">
@@ -369,7 +367,7 @@
 <b>{{dict_element::{{slot::card}}::finalResistanceDamage}}</b><small>피해</small>
 </span>
 </span>
-{{#if {{equal::{{dict_element::{{slot::card}}::showDetail}}::true}}}}
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}
 <span class="ht-card-detail">
 <span class="ht-description">
 {{#each {{dict_element::{{slot::card}}::descriptionSegments}} segment}}{{#if {{equal::{{dict_element::{{slot::segment}}::kind}}::text}}}}{{dict_element::{{slot::segment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::segment}}::kind}}::tag}}}}<button type="button" class="ht-inline-tag ht-tip-trigger {{#if {{equal::{{dict_element::{{slot::segment}}::tagKind}}::mechanism}}}}ht-inline-tag--mechanism{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{slot::segment}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::segment}}::label}} 태그 정보 보기">{{dict_element::{{slot::segment}}::label}}</button>{{/if}}{{/each}}
@@ -379,27 +377,30 @@
 {{/each}}
 </span>
 <span class="ht-card-help">
-<strong>{{dict_element::{{slot::card}}::helpPrimary}}</strong>
-{{#each {{dict_element::{{slot::card}}::helpMessages}} cardHelpMessage}}<span>{{slot::cardHelpMessage}}</span>{{/each}}
+{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}<strong>다시 누르면 선택 취소</strong>{{/if}}
+{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::false}}}}{{#if {{equal::{{dict_element::{{slot::card}}::hasEffectChoices}}::true}}}}<strong>누르면 사용할 효과 선택</strong>{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::hasEffectChoices}}::false}}}}<strong>누르면 상세 표시 및 사용 등록</strong>{{/if}}{{/if}}
+{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}{{#if {{equal::{{dict_element::{{slot::card}}::hasEffectChoices}}::true}}}}<span>선택 효과 · {{dict_element::{{dict_element::{{slot::card}}::selectedEffectChoice}}::label}}</span>{{/if}}{{/if}}
+{{#if {{equal::{{dict_element::{{slot::card}}::reasonCode}}::insufficient_stealth}}}}<span>은폐가 부족합니다</span>{{/if}}
+{{#if {{equal::{{dict_element::{{slot::card}}::reasonCode}}::no_available_effect_choice}}}}<span>선택 가능한 효과가 없습니다</span>{{/if}}
 </span>
 </span>
 {{/if}}
-{{#if {{equal::{{dict_element::{{slot::card}}::showChoicePopover}}::true}}}}
-<div id="{{dict_element::{{slot::card}}::choicePopoverId}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{slot::card}}::name}} 효과 선택">
+{{#if {{equal::{{dict_element::{{slot::card}}::hasEffectChoices}}::true}}}}
+<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-choice-{{dict_element::{{slot::card}}::instanceId}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{slot::card}}::name}} 효과 선택">
 <div class="ht-choice-body">
 <span class="ht-popover-kicker">EFFECT CHOICE</span>
 <span class="ht-popover-title">{{dict_element::{{slot::card}}::name}}</span>
 <span class="ht-popover-copy">이번 사용에 적용할 효과 하나를 선택하세요.</span>
 <div class="ht-choice-options">
 {{#each {{dict_element::{{slot::card}}::effectChoices}} effectChoice}}
-<button type="button" class="ht-choice-option" risu-btn="{{dict_element::{{slot::effectChoice}}::command}}" {{#if {{equal::{{dict_element::{{slot::effectChoice}}::disabled}}::true}}}}disabled aria-disabled="true"{{/if}}>
+<button type="button" class="ht-choice-option" risu-btn="battleController|selectCardEffect|{{dict_element::{{slot::card}}::instanceId}}|{{dict_element::{{slot::effectChoice}}::id}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" {{#if {{equal::{{dict_element::{{slot::effectChoice}}::selectable}}::false}}}}disabled aria-disabled="true"{{/if}}>
 <strong>{{dict_element::{{slot::effectChoice}}::label}}</strong>
 <span>{{#each {{dict_element::{{slot::effectChoice}}::descriptionSegments}} choiceSegment}}{{#if {{equal::{{dict_element::{{slot::choiceSegment}}::kind}}::text}}}}{{dict_element::{{slot::choiceSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::choiceSegment}}::kind}}::tag}}}}{{dict_element::{{slot::choiceSegment}}::label}}{{/if}}{{/each}}</span>
-{{#if {{equal::{{dict_element::{{slot::effectChoice}}::showUnavailableText}}::true}}}}<small>{{dict_element::{{slot::effectChoice}}::unavailableText}}</small>{{/if}}
+{{#if {{equal::{{dict_element::{{slot::effectChoice}}::selectable}}::false}}}}<small>{{dict_element::{{slot::effectChoice}}::unavailableText}}</small>{{/if}}
 </button>
 {{/each}}
 </div>
-<button type="button" class="ht-choice-close" popovertarget="{{dict_element::{{slot::card}}::choicePopoverId}}" popovertargetaction="hide">닫기</button>
+<button type="button" class="ht-choice-close" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-choice-{{dict_element::{{slot::card}}::instanceId}}" popovertargetaction="hide">닫기</button>
 </div>
 </div>
 {{/if}}
