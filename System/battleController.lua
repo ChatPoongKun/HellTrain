@@ -1252,7 +1252,7 @@
         return after, nil
     end
 
-    local function publishCurrentViewInternal(staticData, suppressRefresh)
+    local function publishCurrentViewInternal(staticData, suppressRefresh, skipUiRender)
         staticData = staticData or select(1, loadStaticData())
         if staticData == nil then
             local _, errors = loadStaticData()
@@ -1376,6 +1376,14 @@
             return nil, {
                 makeError("view_write_not_persisted", "$.chatVar.battleView", "게시 뒤 읽은 battleView가 인코딩 결과와 다릅니다."),
             }
+        end
+
+        if skipUiRender == true then
+            return {
+                view = built.view,
+                wireFormat = published.wireFormat,
+                bytes = published.bytes,
+            }, nil
         end
 
         -- getLoreBooks/loadLores는 HTML을 반환하기 전에 CBS를 평가한다.
@@ -3272,8 +3280,6 @@
             if bindingErrors then
                 return failure(bindingErrors)
             end
-            local topology, topologyErrors = inspectPreparingTopology(binding, chat)
-            if topologyErrors then return failure(topologyErrors) end
         end
 
         if sourceName == "pending" then
@@ -3291,7 +3297,9 @@
             return failure(bindingWriteErrors)
         end
 
-        local published, publishErrors = publishCurrentViewInternal(staticData)
+        -- 생성 중에는 잠긴 canonical View만 영속한다. 전체 HTML/CBS 렌더는
+        -- 응답 commit 뒤 게시하므로 HTTP 요청 전 중복 평가하지 않는다.
+        local published, publishErrors = publishCurrentViewInternal(staticData, true, true)
         if publishErrors then
             return failure(publishErrors)
         end
