@@ -979,6 +979,7 @@
         local locked
         local turnId
         local selectedIds = {}
+        local selectedChoices = {}
         local previewIds = {}
         local focusedInstanceId = nil
         local interactionToken = nil
@@ -1016,6 +1017,7 @@
             locked = true
             turnId = pendingInput.turnId
             selectedIds = receiptValidation.receipt.selectedCardInstanceIds
+            selectedChoices = receiptValidation.receipt.effectChoiceByInstanceId or {}
             previewIds = receiptValidation.projection.preview.availableDrawnInstanceIds
         elseif state.status == "active" then
             if draftInput == nil then
@@ -1056,6 +1058,7 @@
             turnId = startReceipt and startReceipt.turnId
                 or string.format("%s-turn-%03d", state.battleId, state.turnNumber)
             selectedIds = draftInspection.draft.registeredCardInstanceIds
+            selectedChoices = draftInspection.draft.effectChoiceByInstanceId or {}
             previewIds = draftInspection.draft.preview.availableDrawnInstanceIds
             if not generationLocked then
                 focusedInstanceId = draftInspection.draft.focusedInstanceId
@@ -1180,7 +1183,71 @@
                     playable = false
                     reasonCode = "insufficient_stealth"
                 end
+                local effectChoices = {}
+                local selectableChoiceCount = 0
+                for choiceIndex, choice in ipairs(type(card.effectChoices) == "table" and card.effectChoices or {}) do
+                    local choicePath = "$.hand.items[" .. slot .. "].effectChoices[" .. choiceIndex .. "]"
+                    local choiceContext = {
+                        turn = displayState.turnNumber,
+                        phase = "player_selection",
+                        mood = displayState.character.mood,
+                        player = { stealth = displayState.player.stealth },
+                        character = {
+                            resistance = displayState.character.resistance,
+                            moodTokens = displayState.character.moodTokens,
+                            publicActionTag = displayState.characterIntent.publicActionTag,
+                        },
+                        card = {
+                            id = card.id,
+                            instanceId = instance.instanceId,
+                            owner = card.owner,
+                            actionTag = card.actionTag,
+                        },
+                    }
+                    local choiceReport, choiceCallError = callRuntime(
+                        "effectEngine",
+                        "evaluateEffectChoice",
+                        data,
+                        card.id,
+                        choice.id,
+                        choiceContext
+                    )
+                    local selectable = not locked
+                        and choiceCallError == nil
+                        and type(choiceReport) == "table"
+                        and choiceReport.ok == true
+                        and choiceReport.selectable == true
+                    if choiceCallError ~= nil then
+                        table.insert(errors, choiceCallError)
+                    elseif type(choiceReport) ~= "table" or choiceReport.ok ~= true then
+                        appendNestedErrors(errors, choicePath, choiceReport)
+                    end
+                    if selectable then selectableChoiceCount = selectableChoiceCount + 1 end
+                    effectChoices[#effectChoices + 1] = {
+                        id = choice.id,
+                        label = choice.label,
+                        descriptionSegments = tokenizeForBuild(choice.description, data.registry, choicePath .. ".description", errors),
+                        selectable = selectable,
+                        reasonCode = selectable and "none" or (choiceReport and choiceReport.reasonCode or (locked and "locked" or "unavailable")),
+                        unavailableText = choice.unavailableText or "현재 상태에서는 이 효과를 선택할 수 없습니다.",
+                    }
+                end
+                if not locked and #effectChoices > 0 and selectableChoiceCount == 0 then
+                    playable = false
+                    reasonCode = "no_available_effect_choice"
+                end
                 playableById[instance.instanceId] = playable
+
+                local selectedChoice = nil
+                local selectedChoiceId = selectedChoices[instance.instanceId]
+                if selectedChoiceId ~= nil then
+                    for _, choice in ipairs(effectChoices) do
+                        if choice.id == selectedChoiceId then
+                            selectedChoice = { id = choice.id, label = choice.label }
+                            break
+                        end
+                    end
+                end
 
                 table.insert(handItems, {
                     slot = slot,
@@ -1192,6 +1259,9 @@
                     ruleLines = summary.ruleLines,
                     actionTag = summary.actionTag,
                     mechanisms = summary.mechanisms,
+                    effectChoices = effectChoices,
+                    hasEffectChoices = #effectChoices > 0,
+                    selectedEffectChoice = selectedChoice,
                     baseStealthCost = baseStealthCost,
                     finalStealthCost = baseStealthCost,
                     baseResistanceDamage = baseResistanceDamage,
@@ -1619,6 +1689,9 @@
             ruleLines = true,
             actionTag = true,
             mechanisms = true,
+            effectChoices = true,
+            hasEffectChoices = true,
+            selectedEffectChoice = true,
             baseStealthCost = true,
             finalStealthCost = true,
             baseResistanceDamage = true,
@@ -1647,6 +1720,59 @@
         validateRuleLines(value.ruleLines, path .. ".ruleLines", errors)
         validateTagView(value.actionTag, path .. ".actionTag", errors, "action")
         validateTagArray(value.mechanisms, path .. ".mechanisms", errors, "mechanism")
+        local choiceCount = getArrayLength(value.effectChoices, path .. ".effectChoices", errors)
+        local choiceIds = {}
+        if choiceCount then
+            for index = 1, choiceCount do
+                local choice = value.effectChoices[index]
+                local choicePath = path .. ".effectChoices[" .. index .. "]"
+                if type(choice) ~= "table" then
+                    addError(errors, "invalid_effect_choice_view", choicePath, "효과 선택지 View가 테이블이 아닙니다.")
+                else
+                    checkAllowedKeys(choice, {
+                        id = true,
+                        label = true,
+                        descriptionSegments = true,
+                        selectable = true,
+                        reasonCode = true,
+                        unavailableText = true,
+                    }, choicePath, errors)
+                    if not isAsciiId(choice.id) or choiceIds[choice.id] then
+                        addError(errors, "invalid_effect_choice_id", choicePath .. ".id", "효과 선택지 ID가 올바르지 않거나 중복되었습니다.")
+                    else
+                        choiceIds[choice.id] = true
+                    end
+                    if type(choice.label) ~= "string" or choice.label == "" then
+                        addError(errors, "invalid_effect_choice_label", choicePath .. ".label", "효과 선택지 표시명이 필요합니다.")
+                    end
+                    validateSegments(choice.descriptionSegments, choicePath .. ".descriptionSegments", errors)
+                    if type(choice.selectable) ~= "boolean" or type(choice.reasonCode) ~= "string"
+                        or (choice.selectable and choice.reasonCode ~= "none")
+                        or (not choice.selectable and choice.reasonCode == "none") then
+                        addError(errors, "invalid_effect_choice_availability", choicePath, "효과 선택 가능 상태가 올바르지 않습니다.")
+                    end
+                    if type(choice.unavailableText) ~= "string" or choice.unavailableText == "" then
+                        addError(errors, "invalid_effect_choice_unavailable_text", choicePath .. ".unavailableText", "효과 선택 불가 안내가 필요합니다.")
+                    end
+                end
+            end
+        end
+        if value.hasEffectChoices ~= (choiceCount ~= nil and choiceCount > 0) then
+            addError(errors, "effect_choice_flag_mismatch", path .. ".hasEffectChoices", "효과 선택지 표시 여부가 목록과 다릅니다.")
+        end
+        if value.selectedEffectChoice ~= nil then
+            if type(value.selectedEffectChoice) ~= "table"
+                or not isAsciiId(value.selectedEffectChoice.id)
+                or type(value.selectedEffectChoice.label) ~= "string"
+                or value.selectedEffectChoice.label == ""
+                or not choiceIds[value.selectedEffectChoice.id] then
+                addError(errors, "invalid_selected_effect_choice", path .. ".selectedEffectChoice", "선택된 효과 표시값이 올바르지 않습니다.")
+            elseif value.selected ~= true then
+                addError(errors, "orphan_selected_effect_choice", path .. ".selectedEffectChoice", "등록되지 않은 카드에 선택 효과가 있습니다.")
+            end
+        elseif value.hasEffectChoices and value.selected == true then
+            addError(errors, "missing_selected_effect_choice", path .. ".selectedEffectChoice", "등록된 선택형 카드에 선택 효과 표시가 없습니다.")
+        end
         for _, field in ipairs({
             "baseStealthCost",
             "finalStealthCost",

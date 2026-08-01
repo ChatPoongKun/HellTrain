@@ -1345,7 +1345,7 @@ end)
 --버튼 클릭시 동작
 local BUTTON_ACTIONS = {
     init = { start = true, choose = true, chooseCharacter = true },
-    battleController = { clickCard = true, registerCard = true, cancelCard = true },
+    battleController = { clickCard = true, registerCard = true, cancelCard = true, selectCardEffect = true },
     popupManage = { root = true, push = true, replace = true, back = true, close = true },
 }
 
@@ -1360,7 +1360,8 @@ local function isAllowedButtonRoute(script, arguments)
             or (action == "choose" and #arguments == 3)
             or (action == "chooseCharacter" and #arguments == 3)
     elseif script == "battleController" then
-        return #arguments == 3
+        return (action == "selectCardEffect" and #arguments == 4)
+            or (action ~= "selectCardEffect" and #arguments == 3)
     elseif action == "back" or action == "close" then
         return #arguments == 1
     end

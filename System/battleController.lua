@@ -2623,15 +2623,16 @@
         })
     end
 
-    local function interactCard(interactionAction, instanceId, expectedInteractionToken)
+    local function interactCard(interactionAction, instanceId, expectedInteractionToken, choiceId)
         if interactionAction ~= "click"
             and interactionAction ~= "register"
-            and interactionAction ~= "cancel" then
+            and interactionAction ~= "cancel"
+            and interactionAction ~= "choose" then
             return failure({
                 makeError(
                     "invalid_interaction_action",
                     "$.interactionAction",
-                    "카드 상호작용 작업은 click, register, cancel 중 하나여야 합니다."
+                    "카드 상호작용 작업은 click, register, cancel, choose 중 하나여야 합니다."
                 ),
             })
         end
@@ -2679,6 +2680,10 @@
                 makeError("invalid_interaction_token", "$.expectedInteractionToken", "비어 있지 않은 draft interaction token이 필요합니다."),
             })
         end
+        if interactionAction == "choose"
+            and (type(choiceId) ~= "string" or string.match(choiceId, "^[a-z][a-z0-9_]*$") == nil) then
+            return failure({ makeError("invalid_effect_choice_id", "$.choiceId", "효과 선택지 ID가 올바르지 않습니다.") })
+        end
         local draft, draftErrors = readStored(KEYS.draft, true)
         if draftErrors then
             return failure(draftErrors)
@@ -2692,6 +2697,7 @@
             {
                 action = interactionAction,
                 instanceId = instanceId,
+                choiceId = choiceId,
                 expectedInteractionToken = expectedInteractionToken,
             }
         )
@@ -2777,6 +2783,10 @@
 
     local function cancelCard(instanceId, expectedInteractionToken)
         return interactCard("cancel", instanceId, expectedInteractionToken)
+    end
+
+    local function selectCardEffect(instanceId, choiceId, expectedInteractionToken)
+        return interactCard("choose", instanceId, expectedInteractionToken, choiceId)
     end
 
     local loadBoundPending
@@ -3827,6 +3837,8 @@
         return registerCard(arguments[1], arguments[2])
     elseif action == "cancelCard" then
         return cancelCard(arguments[1], arguments[2])
+    elseif action == "selectCardEffect" then
+        return selectCardEffect(arguments[1], arguments[2], arguments[3])
     elseif action == "prepareGeneration" then
         return prepareGeneration()
     elseif action == "injectRequest" then

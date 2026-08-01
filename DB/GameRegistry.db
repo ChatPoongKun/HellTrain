@@ -120,6 +120,7 @@ return {
         draw_cards = { id = "draw_cards" },
         skip_actions = { id = "skip_actions" },
         add_mood_token = { id = "add_mood_token" },
+        remove_mood_token = { id = "remove_mood_token" },
         force_mood = { id = "force_mood" },
     },
 }

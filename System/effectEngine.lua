@@ -278,6 +278,7 @@
         draw_cards = true,
         skip_actions = true,
         add_mood_token = true,
+        remove_mood_token = true,
         force_mood = true,
     }
 
@@ -542,7 +543,7 @@
                         addError(errors, "invalid_command_scope", path .. ".scope", "v1 행동 생략 범위는 remainingTurn이어야 합니다.")
                     end
                     output.scope = command.scope
-                elseif command.op == "add_mood_token" then
+                elseif command.op == "add_mood_token" or command.op == "remove_mood_token" then
                     common.amount = true
                     common.mood = true
                     checkCommandKeys(command, common, path, errors)
@@ -683,6 +684,55 @@
         return reportSuccess({
             cardId = cardId,
             playable = playable,
+            reasonCode = reasonCode,
+        })
+    end
+
+    local function evaluateEffectChoice(staticData, cardId, choiceId, context, options)
+        local _, optionsErrors = validateOptions(options)
+        if optionsErrors then return failure(optionsErrors) end
+        local _, card, cardErrors = findRuntimeCard(staticData, cardId)
+        if cardErrors then return failure(cardErrors) end
+        if type(choiceId) ~= "string" or string.match(choiceId, "^[a-z][a-z0-9_]*$") == nil then
+            return failure({ makeError("invalid_effect_choice_id", "$.choiceId", "효과 선택지 ID가 올바르지 않습니다.") })
+        end
+
+        local selected
+        for _, choice in ipairs(type(card.effectChoices) == "table" and card.effectChoices or {}) do
+            if type(choice) == "table" and choice.id == choiceId then
+                selected = choice
+                break
+            end
+        end
+        if selected == nil then
+            return failure({ makeError("unknown_effect_choice", "$.choiceId", "카드에 등록되지 않은 효과 선택지입니다.") })
+        end
+        if selected.canSelect == nil then
+            return reportSuccess({ cardId = cardId, choiceId = choiceId, selectable = true })
+        end
+        if type(selected.canSelect) ~= "function" then
+            return failure({ makeError("invalid_effect_choice_predicate", "$.card.effectChoices", "효과 선택 가능 조건이 함수가 아닙니다.") })
+        end
+
+        local contextCopy, contextFailure = prepareCallbackValue(context, "$.context")
+        if contextFailure then return contextFailure end
+        local ok, selectable, reasonCode, unexpected = pcall(selected.canSelect, contextCopy)
+        if not ok then
+            return failure({ makeError("effect_choice_predicate_error", "$.card.effectChoices", "효과 선택 가능 조건 실행에 실패했습니다: " .. tostring(selectable)) })
+        end
+        if type(selectable) ~= "boolean" or unexpected ~= nil then
+            return failure({ makeError("invalid_effect_choice_result", "$.card.effectChoices", "효과 선택 가능 조건은 불리언과 선택적 사유 코드만 반환해야 합니다.") })
+        end
+        if selectable and reasonCode ~= nil then
+            return failure({ makeError("invalid_effect_choice_reason", "$.card.effectChoices", "선택 가능한 효과에는 실패 사유가 없어야 합니다.") })
+        end
+        if not selectable and (type(reasonCode) ~= "string" or string.match(reasonCode, "^[a-z][a-z0-9_]*$") == nil) then
+            return failure({ makeError("invalid_effect_choice_reason", "$.card.effectChoices", "선택 불가 사유는 lower_snake_case 코드여야 합니다.") })
+        end
+        return reportSuccess({
+            cardId = cardId,
+            choiceId = choiceId,
+            selectable = selectable,
             reasonCode = reasonCode,
         })
     end
@@ -1049,7 +1099,7 @@
                 entry.before = before
                 entry.after = true
                 entry.changed = not before
-            elseif command.op == "add_mood_token" then
+            elseif command.op == "add_mood_token" or command.op == "remove_mood_token" then
                 if type(state.character) ~= "table" then
                     return failure({
                         makeError("invalid_mood_state", "$.working.state.character", "캐릭터 무드 상태가 없습니다."),
@@ -1079,7 +1129,9 @@
                         makeError("invalid_mood_token_count", "$.working.state.character.moodTokens." .. command.mood, "무드 토큰 수가 0 이상의 정수가 아닙니다."),
                     })
                 end
-                local after = before + command.amount
+                local after = command.op == "add_mood_token"
+                    and (before + command.amount)
+                    or math.max(0, before - command.amount)
                 if after > 9007199254740991 then
                     return failure({
                         makeError("mood_token_overflow", "$.commands[" .. index .. "].amount", "무드 토큰 수가 안전한 정수 범위를 벗어났습니다."),
@@ -1089,7 +1141,7 @@
                 entry.amount = command.amount
                 entry.before = before
                 entry.after = after
-                entry.changed = true
+                entry.changed = before ~= after
                 state.character.moodTokens[command.mood] = after
             elseif command.op == "force_mood" then
                 if transient.forcedMoodRequests == nil then
@@ -1122,6 +1174,7 @@
     local actions = {
         evaluateSelectionPreview = evaluateSelectionPreview,
         evaluateCanPlay = evaluateCanPlay,
+        evaluateEffectChoice = evaluateEffectChoice,
         evaluateCardResolve = evaluateCardResolve,
         evaluateMoodEffect = evaluateMoodEffect,
         evaluateTriggerCondition = evaluateTriggerCondition,

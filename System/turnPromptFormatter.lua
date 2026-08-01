@@ -195,7 +195,7 @@
             allowed = { op = true, target = true, changed = true, requested = true, drawnCount = true }
         elseif op == "skip_actions" then
             allowed = { op = true, target = true, changed = true, scope = true, before = true, after = true }
-        elseif op == "add_mood_token" then
+        elseif op == "add_mood_token" or op == "remove_mood_token" then
             allowed = { op = true, target = true, changed = true, mood = true, amount = true, before = true, after = true }
         elseif op == "force_mood" then
             allowed = { op = true, target = true, changed = true, mood = true, before = true, after = true }
@@ -265,14 +265,16 @@
             safe.scope = payload.scope
             safe.before = false
             safe.after = true
-        elseif op == "add_mood_token" then
+        elseif op == "add_mood_token" or op == "remove_mood_token" then
             local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
             if payload.target ~= "character"
                 or type(moods) ~= "table"
                 or type(moods[payload.mood]) ~= "table"
                 or not isInteger(payload.amount, 1)
                 or not isInteger(payload.before, 0)
-                or payload.after ~= payload.before + payload.amount then
+                or payload.after ~= (op == "add_mood_token"
+                    and payload.before + payload.amount
+                    or math.max(0, payload.before - payload.amount)) then
                 return nil, makeError("invalid_effect", path, "무드 토큰 효과 값이 올바르지 않습니다.")
             end
             safe.mood = payload.mood

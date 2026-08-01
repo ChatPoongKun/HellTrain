@@ -257,6 +257,7 @@
                     instanceId = true,
                     owner = true,
                     actionTag = true,
+                    effectChoiceId = true,
                 }
                 for key in pairs(value) do
                     if type(key) ~= "string" or not cardAllowed[key] then
@@ -295,11 +296,17 @@
                         "현재 카드 행동 태그가 올바르지 않습니다."
                     )
                 end
+                if value.effectChoiceId ~= nil
+                    and (type(value.effectChoiceId) ~= "string"
+                        or string.match(value.effectChoiceId, "^[a-z][a-z0-9_]*$") == nil) then
+                    errors[#errors + 1] = makeError("invalid_effect_choice_id", "$.options.currentCard.effectChoiceId", "현재 카드 효과 선택값이 올바르지 않습니다.")
+                end
                 currentCard = {
                     id = value.id,
                     instanceId = value.instanceId,
                     owner = value.owner,
                     actionTag = value.actionTag,
+                    effectChoiceId = value.effectChoiceId,
                 }
             end
         end
@@ -421,6 +428,7 @@
             },
             character = {
                 resistance = state.character.resistance,
+                moodTokens = state.character.moodTokens,
                 publicActionTag = intent.publicActionTag,
             },
         }
@@ -431,6 +439,9 @@
                 owner = options.currentCard.owner,
                 actionTag = options.currentCard.actionTag,
             }
+            if options.currentCard.effectChoiceId ~= nil then
+                context.effectChoiceId = options.currentCard.effectChoiceId
+            end
         end
         if planState ~= nil then
             context.plan = {
@@ -446,6 +457,7 @@
             if planState.remainingCharges ~= nil then
                 context.plan.remainingCharges = planState.remainingCharges
             end
+            if planState.effectChoiceId ~= nil then context.effectChoiceId = planState.effectChoiceId end
         end
         return context
     end
@@ -574,6 +586,9 @@
                 end
                 if slot.remainingCharges ~= nil then
                     planState.remainingCharges = slot.remainingCharges
+                end
+                if slot.effectChoiceId ~= nil then
+                    planState.effectChoiceId = slot.effectChoiceId
                 end
                 local added, addErrors = addCandidate(
                     "plan",

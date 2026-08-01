@@ -120,6 +120,64 @@ return {
             prototype = true,
         },
 
+        clear_the_air = {
+            id = "clear_the_air",
+            owner = "player",
+            name = "분위기 전환",
+            description = "::tag[deception]:: 행동으로 상대의 부정적인 감정을 누그러뜨립니다.",
+            actionTag = "deception",
+            mechanisms = {},
+            base = {
+                stealthCost = 0,
+                resistanceDamage = 0,
+            },
+            rules = {
+                "거절 또는 의심 토큰 중 하나를 선택해 1개 제거합니다.",
+            },
+            effectChoices = {
+                {
+                    id = "remove_rejection",
+                    label = "거절 토큰 제거",
+                    description = "거절 토큰을 1개 제거합니다.",
+                    unavailableText = "제거할 거절 토큰이 없습니다.",
+                    canSelect = function(context)
+                        if context.character.moodTokens.rejection > 0 then return true end
+                        return false, "no_target_token"
+                    end,
+                },
+                {
+                    id = "remove_suspicion",
+                    label = "의심 토큰 제거",
+                    description = "의심 토큰을 1개 제거합니다.",
+                    unavailableText = "제거할 의심 토큰이 없습니다.",
+                    canSelect = function(context)
+                        if context.character.moodTokens.suspicion > 0 then return true end
+                        return false, "no_target_token"
+                    end,
+                },
+            },
+            resolve = function(context)
+                local mood = context.effectChoiceId == "remove_rejection"
+                    and "rejection"
+                    or "suspicion"
+                return {
+                    {
+                        op = "remove_mood_token",
+                        target = "character",
+                        mood = mood,
+                        amount = 1,
+                        cause = "cardChoice",
+                    },
+                }
+            end,
+            narration = {
+                play = {
+                    actorAction = "태연한 말과 행동으로 상대의 부정적인 감정을 누그러뜨린다.",
+                },
+            },
+            prototype = true,
+        },
+
         read_the_room = {
             id = "read_the_room",
             owner = "player",

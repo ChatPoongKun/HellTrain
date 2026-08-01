@@ -52,7 +52,7 @@
             movedInstanceIds = true,
             discarded = true,
         },
-        card_declared = { cardId = true, instanceId = true, finalStealthCost = true },
+        card_declared = { cardId = true, instanceId = true, finalStealthCost = true, effectChoiceId = true },
         card_resolved = { cardId = true, instanceId = true, finalResistanceDamage = true },
         card_restored = { instanceId = true, reasonCode = true, destination = true },
         action_sequence_stopped = {
@@ -88,6 +88,7 @@
         draw_cards = true,
         skip_actions = true,
         add_mood_token = true,
+        remove_mood_token = true,
         force_mood = true,
     }
 
@@ -391,6 +392,13 @@
         return false
     end
 
+    local function findEffectChoice(card, choiceId)
+        for _, choice in ipairs(type(card) == "table" and type(card.effectChoices) == "table" and card.effectChoices or {}) do
+            if choice.id == choiceId then return choice end
+        end
+        return nil
+    end
+
     local function validateSource(source, path, errors)
         if type(source) ~= "table" then
             errors[#errors + 1] = makeError("invalid_event_source", path, "사건 source가 객체가 아닙니다.")
@@ -475,6 +483,7 @@
             remainingTurns = true,
             remainingCharges = true,
             revealed = true,
+            effectChoiceId = true,
         }, path, errors)
         if #errors > 0 then
             return nil, errors[1]
@@ -509,6 +518,9 @@
         end
         if slot.remainingCharges ~= nil and not isInteger(slot.remainingCharges, 1) then
             return nil, makeError("invalid_plan_charges", path .. ".remainingCharges", "계획 남은 충전이 올바르지 않습니다.")
+        end
+        if slot.effectChoiceId ~= nil and not isAsciiId(slot.effectChoiceId) then
+            return nil, makeError("invalid_effect_choice_id", path .. ".effectChoiceId", "계획 효과 선택지 ID가 올바르지 않습니다.")
         end
         return true, nil
     end
@@ -555,6 +567,7 @@
             durationIncludesPlacementTurn = true,
             charges = true,
             revealed = true,
+            effectChoiceId = true,
         }, path, errors)
         if #errors > 0 then
             return nil, errors[1]
@@ -585,6 +598,9 @@
         end
         if type(spec.revealed) ~= "boolean" then
             return nil, makeError("invalid_plan_revealed", path .. ".revealed", "계획 배치 공개 여부가 불리언이 아닙니다.")
+        end
+        if spec.effectChoiceId ~= nil and not isAsciiId(spec.effectChoiceId) then
+            return nil, makeError("invalid_effect_choice_id", path .. ".effectChoiceId", "계획 효과 선택지 ID가 올바르지 않습니다.")
         end
         return true, nil
     end
@@ -899,16 +915,18 @@
             if payload.changed ~= (not payload.before) then
                 return nil, makeError("effect_change_mismatch", path .. ".changed", "행동 생략 효과의 changed가 before와 다릅니다.")
             end
-        elseif op == "add_mood_token" then
+        elseif op == "add_mood_token" or op == "remove_mood_token" then
             if payload.target ~= "character" then
                 return nil, makeError("effect_target_mismatch", path .. ".target", "무드 토큰 대상은 character여야 합니다.")
             end
             if not isAsciiId(payload.mood) or type(moods) ~= "table" or type(moods[payload.mood]) ~= "table"
                 or not isInteger(payload.amount, 1)
                 or not isInteger(payload.before, 0)
-                or not isInteger(payload.after, 1)
-                or payload.after ~= payload.before + payload.amount
-                or payload.changed ~= true then
+                or not isInteger(payload.after, 0)
+                or payload.after ~= (op == "add_mood_token"
+                    and payload.before + payload.amount
+                    or math.max(0, payload.before - payload.amount))
+                or payload.changed ~= (payload.before ~= payload.after) then
                 return nil, makeError("invalid_effect_payload", path, "무드 토큰 효과 payload가 올바르지 않습니다.")
             end
             output.mood = payload.mood
@@ -1250,6 +1268,7 @@
                 }
                 if planSlot.remainingTurns ~= nil then context.plan.remainingTurns = planSlot.remainingTurns end
                 if planSlot.remainingCharges ~= nil then context.plan.remainingCharges = planSlot.remainingCharges end
+                if planSlot.effectChoiceId ~= nil then context.effectChoiceId = planSlot.effectChoiceId end
             end
 
             local specs = kind == "plan" and { definition } or definition.triggers
@@ -1308,7 +1327,7 @@
             end
             if command.op == "draw_cards" then return effect.requested == command.amount end
             if command.op == "skip_actions" then return effect.scope == command.scope end
-            if command.op == "add_mood_token" then
+            if command.op == "add_mood_token" or command.op == "remove_mood_token" then
                 return effect.mood == command.mood and effect.amount == command.amount
             end
             if command.op == "force_mood" then return effect.mood == command.mood end
@@ -1343,6 +1362,7 @@
                     }
                     if planSlot.remainingTurns ~= nil then context.plan.remainingTurns = planSlot.remainingTurns end
                     if planSlot.remainingCharges ~= nil then context.plan.remainingCharges = planSlot.remainingCharges end
+                    if planSlot.effectChoiceId ~= nil then context.effectChoiceId = planSlot.effectChoiceId end
                 end
                 local condition, callError = callModule(
                     "effectEngine",
@@ -1858,7 +1878,7 @@
                 if effectError then
                     return failure({ effectError })
                 end
-                if payload.op == "add_mood_token" or payload.op == "force_mood" then
+                if payload.op == "add_mood_token" or payload.op == "remove_mood_token" or payload.op == "force_mood" then
                     local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
                     if type(moods) ~= "table"
                         or type(moods[payload.mood]) ~= "table" then
@@ -1877,7 +1897,7 @@
                     trackedResistance = effect.after
                 elseif payload.op == "draw_cards" then
                     trackedHandCount[effect.target] = trackedHandCount[effect.target] + effect.drawnCount
-                elseif payload.op == "add_mood_token" then
+                elseif payload.op == "add_mood_token" or payload.op == "remove_mood_token" then
                     if effect.before ~= trackedMoodTokens[effect.mood] then
                         return failure({ makeError("effect_state_mismatch", path .. ".payload.before", "무드 토큰 효과 before가 앞선 토큰 수와 다릅니다.") })
                     end
@@ -1955,6 +1975,12 @@
                 if side == "character" and payload.finalStealthCost ~= 0 then
                     return failure({ makeError("invalid_character_cost", path .. ".payload.finalStealthCost", "캐릭터 카드 비용은 0이어야 합니다.") })
                 end
+                local effectChoice = findEffectChoice(card, payload.effectChoiceId)
+                if side == "player" and type(card.effectChoices) == "table" and effectChoice == nil then
+                    return failure({ makeError("missing_effect_choice", path .. ".payload.effectChoiceId", "선택형 플레이어 카드에 유효한 효과 선택값이 없습니다.") })
+                elseif (side ~= "player" or type(card.effectChoices) ~= "table") and payload.effectChoiceId ~= nil then
+                    return failure({ makeError("unexpected_effect_choice", path .. ".payload.effectChoiceId", "효과 선택지가 없는 카드 선언에 선택값이 있습니다.") })
+                end
                 local publicPayload = {
                     side = side,
                     actionTag = card.actionTag,
@@ -1962,10 +1988,11 @@
                 }
                 if side == "player" then
                     publicPayload.cardId = card.id
+                    if effectChoice ~= nil then publicPayload.effectChoiceId = effectChoice.id end
                 end
                 emit(publicResult, "card_declared", publicPayload)
 
-                if not hasMechanism(card, "plan") then
+                if not hasMechanism(card, "plan") or (effectChoice ~= nil and effectChoice.placesPlan == false) then
                     local llmPayload, narrationError = narration(card, "play", side, "played", true)
                     if narrationError then
                         return failure({ narrationError })
@@ -1997,6 +2024,7 @@
                     side = side,
                     cardId = card.id,
                     instanceId = payload.instanceId,
+                    effectChoiceId = payload.effectChoiceId,
                 }
                 if side == "character" then
                     trackedHandCount.character = trackedHandCount.character - 1
@@ -2015,12 +2043,14 @@
                         cardInstanceId = payload.instanceId,
                         actionTag = card.actionTag,
                         resolutionId = event.resolutionId,
+                        effectChoiceId = payload.effectChoiceId,
                     },
                     {
                         id = card.id,
                         instanceId = payload.instanceId,
                         owner = side,
                         actionTag = card.actionTag,
+                        effectChoiceId = payload.effectChoiceId,
                     },
                     event.eventId
                 )
@@ -2056,12 +2086,14 @@
                         cardInstanceId = payload.instanceId,
                         actionTag = card.actionTag,
                         resolutionId = event.resolutionId,
+                        effectChoiceId = declaration.effectChoiceId,
                     },
                     {
                         id = card.id,
                         instanceId = payload.instanceId,
                         owner = event.side,
                         actionTag = card.actionTag,
+                        effectChoiceId = declaration.effectChoiceId,
                     },
                     event.eventId
                 )
@@ -2139,6 +2171,9 @@
                 end
                 if inputPlanSlot.remainingCharges ~= nil then
                     suppressionContext.plan.remainingCharges = inputPlanSlot.remainingCharges
+                end
+                if inputPlanSlot.effectChoiceId ~= nil then
+                    suppressionContext.effectChoiceId = inputPlanSlot.effectChoiceId
                 end
                 local suppressionCondition, suppressionCallError = callModule(
                     "effectEngine",
@@ -2396,6 +2431,24 @@
                         expectedPlanSpec = {
                             revealed = false,
                         }
+                        if planSpec.effectChoiceId ~= nil then
+                            local planChoice = findEffectChoice(placedCard, planSpec.effectChoiceId)
+                            if planChoice == nil or planChoice.placesPlan == false then
+                                planSpecError = planSpecError or makeError(
+                                    "invalid_plan_effect_choice",
+                                    path .. ".payload.planSpec.effectChoiceId",
+                                    "계획 배치에 유효하지 않은 효과 선택값입니다."
+                                )
+                            else
+                                expectedPlanSpec.effectChoiceId = planSpec.effectChoiceId
+                            end
+                        elseif type(placedCard.effectChoices) == "table" then
+                            planSpecError = planSpecError or makeError(
+                                "missing_plan_effect_choice",
+                                path .. ".payload.planSpec.effectChoiceId",
+                                "선택형 계획 배치에 효과 선택값이 없습니다."
+                            )
+                        end
                         if placedPlanData.durationTurns ~= nil then
                             expectedPlanSpec.durationTurns = placedPlanData.durationTurns
                         end
@@ -2435,6 +2488,9 @@
                     end
                     if planSpec.charges ~= nil then
                         expectedPlacedSlot.remainingCharges = planSpec.charges
+                    end
+                    if planSpec.effectChoiceId ~= nil then
+                        expectedPlacedSlot.effectChoiceId = planSpec.effectChoiceId
                     end
                     expectedAfter[#expectedAfter + 1] = expectedPlacedSlot
                     local expectedMovedIds = replacedSlot ~= nil

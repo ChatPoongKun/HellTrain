@@ -333,7 +333,7 @@
         for index, command in ipairs(commands) do
             local commandPath = path .. "[" .. index .. "]"
             local isMoodCommand = type(command) == "table"
-                and (command.op == "add_mood_token" or command.op == "force_mood")
+                and (command.op == "add_mood_token" or command.op == "remove_mood_token" or command.op == "force_mood")
             if isMoodCommand then
                 -- 무드 효과는 선택 확률을 왜곡하지 않고 실제 턴 해결에서 판정한다.
             else
