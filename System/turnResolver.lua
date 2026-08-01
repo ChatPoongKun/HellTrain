@@ -1187,104 +1187,17 @@
             latchOutcome("turn_end_checkpoint", "turn_end", nil)
         end
 
-        local function moodOrder()
-            local order = {}
-            local count = 0
-            for moodId, mood in pairs(staticData.registry.moods) do
-                if type(mood) ~= "table" or mood.id ~= moodId or not isInteger(mood.order, 1) then
-                    return nil, makeError("invalid_mood_registry", "$.staticData.registry.moods", "무드 순서가 올바르지 않습니다.")
-                end
-                if order[mood.order] ~= nil then
-                    return nil, makeError("invalid_mood_registry", "$.staticData.registry.moods", "무드 순서가 중복되었습니다.")
-                end
-                order[mood.order] = moodId
-                count = count + 1
-            end
-            for index = 1, count do
-                if order[index] == nil then
-                    return nil, makeError("invalid_mood_registry", "$.staticData.registry.moods", "무드 순서가 1부터 이어지지 않습니다.")
-                end
-            end
-            return order, nil
-        end
-
-        local order, moodOrderError = moodOrder()
-        if moodOrderError then
-            return failure({ moodOrderError })
-        end
-        local tokenCounts = working.state.character.moodTokens
-        if tokenCounts == nil then
-            tokenCounts = {}
-            working.state.character.moodTokens = tokenCounts
-        elseif type(tokenCounts) ~= "table" then
-            return failure({ makeError("invalid_mood_tokens", "$.character.moodTokens", "무드 토큰이 객체가 아닙니다.") })
-        end
-        local tokensBefore = {}
-        for _, moodId in ipairs(order) do
-            local count = tokenCounts[moodId] or 0
-            if not isInteger(count, 0) then
-                return failure({ makeError("invalid_mood_token_count", "$.character.moodTokens." .. moodId, "무드 토큰 수는 0 이상의 정수여야 합니다.") })
-            end
-            tokenCounts[moodId] = count
-            tokensBefore[moodId] = count
-        end
-        local forcedRequests = working.transient.forcedMoodRequests or {}
-        if not isDenseArray(forcedRequests) then
-            return failure({ makeError("invalid_forced_mood_requests", "$.transient.forcedMoodRequests", "무드 강제 변경 요청이 연속 배열이 아닙니다.") })
-        end
-        local moodPayload = {
-            before = working.state.character.mood,
-            after = working.state.character.mood,
-            applied = false,
-            forcedCount = #forcedRequests,
-            forceCancelled = #forcedRequests >= 2,
-            tokensBefore = tokensBefore,
-        }
-        if #forcedRequests == 1 then
-            local targetMood = forcedRequests[1].mood
-            if type(staticData.registry.moods[targetMood]) ~= "table" then
-                return failure({ makeError("unknown_mood", "$.transient.forcedMoodRequests[1].mood", "등록되지 않은 강제 변경 무드입니다.") })
-            end
-            working.state.character.mood = targetMood
-            moodPayload.after = targetMood
-            moodPayload.applied = moodPayload.before ~= targetMood
-            moodPayload.resolution = "forced"
-            moodPayload.targetMood = targetMood
-        else
-            local maximum = 0
-            local leaders = {}
-            for _, moodId in ipairs(order) do
-                local count = tokenCounts[moodId]
-                if count > maximum then
-                    maximum = count
-                    leaders = { moodId }
-                elseif count == maximum then
-                    leaders[#leaders + 1] = moodId
-                end
-            end
-            if maximum < 3 then
-                moodPayload.resolution = "none"
-            elseif #leaders == 1 then
-                local targetMood = leaders[1]
-                tokenCounts[targetMood] = 0
-                working.state.character.mood = targetMood
-                moodPayload.after = targetMood
-                moodPayload.applied = moodPayload.before ~= targetMood
-                moodPayload.resolution = "token"
-                moodPayload.targetMood = targetMood
-            else
-                for _, moodId in ipairs(leaders) do
-                    tokenCounts[moodId] = tokenCounts[moodId] - 1
-                end
-                moodPayload.resolution = "tie"
-                moodPayload.tiedMoods = leaders
-            end
-        end
-        local tokensAfter = {}
-        for _, moodId in ipairs(order) do
-            tokensAfter[moodId] = tokenCounts[moodId]
-        end
-        moodPayload.tokensAfter = tokensAfter
+        local moodProjection, moodProjectionErrors = callModule("effectEngine", "projectMood", staticData, {
+            turnNumber = resolvedTurnNumber,
+            mood = working.state.character.mood,
+            moodTokens = working.state.character.moodTokens,
+            forcedMoodRequests = working.transient.forcedMoodRequests,
+        })
+        if moodProjectionErrors then return failure(moodProjectionErrors) end
+        local projectedMood = moodProjection.resolution
+        local moodPayload = projectedMood.payload
+        working.state.character.mood = projectedMood.mood
+        working.state.character.moodTokens = projectedMood.moodTokens
         appendEvent(
             "mood_evaluated",
             "turn_end",
@@ -1295,54 +1208,25 @@
             { kind = "turn_rule" }
         )
 
-        if working.state.status == "active" then
-            local repeatedNegativeMood = resolvedTurnNumber > 1
-                and moodPayload.before == moodPayload.after
-            local moodCommand = nil
-            if moodPayload.after == "suspicion" then
-                moodCommand = {
-                    op = "lose_stealth",
-                    target = "player",
-                    amount = repeatedNegativeMood and 2 or 1,
-                    cause = "moodState",
-                }
-            elseif moodPayload.after == "rejection" then
-                moodCommand = {
-                    op = "lose_stealth",
-                    target = "player",
-                    amount = repeatedNegativeMood and 6 or 3,
-                    cause = "moodState",
-                }
-            elseif moodPayload.after == "confusion" then
-                moodCommand = {
-                    op = "recover_stealth",
-                    target = "player",
-                    amount = 1,
-                    cause = "moodState",
-                }
-            elseif moodPayload.after == "compliance" then
-                moodCommand = {
-                    op = "recover_stealth",
-                    target = "player",
-                    amount = 2,
-                    cause = "moodState",
-                }
+        if working.state.status == "active" and projectedMood.stealthDelta ~= 0 then
+            local moodCommand = {
+                op = projectedMood.stealthDelta < 0 and "lose_stealth" or "recover_stealth",
+                target = "player",
+                amount = math.abs(projectedMood.stealthDelta),
+                cause = "moodState",
+            }
+            local moodApplied, moodApplyErrors = applyCommands(
+                { moodCommand },
+                source("system", "mood_state"),
+                "turn_end",
+                nil,
+                "player",
+                "mood_state"
+            )
+            if not moodApplied then
+                return failure(moodApplyErrors)
             end
-
-            if moodCommand ~= nil then
-                local moodApplied, moodApplyErrors = applyCommands(
-                    { moodCommand },
-                    source("system", "mood_state"),
-                    "turn_end",
-                    nil,
-                    "player",
-                    "mood_state"
-                )
-                if not moodApplied then
-                    return failure(moodApplyErrors)
-                end
-                latchOutcome("mood_state_checkpoint", "turn_end", nil)
-            end
+            latchOutcome("mood_state_checkpoint", "turn_end", nil)
         end
 
         local endingStealth = working.state.player.stealth

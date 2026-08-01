@@ -374,6 +374,161 @@
         return copy, nil
     end
 
+    local function projectMood(staticInput, spec)
+        local staticData = normalizeStaticData(staticInput)
+        local moods = type(staticData) == "table"
+            and type(staticData.registry) == "table"
+            and staticData.registry.moods
+            or nil
+        if type(moods) ~= "table" or type(spec) ~= "table" then
+            return failure({ makeError("invalid_mood_projection", "$.spec", "무드 투영 입력이 올바르지 않습니다.") })
+        end
+        if not isInteger(spec.turnNumber, 1) or type(moods[spec.mood]) ~= "table" then
+            return failure({ makeError("invalid_mood_projection", "$.spec", "무드 투영 턴 또는 현재 무드가 올바르지 않습니다.") })
+        end
+
+        local order = {}
+        local moodCount = 0
+        for moodId, mood in pairs(moods) do
+            if type(mood) ~= "table" or mood.id ~= moodId or not isInteger(mood.order, 1) or order[mood.order] ~= nil then
+                return failure({ makeError("invalid_mood_registry", "$.staticData.registry.moods", "무드 순서가 올바르지 않습니다.") })
+            end
+            order[mood.order] = moodId
+            moodCount = moodCount + 1
+        end
+        for index = 1, moodCount do
+            if order[index] == nil then
+                return failure({ makeError("invalid_mood_registry", "$.staticData.registry.moods", "무드 순서가 1부터 이어지지 않습니다.") })
+            end
+        end
+
+        local tokens = {}
+        local sourceTokens = spec.moodTokens or {}
+        if type(sourceTokens) ~= "table" or getmetatable(sourceTokens) ~= nil then
+            return failure({ makeError("invalid_mood_tokens", "$.spec.moodTokens", "무드 토큰이 객체가 아닙니다.") })
+        end
+        for moodId in pairs(sourceTokens) do
+            if moods[moodId] == nil then
+                return failure({ makeError("unknown_mood", "$.spec.moodTokens." .. tostring(moodId), "등록되지 않은 무드의 토큰입니다.") })
+            end
+        end
+        for _, moodId in ipairs(order) do
+            local count = sourceTokens[moodId] or 0
+            if not isInteger(count, 0) then
+                return failure({ makeError("invalid_mood_token_count", "$.spec.moodTokens." .. moodId, "무드 토큰 수는 0 이상의 정수여야 합니다.") })
+            end
+            tokens[moodId] = count
+        end
+
+        local forcedRequests, cloneError = cloneData(spec.forcedMoodRequests or {}, "$.spec.forcedMoodRequests")
+        if cloneError then return failure({ cloneError }) end
+        if not isDenseArray(forcedRequests) then
+            return failure({ makeError("invalid_forced_mood_requests", "$.spec.forcedMoodRequests", "강제 무드 요청이 배열이 아닙니다.") })
+        end
+        for index, request in ipairs(forcedRequests) do
+            if type(request) ~= "table" or type(moods[request.mood]) ~= "table" then
+                return failure({ makeError("unknown_mood", "$.spec.forcedMoodRequests[" .. index .. "].mood", "등록되지 않은 강제 변경 무드입니다.") })
+            end
+        end
+
+        local commands = spec.commands or {}
+        if not isDenseArray(commands) then
+            return failure({ makeError("invalid_mood_commands", "$.spec.commands", "무드 투영 명령이 배열이 아닙니다.") })
+        end
+        for index, command in ipairs(commands) do
+            local path = "$.spec.commands[" .. index .. "]"
+            if type(command) ~= "table" or type(moods[command.mood]) ~= "table" then
+                return failure({ makeError("invalid_mood_command", path, "무드 투영 명령이 올바르지 않습니다.") })
+            elseif command.op == "add_mood_token" or command.op == "remove_mood_token" then
+                if not isInteger(command.amount, 1) then
+                    return failure({ makeError("invalid_mood_command", path .. ".amount", "무드 토큰 명령 수치가 올바르지 않습니다.") })
+                end
+                local before = tokens[command.mood]
+                local after = command.op == "add_mood_token"
+                    and before + command.amount
+                    or math.max(0, before - command.amount)
+                if not isInteger(after, 0) or after > 9007199254740991 then
+                    return failure({ makeError("mood_token_overflow", path, "무드 토큰 수가 안전한 범위를 벗어났습니다.") })
+                end
+                tokens[command.mood] = after
+            elseif command.op == "force_mood" then
+                forcedRequests[#forcedRequests + 1] = { mood = command.mood }
+            else
+                return failure({ makeError("unsupported_mood_command", path .. ".op", "무드 투영이 지원하지 않는 명령입니다.") })
+            end
+        end
+
+        local tokensBefore, tokensBeforeError = cloneData(tokens, "$.projection.tokensBefore")
+        if tokensBeforeError then return failure({ tokensBeforeError }) end
+        local payload = {
+            before = spec.mood,
+            after = spec.mood,
+            applied = false,
+            forcedCount = #forcedRequests,
+            forceCancelled = #forcedRequests >= 2,
+            tokensBefore = tokensBefore,
+        }
+        if #forcedRequests == 1 then
+            payload.after = forcedRequests[1].mood
+            payload.applied = payload.before ~= payload.after
+            payload.resolution = "forced"
+            payload.targetMood = payload.after
+        else
+            local maximum = 0
+            local leaders = {}
+            for _, moodId in ipairs(order) do
+                local count = tokens[moodId]
+                if count > maximum then
+                    maximum = count
+                    leaders = { moodId }
+                elseif count == maximum then
+                    leaders[#leaders + 1] = moodId
+                end
+            end
+            if maximum < 3 then
+                payload.resolution = "none"
+            elseif #leaders == 1 then
+                payload.after = leaders[1]
+                payload.applied = payload.before ~= payload.after
+                payload.resolution = "token"
+                payload.targetMood = payload.after
+                tokens[payload.after] = 0
+            else
+                for _, moodId in ipairs(leaders) do tokens[moodId] = tokens[moodId] - 1 end
+                payload.resolution = "tie"
+                payload.tiedMoods = leaders
+            end
+        end
+
+        local tokensAfter, tokensAfterError = cloneData(tokens, "$.projection.tokensAfter")
+        if tokensAfterError then return failure({ tokensAfterError }) end
+        payload.tokensAfter = tokensAfter
+
+        local function stealthDelta(moodId, repeated)
+            if moodId == "rejection" then return repeated and -6 or -3 end
+            if moodId == "suspicion" then return repeated and -2 or -1 end
+            if moodId == "confusion" then return 1 end
+            if moodId == "compliance" then return 2 end
+            return 0
+        end
+
+        local repeated = spec.turnNumber > 1 and payload.before == payload.after
+        local finalStealthDelta = stealthDelta(payload.after, repeated)
+        local tokenProgress = 0
+        for _, moodId in ipairs(order) do
+            tokenProgress = tokenProgress + stealthDelta(moodId, false) * tokensAfter[moodId]
+        end
+        return reportSuccess({
+            resolution = {
+                mood = payload.after,
+                moodTokens = tokensAfter,
+                payload = payload,
+                stealthDelta = finalStealthDelta,
+                tokenProgress = tokenProgress,
+            },
+        })
+    end
+
     local function appendNestedErrors(errors, prefix, nested)
         for _, item in ipairs(type(nested) == "table" and nested or {}) do
             local nestedPath = type(item.path) == "string" and item.path or "$"
@@ -1180,6 +1335,7 @@
         evaluateTriggerCondition = evaluateTriggerCondition,
         evaluateTriggerResolve = evaluateTriggerResolve,
         evaluateTrigger = evaluateTrigger,
+        projectMood = projectMood,
         validateCommands = validateCommands,
         validateModifiers = validateModifiers,
         applyCommands = applyCommands,

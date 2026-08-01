@@ -1,7 +1,7 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
     local ACTIVE_REQUEST_SCHEMA_VERSION = 3
-    local AFTERMATH_SCHEMA_VERSION = 1
+    local AFTERMATH_SCHEMA_VERSION = 2
     local VIEW_NAME = "battleView"
     local BATTLE_LOG_VIEW_NAME = "battleLogView"
     local UI_BODY_NAME = "🔯🔯🔯"
@@ -335,6 +335,104 @@
         return #errors == 0
     end
 
+    local function validateAftermathOutputObserved(receipt, request, path, errors)
+        if type(receipt) ~= "table" or getmetatable(receipt) ~= nil then
+            errors[#errors + 1] = makeError("invalid_aftermath_output_observed", path, "자유행동 출력 관측 영수증이 일반 객체가 아닙니다.")
+            return
+        end
+        local allowed = {
+            schemaVersion = true,
+            kind = true,
+            attemptNumber = true,
+            responseLuaIndex = true,
+            responseFingerprint = true,
+        }
+        for key in pairs(receipt) do
+            if type(key) ~= "string" or not allowed[key] then
+                errors[#errors + 1] = makeError("unknown_aftermath_output_observed_field", path .. "." .. tostring(key), "자유행동 출력 관측 영수증에 알 수 없는 필드가 있습니다.")
+            end
+        end
+        local attemptNumber = type(request) == "table" and (request.attemptNumber or 1) or nil
+        if receipt.schemaVersion ~= 1 or receipt.kind ~= "battleAftermathOutputObserved" then
+            errors[#errors + 1] = makeError("invalid_aftermath_output_observed_schema", path, "자유행동 출력 관측 영수증 형식이 올바르지 않습니다.")
+        end
+        if receipt.attemptNumber ~= attemptNumber then
+            errors[#errors + 1] = makeError("aftermath_output_observed_attempt_mismatch", path .. ".attemptNumber", "자유행동 출력 관측 시도가 현재 요청과 다릅니다.")
+        end
+        local expectedIndex = type(request) == "table"
+            and isInteger(request.userLuaIndex, 1)
+            and request.userLuaIndex + 1
+            or nil
+        if not isInteger(receipt.responseLuaIndex, 1) or receipt.responseLuaIndex ~= expectedIndex then
+            errors[#errors + 1] = makeError("aftermath_output_observed_index_mismatch", path .. ".responseLuaIndex", "자유행동 출력 관측 위치가 현재 요청과 다릅니다.")
+        end
+        validateFingerprint(receipt.responseFingerprint, path .. ".responseFingerprint", errors)
+    end
+
+    local function validateAftermathRecoveringCleanup(receipt, request, path, errors)
+        if type(receipt) ~= "table" or getmetatable(receipt) ~= nil then
+            errors[#errors + 1] = makeError("invalid_aftermath_recovering_cleanup", path, "자유행동 응답 삭제 복구 영수증이 일반 객체가 아닙니다.")
+            return
+        end
+        local allowed = {
+            schemaVersion = true,
+            kind = true,
+            attemptNumber = true,
+            responseLuaIndex = true,
+            responseFingerprint = true,
+        }
+        for key in pairs(receipt) do
+            if type(key) ~= "string" or not allowed[key] then
+                errors[#errors + 1] = makeError("unknown_aftermath_recovering_cleanup_field", path .. "." .. tostring(key), "자유행동 응답 삭제 복구 영수증에 알 수 없는 필드가 있습니다.")
+            end
+        end
+        if receipt.schemaVersion ~= 1 or receipt.kind ~= "battleAftermathRecoveringCleanup" then
+            errors[#errors + 1] = makeError("invalid_aftermath_recovering_cleanup_schema", path, "자유행동 응답 삭제 복구 영수증 형식이 올바르지 않습니다.")
+        end
+        if receipt.attemptNumber ~= (type(request) == "table" and (request.attemptNumber or 1) or nil) then
+            errors[#errors + 1] = makeError("aftermath_recovering_cleanup_attempt_mismatch", path .. ".attemptNumber", "자유행동 응답 삭제 복구 시도가 현재 요청과 다릅니다.")
+        end
+        local expectedIndex = type(request) == "table"
+            and isInteger(request.userLuaIndex, 1)
+            and request.userLuaIndex + 1
+            or nil
+        if not isInteger(receipt.responseLuaIndex, 1) or receipt.responseLuaIndex ~= expectedIndex then
+            errors[#errors + 1] = makeError("aftermath_recovering_cleanup_index_mismatch", path .. ".responseLuaIndex", "자유행동 응답 삭제 복구 위치가 현재 요청과 다릅니다.")
+        end
+        validateFingerprint(receipt.responseFingerprint, path .. ".responseFingerprint", errors)
+    end
+
+    local function validateAftermathCommitted(receipt, completedTurnNumber, path, errors)
+        if type(receipt) ~= "table" or getmetatable(receipt) ~= nil then
+            errors[#errors + 1] = makeError("invalid_aftermath_committed", path, "확정된 자유행동 영수증이 일반 객체가 아닙니다.")
+            return
+        end
+        local allowed = {
+            schemaVersion = true,
+            kind = true,
+            turnNumber = true,
+            responseLuaIndex = true,
+            prefixFingerprint = true,
+            responseIdentityFingerprint = true,
+        }
+        for key in pairs(receipt) do
+            if type(key) ~= "string" or not allowed[key] then
+                errors[#errors + 1] = makeError("unknown_aftermath_committed_field", path .. "." .. tostring(key), "확정된 자유행동 영수증에 알 수 없는 필드가 있습니다.")
+            end
+        end
+        if receipt.schemaVersion ~= 1 or receipt.kind ~= "battleAftermathCommitted" then
+            errors[#errors + 1] = makeError("invalid_aftermath_committed_schema", path, "확정된 자유행동 영수증 형식이 올바르지 않습니다.")
+        end
+        if receipt.turnNumber ~= completedTurnNumber then
+            errors[#errors + 1] = makeError("aftermath_committed_turn_mismatch", path .. ".turnNumber", "확정된 자유행동 영수증의 턴이 현재 진행과 다릅니다.")
+        end
+        if not isInteger(receipt.responseLuaIndex, 1) then
+            errors[#errors + 1] = makeError("invalid_aftermath_committed_index", path .. ".responseLuaIndex", "확정된 자유행동 응답 위치가 올바르지 않습니다.")
+        end
+        validateFingerprint(receipt.prefixFingerprint, path .. ".prefixFingerprint", errors)
+        validateFingerprint(receipt.responseIdentityFingerprint, path .. ".responseIdentityFingerprint", errors)
+    end
+
     local function validateAftermath(value, authority)
         local errors = {}
         local path = "$.aftermath"
@@ -351,6 +449,7 @@
             completedTurnNumber = true,
             phase = true,
             request = true,
+            lastCommitted = true,
         }
         for key in pairs(value) do
             if type(key) ~= "string" or not allowed[key] then
@@ -361,7 +460,8 @@
                 )
             end
         end
-        if value.schemaVersion ~= AFTERMATH_SCHEMA_VERSION or value.kind ~= "battleAftermath" then
+        if (value.schemaVersion ~= 1 and value.schemaVersion ~= AFTERMATH_SCHEMA_VERSION)
+            or value.kind ~= "battleAftermath" then
             errors[#errors + 1] = makeError("invalid_aftermath_schema", path, "승리 후 자유행동 상태 형식이 올바르지 않습니다.")
         end
         if not isRuntimeId(value.battleId) then
@@ -397,18 +497,22 @@
             errors[#errors + 1] = makeError("aftermath_over_limit", path .. ".completedTurnNumber", "진행 중인 자유행동이 턴 제한을 넘었습니다.")
         end
 
-        local needsRequest = value.phase == "inFlight"
-            or value.phase == "requestInjected"
-            or value.phase == "settling"
-        if needsRequest then
-            local request = value.request
+        local needsRequest = value.phase == "inFlight" or value.phase == "requestInjected"
+        local legacySettlingRequest = value.schemaVersion == 1 and value.phase == "settling"
+        local request = value.request
+        if needsRequest or legacySettlingRequest then
             if type(request) ~= "table" or getmetatable(request) ~= nil then
-                errors[#errors + 1] = makeError("missing_aftermath_request", path .. ".request", "생성 중인 자유행동 요청 영수증이 없습니다.")
+                if needsRequest then
+                    errors[#errors + 1] = makeError("missing_aftermath_request", path .. ".request", "생성 중인 자유행동 요청 영수증이 없습니다.")
+                end
             else
                 local requestAllowed = {
                     turnNumber = true,
                     userLuaIndex = true,
                     userFingerprint = true,
+                    attemptNumber = true,
+                    outputObserved = true,
+                    recoveringCleanup = true,
                 }
                 for key in pairs(request) do
                     if type(key) ~= "string" or not requestAllowed[key] then
@@ -428,10 +532,35 @@
                 if not isInteger(request.userLuaIndex, 1) then
                     errors[#errors + 1] = makeError("invalid_aftermath_user_index", path .. ".request.userLuaIndex", "자유행동 사용자 메시지 위치가 올바르지 않습니다.")
                 end
+                if request.attemptNumber ~= nil and not isInteger(request.attemptNumber, 1) then
+                    errors[#errors + 1] = makeError("invalid_aftermath_attempt", path .. ".request.attemptNumber", "자유행동 요청 시도 번호가 올바르지 않습니다.")
+                elseif value.schemaVersion == AFTERMATH_SCHEMA_VERSION and not isInteger(request.attemptNumber, 1) then
+                    errors[#errors + 1] = makeError("missing_aftermath_attempt", path .. ".request.attemptNumber", "자유행동 요청 시도 번호가 없습니다.")
+                end
                 validateFingerprint(request.userFingerprint, path .. ".request.userFingerprint", errors)
+                if request.outputObserved ~= nil then
+                    if value.phase ~= "requestInjected" then
+                        errors[#errors + 1] = makeError("aftermath_output_observed_phase_mismatch", path .. ".request.outputObserved", "자유행동 출력 관측 영수증은 지시가 주입된 요청에만 존재할 수 있습니다.")
+                    end
+                    validateAftermathOutputObserved(request.outputObserved, request, path .. ".request.outputObserved", errors)
+                end
+                if request.recoveringCleanup ~= nil then
+                    if value.phase ~= "requestInjected" then
+                        errors[#errors + 1] = makeError("aftermath_recovering_cleanup_phase_mismatch", path .. ".request.recoveringCleanup", "자유행동 응답 삭제 복구 영수증은 지시가 주입된 요청에만 존재할 수 있습니다.")
+                    end
+                    if request.outputObserved ~= nil then
+                        errors[#errors + 1] = makeError("aftermath_recovery_receipt_conflict", path .. ".request", "출력 관측과 응답 삭제 복구 영수증은 함께 존재할 수 없습니다.")
+                    end
+                    validateAftermathRecoveringCleanup(request.recoveringCleanup, request, path .. ".request.recoveringCleanup", errors)
+                end
             end
         elseif value.request ~= nil then
             errors[#errors + 1] = makeError("unexpected_aftermath_request", path .. ".request", "대기 또는 완료 상태에 생성 요청이 남아 있습니다.")
+        end
+        if value.lastCommitted ~= nil then
+            validateAftermathCommitted(value.lastCommitted, value.completedTurnNumber, path .. ".lastCommitted", errors)
+        elseif value.schemaVersion == AFTERMATH_SCHEMA_VERSION then
+            errors[#errors + 1] = makeError("missing_aftermath_committed", path .. ".lastCommitted", "확정된 자유행동 영수증이 없습니다.")
         end
         return errors
     end
@@ -1756,12 +1885,171 @@
         }
     end
 
-    local function validateAftermathRequestChat(aftermath, chat, requireResponse)
+    local function fingerprintAftermathResponseIdentity(response, path)
+        if type(response) ~= "table" or response.role ~= "char" then
+            return nil, makeError("invalid_aftermath_response_identity", path, "자유행동 응답 식별자를 만들 수 없습니다.")
+        end
+        return fingerprintChatRange({ {
+            role = response.role,
+            time = response.time or 0,
+        } }, 1, 1, path)
+    end
+
+    local function buildAftermathCommitted(chat, turnNumber, responseLuaIndex)
+        local response = isInteger(responseLuaIndex, 1) and chat[responseLuaIndex] or nil
+        if not isInteger(responseLuaIndex, 1)
+            or type(response) ~= "table"
+            or response.role ~= "char" then
+            return nil, {
+                makeError("invalid_aftermath_committed_response", "$.chat", "확정할 자유행동 캐릭터 응답 위치가 올바르지 않습니다."),
+            }
+        end
+        local fingerprint, fingerprintError = fingerprintChatRange(
+            chat,
+            1,
+            responseLuaIndex - 1,
+            "$.aftermath.lastCommitted.prefix"
+        )
+        if fingerprintError then return nil, { fingerprintError } end
+        local responseIdentity, identityError = fingerprintAftermathResponseIdentity(
+            response,
+            "$.aftermath.lastCommitted.responseIdentity"
+        )
+        if identityError then return nil, { identityError } end
+        return {
+            schemaVersion = 1,
+            kind = "battleAftermathCommitted",
+            turnNumber = turnNumber,
+            responseLuaIndex = responseLuaIndex,
+            prefixFingerprint = fingerprint,
+            responseIdentityFingerprint = responseIdentity,
+        }, nil
+    end
+
+    local function validateAftermathCommittedChat(aftermath, chat)
+        local receipt = aftermath.lastCommitted
+        if receipt == nil then return nil end
+        if #chat < receipt.responseLuaIndex then
+            return {
+                makeError("aftermath_committed_chat_missing", "$.chat", "이미 확정된 자유행동 장면이 대화에서 삭제되었습니다."),
+            }
+        end
+        local fingerprint, fingerprintError = fingerprintChatRange(
+            chat,
+            1,
+            receipt.responseLuaIndex - 1,
+            "$.aftermath.lastCommitted.currentPrefix"
+        )
+        if fingerprintError then return { fingerprintError } end
+        local response = chat[receipt.responseLuaIndex]
+        if type(response) ~= "table" or response.role ~= "char" then
+            return {
+                makeError("aftermath_committed_chat_changed", "$.chat", "이미 확정된 자유행동 장면이 변경되었습니다."),
+            }
+        end
+        local responseIdentity, identityError = fingerprintAftermathResponseIdentity(
+            response,
+            "$.aftermath.lastCommitted.currentResponseIdentity"
+        )
+        if identityError then return { identityError } end
+        if not fingerprintsEqual(fingerprint, receipt.prefixFingerprint)
+            or not fingerprintsEqual(responseIdentity, receipt.responseIdentityFingerprint) then
+            return {
+                makeError("aftermath_committed_chat_changed", "$.chat", "이미 확정된 자유행동 장면이 변경되었습니다."),
+            }
+        end
+        return nil
+    end
+
+    local function migrateLegacyAftermath(authority, aftermath)
+        if aftermath.schemaVersion ~= 1 or aftermath.phase == "complete" then
+            return aftermath, nil
+        end
+        local chat, chatErrors = readChat()
+        if chatErrors then return nil, chatErrors end
+        local binding, bindingErrors = readStored(KEYS.activeRequest, true)
+        if bindingErrors then return nil, bindingErrors end
+        local bindingValidationErrors = validateBinding(binding, nil)
+        if #bindingValidationErrors > 0 then return nil, bindingValidationErrors end
+        if binding.phase ~= "committed" or binding.battleId ~= aftermath.battleId then
+            return nil, {
+                makeError("legacy_aftermath_migration_unsafe", "$.activeRequest", "기존 자유행동의 기준 전투 응답을 안전하게 찾을 수 없습니다."),
+            }
+        end
+        local prefixErrors = validateAnchorPrefix(binding, chat)
+        if prefixErrors then return nil, prefixErrors end
+        local responseLuaIndex = binding.chatAnchor.responseIndex + 1
+            + (aftermath.completedTurnNumber - aftermath.victoryTurnNumber) * 2
+        if aftermath.phase == "ready" then
+            local suffixCount = #chat - responseLuaIndex
+            local first = chat[responseLuaIndex + 1]
+            local second = chat[responseLuaIndex + 2]
+            local firstIsInput = type(first) == "table"
+                and first.role == "user"
+                and not isExactUiAnchor(first)
+                and not isExactFiller(first)
+            local secondIsInput = type(second) == "table"
+                and second.role == "user"
+                and not isExactUiAnchor(second)
+                and not isExactFiller(second)
+            if suffixCount < 0
+                or (suffixCount == 1
+                    and not (isExactUiAnchor(first) or firstIsInput or isExactFiller(first)))
+                or (suffixCount == 2
+                    and not (isExactUiAnchor(first)
+                        and (secondIsInput or isExactFiller(second))))
+                or suffixCount > 2 then
+                return nil, {
+                    makeError("legacy_aftermath_migration_unsafe", "$.chat", "기존 자유행동 대화 끝을 안전하게 이전할 수 없습니다."),
+                }
+            end
+        elseif aftermath.phase == "settling" then
+            if type(aftermath.request) ~= "table"
+                or aftermath.request.userLuaIndex + 1 ~= responseLuaIndex then
+                return nil, {
+                    makeError("legacy_aftermath_migration_unsafe", "$.aftermath.request", "기존 자유행동 정산 응답 위치를 안전하게 이전할 수 없습니다."),
+                }
+            end
+        elseif type(aftermath.request) ~= "table"
+            or aftermath.request.userLuaIndex ~= responseLuaIndex + 1 then
+            return nil, {
+                makeError("legacy_aftermath_migration_unsafe", "$.aftermath.request", "기존 자유행동 요청 위치를 안전하게 이전할 수 없습니다."),
+            }
+        end
+        local receipt, receiptErrors = buildAftermathCommitted(
+            chat,
+            aftermath.completedTurnNumber,
+            responseLuaIndex
+        )
+        if receiptErrors then return nil, receiptErrors end
+        aftermath.schemaVersion = AFTERMATH_SCHEMA_VERSION
+        aftermath.lastCommitted = receipt
+        if aftermath.phase == "settling" then
+            aftermath.request = nil
+        elseif type(aftermath.request) == "table" then
+            aftermath.request.attemptNumber = aftermath.request.attemptNumber or 1
+        end
+        local validationErrors = validateAftermath(aftermath, authority)
+        if #validationErrors > 0 then return nil, validationErrors end
+        local writeErrors = writeStored(KEYS.aftermath, aftermath)
+        if writeErrors then return nil, writeErrors end
+        return aftermath, nil
+    end
+
+    local function validateAftermathRequestChat(aftermath, chat, requireResponse, allowTrailingFillers)
+        local committedErrors = validateAftermathCommittedChat(aftermath, chat)
+        if committedErrors then return nil, committedErrors end
         local request = aftermath.request
         local user = type(request) == "table" and chat[request.userLuaIndex] or nil
         if type(user) ~= "table" or user.role ~= "user" or isExactUiAnchor(user) then
             return nil, {
                 makeError("aftermath_user_missing", "$.chat", "자유행동 요청에 연결된 사용자 입력이 없습니다."),
+            }
+        end
+        if type(aftermath.lastCommitted) == "table"
+            and request.userLuaIndex ~= aftermath.lastCommitted.responseLuaIndex + 1 then
+            return nil, {
+                makeError("aftermath_chat_topology_mismatch", "$.chat", "확정 장면과 현재 자유행동 입력 사이에 예상하지 않은 메시지가 있습니다."),
             }
         end
         local fingerprint, fingerprintError = fingerprintChatRange(
@@ -1777,6 +2065,9 @@
             }
         end
         local response = chat[request.userLuaIndex + 1]
+        if allowTrailingFillers and isExactFiller(response) then
+            response = nil
+        end
         if response ~= nil and (type(response) ~= "table" or response.role ~= "char") then
             return nil, {
                 makeError("aftermath_response_role_mismatch", "$.chat", "자유행동 응답 위치에 캐릭터 메시지가 아닌 항목이 있습니다."),
@@ -1784,9 +2075,18 @@
         end
         local expectedLength = request.userLuaIndex + (response ~= nil and 1 or 0)
         if #chat ~= expectedLength then
-            return nil, {
-                makeError("aftermath_chat_topology_mismatch", "$.chat", "자유행동 요청 뒤에 소유권을 확인할 수 없는 메시지가 있습니다."),
-            }
+            if #chat < expectedLength or not allowTrailingFillers then
+                return nil, {
+                    makeError("aftermath_chat_topology_mismatch", "$.chat", "자유행동 요청 뒤에 소유권을 확인할 수 없는 메시지가 있습니다."),
+                }
+            end
+            for index = expectedLength + 1, #chat do
+                if not isExactFiller(chat[index]) then
+                    return nil, {
+                        makeError("aftermath_chat_topology_mismatch", "$.chat", "자유행동 요청 뒤에 소유권을 확인할 수 없는 메시지가 있습니다."),
+                    }
+                end
+            end
         end
         if requireResponse and response == nil then
             return nil, {
@@ -1796,63 +2096,160 @@
         return response, nil
     end
 
+    local function validateAftermathOutput(response)
+        if type(response.data) ~= "string" then
+            return {
+                makeError("invalid_aftermath_output", "$.chat", "자유행동 캐릭터 응답이 문자열이 아닙니다."),
+            }
+        end
+        if string.match(response.data, "%S") == nil then
+            return {
+                makeError("aftermath_output_blank", "$.chat", "빈 자유행동 응답은 확정할 수 없습니다."),
+            }
+        end
+        if string.find(response.data, "```risuerror", 1, true) ~= nil then
+            return {
+                makeError("aftermath_output_error", "$.chat", "LLM 오류 응답은 자유행동 장면으로 확정할 수 없습니다."),
+            }
+        end
+        return nil
+    end
+
+    local function observeAftermathOutput(authority, aftermath, chat)
+        local request = aftermath.request
+        local responseLuaIndex = request.userLuaIndex + 1
+        local fingerprint, fingerprintError = fingerprintAftermathResponseIdentity(
+            chat[responseLuaIndex],
+            "$.aftermath.request.outputObserved.response"
+        )
+        if fingerprintError then return { fingerprintError } end
+        local observed = request.outputObserved
+        if observed ~= nil then
+            if observed.attemptNumber ~= (request.attemptNumber or 1)
+                or observed.responseLuaIndex ~= responseLuaIndex
+                or not fingerprintsEqual(observed.responseFingerprint, fingerprint) then
+                return {
+                    makeError("aftermath_observed_output_mismatch", "$.chat", "현재 자유행동 응답이 저장된 출력 관측 영수증과 다릅니다."),
+                }
+            end
+            return nil
+        end
+        request.attemptNumber = request.attemptNumber or 1
+        request.outputObserved = {
+            schemaVersion = 1,
+            kind = "battleAftermathOutputObserved",
+            attemptNumber = request.attemptNumber,
+            responseLuaIndex = responseLuaIndex,
+            responseFingerprint = fingerprint,
+        }
+        aftermath.schemaVersion = AFTERMATH_SCHEMA_VERSION
+        local validationErrors = validateAftermath(aftermath, authority)
+        if #validationErrors > 0 then return validationErrors end
+        return writeStored(KEYS.aftermath, aftermath)
+    end
+
+    local function beginAftermathRecoveringCleanup(authority, aftermath, chat)
+        local request = aftermath.request
+        local responseLuaIndex = request.userLuaIndex + 1
+        local fingerprint, fingerprintError = fingerprintChatRange(
+            chat,
+            responseLuaIndex,
+            1,
+            "$.aftermath.retry.response"
+        )
+        if fingerprintError then return nil, { fingerprintError } end
+        request.outputObserved = nil
+        request.recoveringCleanup = {
+            schemaVersion = 1,
+            kind = "battleAftermathRecoveringCleanup",
+            attemptNumber = request.attemptNumber or 1,
+            responseLuaIndex = responseLuaIndex,
+            responseFingerprint = fingerprint,
+        }
+        aftermath.schemaVersion = AFTERMATH_SCHEMA_VERSION
+        local validationErrors = validateAftermath(aftermath, authority)
+        if #validationErrors > 0 then return nil, validationErrors end
+        local writeErrors = writeStored(KEYS.aftermath, aftermath)
+        if writeErrors then return nil, writeErrors end
+        return request.recoveringCleanup, nil
+    end
+
+    local function settleAftermath(authority, aftermath, staticData)
+        local lastCommitted, lastErrors = readStored(KEYS.lastCommittedPending, true)
+        if lastErrors then return failure(lastErrors) end
+        local summary, summaryErrors = buildTerminalSummary(authority, lastCommitted, staticData)
+        if summaryErrors then return failure(summaryErrors) end
+        local _, battleLogErrors = publishTerminalBattleLog(authority, staticData)
+        if battleLogErrors then return failure(battleLogErrors) end
+        local settled, settlementErrors = callModule(
+            "gameSetupController",
+            "completeBattle",
+            summary
+        )
+        if settlementErrors then return failure(settlementErrors) end
+        if type(settled.view) ~= "table" or type(settled.state) ~= "table" then
+            return failure({
+                makeError("invalid_settlement_result", "$.runtime.gameSetupController.completeBattle", "자유행동 종료 정산이 진행 상태와 보상 View를 반환하지 않았습니다."),
+            })
+        end
+        aftermath.schemaVersion = AFTERMATH_SCHEMA_VERSION
+        aftermath.phase = "complete"
+        aftermath.request = nil
+        local writeErrors = writeStored(KEYS.aftermath, aftermath)
+        if writeErrors then return failure(writeErrors) end
+        return success({
+            generationReady = false,
+            outputCommitted = true,
+            aftermathComplete = true,
+            status = authority.status,
+            view = settled.view,
+            progressionState = settled.state,
+        })
+    end
+
     local function commitAftermathOutput(authority, aftermath, staticData)
-        local chat, chatErrors = readChat()
-        if chatErrors then return failure(chatErrors) end
-        local _, topologyErrors = validateAftermathRequestChat(aftermath, chat, true)
-        if topologyErrors then return failure(topologyErrors) end
-        if aftermath.phase ~= "requestInjected" and aftermath.phase ~= "settling" then
+        if aftermath.phase == "settling" then
+            return settleAftermath(authority, aftermath, staticData)
+        end
+        if aftermath.phase ~= "requestInjected" then
             return failure({
                 makeError("aftermath_request_not_injected", "$.aftermath.phase", "장면 지시가 주입되지 않은 자유행동 출력은 확정할 수 없습니다."),
             })
         end
-
-        local completedTurnNumber = aftermath.phase == "settling"
-            and aftermath.completedTurnNumber
-            or aftermath.completedTurnNumber + 1
-        if completedTurnNumber == authority.turnLimit then
-            if aftermath.phase ~= "settling" then
-                aftermath.completedTurnNumber = completedTurnNumber
-                aftermath.phase = "settling"
-                local settlingWriteErrors = writeStored(KEYS.aftermath, aftermath)
-                if settlingWriteErrors then return failure(settlingWriteErrors) end
-            end
-            local lastCommitted, lastErrors = readStored(KEYS.lastCommittedPending, true)
-            if lastErrors then return failure(lastErrors) end
-            local summary, summaryErrors = buildTerminalSummary(authority, lastCommitted, staticData)
-            if summaryErrors then return failure(summaryErrors) end
-            local _, battleLogErrors = publishTerminalBattleLog(authority, staticData)
-            if battleLogErrors then return failure(battleLogErrors) end
-            local settled, settlementErrors = callModule(
-                "gameSetupController",
-                "completeBattle",
-                summary
-            )
-            if settlementErrors then return failure(settlementErrors) end
-            if type(settled.view) ~= "table" or type(settled.state) ~= "table" then
-                return failure({
-                    makeError("invalid_settlement_result", "$.runtime.gameSetupController.completeBattle", "자유행동 종료 정산이 진행 상태와 보상 View를 반환하지 않았습니다."),
-                })
-            end
-            aftermath.phase = "complete"
-            aftermath.request = nil
-            local writeErrors = writeStored(KEYS.aftermath, aftermath)
-            if writeErrors then return failure(writeErrors) end
-            return success({
-                generationReady = false,
-                outputCommitted = true,
-                aftermathComplete = true,
-                status = authority.status,
-                view = settled.view,
-                progressionState = settled.state,
+        if aftermath.request.recoveringCleanup ~= nil then
+            return failure({
+                makeError("aftermath_cleanup_in_progress", "$.aftermath.request.recoveringCleanup", "미확정 자유행동 응답 삭제 복구 중에는 출력을 확정할 수 없습니다."),
             })
         end
+        local chat, chatErrors = readChat()
+        if chatErrors then return failure(chatErrors) end
+        local response, topologyErrors = validateAftermathRequestChat(aftermath, chat, true)
+        if topologyErrors then return failure(topologyErrors) end
+        local outputErrors = validateAftermathOutput(response)
+        if outputErrors then return failure(outputErrors) end
+        local observedErrors = observeAftermathOutput(authority, aftermath, chat)
+        if observedErrors then return failure(observedErrors) end
 
+        local completedTurnNumber = aftermath.completedTurnNumber + 1
+        local committedReceipt, receiptErrors = buildAftermathCommitted(
+            chat,
+            completedTurnNumber,
+            aftermath.request.userLuaIndex + 1
+        )
+        if receiptErrors then return failure(receiptErrors) end
+        aftermath.schemaVersion = AFTERMATH_SCHEMA_VERSION
         aftermath.completedTurnNumber = completedTurnNumber
-        aftermath.phase = "ready"
+        aftermath.lastCommitted = committedReceipt
         aftermath.request = nil
+        aftermath.phase = completedTurnNumber == authority.turnLimit and "settling" or "ready"
+        local validationErrors = validateAftermath(aftermath, authority)
+        if #validationErrors > 0 then return failure(validationErrors) end
         local writeErrors = writeStored(KEYS.aftermath, aftermath)
         if writeErrors then return failure(writeErrors) end
+        if aftermath.phase == "settling" then
+            return settleAftermath(authority, aftermath, staticData)
+        end
+
         local published, publishErrors = publishCurrentViewInternal(staticData, true)
         if publishErrors then return failure(publishErrors) end
         return success({
@@ -1872,40 +2269,163 @@
                 aftermathComplete = true,
             })
         end
-        if aftermath.phase == "inFlight"
-            or aftermath.phase == "requestInjected"
-            or aftermath.phase == "settling" then
+        if aftermath.phase == "settling" then
             local chat, chatErrors = readChat()
             if chatErrors then return failure(chatErrors) end
-            if type(aftermath.request) == "table"
-                and #chat > aftermath.request.userLuaIndex
-                and isExactFiller(chat[#chat]) then
-                local cleaned, _, cleanupErrors = removeTrailingSayNothing(
-                    chat,
-                    aftermath.request.userLuaIndex
-                )
-                if cleanupErrors then return failure(cleanupErrors) end
-                chat = cleaned
+            local _, removedFillers, cleanupErrors = removeTrailingSayNothing(chat, 0)
+            if cleanupErrors then return failure(cleanupErrors) end
+            local settled = settleAftermath(authority, aftermath, staticData)
+            if type(settled) == "table" and settled.ok == true then
+                settled.commitRecovered = true
+                settled.removedSayNothing = removedFillers > 0
+                settled.removedSayNothingCount = removedFillers
             end
-            local response, topologyErrors = validateAftermathRequestChat(aftermath, chat, false)
+            return settled
+        end
+        if aftermath.phase == "inFlight" or aftermath.phase == "requestInjected" then
+            local chat, chatErrors = readChat()
+            if chatErrors then return failure(chatErrors) end
+            local response, topologyErrors = validateAftermathRequestChat(aftermath, chat, false, true)
             if topologyErrors then return failure(topologyErrors) end
-            if response ~= nil then
-                local committed = commitAftermathOutput(authority, aftermath, staticData)
-                if type(committed) ~= "table" or committed.ok ~= true then return committed end
-                committed.commitRecovered = true
-                committed.generationReady = false
-                return committed
+            local observed = aftermath.request.outputObserved
+            if observed ~= nil then
+                if response == nil then
+                    return failure({
+                        makeError("aftermath_observed_output_missing", "$.chat", "관측된 자유행동 응답이 대화에서 삭제되었습니다."),
+                    })
+                end
+                local observedErrors = observeAftermathOutput(authority, aftermath, chat)
+                if observedErrors then return failure(observedErrors) end
+                local outputErrors = validateAftermathOutput(response)
+                if outputErrors then
+                    if not isExactFiller(chat[#chat]) then return failure(outputErrors) end
+                    local _, beginErrors = beginAftermathRecoveringCleanup(
+                        authority,
+                        aftermath,
+                        chat
+                    )
+                    if beginErrors then return failure(beginErrors) end
+                else
+                    local cleaned, removedFillers, cleanupErrors = removeTrailingSayNothing(
+                        chat,
+                        aftermath.request.userLuaIndex + 1
+                    )
+                    if cleanupErrors then return failure(cleanupErrors) end
+                    chat = cleaned
+                    local committed = commitAftermathOutput(authority, aftermath, staticData)
+                    if type(committed) ~= "table" or committed.ok ~= true then return committed end
+                    committed.commitRecovered = true
+                    committed.removedSayNothing = removedFillers > 0
+                    committed.removedSayNothingCount = removedFillers
+                    return committed
+                end
             end
+            local retryCleanup = aftermath.request.recoveringCleanup
+            local hasRetryFiller = isExactFiller(chat[#chat])
+            if response ~= nil and not hasRetryFiller and retryCleanup == nil then
+                return failure({
+                    makeError("aftermath_request_already_in_flight", "$.aftermath.phase", "아직 관측되지 않은 자유행동 응답이 있어 재시도를 시작할 수 없습니다."),
+                })
+            end
+
+            if retryCleanup == nil and response ~= nil then
+                local beginErrors
+                retryCleanup, beginErrors = beginAftermathRecoveringCleanup(
+                    authority,
+                    aftermath,
+                    chat
+                )
+                if beginErrors then return failure(beginErrors) end
+            elseif retryCleanup ~= nil and response ~= nil then
+                local fingerprint, fingerprintError = fingerprintChatRange(
+                    chat,
+                    retryCleanup.responseLuaIndex,
+                    1,
+                    "$.aftermath.retry.currentResponse"
+                )
+                if fingerprintError then return failure({ fingerprintError }) end
+                if not fingerprintsEqual(fingerprint, retryCleanup.responseFingerprint) then
+                    return failure({
+                        makeError("aftermath_recovering_cleanup_response_mismatch", "$.chat", "삭제 복구 중인 자유행동 응답이 변경되었습니다."),
+                    })
+                end
+            end
+
+            local cleaned, removedFillers, cleanupErrors = removeTrailingSayNothing(
+                chat,
+                aftermath.request.userLuaIndex
+            )
+            if cleanupErrors then return failure(cleanupErrors) end
+            chat = cleaned
+            local removedResponse = retryCleanup ~= nil
+            response = chat[aftermath.request.userLuaIndex + 1]
+            if retryCleanup ~= nil and response ~= nil then
+                local afterRemoval, removeErrors = removeRecoveryResponse(
+                    chat,
+                    retryCleanup.responseLuaIndex,
+                    retryCleanup.responseFingerprint
+                )
+                if removeErrors then return failure(removeErrors) end
+                chat = afterRemoval
+            end
+            local _, finalTopologyErrors = validateAftermathRequestChat(aftermath, chat, false)
+            if finalTopologyErrors then return failure(finalTopologyErrors) end
+            aftermath.schemaVersion = AFTERMATH_SCHEMA_VERSION
+            aftermath.phase = "inFlight"
+            aftermath.request.attemptNumber = (aftermath.request.attemptNumber or 1) + 1
+            aftermath.request.outputObserved = nil
+            aftermath.request.recoveringCleanup = nil
+            local validationErrors = validateAftermath(aftermath, authority)
+            if #validationErrors > 0 then return failure(validationErrors) end
+            local writeErrors = writeStored(KEYS.aftermath, aftermath)
+            if writeErrors then return failure(writeErrors) end
             return success({
                 generationReady = true,
                 aftermath = true,
                 reused = true,
+                zeroOutputRetry = not removedResponse,
+                commitRecovered = false,
                 turnNumber = aftermath.request.turnNumber,
+                attemptNumber = aftermath.request.attemptNumber,
+                removedSayNothing = removedFillers > 0,
+                removedSayNothingCount = removedFillers,
+                removedUncommittedOutput = removedResponse,
             })
         end
 
         local chat, chatErrors = readChat()
         if chatErrors then return failure(chatErrors) end
+        local committedErrors = validateAftermathCommittedChat(aftermath, chat)
+        if committedErrors then return failure(committedErrors) end
+        local removedFillers = 0
+        if isExactFiller(chat[#chat]) then
+            local cleaned, cleanupCount, cleanupErrors = removeTrailingSayNothing(
+                chat,
+                aftermath.lastCommitted.responseLuaIndex
+            )
+            if cleanupErrors then return failure(cleanupErrors) end
+            chat = cleaned
+            removedFillers = cleanupCount
+        end
+        if #chat == aftermath.lastCommitted.responseLuaIndex then
+            local published, publishErrors = publishCurrentViewInternal(staticData, true)
+            if publishErrors then return failure(publishErrors) end
+            return success({
+                generationReady = false,
+                outputCommitted = false,
+                aftermathComplete = false,
+                uiAnchorRequired = true,
+                commitRecovered = false,
+                removedSayNothing = removedFillers > 0,
+                removedSayNothingCount = removedFillers,
+                view = published.view,
+            })
+        end
+        if removedFillers > 0 then
+            return failure({
+                makeError("aftermath_automatic_continue_rejected", "$.chat", "빈 전송이나 Continue는 자유행동으로 처리하지 않습니다."),
+            })
+        end
         local userLuaIndex = #chat
         local user = chat[userLuaIndex]
         if type(user) ~= "table" or user.role ~= "user" or isExactUiAnchor(user) then
@@ -1919,6 +2439,12 @@
             chat = after
             userLuaIndex = #chat
         end
+        if type(aftermath.lastCommitted) == "table"
+            and userLuaIndex ~= aftermath.lastCommitted.responseLuaIndex + 1 then
+            return failure({
+                makeError("aftermath_chat_topology_mismatch", "$.chat", "확정 장면 뒤에는 하나의 새 자유행동 입력만 올 수 있습니다."),
+            })
+        end
         local fingerprint, fingerprintError = fingerprintChatRange(
             chat,
             userLuaIndex,
@@ -1926,12 +2452,16 @@
             "$.aftermath.request.user"
         )
         if fingerprintError then return failure({ fingerprintError }) end
+        aftermath.schemaVersion = AFTERMATH_SCHEMA_VERSION
         aftermath.phase = "inFlight"
         aftermath.request = {
             turnNumber = aftermath.completedTurnNumber + 1,
             userLuaIndex = userLuaIndex,
             userFingerprint = fingerprint,
+            attemptNumber = 1,
         }
+        local validationErrors = validateAftermath(aftermath, authority)
+        if #validationErrors > 0 then return failure(validationErrors) end
         local writeErrors = writeStored(KEYS.aftermath, aftermath)
         if writeErrors then return failure(writeErrors) end
         return success({
@@ -1939,6 +2469,7 @@
             aftermath = true,
             reused = false,
             turnNumber = aftermath.request.turnNumber,
+            attemptNumber = aftermath.request.attemptNumber,
         })
     end
 
@@ -1971,8 +2502,15 @@
         end
         local chat, chatErrors = readChat()
         if chatErrors then return failure(chatErrors) end
-        local _, topologyErrors = validateAftermathRequestChat(aftermath, chat, false)
+        local response, topologyErrors = validateAftermathRequestChat(aftermath, chat, false)
         if topologyErrors then return failure(topologyErrors) end
+        if response ~= nil
+            or aftermath.request.outputObserved ~= nil
+            or aftermath.request.recoveringCleanup ~= nil then
+            return failure({
+                makeError("aftermath_request_not_clean", "$.chat", "응답이 시작되거나 관측된 자유행동 요청에는 프롬프트를 다시 주입할 수 없습니다."),
+            })
+        end
 
         local instruction = buildAftermathInstruction(authority, aftermath)
         local normalized = {}
@@ -1987,6 +2525,8 @@
         normalized[#normalized + 1] = instruction
         if aftermath.phase == "inFlight" then
             aftermath.phase = "requestInjected"
+            local validationErrors = validateAftermath(aftermath, authority)
+            if #validationErrors > 0 then return failure(validationErrors) end
             local writeErrors = writeStored(KEYS.aftermath, aftermath)
             if writeErrors then return failure(writeErrors) end
         end
@@ -1997,6 +2537,7 @@
             aftermath = true,
             finalTurn = aftermath.completedTurnNumber + 1 == authority.turnLimit,
             requestPhase = aftermath.phase,
+            attemptNumber = aftermath.request.attemptNumber,
         })
     end
 
@@ -3050,6 +3591,9 @@
         if aftermath ~= nil then
             local aftermathErrors = validateAftermath(aftermath, authority)
             if #aftermathErrors > 0 then return failure(aftermathErrors) end
+            local migrated, migrationErrors = migrateLegacyAftermath(authority, aftermath)
+            if migrationErrors then return failure(migrationErrors) end
+            aftermath = migrated
             return prepareAftermathGeneration(authority, aftermath, staticData)
         end
         local chat, chatErrors = readChat()
@@ -3379,6 +3923,9 @@
         if aftermath ~= nil then
             local aftermathErrors = validateAftermath(aftermath, authority)
             if #aftermathErrors > 0 then return failure(aftermathErrors) end
+            local migrated, migrationErrors = migrateLegacyAftermath(authority, aftermath)
+            if migrationErrors then return failure(migrationErrors) end
+            aftermath = migrated
             return injectAftermathRequest(promptArray, authority, aftermath)
         end
         local promptCopy, cloneError = cloneJson(promptArray, "$.promptArray")
@@ -3557,6 +4104,9 @@
         if aftermath ~= nil then
             local aftermathErrors = validateAftermath(aftermath, authority)
             if #aftermathErrors > 0 then return failure(aftermathErrors) end
+            local migrated, migrationErrors = migrateLegacyAftermath(authority, aftermath)
+            if migrationErrors then return failure(migrationErrors) end
+            aftermath = migrated
             if aftermath.phase == "ready" then
                 local published, publishErrors = publishCurrentViewInternal(staticData, true)
                 if publishErrors then return failure(publishErrors) end
@@ -3725,6 +4275,14 @@
             local currentAftermath, aftermathErrors = readStored(KEYS.aftermath, false)
             if aftermathErrors then return failure(aftermathErrors) end
             if currentAftermath == nil then
+                local aftermathChat, chatErrors = readChat()
+                if chatErrors then return failure(chatErrors) end
+                local committedReceipt, receiptErrors = buildAftermathCommitted(
+                    aftermathChat,
+                    nextState.turnNumber,
+                    #aftermathChat
+                )
+                if receiptErrors then return failure(receiptErrors) end
                 currentAftermath = {
                     schemaVersion = AFTERMATH_SCHEMA_VERSION,
                     kind = "battleAftermath",
@@ -3732,7 +4290,10 @@
                     victoryTurnNumber = nextState.turnNumber,
                     completedTurnNumber = nextState.turnNumber,
                     phase = "ready",
+                    lastCommitted = committedReceipt,
                 }
+                local validationErrors = validateAftermath(currentAftermath, nextState)
+                if #validationErrors > 0 then return failure(validationErrors) end
                 local writeErrors = writeStored(KEYS.aftermath, currentAftermath)
                 if writeErrors then return failure(writeErrors) end
             else

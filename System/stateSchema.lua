@@ -2,6 +2,7 @@
     local SCHEMA_VERSION = 1
     local MAX_SAFE_INTEGER = 9007199254740991
     local MAX_PLAN_CAPACITY = 16
+    local CHARACTER_SCORE_SCALE = 3
     local FINGERPRINT_ALGORITHM = "canonical_poly131_137_receipt_v2"
     local DRAFT_FINGERPRINT_ALGORITHM = "canonical_poly131_137_v1"
     local PENDING_INTEGRITY_ALGORITHM = "canonical_poly131_137_pending_v1"
@@ -1018,7 +1019,7 @@
         end
     end
 
-    local function validateSelectionContext(context, path, errors)
+    local function validateSelectionContext(context, path, errors, staticData)
         if type(context) ~= "table" then
             addError(errors, "invalid_selection_context", path, "선택 시점 컨텍스트가 객체가 아닙니다.")
             return nil
@@ -1056,12 +1057,37 @@
             checkAllowedKeys(context.character, {
                 resistance = true,
                 mood = true,
+                moodTokens = true,
             }, path .. ".character", errors)
             if not isFinite(context.character.resistance) then
                 addError(errors, "invalid_selection_context", path .. ".character.resistance", "선택 시점 저항이 유한한 숫자가 아닙니다.")
             end
             if not isAsciiId(context.character.mood) then
                 addError(errors, "invalid_selection_context", path .. ".character.mood", "선택 시점 무드 ID가 올바르지 않습니다.")
+            end
+            local moodTokens = context.character.moodTokens
+            local moods = type(staticData) == "table"
+                and type(staticData.registry) == "table"
+                and type(staticData.registry.moods) == "table"
+                and staticData.registry.moods
+                or nil
+            if type(moodTokens) ~= "table" or getmetatable(moodTokens) ~= nil then
+                addError(errors, "invalid_selection_context", path .. ".character.moodTokens", "선택 시점 무드 토큰이 객체가 아닙니다.")
+            else
+                for moodId in pairs(moods or {}) do
+                    if moodTokens[moodId] == nil then
+                        addError(errors, "invalid_mood_token_count", path .. ".character.moodTokens." .. moodId, "선택 시점 무드 토큰 수가 올바르지 않습니다.")
+                    end
+                end
+                for moodId, count in pairs(moodTokens) do
+                    if not isAsciiId(moodId) then
+                        addError(errors, "invalid_mood", path .. ".character.moodTokens." .. tostring(moodId), "선택 시점 무드 토큰 ID가 올바르지 않습니다.")
+                    elseif moods ~= nil and moods[moodId] == nil then
+                        addError(errors, "unknown_mood", path .. ".character.moodTokens." .. tostring(moodId), "선택 시점에 등록되지 않은 무드 토큰이 있습니다.")
+                    elseif not isSafeInteger(count, 0) then
+                        addError(errors, "invalid_mood_token_count", path .. ".character.moodTokens." .. moodId, "선택 시점 무드 토큰 수가 올바르지 않습니다.")
+                    end
+                end
             end
         end
 
@@ -1116,6 +1142,7 @@
             projectedPlayerStealth = true,
             lethal = true,
             weight = true,
+            moodScore = true,
             totals = true,
             planChargesEvaluated = true,
         }, path, errors)
@@ -1146,6 +1173,9 @@
         end
         if not isSafeInteger(candidate.weight, 0) then
             addError(errors, "invalid_selection_weight", path .. ".weight", "후보 가중치는 0 이상의 안전한 정수여야 합니다.")
+        end
+        if not isSafeInteger(candidate.moodScore) then
+            addError(errors, "invalid_mood_score", path .. ".moodScore", "후보 무드 점수는 안전한 정수여야 합니다.")
         end
 
         validateCandidateTotals(candidate.totals, path .. ".totals", errors)
@@ -1230,6 +1260,18 @@
         local playerHandCount = countStateZone(state, "player", "hand")
         local characterResistance = type(state.character) == "table" and state.character.resistance or nil
         local characterMood = type(state.character) == "table" and state.character.mood or nil
+        local characterMoodTokens = {}
+        local stateMoodTokens = type(state.character) == "table" and type(state.character.moodTokens) == "table"
+            and state.character.moodTokens
+            or {}
+        local registryMoods = type(staticData) == "table"
+            and type(staticData.registry) == "table"
+            and type(staticData.registry.moods) == "table"
+            and staticData.registry.moods
+            or {}
+        for moodId in pairs(registryMoods) do
+            characterMoodTokens[moodId] = stateMoodTokens[moodId] or 0
+        end
         local postSelectionCharacterDraws = {}
 
         if type(events) == "table" then
@@ -1256,6 +1298,11 @@
                         for _, instanceId in ipairs(type(payload.drawnInstanceIds) == "table" and payload.drawnInstanceIds or {}) do
                             postSelectionCharacterDraws[instanceId] = true
                         end
+                    elseif (payload.op == "add_mood_token" or payload.op == "remove_mood_token")
+                        and payload.target == "character"
+                        and isAsciiId(payload.mood)
+                        and isSafeInteger(payload.before, 0) then
+                        characterMoodTokens[payload.mood] = payload.before
                     end
                 end
             end
@@ -1304,6 +1351,7 @@
             character = {
                 resistance = characterResistance,
                 mood = characterMood,
+                moodTokens = characterMoodTokens,
             },
             characterHand = characterHand,
             history = projectHistoryContext(state.history),
@@ -1334,6 +1382,7 @@
             or type(left.character) ~= "table" or type(right.character) ~= "table"
             or left.character.resistance ~= right.character.resistance
             or left.character.mood ~= right.character.mood
+            or not historyContextEqual(left.character.moodTokens, right.character.moodTokens)
             or not historyContextEqual(left.history, right.history)
             or type(left.characterHand) ~= "table" or type(right.characterHand) ~= "table"
             or #left.characterHand ~= #right.characterHand then
@@ -1413,7 +1462,7 @@
         end
 
         local contextPath = path .. ".selectionContext"
-        local contextHandCount = validateSelectionContext(selection.selectionContext, contextPath, errors)
+        local contextHandCount = validateSelectionContext(selection.selectionContext, contextPath, errors, staticData)
         if type(selection.selectionContext) == "table" then
             if selection.selectionContext.turnNumber ~= selection.turnNumber then
                 addError(errors, "selection_context_turn_mismatch", contextPath .. ".turnNumber", "선택 시점 컨텍스트의 턴 번호가 선택 영수증과 다릅니다.")
@@ -1485,13 +1534,15 @@
                         and isFinite(totals.recoverResistance)
                         and isFinite(totals.loseStealth)
                         and isFinite(totals.damageResistance)
-                        and isFinite(totals.recoverStealth) then
-                        local expectedScore = totals.recoverResistance
+                        and isFinite(totals.recoverStealth)
+                        and isSafeInteger(candidate.moodScore) then
+                        local directScore = totals.recoverResistance
                             + totals.loseStealth
                             - totals.damageResistance
                             - totals.recoverStealth
+                        local expectedScore = directScore * CHARACTER_SCORE_SCALE + candidate.moodScore
                         if candidate.score ~= expectedScore then
-                            addError(errors, "selection_score_mismatch", candidatePath .. ".score", "후보 점수가 효과 합계의 순저항 감소치와 다릅니다.")
+                            addError(errors, "selection_score_mismatch", candidatePath .. ".score", "후보 점수가 직접 효과와 무드 평가 합계와 다릅니다.")
                         end
                         local contextStealth = type(selection.selectionContext.player) == "table"
                             and selection.selectionContext.player.stealth
