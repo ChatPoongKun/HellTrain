@@ -1,6 +1,7 @@
 (function(triggerId, action, ...)
     local SCHEMA_VERSION = 1
     local MAX_SAFE_INTEGER = 9007199254740991
+    local SCORE_SCALE = 3
 
     local SCORE_OPERATIONS = {
         recover_resistance = { scoreDirection = 1, stealthDirection = 0 },
@@ -206,6 +207,22 @@
         return count
     end
 
+    local function moodTokenSnapshot(state, staticData)
+        local snapshot = {}
+        local source = type(state) == "table"
+            and type(state.character) == "table"
+            and type(state.character.moodTokens) == "table"
+            and state.character.moodTokens
+            or {}
+        local moods = type(staticData) == "table"
+            and type(staticData.registry) == "table"
+            and type(staticData.registry.moods) == "table"
+            and staticData.registry.moods
+            or {}
+        for moodId in pairs(moods) do snapshot[moodId] = source[moodId] or 0 end
+        return snapshot
+    end
+
     local function orderedCharacterHand(state)
         local hand = {}
         for sourceIndex, instance in ipairs(type(state) == "table" and type(state.cardInstances) == "table" and state.cardInstances or {}) do
@@ -265,12 +282,13 @@
             character = {
                 resistance = state.character.resistance,
                 mood = state.character.mood,
+                moodTokens = moodTokenSnapshot(state, staticData),
             },
             characterHand = characterHand,
         }
     end
 
-    local function buildContext(state, card, instance, plan)
+    local function buildContext(state, staticData, card, instance, plan)
         local context = {
             turn = state.turnNumber,
             phase = "character_selection",
@@ -282,6 +300,7 @@
             },
             character = {
                 resistance = state.character.resistance,
+                moodTokens = moodTokenSnapshot(state, staticData),
                 publicActionTag = nil,
             },
         }
@@ -324,7 +343,7 @@
         recover_stealth = "recoverStealth",
     }
 
-    local function scoreCommands(commands, totals, path)
+    local function scoreCommands(commands, totals, path, moodCommands)
         if not isDenseArray(commands) then
             return nil, makeError("invalid_scoring_commands", path, "점수화할 효과 명령이 연속 배열이 아닙니다.")
         end
@@ -335,7 +354,7 @@
             local isMoodCommand = type(command) == "table"
                 and (command.op == "add_mood_token" or command.op == "remove_mood_token" or command.op == "force_mood")
             if isMoodCommand then
-                -- 무드 효과는 선택 확률을 왜곡하지 않고 실제 턴 해결에서 판정한다.
+                moodCommands[#moodCommands + 1] = command
             else
                 local operation = type(command) == "table" and SCORE_OPERATIONS[command.op] or nil
                 if not operation then
@@ -363,6 +382,40 @@
         }, nil
     end
 
+    local function scoreMoodCommands(state, staticData, commands)
+        if #commands == 0 then return 0, nil end
+        local spec = {
+            turnNumber = state.turnNumber,
+            mood = state.character.mood,
+            moodTokens = moodTokenSnapshot(state, staticData),
+            forcedMoodRequests = {},
+        }
+        local baseline, baselineErrors = callModule("effectEngine", "projectMood", staticData, spec)
+        if baselineErrors then return nil, baselineErrors end
+        spec.commands = commands
+        local projected, projectedErrors = callModule("effectEngine", "projectMood", staticData, spec)
+        if projectedErrors then return nil, projectedErrors end
+
+        local function value(report)
+            local projection = type(report) == "table" and report.resolution or nil
+            if type(projection) ~= "table"
+                or not isFinite(projection.stealthDelta)
+                or not isFinite(projection.tokenProgress) then
+                return nil
+            end
+            return -(projection.stealthDelta * SCORE_SCALE + projection.tokenProgress)
+        end
+
+        local baselineValue = value(baseline)
+        local projectedValue = value(projected)
+        if not isSafeInteger(baselineValue) or not isSafeInteger(projectedValue) then
+            return nil, {
+                makeError("invalid_mood_score", "$.runtime.effectEngine.projectMood", "무드 투영 점수가 안전한 정수가 아닙니다."),
+            }
+        end
+        return projectedValue - baselineValue, nil
+    end
+
     local function scoreCandidate(state, staticData, card, instance)
         if card.canPlay ~= nil then
             return nil, {
@@ -386,7 +439,9 @@
         local totals = emptyTotals()
         local score = 0
         local stealthDelta = 0
-        local context = buildContext(state, card, instance, nil)
+        local immediateMoodCommands = {}
+        local moodScore = 0
+        local context = buildContext(state, staticData, card, instance, nil)
         local cardReport, cardErrors = callModule(
             "effectEngine",
             "evaluateCardResolve",
@@ -400,7 +455,8 @@
         local cardScore, cardScoreError = scoreCommands(
             cardReport.commands,
             totals,
-            "$.staticData.cards." .. card.id .. ".resolve.commands"
+            "$.staticData.cards." .. card.id .. ".resolve.commands",
+            immediateMoodCommands
         )
         if cardScoreError then
             return nil, { cardScoreError }
@@ -419,16 +475,20 @@
         if moodErrors then
             return nil, moodErrors
         end
-        local moodScore, moodScoreError = scoreCommands(
+        local moodEffectScore, moodScoreError = scoreCommands(
             moodReport.commands,
             totals,
-            "$.staticData.cards." .. card.id .. ".moodEffects." .. state.character.mood .. ".commands"
+            "$.staticData.cards." .. card.id .. ".moodEffects." .. state.character.mood .. ".commands",
+            immediateMoodCommands
         )
         if moodScoreError then
             return nil, { moodScoreError }
         end
-        score = score + moodScore.scoreDelta
-        stealthDelta = stealthDelta + moodScore.stealthDelta
+        score = score + moodEffectScore.scoreDelta
+        stealthDelta = stealthDelta + moodEffectScore.stealthDelta
+        local immediateMoodScore, immediateMoodErrors = scoreMoodCommands(state, staticData, immediateMoodCommands)
+        if immediateMoodErrors then return nil, immediateMoodErrors end
+        moodScore = moodScore + immediateMoodScore
 
         local planChargesEvaluated = 0
         if hasMechanism(card, "plan") then
@@ -453,7 +513,7 @@
 
             for chargeIndex = 1, plan.charges do
                 local remainingCharges = plan.charges - chargeIndex + 1
-                local planContext = buildContext(state, nil, nil, {
+                local planContext = buildContext(state, staticData, nil, nil, {
                     cardId = card.id,
                     cardInstanceId = instance.instanceId,
                     side = "character",
@@ -480,20 +540,27 @@
                         ),
                     }
                 end
+                local planMoodCommands = {}
                 local planScore, planScoreError = scoreCommands(
                     triggerReport.commands,
                     totals,
-                    "$.staticData.cards." .. card.id .. ".mechanismData.plan.resolve.commands[charge=" .. chargeIndex .. "]"
+                    "$.staticData.cards." .. card.id .. ".mechanismData.plan.resolve.commands[charge=" .. chargeIndex .. "]",
+                    planMoodCommands
                 )
                 if planScoreError then
                     return nil, { planScoreError }
                 end
                 score = score + planScore.scoreDelta
                 stealthDelta = stealthDelta + planScore.stealthDelta
+                -- ponytail: 각 충전을 현재 무드에서 독립 평가한다. 실제 선택 로그가 빗나갈 때만 다중 턴 탐색을 추가한다.
+                local chargeMoodScore, chargeMoodErrors = scoreMoodCommands(state, staticData, planMoodCommands)
+                if chargeMoodErrors then return nil, chargeMoodErrors end
+                moodScore = moodScore + chargeMoodScore
                 planChargesEvaluated = planChargesEvaluated + 1
             end
         end
 
+        score = score * SCORE_SCALE + moodScore
         local projectedStealth = state.player.stealth + stealthDelta
         if not isFinite(score) or not isFinite(projectedStealth) then
             return nil, {
@@ -518,6 +585,7 @@
             projectedPlayerStealth = projectedStealth,
             lethal = projectedStealth <= 0,
             weight = 0,
+            moodScore = moodScore,
             totals = totals,
             planChargesEvaluated = planChargesEvaluated,
         }, nil
@@ -570,6 +638,7 @@
             or not isFinite(context.character.resistance)
             or type(context.character.mood) ~= "string"
             or context.character.mood == ""
+            or type(context.character.moodTokens) ~= "table"
             or not isDenseArray(context.characterHand)
             or not isDenseArray(receipt.candidates) then
             return failure({
@@ -581,6 +650,20 @@
                 makeError("selection_candidate_count_mismatch", "$.receipt.candidates", "선택 시점 손패와 후보 수가 다릅니다."),
             })
         end
+        for moodId in pairs(staticData.registry.moods) do
+            if not isSafeInteger(context.character.moodTokens[moodId], 0) then
+                return failure({
+                    makeError("invalid_selection_context", "$.receipt.selectionContext.character.moodTokens." .. moodId, "선택 시점 무드 토큰 수가 올바르지 않습니다."),
+                })
+            end
+        end
+        for moodId in pairs(context.character.moodTokens) do
+            if staticData.registry.moods[moodId] == nil then
+                return failure({
+                    makeError("unknown_mood", "$.receipt.selectionContext.character.moodTokens." .. tostring(moodId), "선택 시점에 등록되지 않은 무드 토큰이 있습니다."),
+                })
+            end
+        end
 
         local syntheticState = {
             turnNumber = context.turnNumber,
@@ -591,6 +674,7 @@
             character = {
                 resistance = context.character.resistance,
                 mood = context.character.mood,
+                moodTokens = moodTokenSnapshot({ character = context.character }, staticData),
             },
             cardInstances = {},
         }
@@ -641,6 +725,7 @@
                 or candidate.actionTag ~= expected.actionTag
                 or candidate.handPosition ~= expected.handPosition
                 or candidate.score ~= expected.score
+                or candidate.moodScore ~= expected.moodScore
                 or candidate.projectedPlayerStealth ~= expected.projectedPlayerStealth
                 or candidate.lethal ~= expected.lethal
                 or candidate.planChargesEvaluated ~= expected.planChargesEvaluated
