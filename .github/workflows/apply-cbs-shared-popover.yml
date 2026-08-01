@@ -1,0 +1,78 @@
+name: Apply CBS shared popover experiment
+
+on:
+  push:
+    branches:
+      - perf/consolidate-battleui-popover-bank
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'chore: apply CBS shared popover experiment'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/consolidate-battleui-popover-bank
+          fetch-depth: 0
+
+      - name: Rebuild experiment from latest main
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="perf/consolidate-battleui-popover-bank"
+          expected_html_blob="37cef2a5bbbb0fda692abf7e4491338c6293bfdd"
+          expected_controller_blob="416ebc9fda2d5f9e975dffd0169067086cec0610"
+
+          cp .github/scripts/transform_shared_popover.py /tmp/transform_shared_popover.py
+          cp System/popoverController.lua /tmp/popoverController.lua
+
+          git fetch origin main
+          git reset --hard origin/main
+          cp /tmp/popoverController.lua System/popoverController.lua
+          python3 /tmp/transform_shared_popover.py
+
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path('System/popoverController.lua').read_text(encoding='utf-8')
+          required = (
+              '(function(triggerId, action, ...)',
+              'battlePopoverKind',
+              'battlePopoverId',
+              'battlePopoverTurnId',
+              'battlePopoverToken',
+              'loadLores',
+              'setChatVar',
+              'action == "open"',
+              'action == "close"',
+          )
+          missing = [item for item in required if item not in source]
+          if missing:
+              raise SystemExit(f'missing controller markers: {missing}')
+          if '<script' in Path('html/battleui.html').read_text(encoding='utf-8').lower():
+              raise SystemExit('JavaScript script tag found')
+          PY
+
+          if command -v luac >/dev/null 2>&1; then
+            luac -p System/popoverController.lua
+          fi
+          git diff --check
+          [[ "$(git diff --name-only | sort)" == $'System/popoverController.lua\nhtml/battleui.html' ]]
+          [[ "$(git hash-object html/battleui.html)" == "$expected_html_blob" ]]
+          [[ "$(git hash-object System/popoverController.lua)" == "$expected_controller_blob" ]]
+
+          before_bytes="$(git show origin/main:html/battleui.html | wc -c | tr -d ' ')"
+          after_bytes="$(wc -c < html/battleui.html | tr -d ' ')"
+          open_commands="$(grep -o 'risu-btn="popoverController|open|' html/battleui.html | wc -l | tr -d ' ')"
+          shared_popovers="$(grep -o 'id="ht-shared-popover"' html/battleui.html | wc -l | tr -d ' ')"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add System/popoverController.lua html/battleui.html
+          git commit -m "perf: CBS 공통 팝오버로 DOM 복제 제거" \
+            -m "팝오버 선택 키만 chatVar에 기록하고 battleui CBS를 다시 평가합니다." \
+            -m "JavaScript 없이 모든 상세정보와 효과 선택을 단일 모달 DOM에서 렌더링합니다." \
+            -m "template bytes: ${before_bytes} -> ${after_bytes}; shared popovers: ${shared_popovers}; open triggers: ${open_commands}"
+          git push --force-with-lease="refs/heads/${branch}:${GITHUB_SHA}" origin "HEAD:${branch}"
