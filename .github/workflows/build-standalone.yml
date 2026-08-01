@@ -1,0 +1,58 @@
+name: Build standalone main.lua
+
+on:
+  push:
+    branches:
+      - main
+      - feature/standalone-main
+    paths:
+      - "System/*.lua"
+      - "tools/build_standalone.py"
+      - ".github/workflows/build-standalone.yml"
+  pull_request:
+    paths:
+      - "System/*.lua"
+      - "tools/build_standalone.py"
+      - ".github/workflows/build-standalone.yml"
+      - "main.lua"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: standalone-main-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate standalone main.lua
+        run: python tools/build_standalone.py
+
+      - name: Verify deterministic output
+        run: python tools/build_standalone.py --check
+
+      - name: Commit generated main.lua
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.lua
+          if git diff --cached --quiet; then
+            echo "main.lua is already up to date"
+            exit 0
+          fi
+          git commit -m "build: regenerate standalone main.lua"
+          git push
