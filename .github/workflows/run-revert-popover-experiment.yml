@@ -1,0 +1,187 @@
+name: One-shot battle UI revert and popover experiment
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'chore: run one-shot battle UI revert and popover experiment'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Revert precomputed display fields and create experiment branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected_parent="d14a6dad48afba6bd4c4fbee93235ce8adab1f02"
+          restore_ref="07aa1b66f2d783d5ad5f79ef6058f5d5d2caf5fa"
+          workflow_path=".github/workflows/run-revert-popover-experiment.yml"
+          experiment_branch="perf/consolidate-battleui-popover-bank"
+
+          git fetch origin main
+          git switch -C main origin/main
+          if [[ "$(git rev-parse HEAD^)" != "$expected_parent" ]]; then
+            echo "unexpected main parent" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git checkout "$restore_ref" -- System/main.lua System/viewBuilder.lua html/battleui.html
+          git rm "$workflow_path"
+          git diff --check
+          git commit -m "revert: battle UI 표시 결정 사전 계산 제거" \
+            -m "View 생성·검증·직렬화 비용 증가로 체감 성능이 저하된 변경을 되돌립니다."
+          git push origin HEAD:main
+
+          if git ls-remote --exit-code --heads origin "refs/heads/$experiment_branch" >/dev/null 2>&1; then
+            echo "branch already exists: $experiment_branch" >&2
+            exit 1
+          fi
+          git switch -c "$experiment_branch"
+
+          python3 - <<'PY'
+          from __future__ import annotations
+          import json, re
+          from collections import OrderedDict
+          from dataclasses import dataclass
+          from pathlib import Path
+
+          path = Path('html/battleui.html')
+          original = path.read_text(encoding='utf-8')
+          lines = original.splitlines(keepends=True)
+          div_open = re.compile(r'<div\b', re.I)
+          div_close = re.compile(r'</div\s*>', re.I)
+          class_attr = re.compile(r'class="([^"]*)"')
+          id_attr = re.compile(r'id="([^"]+)"')
+          target_attr = re.compile(r'popovertarget="([^"]+)"')
+          scope_open = re.compile(r'^\{\{#([A-Za-z_][A-Za-z0-9_]*)\b')
+          scope_close = re.compile(r'^\{\{/([A-Za-z_][A-Za-z0-9_]*)\}\}$')
+
+          def classes(line: str) -> set[str]:
+              m = class_attr.search(line)
+              return set(m.group(1).split()) if m else set()
+          def is_bank(line: str) -> bool:
+              return '<div' in line and 'ht-popover-bank' in classes(line)
+          def is_popup(line: str) -> bool:
+              return '<div' in line and 'ht-popover' in classes(line)
+          def delta(line: str) -> int:
+              return len(div_open.findall(line)) - len(div_close.findall(line))
+          def container_end(source: list[str], start: int) -> int:
+              depth = 0
+              for i in range(start, len(source)):
+                  depth += delta(source[i])
+                  if depth == 0:
+                      return i
+              raise RuntimeError(f'unclosed div at {start + 1}')
+
+          bank_start = next((i for i, line in enumerate(lines) if is_bank(line)), None)
+          if bank_start is None:
+              raise RuntimeError('ht-popover-bank not found')
+          bank_end = container_end(lines, bank_start)
+
+          @dataclass(frozen=True)
+          class Scope:
+              opener: str
+              kind: str
+              in_else: bool = False
+
+          scopes: list[Scope] = []
+          groups = OrderedDict()
+          prefix: list[str] = []
+          moved = 0
+
+          def update_scope(line: str) -> None:
+              stripped = line.strip()
+              m = scope_open.match(stripped)
+              if m and stripped.endswith('}}'):
+                  scopes.append(Scope(stripped, m.group(1), False)); return
+              if stripped == '{{else}}':
+                  if not scopes: raise RuntimeError('orphan else')
+                  top = scopes[-1]
+                  scopes[-1] = Scope(top.opener, top.kind, True); return
+              m = scope_close.match(stripped)
+              if m:
+                  if not scopes or scopes[-1].kind != m.group(1):
+                      raise RuntimeError(f'scope mismatch: {stripped}')
+                  scopes.pop()
+
+          i = 0
+          while i < bank_start:
+              line = lines[i]
+              if is_popup(line):
+                  end = container_end(lines, i)
+                  groups.setdefault(tuple(scopes), []).append(lines[i:end + 1])
+                  moved += 1
+                  i = end + 1
+                  continue
+              prefix.append(line)
+              update_scope(line)
+              i += 1
+          if scopes: raise RuntimeError('unclosed scope before bank')
+          if moved == 0: raise RuntimeError('no inline popovers found')
+
+          inserted = ['\n']
+          for signature, blocks in groups.items():
+              for scope in signature:
+                  inserted.append(scope.opener + '\n')
+                  if scope.in_else: inserted.append('{{else}}\n')
+              for block in blocks: inserted.extend(block)
+              for scope in reversed(signature):
+                  inserted.append(f'{{{{/{scope.kind}}}}}\n')
+
+          transformed = ''.join(prefix + lines[bank_start:bank_end] + inserted + [lines[bank_end]] + lines[bank_end + 1:])
+
+          def popup_ids(text: str) -> list[str]:
+              result = []
+              for line in text.splitlines():
+                  if is_popup(line):
+                      m = id_attr.search(line)
+                      if not m: raise RuntimeError(f'popover without id: {line}')
+                      result.append(m.group(1))
+              return result
+
+          before_ids, after_ids = popup_ids(original), popup_ids(transformed)
+          before_targets, after_targets = target_attr.findall(original), target_attr.findall(transformed)
+          if sorted(before_ids) != sorted(after_ids): raise RuntimeError('popover ids changed')
+          if sorted(before_targets) != sorted(after_targets): raise RuntimeError('popover targets changed')
+          if original.count('<div') != transformed.count('<div'): raise RuntimeError('div opens changed')
+          if original.count('</div>') != transformed.count('</div>'): raise RuntimeError('div closes changed')
+
+          out_lines = transformed.splitlines(keepends=True)
+          new_bank_start = next(i for i, line in enumerate(out_lines) if is_bank(line))
+          new_bank_end = container_end(out_lines, new_bank_start)
+          outside = [i + 1 for i, line in enumerate(out_lines) if is_popup(line) and not (new_bank_start < i < new_bank_end)]
+          if outside: raise RuntimeError(f'popovers remain outside bank: {outside}')
+          missing = sorted(set(after_targets) - set(after_ids))
+          if missing: raise RuntimeError(f'missing popover ids: {missing}')
+
+          path.write_text(transformed, encoding='utf-8')
+          metrics = {
+              'before_bytes': len(original.encode()),
+              'after_bytes': len(transformed.encode()),
+              'popover_definitions': len(after_ids),
+              'inline_popovers_moved': moved,
+              'scope_groups_added': len(groups),
+          }
+          Path('/tmp/popover_metrics.json').write_text(json.dumps(metrics, ensure_ascii=False, sort_keys=True), encoding='utf-8')
+          print(json.dumps(metrics, ensure_ascii=False, indent=2, sort_keys=True))
+          PY
+
+          [[ "$(git diff --name-only)" == "html/battleui.html" ]]
+          git diff --check
+          metrics="$(cat /tmp/popover_metrics.json)"
+          git add html/battleui.html
+          git commit -m "perf: battle UI 팝오버를 공통 bank로 통합" \
+            -m "트리거 주변의 팝오버 정의를 기존 ht-popover-bank 아래로 이동합니다." \
+            -m "template metrics: $metrics"
+          git push origin HEAD:"$experiment_branch"
+          git push origin --delete automation/revert-and-popover-bank-20260802 || true
