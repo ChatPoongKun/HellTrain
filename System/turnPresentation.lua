@@ -418,7 +418,7 @@
                 return sideLabel(payload.target) .. "의 이번 턴 남은 행동이 생략됩니다.", nil
             end
             return sideLabel(payload.target) .. "의 남은 행동은 이미 생략된 상태입니다.", nil
-        elseif payload.op == "add_mood_token" then
+        elseif payload.op == "add_mood_token" or payload.op == "remove_mood_token" then
             local keyError = checkAllowedKeys(payload, {
                 op = true,
                 target = true,
@@ -432,13 +432,17 @@
             local mood, moodError = lookupMood(staticData, payload.mood, path .. ".mood")
             if moodError then return nil, moodError end
             if payload.target ~= "character"
-                or payload.changed ~= true
                 or not isInteger(payload.amount, 1)
                 or not isInteger(payload.before, 0)
-                or payload.after ~= payload.before + payload.amount then
+                or not isInteger(payload.after, 0)
+                or payload.after ~= (payload.op == "add_mood_token"
+                    and payload.before + payload.amount
+                    or math.max(0, payload.before - payload.amount))
+                or payload.changed ~= (payload.before ~= payload.after) then
                 return nil, makeError("invalid_effect_payload", path, "무드 토큰 표시값이 서로 일치하지 않습니다.")
             end
-            return mood.label .. " 토큰을 " .. numberText(payload.amount) .. "개 생성했습니다. ("
+            local verb = payload.op == "add_mood_token" and "생성했습니다" or "제거했습니다"
+            return mood.label .. " 토큰을 " .. numberText(payload.amount) .. "개 " .. verb .. ". ("
                 .. numberText(payload.before) .. " → " .. numberText(payload.after) .. ")", nil
         elseif payload.op == "force_mood" then
             local keyError = checkAllowedKeys(payload, {
@@ -529,6 +533,7 @@
                 actionTag = true,
                 stealthCost = true,
                 cardId = true,
+                effectChoiceId = true,
             }, payloadPath)
             if keyError then return nil, keyError end
             if not isSide(payload.side) or not isFinite(payload.stealthCost) or payload.stealthCost < 0 then
@@ -550,8 +555,21 @@
             if card.actionTag ~= payload.actionTag then
                 return nil, makeError("card_action_mismatch", payloadPath .. ".actionTag", "카드와 공개 행동 태그가 다릅니다.")
             end
+            local choiceLabel = nil
+            if type(card.effectChoices) == "table" then
+                for _, choice in ipairs(card.effectChoices) do
+                    if choice.id == payload.effectChoiceId then choiceLabel = choice.label end
+                end
+                if choiceLabel == nil then
+                    return nil, makeError("missing_effect_choice", payloadPath .. ".effectChoiceId", "선택형 카드의 효과 선택값이 올바르지 않습니다.")
+                end
+            elseif payload.effectChoiceId ~= nil then
+                return nil, makeError("unexpected_effect_choice", payloadPath .. ".effectChoiceId", "일반 카드에 효과 선택값이 있습니다.")
+            end
             return summary(index, event.type, "플레이어가 ‘" .. cardName .. "’(" .. tagLabel
-                .. ")을(를) 사용했습니다. 은폐 비용 " .. numberText(payload.stealthCost) .. "."), nil
+                .. ")을(를) 사용했습니다."
+                .. (choiceLabel and (" 선택 효과: " .. choiceLabel .. ".") or "")
+                .. " 은폐 비용 " .. numberText(payload.stealthCost) .. "."), nil
         elseif event.type == "effect_applied" then
             local text, effectError, source = validateEffect(payload, payloadPath, staticData)
             if effectError then return nil, effectError end

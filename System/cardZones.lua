@@ -550,6 +550,11 @@
                             if slot.revealed ~= true and slot.revealed ~= false then
                                 table.insert(errors, makeError("invalid_revealed", slotPath .. ".revealed", "revealed는 불리언이어야 합니다."))
                             end
+                            if slot.effectChoiceId ~= nil
+                                and (type(slot.effectChoiceId) ~= "string"
+                                    or string.match(slot.effectChoiceId, "^[a-z][a-z0-9_]*$") == nil) then
+                                table.insert(errors, makeError("invalid_effect_choice_id", slotPath .. ".effectChoiceId", "계획 효과 선택지 ID가 올바르지 않습니다."))
+                            end
                             if slot.durationIncludesPlacementTurn ~= nil
                                 and type(slot.durationIncludesPlacementTurn) ~= "boolean" then
                                 table.insert(errors, makeError(
@@ -910,6 +915,7 @@
             durationIncludesPlacementTurn = true,
             charges = true,
             revealed = true,
+            effectChoiceId = true,
         }
         for key in pairs(planSpec) do
             if type(key) ~= "string" or not allowed[key] then
@@ -964,6 +970,11 @@
                 "revealed는 불리언이어야 합니다."
             ))
         end
+        if planSpec.effectChoiceId ~= nil
+            and (type(planSpec.effectChoiceId) ~= "string"
+                or string.match(planSpec.effectChoiceId, "^[a-z][a-z0-9_]*$") == nil) then
+            table.insert(errors, makeError("invalid_effect_choice_id", "$.planSpec.effectChoiceId", "계획 효과 선택지 ID가 올바르지 않습니다."))
+        end
 
         if #errors > 0 then
             return nil, errors
@@ -973,6 +984,7 @@
             durationIncludesPlacementTurn = planSpec.durationIncludesPlacementTurn == true,
             charges = planSpec.charges,
             revealed = planSpec.revealed == true,
+            effectChoiceId = planSpec.effectChoiceId,
         }, nil
     end
 
@@ -1037,6 +1049,9 @@
         end
         if normalizedSpec.charges ~= nil then
             slot.remainingCharges = normalizedSpec.charges
+        end
+        if normalizedSpec.effectChoiceId ~= nil then
+            slot.effectChoiceId = normalizedSpec.effectChoiceId
         end
         table.insert(ownerState.planSlots, slot)
         table.insert(movedInstanceIds, instance.instanceId)

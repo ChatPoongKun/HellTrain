@@ -1037,6 +1037,21 @@
                     end
 
                     validateNarration(card, path, hasPlan, errors)
+                    if hasPlan and type(card.effectChoices) == "table" then
+                        local hasImmediateChoice = false
+                        for _, choice in ipairs(card.effectChoices) do
+                            if type(choice) == "table" and choice.placesPlan == false then
+                                hasImmediateChoice = true
+                            end
+                        end
+                        if hasImmediateChoice
+                            and (type(card.narration) ~= "table"
+                                or type(card.narration.play) ~= "table"
+                                or type(card.narration.play.actorAction) ~= "string"
+                                or card.narration.play.actorAction == "") then
+                            addError(errors, "missing_immediate_choice_narration", path .. ".narration.play", "즉시 발동 선택지가 있는 계획 카드에는 사용 묘사가 필요합니다.")
+                        end
+                    end
                 end
 
                 if type(card.base) ~= "table" then
@@ -1066,6 +1081,63 @@
                 end
                 if card.resolve ~= nil and type(card.resolve) ~= "function" then
                     addError(errors, "invalid_resolve", path .. ".resolve", "카드 효과가 함수가 아닙니다.")
+                end
+                if card.effectChoices ~= nil then
+                    local choicesPath = path .. ".effectChoices"
+                    if card.owner ~= "player" then
+                        addError(errors, "choice_requires_player", choicesPath, "효과 선택지는 플레이어 카드에만 선언할 수 있습니다.")
+                    end
+                    if not isArray(card.effectChoices) or #card.effectChoices < 2 then
+                        addError(errors, "invalid_effect_choices", choicesPath, "효과 선택지는 2개 이상의 배열이어야 합니다.")
+                    else
+                        local seenChoiceIds = {}
+                        for choiceIndex, choice in ipairs(card.effectChoices) do
+                            local choicePath = choicesPath .. "[" .. choiceIndex .. "]"
+                            if type(choice) ~= "table" then
+                                addError(errors, "invalid_effect_choice", choicePath, "효과 선택지가 테이블이 아닙니다.")
+                            else
+                                for field in pairs(choice) do
+                                    if field ~= "id"
+                                        and field ~= "label"
+                                        and field ~= "description"
+                                        and field ~= "unavailableText"
+                                        and field ~= "canSelect"
+                                        and field ~= "placesPlan" then
+                                        addError(errors, "unexpected_effect_choice_field", choicePath .. "." .. tostring(field), "효과 선택지에 허용되지 않은 필드가 있습니다.")
+                                    end
+                                end
+                                if not isAsciiId(choice.id) then
+                                    addError(errors, "invalid_effect_choice_id", choicePath .. ".id", "효과 선택지 ID는 ASCII ID여야 합니다.")
+                                elseif seenChoiceIds[choice.id] then
+                                    addError(errors, "duplicate_effect_choice_id", choicePath .. ".id", "효과 선택지 ID가 중복되었습니다.")
+                                else
+                                    seenChoiceIds[choice.id] = true
+                                end
+                                if type(choice.label) ~= "string" or choice.label == "" then
+                                    addError(errors, "invalid_effect_choice_label", choicePath .. ".label", "효과 선택지 표시명이 필요합니다.")
+                                end
+                                if type(choice.description) ~= "string" or choice.description == "" then
+                                    addError(errors, "invalid_effect_choice_description", choicePath .. ".description", "효과 선택지 설명이 필요합니다.")
+                                else
+                                    validateTagTokens(choice.description, choicePath .. ".description", registry, errors)
+                                end
+                                if choice.unavailableText ~= nil
+                                    and (type(choice.unavailableText) ~= "string" or choice.unavailableText == "") then
+                                    addError(errors, "invalid_effect_choice_unavailable_text", choicePath .. ".unavailableText", "비활성 안내는 비어 있지 않은 문자열이어야 합니다.")
+                                end
+                                if choice.canSelect ~= nil and type(choice.canSelect) ~= "function" then
+                                    addError(errors, "invalid_effect_choice_predicate", choicePath .. ".canSelect", "효과 선택 가능 조건이 함수가 아닙니다.")
+                                end
+                                if choice.placesPlan ~= nil then
+                                    if type(choice.placesPlan) ~= "boolean" then
+                                        addError(errors, "invalid_effect_choice_plan_flag", choicePath .. ".placesPlan", "계획 배치 여부는 불리언이어야 합니다.")
+                                    elseif not hasMechanism(card, "plan") then
+                                        addError(errors, "effect_choice_plan_without_mechanism", choicePath .. ".placesPlan", "계획 메커니즘이 없는 카드에는 계획 배치 선택을 선언할 수 없습니다.")
+                                    end
+                                end
+                            end
+                        end
+                    end
                 end
                 if card.moodEffects ~= nil then
                     if type(card.moodEffects) ~= "table" then

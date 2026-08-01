@@ -214,7 +214,7 @@
         return report.context
     end
 
-    local function buildContext(state, phase, card, instance, plan)
+    local function buildContext(state, phase, card, instance, plan, effectChoiceId)
         local context = {
             turn = state.turnNumber,
             phase = phase,
@@ -226,6 +226,7 @@
             },
             character = {
                 resistance = state.character.resistance,
+                moodTokens = state.character.moodTokens,
                 publicActionTag = state.characterIntent.publicActionTag,
             },
         }
@@ -251,6 +252,7 @@
                 context.plan.remainingCharges = plan.remainingCharges
             end
         end
+        if effectChoiceId ~= nil then context.effectChoiceId = effectChoiceId end
         return context
     end
 
@@ -316,6 +318,11 @@
         if selectionCloneError then
             return failure({ selectionCloneError })
         end
+        local playerChoices, choicesCloneError = cloneData(
+            validatedProjection.effectChoiceByInstanceId or {},
+            "$.projection.effectChoiceByInstanceId"
+        )
+        if choicesCloneError then return failure({ choicesCloneError }) end
         local characterSelection, characterCloneError = cloneData(
             workingState.characterIntent.cardInstanceIds,
             "$.projection.workingState.characterIntent.cardInstanceIds"
@@ -506,6 +513,9 @@
                     owner = currentCard.owner,
                     actionTag = currentCard.actionTag,
                 }
+                if inputEvent.effectChoiceId ~= nil then
+                    pipelineOptions.currentCard.effectChoiceId = inputEvent.effectChoiceId
+                end
             end
             if insightSide ~= nil then
                 pipelineOptions.insightSide = insightSide
@@ -685,7 +695,7 @@
             )
         end
 
-        local function finishCardZone(card, instance, phase, resolutionId)
+        local function finishCardZone(card, instance, phase, resolutionId, effectChoiceId)
             local isPlan = hasMechanism(card, "plan")
             local isRemove = hasMechanism(card, "remove")
             if isPlan and isRemove then
@@ -697,12 +707,19 @@
                     ),
                 }
             end
-            if isPlan then
+            local placesPlan = isPlan
+            if effectChoiceId ~= nil then
+                for _, choice in ipairs(type(card.effectChoices) == "table" and card.effectChoices or {}) do
+                    if choice.id == effectChoiceId and choice.placesPlan == false then placesPlan = false end
+                end
+            end
+            if placesPlan then
                 local planData = type(card.mechanismData) == "table" and card.mechanismData.plan or nil
                 if type(planData) ~= "table" then
                     return false, { makeError("missing_plan_definition", "$.staticData.cards." .. card.id, "계획 데이터가 없습니다.") }
                 end
                 local planSpec = { revealed = false }
+                if effectChoiceId ~= nil then planSpec.effectChoiceId = effectChoiceId end
                 if planData.durationTurns ~= nil then
                     planSpec.durationTurns = planData.durationTurns
                 end
@@ -797,6 +814,7 @@
                 or not isFinite(card.base.resistanceDamage) then
                 return false, { makeError("invalid_card_base", "$.staticData.cards." .. card.id .. ".base", "카드 기본 수치가 올바르지 않습니다.") }
             end
+            local effectChoiceId = expectedSide == "player" and playerChoices[instanceId] or nil
 
             local modifierReport, modifierErrors = callModule(
                 "effectEngine",
@@ -830,7 +848,7 @@
                 }
             end
 
-            local context = buildContext(working.state, phase, card, instance, nil)
+            local context = buildContext(working.state, phase, card, instance, nil, effectChoiceId)
             local canPlayReport, canPlayErrors = callModule(
                 "effectEngine",
                 "evaluateCanPlay",
@@ -844,6 +862,24 @@
             end
             local playable = canPlayReport.playable == true
             local reasonCode = canPlayReport.reasonCode
+            if expectedSide == "player" and type(card.effectChoices) == "table" then
+                local choiceReport, choiceErrors = callModule(
+                    "effectEngine",
+                    "evaluateEffectChoice",
+                    staticData,
+                    card.id,
+                    effectChoiceId,
+                    context,
+                    { modifiers = modifiers }
+                )
+                if choiceErrors then return false, choiceErrors end
+                if choiceReport.selectable ~= true then
+                    playable = false
+                    reasonCode = choiceReport.reasonCode or "effect_choice_unavailable"
+                end
+            elseif effectChoiceId ~= nil then
+                return false, { makeError("unexpected_effect_choice", "$.projection.effectChoiceByInstanceId", "효과 선택지가 없는 카드에 선택값이 있습니다.") }
+            end
             if expectedSide == "player" and working.state.player.stealth <= finalCost then
                 playable = false
                 reasonCode = "insufficient_stealth"
@@ -902,6 +938,7 @@
                     cardId = card.id,
                     instanceId = instance.instanceId,
                     finalStealthCost = finalCost,
+                    effectChoiceId = effectChoiceId,
                 },
                 resolutionId,
                 expectedSide,
@@ -915,6 +952,7 @@
                 cardInstanceId = instance.instanceId,
                 actionTag = card.actionTag,
                 resolutionId = resolutionId,
+                effectChoiceId = effectChoiceId,
             }
             local preApplied, preApplyErrors = applyTriggerPipeline(
                 declaredInput,
@@ -947,7 +985,7 @@
                 return false, baseErrors
             end
 
-            context = buildContext(working.state, phase, card, instance, nil)
+            context = buildContext(working.state, phase, card, instance, nil, effectChoiceId)
             local cardEffect, cardEffectErrors = callModule(
                 "effectEngine",
                 "evaluateCardResolve",
@@ -972,7 +1010,7 @@
             end
 
             local currentMood = working.state.character.mood
-            context = buildContext(working.state, phase, card, instance, nil)
+            context = buildContext(working.state, phase, card, instance, nil, effectChoiceId)
             local moodEffect, moodEffectErrors = callModule(
                 "effectEngine",
                 "evaluateMoodEffect",
@@ -1017,6 +1055,7 @@
                 cardInstanceId = instance.instanceId,
                 actionTag = card.actionTag,
                 resolutionId = resolutionId,
+                effectChoiceId = effectChoiceId,
             }
             local postApplied, postApplyErrors = applyTriggerPipeline(
                 resolvedInput,
@@ -1030,7 +1069,7 @@
                 return false, postApplyErrors
             end
 
-            local zoneFinished, zoneFinishErrors = finishCardZone(card, instance, phase, resolutionId)
+            local zoneFinished, zoneFinishErrors = finishCardZone(card, instance, phase, resolutionId, effectChoiceId)
             if not zoneFinished then
                 return false, zoneFinishErrors
             end

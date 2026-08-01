@@ -521,6 +521,7 @@
             source = true,
             focusedInstanceId = true,
             registeredCardInstanceIds = true,
+            effectChoiceByInstanceId = true,
             preview = true,
         }, "$.draft", errors)
         if draft.schemaVersion ~= SCHEMA_VERSION then
@@ -537,6 +538,18 @@
             ))
         end
         validateIdArray(draft.registeredCardInstanceIds, "$.draft.registeredCardInstanceIds", errors)
+        if draft.effectChoiceByInstanceId ~= nil then
+            if type(draft.effectChoiceByInstanceId) ~= "table" or getmetatable(draft.effectChoiceByInstanceId) ~= nil then
+                table.insert(errors, makeError("invalid_effect_choice_map", "$.draft.effectChoiceByInstanceId", "효과 선택값은 일반 객체여야 합니다."))
+            else
+                for instanceId, choiceId in pairs(draft.effectChoiceByInstanceId) do
+                    if not isRuntimeId(instanceId) or type(choiceId) ~= "string"
+                        or string.match(choiceId, "^[a-z][a-z0-9_]*$") == nil then
+                        table.insert(errors, makeError("invalid_effect_choice", "$.draft.effectChoiceByInstanceId." .. tostring(instanceId), "카드 인스턴스별 효과 선택값이 올바르지 않습니다."))
+                    end
+                end
+            end
+        end
         validatePreviewShape(draft.preview, "$.draft.preview", errors)
 
         local source = draft.source
@@ -638,6 +651,38 @@
         return copy
     end
 
+    local function copyMap(values)
+        local copy = {}
+        for key, value in pairs(values or {}) do copy[key] = value end
+        return copy
+    end
+
+    local function choiceContext(state, card, instance, phase)
+        local tokens = {}
+        for moodId in pairs(state.character.moodTokens or {}) do
+            tokens[moodId] = state.character.moodTokens[moodId]
+        end
+        return {
+            turn = state.turnNumber,
+            phase = phase or "player_selection",
+            mood = state.character.mood,
+            player = {
+                stealth = state.player.stealth,
+            },
+            character = {
+                resistance = state.character.resistance,
+                moodTokens = tokens,
+                publicActionTag = state.characterIntent.publicActionTag,
+            },
+            card = {
+                id = card.id,
+                instanceId = instance.instanceId,
+                owner = card.owner,
+                actionTag = card.actionTag,
+            },
+        }
+    end
+
     local function appendAll(target, values)
         for _, value in ipairs(values or {}) do
             table.insert(target, value)
@@ -656,13 +701,14 @@
         }
     end
 
-    local function replaySelection(state, staticData, registeredIds, dropUnavailable)
+    local function replaySelection(state, staticData, registeredIds, choiceByInstanceId, dropUnavailable)
         local working, cloneError = cloneValue(state, "$.state")
         if cloneError then
             return nil, { cloneError }
         end
 
         local keptIds = {}
+        local keptChoices = {}
         local previewEvents = {}
         local drawnInstanceIds = {}
         local mainActionCount = 0
@@ -690,6 +736,28 @@
                     ),
                 }
             else
+                local choices = type(card.effectChoices) == "table" and card.effectChoices or nil
+                local choiceId = choiceByInstanceId and choiceByInstanceId[instanceId] or nil
+                if choices ~= nil then
+                    if choiceId == nil then
+                        return nil, { makeError("effect_choice_required", "$.draft.effectChoiceByInstanceId." .. instanceId, "이 카드를 등록하려면 효과를 선택해야 합니다.") }
+                    end
+                    local choiceReport, choiceError = callModule(
+                        "effectEngine",
+                        "evaluateEffectChoice",
+                        staticData,
+                        card.id,
+                        choiceId,
+                        choiceContext(working, card, instance)
+                    )
+                    if choiceError then return nil, { choiceError } end
+                    if choiceReport.selectable ~= true then
+                        return nil, { makeError("effect_choice_unavailable", "$.draft.effectChoiceByInstanceId." .. instanceId, "현재 상태에서는 선택한 효과를 사용할 수 없습니다.") }
+                    end
+                    keptChoices[instanceId] = choiceId
+                elseif choiceId ~= nil then
+                    return nil, { makeError("unexpected_effect_choice", "$.draft.effectChoiceByInstanceId." .. instanceId, "효과 선택지가 없는 카드에 선택값이 있습니다.") }
+                end
                 table.insert(keptIds, instanceId)
                 if not hasMechanism(card, "chain") then
                     mainActionCount = mainActionCount + 1
@@ -781,6 +849,7 @@
         return {
             workingState = working,
             registeredCardInstanceIds = keptIds,
+            effectChoiceByInstanceId = keptChoices,
             mainActionCount = mainActionCount,
             preview = {
                 events = previewEvents,
@@ -840,6 +909,7 @@
             stateCopy,
             normalizedStaticData,
             draftCopy.registeredCardInstanceIds,
+            draftCopy.effectChoiceByInstanceId or {},
             false
         )
         if replayErrors then
@@ -853,6 +923,9 @@
                     "저장된 선택 프리뷰가 같은 권위 상태에서 다시 계산한 결과와 다릅니다."
                 ),
             }
+        end
+        if not deepEqual(draftCopy.effectChoiceByInstanceId or {}, replay.effectChoiceByInstanceId) then
+            return nil, { makeError("effect_choice_mismatch", "$.draft.effectChoiceByInstanceId", "저장된 효과 선택값이 같은 전투 상태에서 재생한 결과와 다릅니다.") }
         end
 
         if draftCopy.focusedInstanceId ~= nil then
@@ -876,7 +949,7 @@
         }, nil
     end
 
-    local function buildDraft(state, registeredIds, focusedInstanceId, replay)
+    local function buildDraft(state, registeredIds, effectChoiceByInstanceId, focusedInstanceId, replay)
         local source, sourceError = buildSource(state)
         if sourceError then
             return nil, sourceError
@@ -886,6 +959,7 @@
             kind = "turnDraft",
             source = source,
             registeredCardInstanceIds = copyArray(registeredIds),
+            effectChoiceByInstanceId = copyMap(effectChoiceByInstanceId),
             preview = replay and replay.preview or emptyPreview(state),
         }
         if focusedInstanceId ~= nil then
@@ -899,11 +973,11 @@
         if errors then
             return failure(errors)
         end
-        local replay, replayErrors = replaySelection(stateCopy, normalizedStaticData, {}, false)
+        local replay, replayErrors = replaySelection(stateCopy, normalizedStaticData, {}, {}, false)
         if replayErrors then
             return failure(replayErrors)
         end
-        local draft, draftError = buildDraft(stateCopy, {}, nil, replay)
+        local draft, draftError = buildDraft(stateCopy, {}, {}, nil, replay)
         if draftError then
             return failure({ draftError })
         end
@@ -963,6 +1037,7 @@
         local nextDraft, draftError = buildDraft(
             validated.state,
             validated.draft.registeredCardInstanceIds,
+            validated.draft.effectChoiceByInstanceId or {},
             instanceId,
             validated.replay
         )
@@ -990,7 +1065,7 @@
         return set
     end
 
-    local function registerValidated(validated, instanceId)
+    local function registerValidated(validated, instanceId, choiceId)
         if not isRuntimeId(instanceId) then
             return nil, {
                 makeError("invalid_instance_id", "$.instanceId", "등록 카드 ID가 올바르지 않습니다."),
@@ -1023,6 +1098,11 @@
                 makeError("unknown_card", "$.instanceId", "정적 DB에서 등록 카드를 찾을 수 없습니다."),
             }
         end
+        if type(targetCard.effectChoices) == "table" and choiceId == nil then
+            return nil, { makeError("effect_choice_required", "$.choiceId", "이 카드를 등록하려면 효과를 선택해야 합니다.") }
+        elseif type(targetCard.effectChoices) ~= "table" and choiceId ~= nil then
+            return nil, { makeError("unexpected_effect_choice", "$.choiceId", "효과 선택지가 없는 카드입니다.") }
+        end
 
         local originalHand = baseHandSet(validated.state)
         local hasSpeculativeRegisteredCard = false
@@ -1034,8 +1114,10 @@
         end
 
         local nextIds = {}
+        local nextChoices = copyMap(validated.draft.effectChoiceByInstanceId or {})
         if originalHand[instanceId] and hasSpeculativeRegisteredCard then
             nextIds = { instanceId }
+            nextChoices = {}
         else
             local chainIds = {}
             local mainId = nil
@@ -1064,11 +1146,18 @@
             end
         end
 
-        local replay, replayErrors = replaySelection(validated.state, validated.staticData, nextIds, false)
+        if choiceId ~= nil then nextChoices[instanceId] = choiceId end
+        local retained = {}
+        for _, retainedId in ipairs(nextIds) do retained[retainedId] = true end
+        for currentId in pairs(nextChoices) do
+            if not retained[currentId] then nextChoices[currentId] = nil end
+        end
+
+        local replay, replayErrors = replaySelection(validated.state, validated.staticData, nextIds, nextChoices, false)
         if replayErrors then
             return nil, replayErrors
         end
-        local nextDraft, draftError = buildDraft(validated.state, nextIds, instanceId, replay)
+        local nextDraft, draftError = buildDraft(validated.state, nextIds, replay.effectChoiceByInstanceId, instanceId, replay)
         if draftError then
             return nil, { draftError }
         end
@@ -1099,6 +1188,7 @@
             validated.state,
             validated.staticData,
             remainingIds,
+            validated.draft.effectChoiceByInstanceId or {},
             true
         )
         if replayErrors then
@@ -1113,6 +1203,7 @@
         local nextDraft, draftError = buildDraft(
             validated.state,
             replay.registeredCardInstanceIds,
+            replay.effectChoiceByInstanceId,
             focusedInstanceId,
             replay
         )
@@ -1132,22 +1223,24 @@
         if registeredSet(validated.draft.registeredCardInstanceIds)[instanceId] then
             return cancelValidated(validated, instanceId)
         end
-        return registerValidated(validated, instanceId)
+        return registerValidated(validated, instanceId, nil)
     end
 
-    local function runValidatedTransition(validated, interactionAction, instanceId)
+    local function runValidatedTransition(validated, interactionAction, instanceId, choiceId)
         if interactionAction == "click" then
             return clickValidated(validated, instanceId)
         elseif interactionAction == "register" then
-            return registerValidated(validated, instanceId)
+            return registerValidated(validated, instanceId, nil)
         elseif interactionAction == "cancel" then
             return cancelValidated(validated, instanceId)
+        elseif interactionAction == "choose" then
+            return registerValidated(validated, instanceId, choiceId)
         end
         return nil, {
             makeError(
                 "invalid_interaction_action",
                 "$.interaction.action",
-                "카드 상호작용 작업은 click, register, cancel 중 하나여야 합니다."
+                "카드 상호작용 작업은 click, register, cancel, choose 중 하나여야 합니다."
             ),
         }
     end
@@ -1162,19 +1255,29 @@
         checkAllowedKeys(interaction, {
             action = true,
             instanceId = true,
+            choiceId = true,
             expectedInteractionToken = true,
         }, "$.interaction", requestErrors)
         local interactionAction = rawget(interaction, "action")
         local instanceId = rawget(interaction, "instanceId")
+        local choiceId = rawget(interaction, "choiceId")
         local expectedInteractionToken = rawget(interaction, "expectedInteractionToken")
         if interactionAction ~= "click"
             and interactionAction ~= "register"
-            and interactionAction ~= "cancel" then
+            and interactionAction ~= "cancel"
+            and interactionAction ~= "choose" then
             table.insert(requestErrors, makeError(
                 "invalid_interaction_action",
                 "$.interaction.action",
-                "카드 상호작용 작업은 click, register, cancel 중 하나여야 합니다."
+                "카드 상호작용 작업은 click, register, cancel, choose 중 하나여야 합니다."
             ))
+        end
+        if interactionAction == "choose" then
+            if type(choiceId) ~= "string" or string.match(choiceId, "^[a-z][a-z0-9_]*$") == nil then
+                table.insert(requestErrors, makeError("invalid_effect_choice_id", "$.interaction.choiceId", "효과 선택지 ID가 올바르지 않습니다."))
+            end
+        elseif choiceId ~= nil then
+            table.insert(requestErrors, makeError("unexpected_effect_choice", "$.interaction.choiceId", "choose 작업 외에는 효과 선택값을 보낼 수 없습니다."))
         end
         if not isRuntimeId(instanceId) then
             table.insert(requestErrors, makeError(
@@ -1214,7 +1317,8 @@
         local nextDraft, transitionErrors = runValidatedTransition(
             validated,
             interactionAction,
-            instanceId
+            instanceId,
+            choiceId
         )
         if transitionErrors then
             return failure(transitionErrors)
@@ -1309,6 +1413,7 @@
             hasMainAction = replay.mainActionCount == 1,
             passAfterChain = #selectedIds > 0 and replay.mainActionCount == 0,
             selectedCardInstanceIds = selectedIds,
+            effectChoiceByInstanceId = copyMap(replay.effectChoiceByInstanceId),
             source = source,
             preview = preview,
             projectedRng = {
@@ -1357,6 +1462,7 @@
             hasMainAction = true,
             passAfterChain = true,
             selectedCardInstanceIds = true,
+            effectChoiceByInstanceId = true,
             source = true,
             preview = true,
             projectedRng = true,
@@ -1418,6 +1524,16 @@
             "$.projection.selectedCardInstanceIds",
             errors
         )
+        if type(projection.effectChoiceByInstanceId) ~= "table" or getmetatable(projection.effectChoiceByInstanceId) ~= nil then
+            table.insert(errors, makeError("invalid_effect_choice_map", "$.projection.effectChoiceByInstanceId", "projection 효과 선택값은 일반 객체여야 합니다."))
+        else
+            for instanceId, choiceId in pairs(projection.effectChoiceByInstanceId) do
+                if not isRuntimeId(instanceId) or type(choiceId) ~= "string"
+                    or string.match(choiceId, "^[a-z][a-z0-9_]*$") == nil then
+                    table.insert(errors, makeError("invalid_effect_choice", "$.projection.effectChoiceByInstanceId." .. tostring(instanceId), "projection 효과 선택값이 올바르지 않습니다."))
+                end
+            end
+        end
         if type(projection.source) ~= "table" or getmetatable(projection.source) ~= nil then
             table.insert(errors, makeError(
                 "invalid_projection_source",
@@ -1470,6 +1586,7 @@
             stateCopy,
             normalizedStaticData,
             projectionCopy.selectedCardInstanceIds,
+            projectionCopy.effectChoiceByInstanceId,
             false
         )
         if replayErrors then
@@ -1511,11 +1628,14 @@
         if rngError then
             return nil, rngError
         end
+        local choices, choicesError = cloneValue(projection.effectChoiceByInstanceId, "$.projection.effectChoiceByInstanceId")
+        if choicesError then return nil, choicesError end
         return {
             schemaVersion = SCHEMA_VERSION,
             kind = "turnDraftProjectionReceipt",
             mode = projection.mode,
             selectedCardInstanceIds = selectedIds,
+            effectChoiceByInstanceId = choices,
             source = source,
             projectedRng = projectedRng,
         }, nil
@@ -1537,6 +1657,7 @@
             kind = true,
             mode = true,
             selectedCardInstanceIds = true,
+            effectChoiceByInstanceId = true,
             source = true,
             projectedRng = true,
         }, "$.receipt", errors)
@@ -1568,6 +1689,17 @@
             "$.receipt.selectedCardInstanceIds",
             errors
         )
+        if receipt.effectChoiceByInstanceId ~= nil
+            and (type(receipt.effectChoiceByInstanceId) ~= "table" or getmetatable(receipt.effectChoiceByInstanceId) ~= nil) then
+            table.insert(errors, makeError("invalid_effect_choice_map", "$.receipt.effectChoiceByInstanceId", "projection 영수증 효과 선택값은 일반 객체여야 합니다."))
+        else
+            for instanceId, choiceId in pairs(receipt.effectChoiceByInstanceId or {}) do
+                if not isRuntimeId(instanceId) or type(choiceId) ~= "string"
+                    or string.match(choiceId, "^[a-z][a-z0-9_]*$") == nil then
+                    table.insert(errors, makeError("invalid_effect_choice", "$.receipt.effectChoiceByInstanceId." .. tostring(instanceId), "projection 영수증 효과 선택값이 올바르지 않습니다."))
+                end
+            end
+        end
         if type(receipt.source) ~= "table" or getmetatable(receipt.source) ~= nil then
             table.insert(errors, makeError(
                 "invalid_projection_source",
@@ -1605,6 +1737,7 @@
         if #shapeErrors > 0 then
             return failure(shapeErrors)
         end
+        receiptCopy.effectChoiceByInstanceId = receiptCopy.effectChoiceByInstanceId or {}
 
         local expectedSource, sourceError = buildSource(stateCopy)
         if sourceError then
@@ -1624,6 +1757,7 @@
             stateCopy,
             normalizedStaticData,
             receiptCopy.selectedCardInstanceIds,
+            receiptCopy.effectChoiceByInstanceId,
             false
         )
         if replayErrors then

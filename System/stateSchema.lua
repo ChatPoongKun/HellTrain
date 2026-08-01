@@ -510,6 +510,7 @@
             remainingTurns = true,
             remainingCharges = true,
             revealed = true,
+            effectChoiceId = true,
         }, path, errors)
 
         if occupied ~= true then
@@ -529,6 +530,9 @@
         end
         if slot.revealed ~= true and slot.revealed ~= false then
             addError(errors, "invalid_revealed", path .. ".revealed", "revealed는 불리언이어야 합니다.")
+        end
+        if slot.effectChoiceId ~= nil and not isAsciiId(slot.effectChoiceId) then
+            addError(errors, "invalid_effect_choice_id", path .. ".effectChoiceId", "계획 효과 선택지 ID가 올바르지 않습니다.")
         end
         if slot.durationIncludesPlacementTurn ~= nil
             and type(slot.durationIncludesPlacementTurn) ~= "boolean" then
@@ -584,6 +588,17 @@
         if card and not cardHasMechanism(card, "plan") then
             addError(errors, "plan_mechanism_missing", path .. ".cardId", "계획 슬롯의 카드에 plan 메커니즘이 없습니다.")
         elseif card then
+            local matchedChoice = nil
+            for _, choice in ipairs(type(card.effectChoices) == "table" and card.effectChoices or {}) do
+                if choice.id == slot.effectChoiceId then matchedChoice = choice end
+            end
+            if type(card.effectChoices) == "table" and matchedChoice == nil then
+                addError(errors, "missing_plan_effect_choice", path .. ".effectChoiceId", "선택형 계획에 유효한 효과 선택값이 없습니다.")
+            elseif matchedChoice ~= nil and matchedChoice.placesPlan == false then
+                addError(errors, "invalid_plan_effect_choice", path .. ".effectChoiceId", "즉시 발동 선택지는 계획 슬롯에 저장할 수 없습니다.")
+            elseif type(card.effectChoices) ~= "table" and slot.effectChoiceId ~= nil then
+                addError(errors, "unexpected_plan_effect_choice", path .. ".effectChoiceId", "선택지가 없는 계획에 효과 선택값이 있습니다.")
+            end
             local planData = type(card.mechanismData) == "table" and card.mechanismData.plan or nil
             local expectedIncludesPlacementTurn = type(planData) == "table"
                 and planData.durationIncludesPlacementTurn == true
@@ -2804,6 +2819,7 @@
             kind = true,
             mode = true,
             selectedCardInstanceIds = true,
+            effectChoiceByInstanceId = true,
             source = true,
             projectedRng = true,
         }, path, errors)
@@ -2817,6 +2833,20 @@
             addError(errors, "invalid_projection_mode", path .. ".mode", "알 수 없는 projection mode입니다.")
         end
         validateIdArray(receipt.selectedCardInstanceIds, path .. ".selectedCardInstanceIds", errors, isRuntimeId)
+        if receipt.effectChoiceByInstanceId ~= nil and type(receipt.effectChoiceByInstanceId) ~= "table" then
+            addError(errors, "invalid_effect_choice_map", path .. ".effectChoiceByInstanceId", "효과 선택값은 객체여야 합니다.")
+        else
+            local selected = {}
+            for _, instanceId in ipairs(type(receipt.selectedCardInstanceIds) == "table" and receipt.selectedCardInstanceIds or {}) do
+                selected[instanceId] = true
+            end
+            for instanceId, choiceId in pairs(receipt.effectChoiceByInstanceId or {}) do
+                if not isRuntimeId(instanceId) or not selected[instanceId]
+                    or not isAsciiId(choiceId) then
+                    addError(errors, "invalid_effect_choice", path .. ".effectChoiceByInstanceId." .. tostring(instanceId), "봉인된 효과 선택값이 올바르지 않습니다.")
+                end
+            end
+        end
         local selectedCount = type(receipt.selectedCardInstanceIds) == "table" and #receipt.selectedCardInstanceIds or 0
         if receipt.mode == "pass" and selectedCount ~= 0 then
             addError(errors, "projection_pass_has_selection", path .. ".selectedCardInstanceIds", "pass projection에는 등록 카드가 없어야 합니다.")
