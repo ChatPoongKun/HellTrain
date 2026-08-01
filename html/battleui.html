@@ -1,3 +1,54 @@
+<style>
+.ht-shared-popover-layer {
+position: fixed;
+z-index: 2147483646;
+inset: 0;
+}
+.ht-shared-popover-backdrop {
+position: fixed;
+inset: 0;
+width: 100%;
+height: 100%;
+margin: 0;
+padding: 0;
+border: 0;
+background: rgba(4, 4, 6, .30);
+cursor: default;
+}
+.ht-popover.ht-shared-popover.is-open {
+display: block;
+pointer-events: auto;
+}
+.ht-shared-popover-close {
+position: absolute;
+z-index: 2;
+top: 8px;
+right: 8px;
+display: flex;
+align-items: center;
+justify-content: center;
+width: 25px;
+height: 25px;
+min-height: 0;
+margin: 0;
+padding: 0;
+border: 1px solid rgba(255, 255, 255, .13);
+border-radius: 50%;
+color: #aaa39d;
+background: rgba(255, 255, 255, .04);
+font-size: 15px;
+line-height: 1;
+cursor: pointer;
+pointer-events: auto;
+}
+.ht-shared-popover .ht-popover-dismiss,
+.ht-shared-popover .ht-choice-option,
+.ht-shared-popover .ht-choice-close,
+.ht-shared-popover summary {
+pointer-events: auto;
+}
+</style>
+
 <section class="ht-battle {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::aftermath}}::active}}::true}}}}is-aftermath{{/if}}" aria-label="함락! 무한의 지옥철 전투 화면">
 <header class="ht-topbar">
 <div class="ht-brand">
@@ -7,19 +58,11 @@
 <div class="ht-title">함락! 무한의 지옥철</div>
 </div>
 </div>
-<button type="button" class="ht-top-environment ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-environment" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}} 환경 정보 보기">
+<button type="button" class="ht-top-environment ht-tip-trigger" risu-btn="popoverController|open|environment|current|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}} 환경 정보 보기">
 {{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}}
 </button>
 </header>
 
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-environment" class="ht-popover" popover="auto" role="dialog" aria-label="환경 정보">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-environment" popovertargetaction="hide">
-<span class="ht-popover-kicker">ENVIRONMENT</span>
-<span class="ht-popover-title">{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}}</span>
-<span class="ht-popover-copy">{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::description}}</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
 
 <section class="ht-route" style="--route-color: {{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::lineColor}}" aria-label="현재 지하철 이동 경로">
 <div class="ht-route-head">
@@ -37,23 +80,9 @@
 </div>
 <div class="ht-route-track">
 {{#each {{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::stations}} station}}
-<button type="button" class="ht-route-stop ht-tip-trigger" data-status="{{dict_element::{{slot::station}}::status}}" data-start="{{dict_element::{{slot::station}}::isStart}}" data-destination="{{dict_element::{{slot::station}}::isDestination}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-station-{{dict_element::{{slot::station}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::station}}::name}} 역 정보 보기">
+<button type="button" class="ht-route-stop ht-tip-trigger" data-status="{{dict_element::{{slot::station}}::status}}" data-start="{{dict_element::{{slot::station}}::isStart}}" data-destination="{{dict_element::{{slot::station}}::isDestination}}" risu-btn="popoverController|open|station|{{dict_element::{{slot::station}}::id}}|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::station}}::name}} 역 정보 보기">
 <i class="ht-route-node" aria-hidden="true"></i>
 </button>
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-station-{{dict_element::{{slot::station}}::id}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{slot::station}}::name}} 역 정보">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-station-{{dict_element::{{slot::station}}::id}}" popovertargetaction="hide">
-<span class="ht-popover-kicker">{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::lineName}}</span>
-<span class="ht-popover-title">{{dict_element::{{slot::station}}::name}}</span>
-<span class="ht-popover-meta">
-{{#if {{equal::{{dict_element::{{slot::station}}::isStart}}::true}}}}출발역 · {{/if}}
-{{#if {{equal::{{dict_element::{{slot::station}}::status}}::passed}}}}지나온 역{{/if}}
-{{#if {{equal::{{dict_element::{{slot::station}}::status}}::current}}}}현재 위치{{/if}}
-{{#if {{equal::{{dict_element::{{slot::station}}::status}}::upcoming}}}}남은 경로{{/if}}
-{{#if {{equal::{{dict_element::{{slot::station}}::isDestination}}::true}}}} · 도착역{{/if}}
-</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
 {{/each}}
 </div>
 </section>
@@ -86,20 +115,7 @@
 <div class="ht-section-label">공개 특징</div>
 <div class="ht-trait-list">
 {{#each {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::traits}} trait}}
-<button type="button" class="ht-trait ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-trait-{{dict_element::{{slot::trait}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::trait}}::name}} 특징 정보 보기">{{dict_element::{{slot::trait}}::name}}</button>
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-trait-{{dict_element::{{slot::trait}}::id}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{slot::trait}}::name}} 특징 정보">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-trait-{{dict_element::{{slot::trait}}::id}}" popovertargetaction="hide">
-<span class="ht-popover-kicker">PUBLIC TRAIT</span>
-<span class="ht-popover-title">{{dict_element::{{slot::trait}}::name}}</span>
-<span class="ht-popover-copy">{{dict_element::{{slot::trait}}::description}}</span>
-<span class="ht-popover-rules">
-{{#each {{dict_element::{{slot::trait}}::ruleLines}} traitRule}}
-<span class="ht-popover-rule">{{#each {{dict_element::{{slot::traitRule}}::segments}} traitRuleSegment}}{{#if {{equal::{{dict_element::{{slot::traitRuleSegment}}::kind}}::text}}}}{{dict_element::{{slot::traitRuleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::traitRuleSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::traitRuleSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::traitRuleSegment}}::label}}</span>{{/if}}{{/each}}</span>
-{{/each}}
-</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
+<button type="button" class="ht-trait ht-tip-trigger" risu-btn="popoverController|open|trait|{{dict_element::{{slot::trait}}::id}}|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::trait}}::name}} 특징 정보 보기">{{dict_element::{{slot::trait}}::name}}</button>
 {{/each}}
 </div>
 </div>
@@ -117,7 +133,7 @@
 <span>예고 행동</span>
 <i class="ht-intent-dot" aria-hidden="true"></i>
 {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::status}}::tagRevealed}}}}
-<button type="button" class="ht-intent-trigger ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::tag}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::tag}}::label}} 태그 정보 보기">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::tag}}::label}}</button>
+<button type="button" class="ht-intent-trigger ht-tip-trigger" risu-btn="popoverController|open|tag|{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::tag}}::id}}|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::tag}}::label}} 태그 정보 보기">{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::tag}}::label}}</button>
 {{/if}}
 {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::publicAction}}::status}}::none}}}}
 <strong>행동 없음</strong>
@@ -126,14 +142,14 @@
 </div>
 <div class="ht-resource-grid">
 <section class="ht-resource-panel" aria-label="저항과 직전 변화">
-<button type="button" class="ht-resource ht-resource--enemy ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-resistance" aria-haspopup="dialog" aria-label="저항 {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}}, 설명 보기">
+<button type="button" class="ht-resource ht-resource--enemy ht-tip-trigger" risu-btn="popoverController|open|resource|resistance|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="저항 {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}}, 설명 보기">
 <span class="ht-resource-label">저항</span>
 <strong>{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}}</strong>
 </button>
 <div class="ht-resource-changes">
 {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::available}}::true}}}}
 {{#each {{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::resourceChanges}}::resistance}} resistanceChange}}
-<button type="button" class="ht-resource-change ht-tip-trigger" data-direction="{{dict_element::{{slot::resistanceChange}}::direction}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-change-{{dict_element::{{slot::resistanceChange}}::sequence}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::resistanceChange}}::source}}::name}}, 저항 변화 {{dict_element::{{slot::resistanceChange}}::amountLabel}} 상세정보 보기">
+<button type="button" class="ht-resource-change ht-tip-trigger" data-direction="{{dict_element::{{slot::resistanceChange}}::direction}}" risu-btn="popoverController|open|change|{{dict_element::{{slot::resistanceChange}}::sequence}}|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::resistanceChange}}::source}}::name}}, 저항 변화 {{dict_element::{{slot::resistanceChange}}::amountLabel}} 상세정보 보기">
 <b>{{dict_element::{{slot::resistanceChange}}::amountLabel}}</b>
 <span>{{dict_element::{{dict_element::{{slot::resistanceChange}}::source}}::name}}</span>
 <small>{{dict_element::{{dict_element::{{slot::resistanceChange}}::source}}::kindLabel}}</small>
@@ -142,24 +158,15 @@
 {{/if}}
 </div>
 </section>
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-resistance" class="ht-popover" popover="auto" role="dialog" aria-label="저항 설명">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-resistance" popovertargetaction="hide">
-<span class="ht-popover-kicker">ENEMY · 교전 수치</span>
-<span class="ht-popover-title">저항 · {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}}</span>
-<span class="ht-popover-copy">상대가 교전을 버티는 수치입니다. 카드와 효과로 낮추며, 0 이하가 되면 승리합니다.</span>
-<span class="ht-popover-meta">회복 효과로 현재 수치가 증가할 수 있습니다.</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
 <section class="ht-resource-panel" aria-label="은폐와 직전 변화">
-<button type="button" class="ht-resource ht-resource--player ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-stealth" aria-haspopup="dialog" aria-label="은폐 {{dict_element::{{dict_element::{{getvar::battleView}}::player}}::stealth}}, 설명 보기">
+<button type="button" class="ht-resource ht-resource--player ht-tip-trigger" risu-btn="popoverController|open|resource|stealth|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="은폐 {{dict_element::{{dict_element::{{getvar::battleView}}::player}}::stealth}}, 설명 보기">
 <span class="ht-resource-label">은폐</span>
 <strong>{{dict_element::{{dict_element::{{getvar::battleView}}::player}}::stealth}}</strong>
 </button>
 <div class="ht-resource-changes">
 {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::available}}::true}}}}
 {{#each {{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::resourceChanges}}::stealth}} stealthChange}}
-<button type="button" class="ht-resource-change ht-tip-trigger" data-direction="{{dict_element::{{slot::stealthChange}}::direction}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-change-{{dict_element::{{slot::stealthChange}}::sequence}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::stealthChange}}::source}}::name}}, 은폐 변화 {{dict_element::{{slot::stealthChange}}::amountLabel}} 상세정보 보기">
+<button type="button" class="ht-resource-change ht-tip-trigger" data-direction="{{dict_element::{{slot::stealthChange}}::direction}}" risu-btn="popoverController|open|change|{{dict_element::{{slot::stealthChange}}::sequence}}|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::stealthChange}}::source}}::name}}, 은폐 변화 {{dict_element::{{slot::stealthChange}}::amountLabel}} 상세정보 보기">
 <b>{{dict_element::{{slot::stealthChange}}::amountLabel}}</b>
 <span>{{dict_element::{{dict_element::{{slot::stealthChange}}::source}}::name}}</span>
 <small>{{dict_element::{{dict_element::{{slot::stealthChange}}::source}}::kindLabel}}</small>
@@ -168,15 +175,6 @@
 {{/if}}
 </div>
 </section>
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-stealth" class="ht-popover" popover="auto" role="dialog" aria-label="은폐 설명">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-resource-stealth" popovertargetaction="hide">
-<span class="ht-popover-kicker">PLAYER · 교전 수치</span>
-<span class="ht-popover-title">은폐 · {{dict_element::{{dict_element::{{getvar::battleView}}::player}}::stealth}}</span>
-<span class="ht-popover-copy">발각되지 않고 행동할 수 있는 여유입니다. 카드 비용과 효과로 감소합니다.</span>
-<span class="ht-popover-meta">상대의 저항이 남은 채 0 이하가 되면 패배하며, 회복 효과로 증가할 수 있습니다.</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
 </div>
 <div class="ht-plan-owners" aria-label="양측 계획">
 <article class="ht-plan-owner">
@@ -185,28 +183,10 @@
 {{#each {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::plans}} plan}}
 {{#if {{equal::{{dict_element::{{slot::plan}}::status}}::empty}}}}<span class="ht-plan">빈 슬롯</span>{{/if}}
 {{#if {{equal::{{dict_element::{{slot::plan}}::status}}::hidden}}}}
-<button type="button" class="ht-plan ht-plan--hidden ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-enemy-plan-{{dict_element::{{slot::plan}}::slotIndex}}" aria-haspopup="dialog" aria-label="공개되지 않은 상대 계획 정보 보기">? 계획</button>
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-enemy-plan-{{dict_element::{{slot::plan}}::slotIndex}}" class="ht-popover" popover="auto" role="dialog" aria-label="공개되지 않은 상대 계획">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-enemy-plan-{{dict_element::{{slot::plan}}::slotIndex}}" popovertargetaction="hide">
-<span class="ht-popover-kicker">상대의 계획</span>
-<span class="ht-popover-title">아직 공개되지 않음</span>
-<span class="ht-popover-copy">상대가 계획을 실행하거나 공개 효과가 적용되기 전까지 내용을 알 수 없습니다.</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
+<button type="button" class="ht-plan ht-plan--hidden ht-tip-trigger" risu-btn="popoverController|open|enemy_plan|{{dict_element::{{slot::plan}}::slotIndex}}|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="공개되지 않은 상대 계획 정보 보기">? 계획</button>
 {{/if}}
 {{#if {{equal::{{dict_element::{{slot::plan}}::status}}::revealed}}}}
-<button type="button" class="ht-plan ht-plan--active ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-enemy-plan-{{dict_element::{{slot::plan}}::slotIndex}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}} 상대 계획 정보 보기">{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}}{{#if {{equal::{{dict_element::{{slot::plan}}::hasDuration}}::true}}}} · {{dict_element::{{slot::plan}}::remainingTurns}}T{{/if}}</button>
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-enemy-plan-{{dict_element::{{slot::plan}}::slotIndex}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}} 상대 계획 정보">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-enemy-plan-{{dict_element::{{slot::plan}}::slotIndex}}" popovertargetaction="hide">
-<span class="ht-popover-kicker">ENEMY · 상대 계획</span>
-<span class="ht-popover-title">{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}}</span>
-<span class="ht-popover-copy">{{#each {{dict_element::{{dict_element::{{slot::plan}}::card}}::descriptionSegments}} planDescriptionSegment}}{{#if {{equal::{{dict_element::{{slot::planDescriptionSegment}}::kind}}::text}}}}{{dict_element::{{slot::planDescriptionSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::planDescriptionSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::planDescriptionSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::planDescriptionSegment}}::label}}</span>{{/if}}{{/each}}</span>
-<span class="ht-popover-meta">{{#if {{equal::{{dict_element::{{slot::plan}}::hasDuration}}::true}}}}남은 지속시간 · {{dict_element::{{slot::plan}}::remainingTurns}}턴{{/if}}</span>
-<span class="ht-popover-rules">{{#each {{dict_element::{{dict_element::{{slot::plan}}::card}}::ruleLines}} planRule}}<span class="ht-popover-rule">{{#each {{dict_element::{{slot::planRule}}::segments}} planRuleSegment}}{{#if {{equal::{{dict_element::{{slot::planRuleSegment}}::kind}}::text}}}}{{dict_element::{{slot::planRuleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::planRuleSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::planRuleSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::planRuleSegment}}::label}}</span>{{/if}}{{/each}}</span>{{/each}}</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
+<button type="button" class="ht-plan ht-plan--active ht-tip-trigger" risu-btn="popoverController|open|enemy_plan|{{dict_element::{{slot::plan}}::slotIndex}}|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}} 상대 계획 정보 보기">{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}}{{#if {{equal::{{dict_element::{{slot::plan}}::hasDuration}}::true}}}} · {{dict_element::{{slot::plan}}::remainingTurns}}T{{/if}}</button>
 {{/if}}
 {{/each}}
 </div>
@@ -217,17 +197,7 @@
 {{#each {{dict_element::{{dict_element::{{getvar::battleView}}::player}}::plans}} playerPlan}}
 {{#if {{equal::{{dict_element::{{slot::playerPlan}}::status}}::empty}}}}<span class="ht-plan">빈 슬롯</span>{{/if}}
 {{#if {{equal::{{dict_element::{{slot::playerPlan}}::status}}::revealed}}}}
-<button type="button" class="ht-plan ht-plan--active ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-player-plan-{{dict_element::{{slot::playerPlan}}::slotIndex}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::name}} 내 계획 정보 보기">{{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::name}}{{#if {{equal::{{dict_element::{{slot::playerPlan}}::hasDuration}}::true}}}} · {{dict_element::{{slot::playerPlan}}::remainingTurns}}T{{/if}}</button>
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-player-plan-{{dict_element::{{slot::playerPlan}}::slotIndex}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::name}} 내 계획 정보">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-player-plan-{{dict_element::{{slot::playerPlan}}::slotIndex}}" popovertargetaction="hide">
-<span class="ht-popover-kicker">PLAYER · 내 계획</span>
-<span class="ht-popover-title">{{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::name}}</span>
-<span class="ht-popover-copy">{{#each {{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::descriptionSegments}} playerPlanDescriptionSegment}}{{#if {{equal::{{dict_element::{{slot::playerPlanDescriptionSegment}}::kind}}::text}}}}{{dict_element::{{slot::playerPlanDescriptionSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::playerPlanDescriptionSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::playerPlanDescriptionSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::playerPlanDescriptionSegment}}::label}}</span>{{/if}}{{/each}}</span>
-<span class="ht-popover-meta">{{#if {{equal::{{dict_element::{{slot::playerPlan}}::hasDuration}}::true}}}}남은 지속시간 · {{dict_element::{{slot::playerPlan}}::remainingTurns}}턴{{/if}}</span>
-<span class="ht-popover-rules">{{#each {{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::ruleLines}} playerPlanRule}}<span class="ht-popover-rule">{{#each {{dict_element::{{slot::playerPlanRule}}::segments}} playerPlanRuleSegment}}{{#if {{equal::{{dict_element::{{slot::playerPlanRuleSegment}}::kind}}::text}}}}{{dict_element::{{slot::playerPlanRuleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::playerPlanRuleSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::playerPlanRuleSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::playerPlanRuleSegment}}::label}}</span>{{/if}}{{/each}}</span>{{/each}}</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
+<button type="button" class="ht-plan ht-plan--active ht-tip-trigger" risu-btn="popoverController|open|player_plan|{{dict_element::{{slot::playerPlan}}::slotIndex}}|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::name}} 내 계획 정보 보기">{{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::name}}{{#if {{equal::{{dict_element::{{slot::playerPlan}}::hasDuration}}::true}}}} · {{dict_element::{{slot::playerPlan}}::remainingTurns}}T{{/if}}</button>
 {{/if}}
 {{/each}}
 </div>
@@ -241,7 +211,7 @@
 <span class="ht-current-mood">현재 · {{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::label}}</span>
 </div>
 <div class="ht-mood-grid">
-<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::rejection}}}}is-current{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-rejection" aria-haspopup="dialog" aria-label="거절 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::rejection}}}}aria-current="true"{{/if}}>
+<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::rejection}}}}is-current{{/if}}" risu-btn="popoverController|open|mood|rejection|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="거절 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::rejection}}}}aria-current="true"{{/if}}>
 <i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::5}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::4}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::3}}}}is-filled{{/if}}"></i>
@@ -249,16 +219,7 @@
 <i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}::1}}}}is-filled{{/if}}"></i>
 <span class="ht-mood-name">거절</span>
 </button>
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-rejection" class="ht-popover" popover="auto" role="dialog" aria-label="거절 무드 정보">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-rejection" popovertargetaction="hide">
-<span class="ht-popover-kicker">MOOD</span>
-<span class="ht-popover-title">거절 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}</span>
-<span class="ht-popover-copy">현재 거절 무드 토큰 수입니다.</span>
-<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
-<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::suspicion}}}}is-current{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-suspicion" aria-haspopup="dialog" aria-label="의심 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::suspicion}}}}aria-current="true"{{/if}}>
+<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::suspicion}}}}is-current{{/if}}" risu-btn="popoverController|open|mood|suspicion|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="의심 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::suspicion}}}}aria-current="true"{{/if}}>
 <i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::5}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::4}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::3}}}}is-filled{{/if}}"></i>
@@ -266,16 +227,7 @@
 <i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}::1}}}}is-filled{{/if}}"></i>
 <span class="ht-mood-name">의심</span>
 </button>
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-suspicion" class="ht-popover" popover="auto" role="dialog" aria-label="의심 무드 정보">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-suspicion" popovertargetaction="hide">
-<span class="ht-popover-kicker">MOOD</span>
-<span class="ht-popover-title">의심 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}</span>
-<span class="ht-popover-copy">현재 의심 무드 토큰 수입니다.</span>
-<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
-<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::ignore}}}}is-current{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-ignore" aria-haspopup="dialog" aria-label="무시 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::ignore}}}}aria-current="true"{{/if}}>
+<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::ignore}}}}is-current{{/if}}" risu-btn="popoverController|open|mood|ignore|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="무시 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::ignore}}}}aria-current="true"{{/if}}>
 <i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::5}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::4}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::3}}}}is-filled{{/if}}"></i>
@@ -283,16 +235,7 @@
 <i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}::1}}}}is-filled{{/if}}"></i>
 <span class="ht-mood-name">무시</span>
 </button>
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-ignore" class="ht-popover" popover="auto" role="dialog" aria-label="무시 무드 정보">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-ignore" popovertargetaction="hide">
-<span class="ht-popover-kicker">MOOD</span>
-<span class="ht-popover-title">무시 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}</span>
-<span class="ht-popover-copy">현재 무시 무드 토큰 수입니다.</span>
-<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
-<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::confusion}}}}is-current{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-confusion" aria-haspopup="dialog" aria-label="혼란 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::confusion}}}}aria-current="true"{{/if}}>
+<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::confusion}}}}is-current{{/if}}" risu-btn="popoverController|open|mood|confusion|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="혼란 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::confusion}}}}aria-current="true"{{/if}}>
 <i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::5}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::4}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::3}}}}is-filled{{/if}}"></i>
@@ -300,16 +243,7 @@
 <i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}::1}}}}is-filled{{/if}}"></i>
 <span class="ht-mood-name">혼란</span>
 </button>
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-confusion" class="ht-popover" popover="auto" role="dialog" aria-label="혼란 무드 정보">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-confusion" popovertargetaction="hide">
-<span class="ht-popover-kicker">MOOD</span>
-<span class="ht-popover-title">혼란 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}</span>
-<span class="ht-popover-copy">현재 혼란 무드 토큰 수입니다.</span>
-<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
-<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::compliance}}}}is-current{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-compliance" aria-haspopup="dialog" aria-label="순응 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::compliance}}}}aria-current="true"{{/if}}>
+<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::compliance}}}}is-current{{/if}}" risu-btn="popoverController|open|mood|compliance|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="순응 무드 {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::id}}::compliance}}}}aria-current="true"{{/if}}>
 <i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::5}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::4}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::3}}}}is-filled{{/if}}"></i>
@@ -317,20 +251,11 @@
 <i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}::1}}}}is-filled{{/if}}"></i>
 <span class="ht-mood-name">순응</span>
 </button>
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-compliance" class="ht-popover" popover="auto" role="dialog" aria-label="순응 무드 정보">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-mood-compliance" popovertargetaction="hide">
-<span class="ht-popover-kicker">MOOD</span>
-<span class="ht-popover-title">순응 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}</span>
-<span class="ht-popover-copy">현재 순응 무드 토큰 수입니다.</span>
-<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
 </div>
 </section>
 
 <div class="ht-subrow">
-<button type="button" class="ht-env-card ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-environment" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}} 환경 정보 보기">
+<button type="button" class="ht-env-card ht-tip-trigger" risu-btn="popoverController|open|environment|current|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}} 환경 정보 보기">
 <span class="ht-env-name">환경 · {{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}}</span>
 <span class="ht-env-desc">{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::description}}</span>
 </button>
@@ -349,14 +274,14 @@
 
 <div class="ht-cards">
 {{#each {{dict_element::{{dict_element::{{getvar::battleView}}::hand}}::items}} card}}<article class="ht-card {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}is-focused{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}is-selected{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::origin}}::preview}}}}is-preview{{/if}} {{#if {{equal::{{dict_element::{{slot::card}}::playable}}::false}}}}is-unplayable{{/if}}" aria-label="{{dict_element::{{slot::card}}::name}} 카드">
-{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}<button type="button" class="ht-card-action" risu-btn="battleController|clickCard|{{dict_element::{{slot::card}}::instanceId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-label="{{dict_element::{{slot::card}}::name}} 카드 상세 보기 및 선택" aria-expanded="{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}true{{/if}}{{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}}}false{{/if}}" aria-pressed="{{dict_element::{{slot::card}}::selected}}" {{#if {{equal::{{dict_element::{{getvar::battleView}}::locked}}::true}}}}disabled{{/if}}></button>{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::false}}}}{{#if {{equal::{{dict_element::{{slot::card}}::hasEffectChoices}}::true}}}}<button type="button" class="ht-card-action" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-choice-{{dict_element::{{slot::card}}::instanceId}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::card}}::name}} 효과 선택" aria-pressed="false" {{#if {{equal::{{dict_element::{{getvar::battleView}}::locked}}::true}}}}disabled{{/if}}></button>{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::hasEffectChoices}}::false}}}}<button type="button" class="ht-card-action" risu-btn="battleController|clickCard|{{dict_element::{{slot::card}}::instanceId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-label="{{dict_element::{{slot::card}}::name}} 카드 상세 보기 및 선택" aria-pressed="false" {{#if {{equal::{{dict_element::{{getvar::battleView}}::locked}}::true}}}}disabled{{/if}}></button>{{/if}}{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::origin}}::preview}}}}<span class="ht-preview-flag">DRAW PREVIEW</span>{{/if}}<span class="ht-card-top">
+{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}<button type="button" class="ht-card-action" risu-btn="battleController|clickCard|{{dict_element::{{slot::card}}::instanceId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-label="{{dict_element::{{slot::card}}::name}} 카드 상세 보기 및 선택" aria-expanded="{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}true{{/if}}{{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}}}false{{/if}}" aria-pressed="{{dict_element::{{slot::card}}::selected}}" {{#if {{equal::{{dict_element::{{getvar::battleView}}::locked}}::true}}}}disabled{{/if}}></button>{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::false}}}}{{#if {{equal::{{dict_element::{{slot::card}}::hasEffectChoices}}::true}}}}<button type="button" class="ht-card-action" risu-btn="popoverController|open|choice|{{dict_element::{{slot::card}}::instanceId}}|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::card}}::name}} 효과 선택" aria-pressed="false" {{#if {{equal::{{dict_element::{{getvar::battleView}}::locked}}::true}}}}disabled{{/if}}></button>{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::hasEffectChoices}}::false}}}}<button type="button" class="ht-card-action" risu-btn="battleController|clickCard|{{dict_element::{{slot::card}}::instanceId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-label="{{dict_element::{{slot::card}}::name}} 카드 상세 보기 및 선택" aria-pressed="false" {{#if {{equal::{{dict_element::{{getvar::battleView}}::locked}}::true}}}}disabled{{/if}}></button>{{/if}}{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::origin}}::preview}}}}<span class="ht-preview-flag">DRAW PREVIEW</span>{{/if}}<span class="ht-card-top">
 <span class="ht-order">{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::true}}}}{{dict_element::{{slot::card}}::selectionOrder}}{{/if}}{{#if {{equal::{{dict_element::{{slot::card}}::selected}}::false}}}}＋{{/if}}</span>
 <span class="ht-card-name">
 <strong>{{dict_element::{{slot::card}}::name}}</strong>
 <span class="ht-card-tags">
-<button type="button" class="ht-tag ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{dict_element::{{slot::card}}::actionTag}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::card}}::actionTag}}::label}} 태그 정보 보기">{{dict_element::{{dict_element::{{slot::card}}::actionTag}}::label}}</button>
+<button type="button" class="ht-tag ht-tip-trigger" risu-btn="popoverController|open|tag|{{dict_element::{{dict_element::{{slot::card}}::actionTag}}::id}}|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::card}}::actionTag}}::label}} 태그 정보 보기">{{dict_element::{{dict_element::{{slot::card}}::actionTag}}::label}}</button>
 {{#each {{dict_element::{{slot::card}}::mechanisms}} mechanism}}
-<button type="button" class="ht-tag ht-tag--mechanism ht-tip-trigger" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{slot::mechanism}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::mechanism}}::label}} 태그 정보 보기">{{dict_element::{{slot::mechanism}}::label}}</button>
+<button type="button" class="ht-tag ht-tag--mechanism ht-tip-trigger" risu-btn="popoverController|open|tag|{{dict_element::{{slot::mechanism}}::id}}|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::mechanism}}::label}} 태그 정보 보기">{{dict_element::{{slot::mechanism}}::label}}</button>
 {{/each}}
 </span>
 </span>
@@ -370,9 +295,9 @@
 {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::focusedInstanceId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}
 <span class="ht-card-detail">
 <span class="ht-description">
-{{#each {{dict_element::{{slot::card}}::descriptionSegments}} segment}}{{#if {{equal::{{dict_element::{{slot::segment}}::kind}}::text}}}}{{dict_element::{{slot::segment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::segment}}::kind}}::tag}}}}<button type="button" class="ht-inline-tag ht-tip-trigger {{#if {{equal::{{dict_element::{{slot::segment}}::tagKind}}::mechanism}}}}ht-inline-tag--mechanism{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{slot::segment}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::segment}}::label}} 태그 정보 보기">{{dict_element::{{slot::segment}}::label}}</button>{{/if}}{{/each}}
+{{#each {{dict_element::{{slot::card}}::descriptionSegments}} segment}}{{#if {{equal::{{dict_element::{{slot::segment}}::kind}}::text}}}}{{dict_element::{{slot::segment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::segment}}::kind}}::tag}}}}<button type="button" class="ht-inline-tag ht-tip-trigger {{#if {{equal::{{dict_element::{{slot::segment}}::tagKind}}::mechanism}}}}ht-inline-tag--mechanism{{/if}}" risu-btn="popoverController|open|tag|{{dict_element::{{slot::segment}}::id}}|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::segment}}::label}} 태그 정보 보기">{{dict_element::{{slot::segment}}::label}}</button>{{/if}}{{/each}}
 </span>
-<span class="ht-rules">{{#each {{dict_element::{{slot::card}}::ruleLines}} rule}}<span>{{#each {{dict_element::{{slot::rule}}::segments}} ruleSegment}}{{#if {{equal::{{dict_element::{{slot::ruleSegment}}::kind}}::text}}}}{{dict_element::{{slot::ruleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::ruleSegment}}::kind}}::tag}}}}<button type="button" class="ht-inline-tag ht-tip-trigger {{#if {{equal::{{dict_element::{{slot::ruleSegment}}::tagKind}}::mechanism}}}}ht-inline-tag--mechanism{{/if}}" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{slot::ruleSegment}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::ruleSegment}}::label}} 태그 정보 보기">{{dict_element::{{slot::ruleSegment}}::label}}</button>{{/if}}{{/each}}
+<span class="ht-rules">{{#each {{dict_element::{{slot::card}}::ruleLines}} rule}}<span>{{#each {{dict_element::{{slot::rule}}::segments}} ruleSegment}}{{#if {{equal::{{dict_element::{{slot::ruleSegment}}::kind}}::text}}}}{{dict_element::{{slot::ruleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::ruleSegment}}::kind}}::tag}}}}<button type="button" class="ht-inline-tag ht-tip-trigger {{#if {{equal::{{dict_element::{{slot::ruleSegment}}::tagKind}}::mechanism}}}}ht-inline-tag--mechanism{{/if}}" risu-btn="popoverController|open|tag|{{dict_element::{{slot::ruleSegment}}::id}}|{{dict_element::{{getvar::battleView}}::turnId}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::ruleSegment}}::label}} 태그 정보 보기">{{dict_element::{{slot::ruleSegment}}::label}}</button>{{/if}}{{/each}}
 </span>
 {{/each}}
 </span>
@@ -386,23 +311,6 @@
 </span>
 {{/if}}
 {{#if {{equal::{{dict_element::{{slot::card}}::hasEffectChoices}}::true}}}}
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-choice-{{dict_element::{{slot::card}}::instanceId}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{slot::card}}::name}} 효과 선택">
-<div class="ht-choice-body">
-<span class="ht-popover-kicker">EFFECT CHOICE</span>
-<span class="ht-popover-title">{{dict_element::{{slot::card}}::name}}</span>
-<span class="ht-popover-copy">이번 사용에 적용할 효과 하나를 선택하세요.</span>
-<div class="ht-choice-options">
-{{#each {{dict_element::{{slot::card}}::effectChoices}} effectChoice}}
-<button type="button" class="ht-choice-option" risu-btn="battleController|selectCardEffect|{{dict_element::{{slot::card}}::instanceId}}|{{dict_element::{{slot::effectChoice}}::id}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" {{#if {{equal::{{dict_element::{{slot::effectChoice}}::selectable}}::false}}}}disabled aria-disabled="true"{{/if}}>
-<strong>{{dict_element::{{slot::effectChoice}}::label}}</strong>
-<span>{{#each {{dict_element::{{slot::effectChoice}}::descriptionSegments}} choiceSegment}}{{#if {{equal::{{dict_element::{{slot::choiceSegment}}::kind}}::text}}}}{{dict_element::{{slot::choiceSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::choiceSegment}}::kind}}::tag}}}}{{dict_element::{{slot::choiceSegment}}::label}}{{/if}}{{/each}}</span>
-{{#if {{equal::{{dict_element::{{slot::effectChoice}}::selectable}}::false}}}}<small>{{dict_element::{{slot::effectChoice}}::unavailableText}}</small>{{/if}}
-</button>
-{{/each}}
-</div>
-<button type="button" class="ht-choice-close" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-choice-{{dict_element::{{slot::card}}::instanceId}}" popovertargetaction="hide">닫기</button>
-</div>
-</div>
 {{/if}}
 </article>
 {{/each}}
@@ -456,11 +364,209 @@
 </div>
 
 <div class="ht-popover-bank">
+{{#if {{not::{{equal::{{getvar::battlePopoverKind}}::none}}}}}}
+{{#if {{equal::{{getvar::battlePopoverTurnId}}::{{dict_element::{{getvar::battleView}}::turnId}}}}}}
+{{#if {{equal::{{getvar::battlePopoverToken}}::{{dict_element::{{getvar::battleView}}::interactionToken}}}}}}
+<div class="ht-shared-popover-layer">
+<button type="button" class="ht-shared-popover-backdrop" risu-btn="popoverController|close" aria-label="상세정보 닫기"></button>
+<div id="ht-shared-popover" class="ht-popover ht-shared-popover is-open" role="dialog" aria-modal="true" aria-label="상세정보">
+<button type="button" class="ht-shared-popover-close" risu-btn="popoverController|close" aria-label="상세정보 닫기">×</button>
+{{#if {{equal::{{getvar::battlePopoverKind}}::environment}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::current}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
+<span class="ht-popover-kicker">ENVIRONMENT</span>
+<span class="ht-popover-title">{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::name}}</span>
+<span class="ht-popover-copy">{{dict_element::{{dict_element::{{getvar::battleView}}::environment}}::description}}</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+{{/if}}
+{{/if}}
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::stations}} station}}
+{{#if {{equal::{{getvar::battlePopoverKind}}::station}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::{{dict_element::{{slot::station}}::id}}}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
+<span class="ht-popover-kicker">{{dict_element::{{dict_element::{{getvar::battleView}}::subway}}::lineName}}</span>
+<span class="ht-popover-title">{{dict_element::{{slot::station}}::name}}</span>
+<span class="ht-popover-meta">
+{{#if {{equal::{{dict_element::{{slot::station}}::isStart}}::true}}}}출발역 · {{/if}}
+{{#if {{equal::{{dict_element::{{slot::station}}::status}}::passed}}}}지나온 역{{/if}}
+{{#if {{equal::{{dict_element::{{slot::station}}::status}}::current}}}}현재 위치{{/if}}
+{{#if {{equal::{{dict_element::{{slot::station}}::status}}::upcoming}}}}남은 경로{{/if}}
+{{#if {{equal::{{dict_element::{{slot::station}}::isDestination}}::true}}}} · 도착역{{/if}}
+</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+{{/if}}
+{{/if}}
+{{/each}}
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::traits}} trait}}
+{{#if {{equal::{{getvar::battlePopoverKind}}::trait}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::{{dict_element::{{slot::trait}}::id}}}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
+<span class="ht-popover-kicker">PUBLIC TRAIT</span>
+<span class="ht-popover-title">{{dict_element::{{slot::trait}}::name}}</span>
+<span class="ht-popover-copy">{{dict_element::{{slot::trait}}::description}}</span>
+<span class="ht-popover-rules">
+{{#each {{dict_element::{{slot::trait}}::ruleLines}} traitRule}}
+<span class="ht-popover-rule">{{#each {{dict_element::{{slot::traitRule}}::segments}} traitRuleSegment}}{{#if {{equal::{{dict_element::{{slot::traitRuleSegment}}::kind}}::text}}}}{{dict_element::{{slot::traitRuleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::traitRuleSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::traitRuleSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::traitRuleSegment}}::label}}</span>{{/if}}{{/each}}</span>
+{{/each}}
+</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+{{/if}}
+{{/if}}
+{{/each}}
+{{#if {{equal::{{getvar::battlePopoverKind}}::resource}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::resistance}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
+<span class="ht-popover-kicker">ENEMY · 교전 수치</span>
+<span class="ht-popover-title">저항 · {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::resistance}}</span>
+<span class="ht-popover-copy">상대가 교전을 버티는 수치입니다. 카드와 효과로 낮추며, 0 이하가 되면 승리합니다.</span>
+<span class="ht-popover-meta">회복 효과로 현재 수치가 증가할 수 있습니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+{{/if}}
+{{/if}}
+{{#if {{equal::{{getvar::battlePopoverKind}}::resource}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::stealth}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
+<span class="ht-popover-kicker">PLAYER · 교전 수치</span>
+<span class="ht-popover-title">은폐 · {{dict_element::{{dict_element::{{getvar::battleView}}::player}}::stealth}}</span>
+<span class="ht-popover-copy">발각되지 않고 행동할 수 있는 여유입니다. 카드 비용과 효과로 감소합니다.</span>
+<span class="ht-popover-meta">상대의 저항이 남은 채 0 이하가 되면 패배하며, 회복 효과로 증가할 수 있습니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+{{/if}}
+{{/if}}
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::plans}} plan}}
+{{#if {{equal::{{dict_element::{{slot::plan}}::status}}::hidden}}}}
+{{#if {{equal::{{getvar::battlePopoverKind}}::enemy_plan}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::{{dict_element::{{slot::plan}}::slotIndex}}}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
+<span class="ht-popover-kicker">상대의 계획</span>
+<span class="ht-popover-title">아직 공개되지 않음</span>
+<span class="ht-popover-copy">상대가 계획을 실행하거나 공개 효과가 적용되기 전까지 내용을 알 수 없습니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+{{/if}}
+{{/if}}
+{{/if}}
+{{/each}}
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::character}}::plans}} plan}}
+{{#if {{equal::{{dict_element::{{slot::plan}}::status}}::revealed}}}}
+{{#if {{equal::{{getvar::battlePopoverKind}}::enemy_plan}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::{{dict_element::{{slot::plan}}::slotIndex}}}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
+<span class="ht-popover-kicker">ENEMY · 상대 계획</span>
+<span class="ht-popover-title">{{dict_element::{{dict_element::{{slot::plan}}::card}}::name}}</span>
+<span class="ht-popover-copy">{{#each {{dict_element::{{dict_element::{{slot::plan}}::card}}::descriptionSegments}} planDescriptionSegment}}{{#if {{equal::{{dict_element::{{slot::planDescriptionSegment}}::kind}}::text}}}}{{dict_element::{{slot::planDescriptionSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::planDescriptionSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::planDescriptionSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::planDescriptionSegment}}::label}}</span>{{/if}}{{/each}}</span>
+<span class="ht-popover-meta">{{#if {{equal::{{dict_element::{{slot::plan}}::hasDuration}}::true}}}}남은 지속시간 · {{dict_element::{{slot::plan}}::remainingTurns}}턴{{/if}}</span>
+<span class="ht-popover-rules">{{#each {{dict_element::{{dict_element::{{slot::plan}}::card}}::ruleLines}} planRule}}<span class="ht-popover-rule">{{#each {{dict_element::{{slot::planRule}}::segments}} planRuleSegment}}{{#if {{equal::{{dict_element::{{slot::planRuleSegment}}::kind}}::text}}}}{{dict_element::{{slot::planRuleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::planRuleSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::planRuleSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::planRuleSegment}}::label}}</span>{{/if}}{{/each}}</span>{{/each}}</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+{{/if}}
+{{/if}}
+{{/if}}
+{{/each}}
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::player}}::plans}} playerPlan}}
+{{#if {{equal::{{dict_element::{{slot::playerPlan}}::status}}::revealed}}}}
+{{#if {{equal::{{getvar::battlePopoverKind}}::player_plan}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::{{dict_element::{{slot::playerPlan}}::slotIndex}}}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
+<span class="ht-popover-kicker">PLAYER · 내 계획</span>
+<span class="ht-popover-title">{{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::name}}</span>
+<span class="ht-popover-copy">{{#each {{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::descriptionSegments}} playerPlanDescriptionSegment}}{{#if {{equal::{{dict_element::{{slot::playerPlanDescriptionSegment}}::kind}}::text}}}}{{dict_element::{{slot::playerPlanDescriptionSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::playerPlanDescriptionSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::playerPlanDescriptionSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::playerPlanDescriptionSegment}}::label}}</span>{{/if}}{{/each}}</span>
+<span class="ht-popover-meta">{{#if {{equal::{{dict_element::{{slot::playerPlan}}::hasDuration}}::true}}}}남은 지속시간 · {{dict_element::{{slot::playerPlan}}::remainingTurns}}턴{{/if}}</span>
+<span class="ht-popover-rules">{{#each {{dict_element::{{dict_element::{{slot::playerPlan}}::card}}::ruleLines}} playerPlanRule}}<span class="ht-popover-rule">{{#each {{dict_element::{{slot::playerPlanRule}}::segments}} playerPlanRuleSegment}}{{#if {{equal::{{dict_element::{{slot::playerPlanRuleSegment}}::kind}}::text}}}}{{dict_element::{{slot::playerPlanRuleSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::playerPlanRuleSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::playerPlanRuleSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::playerPlanRuleSegment}}::label}}</span>{{/if}}{{/each}}</span>{{/each}}</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+{{/if}}
+{{/if}}
+{{/if}}
+{{/each}}
+{{#if {{equal::{{getvar::battlePopoverKind}}::mood}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::rejection}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
+<span class="ht-popover-kicker">MOOD</span>
+<span class="ht-popover-title">거절 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::rejection}}</span>
+<span class="ht-popover-copy">현재 거절 무드 토큰 수입니다.</span>
+<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+{{/if}}
+{{/if}}
+{{#if {{equal::{{getvar::battlePopoverKind}}::mood}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::suspicion}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
+<span class="ht-popover-kicker">MOOD</span>
+<span class="ht-popover-title">의심 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::suspicion}}</span>
+<span class="ht-popover-copy">현재 의심 무드 토큰 수입니다.</span>
+<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+{{/if}}
+{{/if}}
+{{#if {{equal::{{getvar::battlePopoverKind}}::mood}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::ignore}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
+<span class="ht-popover-kicker">MOOD</span>
+<span class="ht-popover-title">무시 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::ignore}}</span>
+<span class="ht-popover-copy">현재 무시 무드 토큰 수입니다.</span>
+<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+{{/if}}
+{{/if}}
+{{#if {{equal::{{getvar::battlePopoverKind}}::mood}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::confusion}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
+<span class="ht-popover-kicker">MOOD</span>
+<span class="ht-popover-title">혼란 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::confusion}}</span>
+<span class="ht-popover-copy">현재 혼란 무드 토큰 수입니다.</span>
+<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+{{/if}}
+{{/if}}
+{{#if {{equal::{{getvar::battlePopoverKind}}::mood}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::compliance}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
+<span class="ht-popover-kicker">MOOD</span>
+<span class="ht-popover-title">순응 · {{dict_element::{{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::mood}}::tokens}}::compliance}}</span>
+<span class="ht-popover-copy">현재 순응 무드 토큰 수입니다.</span>
+<span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
+<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+{{/if}}
+{{/if}}
+{{#each {{dict_element::{{dict_element::{{getvar::battleView}}::hand}}::items}} card}}
+{{#if {{equal::{{dict_element::{{slot::card}}::hasEffectChoices}}::true}}}}
+{{#if {{equal::{{getvar::battlePopoverKind}}::choice}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::{{dict_element::{{slot::card}}::instanceId}}}}}}
+<div class="ht-choice-body">
+<span class="ht-popover-kicker">EFFECT CHOICE</span>
+<span class="ht-popover-title">{{dict_element::{{slot::card}}::name}}</span>
+<span class="ht-popover-copy">이번 사용에 적용할 효과 하나를 선택하세요.</span>
+<div class="ht-choice-options">
+{{#each {{dict_element::{{slot::card}}::effectChoices}} effectChoice}}
+<button type="button" class="ht-choice-option" risu-btn="battleController|selectCardEffect|{{dict_element::{{slot::card}}::instanceId}}|{{dict_element::{{slot::effectChoice}}::id}}|{{dict_element::{{getvar::battleView}}::interactionToken}}" {{#if {{equal::{{dict_element::{{slot::effectChoice}}::selectable}}::false}}}}disabled aria-disabled="true"{{/if}}>
+<strong>{{dict_element::{{slot::effectChoice}}::label}}</strong>
+<span>{{#each {{dict_element::{{slot::effectChoice}}::descriptionSegments}} choiceSegment}}{{#if {{equal::{{dict_element::{{slot::choiceSegment}}::kind}}::text}}}}{{dict_element::{{slot::choiceSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::choiceSegment}}::kind}}::tag}}}}{{dict_element::{{slot::choiceSegment}}::label}}{{/if}}{{/each}}</span>
+{{#if {{equal::{{dict_element::{{slot::effectChoice}}::selectable}}::false}}}}<small>{{dict_element::{{slot::effectChoice}}::unavailableText}}</small>{{/if}}
+</button>
+{{/each}}
+</div>
+<button type="button" class="ht-choice-close" risu-btn="popoverController|close">닫기</button>
+</div>
+{{/if}}
+{{/if}}
+{{/if}}
+{{/each}}
 {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::available}}::true}}}}
 {{#each {{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::resourceChanges}}::resistance}} resistanceChangePopup}}
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-change-{{dict_element::{{slot::resistanceChangePopup}}::sequence}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{dict_element::{{slot::resistanceChangePopup}}::source}}::name}} 상세정보">
+{{#if {{equal::{{getvar::battlePopoverKind}}::change}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::{{dict_element::{{slot::resistanceChangePopup}}::sequence}}}}}}
 <div class="ht-popover-dialog">
-<button type="button" class="ht-popover-dismiss ht-popover-close" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-change-{{dict_element::{{slot::resistanceChangePopup}}::sequence}}" popovertargetaction="hide" aria-label="상세정보 닫기">×</button>
 <span class="ht-popover-kicker">{{dict_element::{{dict_element::{{slot::resistanceChangePopup}}::source}}::kindLabel}} · 저항 {{dict_element::{{slot::resistanceChangePopup}}::amountLabel}}</span>
 <span class="ht-popover-title">{{dict_element::{{dict_element::{{slot::resistanceChangePopup}}::source}}::name}}</span>
 <span class="ht-popover-copy">{{#each {{dict_element::{{dict_element::{{slot::resistanceChangePopup}}::source}}::descriptionSegments}} resistanceDescriptionSegment}}{{#if {{equal::{{dict_element::{{slot::resistanceDescriptionSegment}}::kind}}::text}}}}{{dict_element::{{slot::resistanceDescriptionSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::resistanceDescriptionSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::resistanceDescriptionSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::resistanceDescriptionSegment}}::label}}</span>{{/if}}{{/each}}</span>
@@ -476,12 +582,15 @@
 </details>
 {{/if}}
 </div>
-</div>
+{{/if}}
+{{/if}}
 {{/each}}
+{{/if}}
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::available}}::true}}}}
 {{#each {{dict_element::{{dict_element::{{dict_element::{{getvar::battleView}}::lastTurn}}::resourceChanges}}::stealth}} stealthChangePopup}}
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-change-{{dict_element::{{slot::stealthChangePopup}}::sequence}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{dict_element::{{slot::stealthChangePopup}}::source}}::name}} 상세정보">
+{{#if {{equal::{{getvar::battlePopoverKind}}::change}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::{{dict_element::{{slot::stealthChangePopup}}::sequence}}}}}}
 <div class="ht-popover-dialog">
-<button type="button" class="ht-popover-dismiss ht-popover-close" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-change-{{dict_element::{{slot::stealthChangePopup}}::sequence}}" popovertargetaction="hide" aria-label="상세정보 닫기">×</button>
 <span class="ht-popover-kicker">{{dict_element::{{dict_element::{{slot::stealthChangePopup}}::source}}::kindLabel}} · 은폐 {{dict_element::{{slot::stealthChangePopup}}::amountLabel}}</span>
 <span class="ht-popover-title">{{dict_element::{{dict_element::{{slot::stealthChangePopup}}::source}}::name}}</span>
 <span class="ht-popover-copy">{{#each {{dict_element::{{dict_element::{{slot::stealthChangePopup}}::source}}::descriptionSegments}} stealthDescriptionSegment}}{{#if {{equal::{{dict_element::{{slot::stealthDescriptionSegment}}::kind}}::text}}}}{{dict_element::{{slot::stealthDescriptionSegment}}::value}}{{/if}}{{#if {{equal::{{dict_element::{{slot::stealthDescriptionSegment}}::kind}}::tag}}}}<span class="ht-popover-tag {{#if {{equal::{{dict_element::{{slot::stealthDescriptionSegment}}::tagKind}}::mechanism}}}}ht-popover-tag--mechanism{{/if}}">{{dict_element::{{slot::stealthDescriptionSegment}}::label}}</span>{{/if}}{{/each}}</span>
@@ -497,18 +606,26 @@
 </details>
 {{/if}}
 </div>
-</div>
+{{/if}}
+{{/if}}
 {{/each}}
 {{/if}}
 {{#each {{dict_element::{{getvar::battleView}}::tagGlossary}} glossaryTag}}
-<div id="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{slot::glossaryTag}}::id}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{slot::glossaryTag}}::label}} 태그 정보">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{dict_element::{{getvar::battleView}}::battleId}}-{{dict_element::{{getvar::battleView}}::turnId}}-tag-{{dict_element::{{slot::glossaryTag}}::id}}" popovertargetaction="hide">
+{{#if {{equal::{{getvar::battlePopoverKind}}::tag}}}}
+{{#if {{equal::{{getvar::battlePopoverId}}::{{dict_element::{{slot::glossaryTag}}::id}}}}}}
+<button type="button" class="ht-popover-dismiss" risu-btn="popoverController|close">
 <span class="ht-popover-kicker">{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::action}}}}ACTION TAG{{/if}}{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::mechanism}}}}MECHANISM{{/if}}</span>
 <span class="ht-popover-title">{{dict_element::{{slot::glossaryTag}}::label}}</span>
 <span class="ht-popover-copy">{{dict_element::{{slot::glossaryTag}}::tooltip}}</span>
 <span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
 </button>
-</div>
+{{/if}}
+{{/if}}
 {{/each}}
+</div>
+</div>
+{{/if}}
+{{/if}}
+{{/if}}
 </div>
 </section>
