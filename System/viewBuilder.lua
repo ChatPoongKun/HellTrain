@@ -886,155 +886,6 @@
         }
     end
 
-    local CARD_REASON_MESSAGES = {
-        insufficient_stealth = "은폐가 부족합니다",
-        no_available_effect_choice = "선택 가능한 효과가 없습니다",
-    }
-
-    local CARD_DISPLAY_FIELD_NAMES = {
-        "className",
-        "orderLabel",
-        "showDetail",
-        "showPreviewFlag",
-        "showChoicePopover",
-        "choicePopoverId",
-        "actionKind",
-        "actionCommand",
-        "actionTarget",
-        "actionAriaLabel",
-        "actionAriaPressed",
-        "actionAriaExpanded",
-        "actionDisabled",
-        "helpPrimary",
-        "helpMessages",
-    }
-
-    local EFFECT_CHOICE_DISPLAY_FIELD_NAMES = {
-        "command",
-        "disabled",
-        "showUnavailableText",
-    }
-
-    local function makeChoicePopoverId(battleId, turnId, instanceId)
-        return table.concat({ "htp", tostring(battleId or ""), tostring(turnId or ""), "choice", tostring(instanceId or "") }, "-")
-    end
-
-    local function makeCardInteractionCommand(instanceId, interactionToken)
-        if type(interactionToken) ~= "string" or interactionToken == "" then
-            return ""
-        end
-        return table.concat({
-            "battleController",
-            "clickCard",
-            tostring(instanceId or ""),
-            interactionToken,
-        }, "|")
-    end
-
-    local function makeEffectChoiceCommand(instanceId, choiceId, interactionToken)
-        if type(interactionToken) ~= "string" or interactionToken == "" then
-            return ""
-        end
-        return table.concat({
-            "battleController",
-            "selectCardEffect",
-            tostring(instanceId or ""),
-            tostring(choiceId or ""),
-            interactionToken,
-        }, "|")
-    end
-
-    local function buildEffectChoiceDisplay(instanceId, choice, interactionToken)
-        return {
-            command = makeEffectChoiceCommand(instanceId, choice.id, interactionToken),
-            disabled = choice.selectable ~= true,
-            showUnavailableText = choice.selectable ~= true,
-        }
-    end
-
-    local function buildCardDisplay(card, context)
-        local focused = context.phase == "selecting"
-            and context.focusedInstanceId == card.instanceId
-        local classNames = { "ht-card" }
-        if focused then classNames[#classNames + 1] = "is-focused" end
-        if card.selected == true then classNames[#classNames + 1] = "is-selected" end
-        if card.origin == "preview" then classNames[#classNames + 1] = "is-preview" end
-        if card.playable == false then classNames[#classNames + 1] = "is-unplayable" end
-
-        local choicePopoverId = makeChoicePopoverId(
-            context.battleId,
-            context.turnId,
-            card.instanceId
-        )
-        local actionKind = card.selected ~= true and card.hasEffectChoices == true
-            and "choose"
-            or "toggle"
-        local helpPrimary
-        if card.selected == true then
-            helpPrimary = "다시 누르면 선택 취소"
-        elseif card.hasEffectChoices == true then
-            helpPrimary = "누르면 사용할 효과 선택"
-        else
-            helpPrimary = "누르면 상세 표시 및 사용 등록"
-        end
-
-        local helpMessages = {}
-        if card.selected == true
-            and card.hasEffectChoices == true
-            and type(card.selectedEffectChoice) == "table" then
-            helpMessages[#helpMessages + 1] = "선택 효과 · " .. tostring(card.selectedEffectChoice.label or "")
-        end
-        local reasonMessage = CARD_REASON_MESSAGES[card.reasonCode]
-        if reasonMessage ~= nil then
-            helpMessages[#helpMessages + 1] = reasonMessage
-        end
-
-        return {
-            className = table.concat(classNames, " "),
-            orderLabel = card.selected == true and tostring(card.selectionOrder) or "＋",
-            showDetail = focused,
-            showPreviewFlag = card.origin == "preview",
-            showChoicePopover = card.hasEffectChoices == true,
-            choicePopoverId = choicePopoverId,
-            actionKind = actionKind,
-            actionCommand = actionKind == "toggle"
-                and makeCardInteractionCommand(card.instanceId, context.interactionToken)
-                or "",
-            actionTarget = actionKind == "choose" and choicePopoverId or "",
-            actionAriaLabel = actionKind == "choose"
-                and (tostring(card.name or "") .. " 효과 선택")
-                or (tostring(card.name or "") .. " 카드 상세 보기 및 선택"),
-            actionAriaPressed = card.selected == true and "true" or "false",
-            actionAriaExpanded = focused and "true" or "false",
-            actionDisabled = context.locked == true,
-            helpPrimary = helpPrimary,
-            helpMessages = helpMessages,
-        }
-    end
-
-    local function appendFields(target, fields)
-        for key, value in pairs(fields) do
-            target[key] = value
-        end
-        return target
-    end
-
-    local function displayValuesEqual(left, right, active)
-        if type(left) ~= type(right) then return false end
-        if type(left) ~= "table" then return left == right end
-        active = active or {}
-        active[left] = active[left] or {}
-        if active[left][right] then return true end
-        active[left][right] = true
-        for key, value in pairs(left) do
-            if not displayValuesEqual(value, right[key], active) then return false end
-        end
-        for key in pairs(right) do
-            if left[key] == nil then return false end
-        end
-        return true
-    end
-
     local function buildBattleView(state, staticData, context)
         local errors = {}
         local data = normalizeStaticData(staticData)
@@ -1316,14 +1167,6 @@
 
         local handItems = {}
         local playableById = {}
-        local cardDisplayContext = {
-            battleId = displayState.battleId,
-            turnId = turnId,
-            phase = phase,
-            locked = locked,
-            interactionToken = interactionToken,
-            focusedInstanceId = focusedInstanceId,
-        }
         for slot, entry in ipairs(displayEntries) do
             local instance = entry.instance
             local card = data.cards[instance.cardId]
@@ -1380,7 +1223,7 @@
                         appendNestedErrors(errors, choicePath, choiceReport)
                     end
                     if selectable then selectableChoiceCount = selectableChoiceCount + 1 end
-                    local effectChoiceView = {
+                    effectChoices[#effectChoices + 1] = {
                         id = choice.id,
                         label = choice.label,
                         descriptionSegments = tokenizeForBuild(choice.description, data.registry, choicePath .. ".description", errors),
@@ -1388,15 +1231,6 @@
                         reasonCode = selectable and "none" or (choiceReport and choiceReport.reasonCode or (locked and "locked" or "unavailable")),
                         unavailableText = choice.unavailableText or "현재 상태에서는 이 효과를 선택할 수 없습니다.",
                     }
-                    appendFields(
-                        effectChoiceView,
-                        buildEffectChoiceDisplay(
-                            instance.instanceId,
-                            effectChoiceView,
-                            interactionToken
-                        )
-                    )
-                    effectChoices[#effectChoices + 1] = effectChoiceView
                 end
                 if not locked and #effectChoices > 0 and selectableChoiceCount == 0 then
                     playable = false
@@ -1415,7 +1249,7 @@
                     end
                 end
 
-                local cardView = {
+                table.insert(handItems, {
                     slot = slot,
                     origin = entry.origin,
                     instanceId = instance.instanceId,
@@ -1436,9 +1270,7 @@
                     reasonCode = reasonCode,
                     selected = selectedOrder[instance.instanceId] ~= nil,
                     selectionOrder = selectedOrder[instance.instanceId] or 0,
-                }
-                appendFields(cardView, buildCardDisplay(cardView, cardDisplayContext))
-                table.insert(handItems, cardView)
+                })
             end
         end
 
@@ -1868,21 +1700,6 @@
             reasonCode = true,
             selected = true,
             selectionOrder = true,
-            className = true,
-            orderLabel = true,
-            showDetail = true,
-            showPreviewFlag = true,
-            showChoicePopover = true,
-            choicePopoverId = true,
-            actionKind = true,
-            actionCommand = true,
-            actionTarget = true,
-            actionAriaLabel = true,
-            actionAriaPressed = true,
-            actionAriaExpanded = true,
-            actionDisabled = true,
-            helpPrimary = true,
-            helpMessages = true,
         }, path, errors)
         if not isInteger(value.slot, 1) then
             addError(errors, "invalid_card_slot", path .. ".slot", "손패 슬롯이 올바르지 않습니다.")
@@ -1919,9 +1736,6 @@
                         selectable = true,
                         reasonCode = true,
                         unavailableText = true,
-                        command = true,
-                        disabled = true,
-                        showUnavailableText = true,
                     }, choicePath, errors)
                     if not isAsciiId(choice.id) or choiceIds[choice.id] then
                         addError(errors, "invalid_effect_choice_id", choicePath .. ".id", "효과 선택지 ID가 올바르지 않거나 중복되었습니다.")
@@ -1939,14 +1753,6 @@
                     end
                     if type(choice.unavailableText) ~= "string" or choice.unavailableText == "" then
                         addError(errors, "invalid_effect_choice_unavailable_text", choicePath .. ".unavailableText", "효과 선택 불가 안내가 필요합니다.")
-                    end
-                    if type(choice.command) ~= "string"
-                        or type(choice.disabled) ~= "boolean"
-                        or type(choice.showUnavailableText) ~= "boolean" then
-                        addError(errors, "invalid_effect_choice_display", choicePath, "효과 선택지 표시 결정이 올바르지 않습니다.")
-                    elseif choice.disabled ~= (choice.selectable ~= true)
-                        or choice.showUnavailableText ~= choice.disabled then
-                        addError(errors, "effect_choice_display_mismatch", choicePath, "효과 선택지 표시 결정이 선택 가능 상태와 다릅니다.")
                     end
                 end
             end
@@ -1996,33 +1802,6 @@
             addError(errors, "selected_order_missing", path .. ".selectionOrder", "선택 카드에는 1 이상의 선택 순서가 필요합니다.")
         elseif not value.selected and value.selectionOrder ~= 0 then
             addError(errors, "unselected_order_present", path .. ".selectionOrder", "미선택 카드의 선택 순서는 0이어야 합니다.")
-        end
-        for _, field in ipairs({
-            "className", "orderLabel", "choicePopoverId", "actionKind",
-            "actionCommand", "actionTarget", "actionAriaLabel",
-            "actionAriaPressed", "actionAriaExpanded", "helpPrimary",
-        }) do
-            if type(value[field]) ~= "string" then
-                addError(errors, "invalid_card_display_string", path .. "." .. field, "카드 표시 결정 문자열이 필요합니다.")
-            end
-        end
-        for _, field in ipairs({
-            "showDetail", "showPreviewFlag", "showChoicePopover", "actionDisabled",
-        }) do
-            if type(value[field]) ~= "boolean" then
-                addError(errors, "invalid_card_display_flag", path .. "." .. field, "카드 표시 결정 플래그는 불리언이어야 합니다.")
-            end
-        end
-        if value.actionKind ~= "toggle" and value.actionKind ~= "choose" then
-            addError(errors, "invalid_card_action_kind", path .. ".actionKind", "카드 동작 종류가 올바르지 않습니다.")
-        end
-        local helpCount = getArrayLength(value.helpMessages, path .. ".helpMessages", errors)
-        if helpCount then
-            for index = 1, helpCount do
-                if type(value.helpMessages[index]) ~= "string" or value.helpMessages[index] == "" then
-                    addError(errors, "invalid_card_help_message", path .. ".helpMessages[" .. index .. "]", "카드 도움말은 비어 있지 않은 문자열이어야 합니다.")
-                end
-            end
         end
     end
 
@@ -2394,35 +2173,6 @@
                     local item = view.hand.items[index]
                     local itemPath = "$.hand.items[" .. index .. "]"
                     validateCardView(item, itemPath, errors)
-                    if type(item) == "table" then
-                        local expectedDisplay = buildCardDisplay(item, {
-                            battleId = view.battleId,
-                            turnId = view.turnId,
-                            phase = view.phase,
-                            locked = view.locked,
-                            interactionToken = view.interactionToken,
-                            focusedInstanceId = type(view.selection) == "table"
-                                and view.selection.focusedInstanceId
-                                or nil,
-                        })
-                        for _, field in ipairs(CARD_DISPLAY_FIELD_NAMES) do
-                            if not displayValuesEqual(item[field], expectedDisplay[field]) then
-                                addError(errors, "card_display_mismatch", itemPath .. "." .. field, "카드 표시 결정이 정규 View 계산과 다릅니다.")
-                            end
-                        end
-                        for choiceIndex, choice in ipairs(type(item.effectChoices) == "table" and item.effectChoices or {}) do
-                            local expectedChoiceDisplay = buildEffectChoiceDisplay(
-                                item.instanceId,
-                                choice,
-                                view.interactionToken
-                            )
-                            for _, field in ipairs(EFFECT_CHOICE_DISPLAY_FIELD_NAMES) do
-                                if not displayValuesEqual(choice[field], expectedChoiceDisplay[field]) then
-                                    addError(errors, "effect_choice_display_mismatch", itemPath .. ".effectChoices[" .. choiceIndex .. "]." .. field, "효과 선택 표시 결정이 정규 View 계산과 다릅니다.")
-                                end
-                            end
-                        end
-                    end
                     if type(item) == "table" and item.slot ~= index then
                         addError(errors, "hand_slot_mismatch", itemPath .. ".slot", "손패 배열 순서와 슬롯이 다릅니다.")
                     end
