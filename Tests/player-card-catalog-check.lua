@@ -16,9 +16,12 @@ local function loadModule(path)
 end
 
 local database = loadModule("DB/PlayerCards.db")
+local registry = loadModule("DB/GameRegistry.db")
 assert(database.schemaVersion == 1)
 assert(database.kind == "cardDatabase")
 assert(type(database.cards) == "table")
+assert(registry.schemaVersion == 1)
+assert(registry.kind == "gameRegistry")
 
 local expectedIds = {
     "p002_trail_off",
@@ -92,6 +95,41 @@ local validMechanisms = {
     insight = true,
 }
 
+local publicTagIds = {}
+for tagId, entry in pairs(registry.actionTags) do
+    publicTagIds[tagId] = true
+    assert(type(entry.label) == "string" and entry.label ~= "", "missing action tag label: " .. tagId)
+    assert(not string.find(entry.label, "%a"), "action tag label must be Korean: " .. tagId)
+end
+for mechanismId, entry in pairs(registry.mechanisms) do
+    publicTagIds[mechanismId] = true
+    assert(type(entry.label) == "string" and entry.label ~= "", "missing mechanism label: " .. mechanismId)
+    assert(not string.find(entry.label, "%a"), "mechanism label must be Korean: " .. mechanismId)
+end
+
+local function assertLocalizedString(value, path)
+    if type(value) ~= "string" then
+        return
+    end
+    local visible = string.gsub(value, "::tag%[[a-z][a-z0-9_]*%]::", "")
+    for tagId in pairs(publicTagIds) do
+        assert(
+            not string.find(visible, "%f[%a]" .. tagId .. "%f[^%a]"),
+            "raw tag id leaked into user-facing text: " .. path .. "/" .. tagId
+        )
+    end
+end
+
+local function assertLocalizedValue(value, path)
+    if type(value) == "string" then
+        assertLocalizedString(value, path)
+    elseif type(value) == "table" then
+        for key, item in pairs(value) do
+            assertLocalizedValue(item, path .. "." .. tostring(key))
+        end
+    end
+end
+
 local count = 0
 for cardId, card in pairs(database.cards) do
     count = count + 1
@@ -116,6 +154,15 @@ for cardId, card in pairs(database.cards) do
         not (card.selectionPreview ~= nil and card.resolve ~= nil),
         "selection preview card cannot define resolve: " .. cardId
     )
+
+    assertLocalizedValue(card.description, cardId .. ".description")
+    assertLocalizedValue(card.rules, cardId .. ".rules")
+    assertLocalizedValue(card.narration, cardId .. ".narration")
+    for index, choice in ipairs(card.effectChoices or {}) do
+        assertLocalizedString(choice.label, cardId .. ".effectChoices[" .. index .. "].label")
+        assertLocalizedString(choice.description, cardId .. ".effectChoices[" .. index .. "].description")
+        assertLocalizedString(choice.unavailableText, cardId .. ".effectChoices[" .. index .. "].unavailableText")
+    end
 end
 
 assert(count == #expectedIds, "player card count mismatch")
