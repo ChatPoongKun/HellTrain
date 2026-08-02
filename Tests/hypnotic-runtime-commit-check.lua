@@ -52,29 +52,37 @@ end
 local staticReport = assertOk("staticData.loadAll", runScript(nil, "staticData", "loadAll"))
 local staticData = assert(staticReport.data)
 
-local initialized
+local boot = assertOk("battleBootstrap.verticalSlice", runScript(nil, "battleBootstrap", "verticalSlice", {
+    battleId = "hypnotic-ui-check",
+    seed = 1,
+}, staticData))
+
+-- Keep all production modules and state validation in the path, but make the first
+-- draw deterministic by rotating the already-valid player deck before initialization.
 local hypnoticInstance
-local seedUsed
-for seed = 1, 200 do
-    local boot = assertOk("battleBootstrap.verticalSlice", runScript(nil, "battleBootstrap", "verticalSlice", {
-        battleId = "hypnotic-ui-check-" .. seed,
-        seed = seed,
-    }, staticData))
-    local turnId = boot.state.battleId .. "-turn-001"
-    local candidate = assertOk("turnInitializer.prepareTurn", runScript(nil, "turnInitializer", "prepareTurn", boot.state, staticData, {
-        turnId = turnId,
-    }))
-    for _, instance in ipairs(candidate.state.cardInstances) do
-        if instance.cardId == "hypnotic_whisper" and instance.zone == "hand" then
-            initialized = candidate
+for _, instance in ipairs(boot.state.cardInstances) do
+    if instance.owner == "player" and instance.zone == "deck" then
+        if instance.cardId == "hypnotic_whisper" then
             hypnoticInstance = instance
-            seedUsed = seed
-            break
+            instance.position = 1
+        else
+            instance.position = instance.position + 1
         end
     end
-    if initialized ~= nil then break end
 end
-assert(initialized ~= nil, "could not draw hypnotic_whisper in seed search")
+assert(hypnoticInstance ~= nil, "hypnotic_whisper instance is missing")
+
+local turnId = boot.state.battleId .. "-turn-001"
+local initialized = assertOk("turnInitializer.prepareTurn", runScript(nil, "turnInitializer", "prepareTurn", boot.state, staticData, {
+    turnId = turnId,
+}))
+for _, instance in ipairs(initialized.state.cardInstances) do
+    if instance.instanceId == hypnoticInstance.instanceId then
+        hypnoticInstance = instance
+        break
+    end
+end
+assert(hypnoticInstance.zone == "hand", "hypnotic_whisper was not drawn")
 
 local state = initialized.state
 local draft = assertOk("turnDraft.newDraft", runScript(nil, "turnDraft", "newDraft", state, staticData)).draft
@@ -92,7 +100,6 @@ local eventTypes = {}
 for _, event in ipairs(pending.turnResult.events) do
     eventTypes[#eventTypes + 1] = event.type .. ":" .. tostring(event.source and event.source.id or "")
 end
-print("seed=" .. seedUsed)
 print("events=" .. table.concat(eventTypes, ","))
 
 local committed = assertOk("battleRuntime.commitPending", runScript(nil, "battleRuntime", "commitPending", state, staticData, pending))
