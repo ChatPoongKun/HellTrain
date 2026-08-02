@@ -1919,7 +1919,7 @@
                             makeError(
                                 "invalid_mood_state_effect",
                                 path,
-                                "확정 무드 은폐 효과 사건의 위치 또는 출처가 올바르지 않습니다."
+                                "무드 은폐 효과 사건의 위치 또는 출처가 올바르지 않습니다."
                             ),
                         })
                     end
@@ -1961,7 +1961,7 @@
                             makeError(
                                 "invalid_mood_state_effect",
                                 path .. ".payload",
-                                "확정 무드 은폐 효과가 무드 평가 결과와 다릅니다."
+                                "무드 은폐 효과가 무드 평가 결과와 다릅니다."
                             ),
                         })
                     end
