@@ -197,7 +197,7 @@ return {
         p015_circle_of_trust = planCard(
             "p015_circle_of_trust", "신뢰의 고리", "approach", 2,
             "::tag[approach]:: 행동으로 접촉을 강화하는 ::tag[plan]::을 배치합니다.",
-            { "지속 3턴, 충전 2.", "긍정 무드에서 플레이어 contact 카드 해결 뒤 저항 피해 3." },
+            { "지속 3턴, 충전 2.", "긍정 무드에서 플레이어의 ::tag[contact]:: 카드 해결 뒤 저항 피해 3." },
             "다음 접촉을 위한 신뢰의 흐름을 만든다.",
             "이어진 신뢰를 발판 삼아 접촉의 압박을 높인다.",
             {
@@ -441,7 +441,7 @@ return {
         p036_question_for_reaction = card(
             "p036_question_for_reaction", "반응 유도 질문", "deception", 1, 2, {},
             "::tag[deception]:: 행동으로 공개된 방어 태세를 흔듭니다.",
-            { "혼란 토큰 1개 추가.", "공개 태그가 vigilance 또는 block이면 추가 피해 2." },
+            { "혼란 토큰 1개 추가.", "공개 행동 태그가 ::tag[vigilance]:: 또는 ::tag[block]::이면 추가 피해 2." },
             "방어에 집중한 틈을 노려 대답하기 곤란한 질문을 던진다.",
             {
                 resolve = function(context)
