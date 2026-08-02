@@ -1,30 +1,51 @@
-name: Diagnose hypnotic UI regression
+name: Apply mood source presentation fix
 
 on:
   push:
     branches:
       - fix/mood-tail-projector
-  pull_request:
-    branches:
-      - main
-    types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  inspect:
+  apply-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: fix/mood-tail-projector
+          fetch-depth: 0
+
+      - name: Apply presentation contract fix
+        run: python3 .github/scripts/apply_mood_source_presentation_fix.py
+
       - name: Install Lua
         run: |
           sudo apt-get update
           sudo apt-get install -y lua5.4
-      - name: Run hypnotic runtime commit trace
+
+      - name: Validate runtime and UI publication path
         shell: bash
         run: |
           set -euo pipefail
+          lua5.4 -e 'for _, path in ipairs({"System/turnPresentation.lua", "System/viewBuilder.lua", "System/turnEventProjector.lua"}) do local f=assert(io.open(path,"rb")); local s=f:read("*a"); f:close(); assert(load("return " .. s, "@" .. path, "t", _G)) end'
+          luac5.4 -p System/main.lua
+          luac5.4 -p Tests/hypnotic-runtime-commit-check.lua
           lua5.4 Tests/hypnotic-runtime-commit-check.lua
+          lua5.4 Tests/mood-tail-projector-check.lua
+          lua5.4 Tests/character-mood-score-check.lua
+          git diff --check
+          test "$(git diff --name-only)" = $'System/main.lua\nSystem/turnPresentation.lua\nSystem/viewBuilder.lua'
+
+      - name: Commit validated fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/scripts/apply_mood_source_presentation_fix.py
+          rm .github/workflows/diagnose-hypnotic-ui.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: present mood-state effects in battle UI"
+          git push origin HEAD:fix/mood-tail-projector
