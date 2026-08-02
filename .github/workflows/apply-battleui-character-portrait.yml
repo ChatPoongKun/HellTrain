@@ -79,8 +79,8 @@ jobs:
           PY
 
           git rm "$workflow_path"
-          git diff --check
-          changed="$(git diff --name-only | sort)"
+          git diff --check HEAD
+          changed="$(git diff --name-only HEAD | sort)"
           expected="$(printf '%s\n' "$workflow_path" 'html/battleui.html' | sort)"
           if [[ "$changed" != "$expected" ]]; then
             echo "unexpected changed files" >&2
