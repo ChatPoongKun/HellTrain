@@ -34,6 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git diff -- System/turnEventProjector.lua
           luac5.4 -p System/turnEventProjector.lua
           luac5.4 -p System/main.lua
           luac5.4 -p Tests/mood-tail-projector-check.lua
