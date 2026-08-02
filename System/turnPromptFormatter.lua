@@ -664,14 +664,11 @@
             "이미 조우 장면이 끝난 뒤의 전투 턴이므로 이전 이동, 암전, 의식 상실, 대상 등장 장면을 되풀이하지 마십시오.",
             "이 지침은 기존 프리셋을 대체하지 않고 이번 턴의 확정 사실만 추가합니다.",
         }
-<<<<<<< HEAD
         if pending.beforeState.turnNumber == 1
             and string.find(pending.beforeState.battleId, "-session-", 1, true) then
             local character = staticData.characters[pending.beforeState.character.characterId]
             instructions[#instructions + 1] = "이번 턴 사건을 이어서 묘사하십시오."
         end
-=======
->>>>>>> b5280ba3a1139a115bb61e1adf8a279bda2fc171
         if pending.afterState.status == "defeat" then
             instructions[#instructions + 1] = "패배 장면의 끝에서 경찰이 다가와 플레이어를 연행하게 되고 열차 밖으로 끌려나가는 순간 시야가 검게 끊기며 의식을 잃는 모습으로 마무리 하십시오."
         end
