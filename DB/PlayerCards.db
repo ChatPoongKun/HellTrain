@@ -431,11 +431,10 @@ return {
                         { id = "draw_one", op = "draw_cards", target = "player", amount = 1 },
                     },
                 },
-                resolve = function(context)
-                    if context.mood == "suspicion" then return { addMood("ignore", 1) } end
-                    if context.mood == "rejection" then return { addMood("confusion", 1) } end
-                    return {}
-                end,
+                moodEffects = {
+                    suspicion = function(context) return { addMood("ignore", 1) } end,
+                    rejection = function(context) return { addMood("confusion", 1) } end,
+                },
             }
         ),
 
