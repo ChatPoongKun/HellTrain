@@ -1,1 +1,1 @@
-Finalize the one-shot battle UI character portrait patch with safe staging.
+Apply the corrected Risu {{img::characterName}} portrait binding.
