@@ -1,1 +1,1 @@
-Run the one-shot battle UI character portrait patch after fixing staged-file validation.
+Finalize the one-shot battle UI character portrait patch with safe staging.
