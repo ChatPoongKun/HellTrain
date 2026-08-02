@@ -1,430 +1,537 @@
+local function command(op, target, amount, mood, cause)
+    local value = { op = op, target = target, cause = cause or "cardEffect" }
+    if amount ~= nil then value.amount = amount end
+    if mood ~= nil then value.mood = mood end
+    return value
+end
+
+local function damage(amount, cause)
+    return command("damage_resistance", "character", amount, nil, cause)
+end
+
+local function recoverStealth(amount, cause)
+    return command("recover_stealth", "player", amount, nil, cause)
+end
+
+local function addMood(mood, amount, cause)
+    return command("add_mood_token", "character", amount, mood, cause)
+end
+
+local function removeMood(mood, amount, cause)
+    return command("remove_mood_token", "character", amount, mood, cause)
+end
+
+local function forceMood(mood, cause)
+    return command("force_mood", "character", nil, mood, cause)
+end
+
+local function negative(mood)
+    return mood == "suspicion" or mood == "rejection"
+end
+
+local function positive(mood)
+    return mood == "confusion" or mood == "compliance"
+end
+
+local function nonNegative(mood)
+    return mood == "ignore" or positive(mood)
+end
+
+local function card(id, name, tag, cost, resistanceDamage, mechanisms, description, rules, actorAction, extra)
+    local value = {
+        id = id,
+        owner = "player",
+        name = name,
+        description = description,
+        actionTag = tag,
+        mechanisms = mechanisms,
+        base = { stealthCost = cost, resistanceDamage = resistanceDamage },
+        rules = rules,
+        narration = { play = { actorAction = actorAction } },
+    }
+    for key, item in pairs(extra or {}) do value[key] = item end
+    return value
+end
+
+local function planCard(id, name, tag, cost, description, rules, placedAction, triggeredAction, plan, extra)
+    local value = card(
+        id, name, tag, cost, 0, { "plan" }, description, rules, placedAction, extra
+    )
+    value.narration = {
+        planPlaced = { actorAction = placedAction },
+        planTriggered = { actorAction = triggeredAction },
+    }
+    value.mechanismData = { plan = plan }
+    return value
+end
+
 return {
     schemaVersion = 1,
     kind = "cardDatabase",
     cards = {
-        subtle_approach = {
-            id = "subtle_approach",
-            owner = "player",
-            name = "은밀한 접근",
-            description = "::tag[approach]:: 행동으로 상대의 반응을 살피고, ::tag[plan]::을 배치해 다음 턴을 준비합니다.",
-            actionTag = "approach",
-            mechanisms = { "plan" },
-            base = {
-                stealthCost = 0,
-                resistanceDamage = 0,
-            },
-            rules = {
-                "다음 턴 시작 무드가 무시라면 무시 토큰을 1개 생성합니다.",
-            },
-            mechanismData = {
-                plan = {
-                    event = "turn_start",
-                    durationTurns = 1,
-                    charges = 1,
-                    trigger = function(context, event)
-                        return context.mood == "ignore"
-                    end,
-                    resolve = function(context, event)
-                        return {
-                            {
-                                op = "add_mood_token",
-                                target = "character",
-                                mood = "ignore",
-                                amount = 1,
-                                cause = "plan",
-                            },
-                        }
-                    end,
-                },
-            },
-            narration = {
-                planPlaced = {
-                    actorAction = "상대의 움직임을 관찰하며 다음 기회를 준비한다.",
-                },
-                planTriggered = {
-                    actorAction = "미리 살핀 반응을 바탕으로 무시하는 분위기를 굳힌다.",
-                },
-            },
-            prototype = true,
-        },
-
-        accidental_brush = {
-            id = "accidental_brush",
-            owner = "player",
-            name = "우연한 스침",
-            description = "::tag[contact]:: 행동으로 열차의 흔들림을 이용해 우연을 가장하고 저항을 낮춥니다.",
-            actionTag = "contact",
-            mechanisms = {},
-            base = {
-                stealthCost = 0,
-                resistanceDamage = 3,
-            },
-            rules = {
-                "의심 무드에서 사용하면 은폐를 3 잃습니다.",
-            },
-            moodEffects = {
-                suspicion = function(context)
-                    return {
-                        {
-                            op = "lose_stealth",
-                            target = "player",
-                            amount = 3,
-                            cause = "moodEffect",
-                        },
-                    }
-                end,
-            },
-            narration = {
-                play = {
-                    actorAction = "열차가 흔들리는 순간에 맞춰 우연인 듯 움직인다.",
-                },
-            },
-            prototype = true,
-        },
-
-        play_it_cool = {
-            id = "play_it_cool",
-            owner = "player",
-            name = "능청떨기",
-            description = "::tag[deception]:: 행동으로 아무런 관심이 없는 척하며 은폐를 회복합니다.",
-            actionTag = "deception",
-            mechanisms = {},
-            base = {
-                stealthCost = 0,
-                resistanceDamage = 0,
-            },
-            rules = {
-                "은폐를 3 회복합니다.",
-                "거절 무드라면 대신 1 회복합니다.",
-            },
-            resolve = function(context)
-                local amount = 3
-                if context.mood == "rejection" then
-                    amount = 1
-                end
-
-                return {
-                    {
-                        op = "recover_stealth",
-                        target = "player",
-                        amount = amount,
-                        cause = "cardEffect",
-                    },
-                }
-            end,
-            narration = {
-                play = {
-                    actorAction = "혼잣말을 하며 주변 일에 관심 없는 듯 태연하게 행동한다.",
-                },
-            },
-            prototype = true,
-        },
-
-        clear_the_air = {
-            id = "clear_the_air",
-            owner = "player",
-            name = "분위기 전환",
-            description = "::tag[deception]:: 행동으로 상대의 부정적인 감정을 누그러뜨립니다.",
-            actionTag = "deception",
-            mechanisms = {},
-            base = {
-                stealthCost = 0,
-                resistanceDamage = 0,
-            },
-            rules = {
-                "거절 또는 의심 토큰 중 하나를 선택해 1개 제거합니다.",
-            },
-            effectChoices = {
-                {
-                    id = "remove_rejection",
-                    label = "거절 토큰 제거",
-                    description = "거절 토큰을 1개 제거합니다.",
-                    unavailableText = "제거할 거절 토큰이 없습니다.",
-                    canSelect = function(context)
-                        if context.character.moodTokens.rejection > 0 then return true end
-                        return false, "no_target_token"
-                    end,
-                },
-                {
-                    id = "remove_suspicion",
-                    label = "의심 토큰 제거",
-                    description = "의심 토큰을 1개 제거합니다.",
-                    unavailableText = "제거할 의심 토큰이 없습니다.",
-                    canSelect = function(context)
-                        if context.character.moodTokens.suspicion > 0 then return true end
-                        return false, "no_target_token"
-                    end,
-                },
-            },
-            resolve = function(context)
-                local mood = context.effectChoiceId == "remove_rejection"
-                    and "rejection"
-                    or "suspicion"
-                return {
-                    {
-                        op = "remove_mood_token",
-                        target = "character",
-                        mood = mood,
-                        amount = 1,
-                        cause = "cardChoice",
-                    },
-                }
-            end,
-            narration = {
-                play = {
-                    actorAction = "태연한 말과 행동으로 상대의 부정적인 감정을 누그러뜨린다.",
-                },
-            },
-            prototype = true,
-        },
-
-        read_the_room = {
-            id = "read_the_room",
-            owner = "player",
-            name = "눈치보기",
-            description = "::tag[observation]:: 행동입니다. ::tag[chain]::으로 주 행동을 남기고, ::tag[insight]::로 이 해결에 반응하는 상대 ::tag[plan]::을 억제합니다.",
-            actionTag = "observation",
-            mechanisms = { "chain", "insight" },
-            base = {
-                stealthCost = 0,
-                resistanceDamage = 0,
-            },
-            rules = {
-                "카드를 1장 뽑습니다.",
-                "이 카드 때문에 발동할 상대 ::tag[plan]::을 억제하지만 그 정보는 공개하지 않습니다.",
-            },
-            selectionPreview = {
-                effects = {
-                    {
-                        id = "draw_one",
-                        op = "draw_cards",
-                        target = "player",
-                        amount = 1,
-                    },
-                },
-            },
-            narration = {
-                play = {
-                    actorAction = "곧바로 움직이지 않고 상대의 시선과 주변 상황을 살핀다.",
-                },
-            },
-            prototype = true,
-        },
-
-        pin_down = {
-            id = "pin_down",
-            owner = "player",
-            name = "제압",
-            description = "::tag[threat]:: 행동으로 상대를 강하게 압박합니다. ::tag[insight]::로 이 해결에 반응하는 상대 ::tag[plan]::을 억제합니다.",
-            actionTag = "threat",
-            mechanisms = { "insight" },
-            base = {
-                stealthCost = 3,
-                resistanceDamage = 7,
-            },
-            rules = {
-                "이 카드 때문에 발동할 상대 ::tag[plan]::을 억제하지만 그 정보는 공개하지 않습니다.",
-            },
-            narration = {
-                play = {
-                    actorAction = "상대가 쉽게 움직이지 못하도록 강하게 압박한다.",
-                },
-            },
-            prototype = true,
-        },
-
-        hypnotic_whisper = {
-            id = "hypnotic_whisper",
-            owner = "player",
-            name = "최면의 속삭임",
-            description = "::tag[deception]:: 행동으로 상대의 판단을 흐리고, 사용 후 ::tag[remove]::되어 이번 세션에서 제외됩니다.",
-            actionTag = "deception",
-            mechanisms = { "remove" },
-            base = {
-                stealthCost = 0,
-                resistanceDamage = 0,
-            },
-            rules = {
-                "캐릭터는 이번 턴 남은 카드 행동을 수행하지 않습니다.",
-                "턴 종료 시 무드를 순응으로 강제 변경합니다.",
-                "사용 후 이번 세션에서 ::tag[remove]::됩니다.",
-            },
-            resolve = function(context)
-                return {
-                    {
-                        op = "skip_actions",
-                        target = "character",
-                        scope = "remainingTurn",
-                        cause = "cardEffect",
-                    },
-                    {
-                        op = "force_mood",
-                        target = "character",
-                        mood = "compliance",
-                        cause = "cardEffect",
-                    },
-                }
-            end,
-            narration = {
-                play = {
-                    actorAction = "낮은 목소리로 짧은 암시를 건네 상대의 판단을 흐린다.",
-                },
-            },
-            prototype = true,
-        },
-
-        persistent_press = {
-            id = "persistent_press",
-            owner = "player",
-            name = "대담한 밀착",
-            description = "::tag[contact]:: 행동으로 거리를 단숨에 좁혀 상대를 강하게 압박하고 저항을 낮춥니다.",
-            actionTag = "contact",
-            mechanisms = {},
-            base = {
-                stealthCost = 2,
-                resistanceDamage = 5,
-            },
-            rules = {
-                "별도의 추가 효과가 없습니다.",
-            },
-            narration = {
-                play = {
-                    actorAction = "망설임 없이 거리를 좁혀 상대를 강하게 압박한다.",
-                },
-            },
-            prototype = true,
-        },
-
-        dangerous_whisper = {
-            id = "dangerous_whisper",
-            owner = "player",
-            name = "위험한 속삭임",
-            description = "::tag[threat]:: 행동으로 낮은 목소리로 위협하며, 혼란한 상대를 더욱 강하게 압박합니다.",
-            actionTag = "threat",
-            mechanisms = {},
-            base = {
-                stealthCost = 1,
-                resistanceDamage = 4,
-            },
-            rules = {
-                "혼란 무드라면 저항을 추가로 4 낮춥니다.",
-            },
-            moodEffects = {
-                confusion = function(context)
-                    return {
-                        {
-                            op = "damage_resistance",
-                            target = "character",
-                            amount = 4,
-                            cause = "moodEffect",
-                        },
-                    }
-                end,
-            },
-            narration = {
-                play = {
-                    actorAction = "다른 승객에게 들리지 않도록 낮은 목소리로 위협적인 말을 건넨다.",
-                },
-            },
-            prototype = true,
-        },
-
-        cut_off_escape = {
-            id = "cut_off_escape",
-            owner = "player",
-            name = "퇴로 봉쇄",
-            description = "::tag[approach]:: 행동으로 상대의 이동 경로를 선점하고, 상대 행동 뒤 발동하는 ::tag[plan]::을 배치합니다.",
-            actionTag = "approach",
-            mechanisms = { "plan" },
-            base = {
-                stealthCost = 1,
-                resistanceDamage = 0,
-            },
-            rules = {
-                "다음 캐릭터 행동이 해결된 뒤 저항을 5 낮춥니다.",
-            },
-            mechanismData = {
-                plan = {
-                    event = "card_resolved",
-                    side = "character",
-                    durationTurns = 1,
-                    durationIncludesPlacementTurn = true,
-                    charges = 1,
-                    trigger = function(context, event)
-                        return event.type == "card_resolved"
-                            and event.side == "character"
-                    end,
-                    resolve = function(context, event)
-                        return {
-                            {
-                                op = "damage_resistance",
-                                target = "character",
-                                amount = 5,
-                                cause = "plan",
-                            },
-                        }
-                    end,
-                },
-            },
-            narration = {
-                planPlaced = {
-                    actorAction = "상대가 움직일 방향을 읽고 먼저 자리를 잡아 퇴로를 막는다.",
-                },
-                planTriggered = {
-                    actorAction = "상대가 움직인 직후 막아 둔 방향으로 다시 압박한다.",
-                },
-            },
-            prototype = true,
-        },
-
-        cross_the_line = {
-            id = "cross_the_line",
-            owner = "player",
-            name = "선을 넘다",
-            description = "::tag[violation]:: 행동으로 돌이킬 수 없는 수준까지 압박하며, 사용 후 ::tag[remove]::되어 이번 세션에서 제외됩니다.",
-            actionTag = "violation",
-            mechanisms = { "remove" },
-            base = {
-                stealthCost = 8,
-                resistanceDamage = 10,
-            },
-            rules = {
-                "순응 무드라면 저항을 추가로 5 낮춥니다.",
-                "순응 무드가 아니라면 턴 종료 시 무드를 거절로 강제 변경합니다.",
-                "사용 후 이번 세션에서 ::tag[remove]::됩니다.",
-            },
-            resolve = function(context)
-                if context.mood == "compliance" then
+        p002_trail_off = card(
+            "p002_trail_off", "말끝 흐리기", "deception", 1, 3, {},
+            "::tag[deception]:: 행동으로 말을 흐려 상대의 판단을 흔듭니다.",
+            { "현재 무드가 의심 또는 거절이면 해당 무드 토큰을 1개 제거합니다." },
+            "말을 끝까지 맺지 않고 여지를 남겨 상대의 판단을 흔든다.",
+            {
+                resolve = function(context)
+                    if negative(context.mood) then return { removeMood(context.mood, 1) } end
                     return {}
-                end
-
-                return {
-                    {
-                        op = "force_mood",
-                        target = "character",
-                        mood = "rejection",
-                        cause = "cardEffect",
-                    },
-                }
-            end,
-            moodEffects = {
-                compliance = function(context)
-                    return {
-                        {
-                            op = "damage_resistance",
-                            target = "character",
-                            amount = 5,
-                            cause = "moodEffect",
-                        },
-                    }
                 end,
+            }
+        ),
+
+        p004_measure_distance = card(
+            "p004_measure_distance", "거리 재기", "approach", 1, 0, { "chain" },
+            "::tag[approach]:: 행동으로 안전한 거리를 가늠하는 ::tag[chain]:: 카드입니다.",
+            { "부정 무드이면 은폐 1 회복.", "혼란 토큰 1개 추가." },
+            "상대의 반응을 살피며 더 다가가도 되는 거리를 가늠한다.",
+            {
+                resolve = function(context)
+                    local commands = {}
+                    if negative(context.mood) then commands[#commands + 1] = recoverStealth(1) end
+                    commands[#commands + 1] = addMood("confusion", 1)
+                    return commands
+                end,
+            }
+        ),
+
+        p005_safe_topic = card(
+            "p005_safe_topic", "안전한 화제", "deception", 1, 0, {},
+            "::tag[deception]:: 행동으로 무난한 화제를 꺼내 분위기를 돌립니다.",
+            { "혼란 토큰 2개 추가.", "거절 무드이면 거절 토큰 1개 제거." },
+            "부담 없는 화제로 말을 돌려 굳어진 분위기에 틈을 만든다.",
+            {
+                resolve = function(context)
+                    local commands = { addMood("confusion", 2) }
+                    if context.mood == "rejection" then commands[#commands + 1] = removeMood("rejection", 1) end
+                    return commands
+                end,
+            }
+        ),
+
+        p007_keep_composure = card(
+            "p007_keep_composure", "표정 관리", "deception", 1, 4, {},
+            "::tag[deception]:: 행동으로 흔들림을 감추며 저항을 낮춥니다.",
+            { "무시·혼란·순응이면 은폐 1 회복.", "그 외에는 무시 토큰 1개 추가." },
+            "표정을 흐트러뜨리지 않은 채 태연하게 대화를 이어 간다.",
+            {
+                resolve = function(context)
+                    if nonNegative(context.mood) then return { recoverStealth(1) } end
+                    return { addMood("ignore", 1) }
+                end,
+            }
+        ),
+
+        p008_change_the_mood = card(
+            "p008_change_the_mood", "분위기 환기", "deception", 3, 0, { "remove" },
+            "::tag[deception]:: 행동으로 부정적인 분위기를 끊고, 사용 후 ::tag[remove]::됩니다.",
+            { "의심 또는 거절일 때만 사용 가능.", "턴 종료 무드를 무시로 강제 변경." },
+            "굳어진 공기를 끊어 내듯 전혀 다른 분위기로 대화를 돌린다.",
+            {
+                canPlay = function(context)
+                    if negative(context.mood) then return true end
+                    return false, "requires_negative_mood"
+                end,
+                resolve = function(context) return { forceMood("ignore") } end,
+            }
+        ),
+
+        p009_agree_along = card(
+            "p009_agree_along", "맞장구", "approach", 0, 0, { "chain" },
+            "::tag[approach]:: 행동으로 호응하는 ::tag[chain]:: 카드입니다.",
+            { "순응 토큰 1개 추가." },
+            "상대의 말에 자연스럽게 맞장구치며 호흡을 맞춘다.",
+            { resolve = function(context) return { addMood("compliance", 1) } end }
+        ),
+
+        p010_empathetic_opening = card(
+            "p010_empathetic_opening", "공감의 틈", "observation", 0, 3, {},
+            "::tag[observation]:: 행동으로 상대의 감정에 맞춰 반응합니다.",
+            { "혼란 토큰 1개 추가." },
+            "상대의 감정을 짚어 공감하는 말로 경계 사이에 틈을 만든다.",
+            { resolve = function(context) return { addMood("confusion", 1) } end }
+        ),
+
+        p011_quiet_agreement = card(
+            "p011_quiet_agreement", "조용한 동의", "deception", 1, 0, {},
+            "::tag[deception]:: 행동으로 조용히 동의해 경계를 누그러뜨립니다.",
+            { "순응 토큰 2개 추가.", "의심 무드이면 의심 토큰 1개 제거." },
+            "작게 고개를 끄덕여 상대의 판단에 동의한다.",
+            {
+                resolve = function(context)
+                    local commands = { addMood("compliance", 2) }
+                    if context.mood == "suspicion" then commands[#commands + 1] = removeMood("suspicion", 1) end
+                    return commands
+                end,
+            }
+        ),
+
+        p012_mirror_emotion = card(
+            "p012_mirror_emotion", "감정 비추기", "observation", 1, 2, {},
+            "::tag[observation]:: 행동으로 상대의 감정을 비추어 보입니다.",
+            { "부정 무드이면 혼란 토큰 1개, 그 외에는 순응 토큰 1개 추가." },
+            "상대의 말투와 표정에 맞춰 감정을 비추듯 반응한다.",
+            {
+                resolve = function(context)
+                    if negative(context.mood) then return { addMood("confusion", 1) } end
+                    return { addMood("compliance", 1) }
+                end,
+            }
+        ),
+
+        p014_room_to_breathe = card(
+            "p014_room_to_breathe", "안도할 틈", "contact", 2, 4, {},
+            "::tag[contact]:: 행동으로 긴장을 누그러뜨리며 저항을 낮춥니다.",
+            { "혼란 또는 순응이면 은폐 2 회복.", "그 외에는 혼란 토큰 1개 추가." },
+            "긴장을 늦출 수 있는 짧은 틈을 만들어 경계를 낮춘다.",
+            {
+                resolve = function(context)
+                    if positive(context.mood) then return { recoverStealth(2) } end
+                    return { addMood("confusion", 1) }
+                end,
+            }
+        ),
+
+        p015_circle_of_trust = planCard(
+            "p015_circle_of_trust", "신뢰의 고리", "approach", 2,
+            "::tag[approach]:: 행동으로 접촉을 강화하는 ::tag[plan]::을 배치합니다.",
+            { "지속 3턴, 충전 2.", "긍정 무드에서 플레이어 contact 카드 해결 뒤 저항 피해 3." },
+            "다음 접촉을 위한 신뢰의 흐름을 만든다.",
+            "이어진 신뢰를 발판 삼아 접촉의 압박을 높인다.",
+            {
+                event = "card_resolved", side = "player", durationTurns = 3, charges = 2,
+                trigger = function(context, event)
+                    return event.type == "card_resolved"
+                        and event.side == "player"
+                        and event.actionTag == "contact"
+                        and positive(context.mood)
+                end,
+                resolve = function(context, event) return { damage(3, "plan") } end,
+            }
+        ),
+
+        p016_put_at_ease = card(
+            "p016_put_at_ease", "마음을 놓게 하기", "contact", 4, 0, { "remove" },
+            "::tag[contact]:: 행동으로 경계를 누그러뜨리고, 사용 후 ::tag[remove]::됩니다.",
+            { "턴 종료 무드를 순응으로 강제 변경." },
+            "상대가 경계를 내려놓도록 차분하게 안심시킨다.",
+            { resolve = function(context) return { forceMood("compliance") } end }
+        ),
+
+        p017_turn_suspicion = card(
+            "p017_turn_suspicion", "의심을 역이용", "deception", 2, 4, {},
+            "::tag[deception]:: 행동으로 의심을 되받아치며 저항을 낮춥니다.",
+            { "의심 무드이면 추가 피해 2.", "혼란 토큰 1개 추가." },
+            "상대의 의심을 역으로 이용해 판단을 흔든다.",
+            {
+                resolve = function(context)
+                    local commands = {}
+                    if context.mood == "suspicion" then commands[#commands + 1] = damage(2) end
+                    commands[#commands + 1] = addMood("confusion", 1)
+                    return commands
+                end,
+            }
+        ),
+
+        p018_draw_line_approach = card(
+            "p018_draw_line_approach", "선을 긋고 다가서기", "approach", 2, 3, {},
+            "::tag[approach]:: 행동으로 분명한 선을 보이며 저항을 낮춥니다.",
+            { "거절 무드이면 추가 피해 3 후 거절 토큰 1개 제거." },
+            "분명한 선을 제시한 뒤 그 범위 안에서 다가선다.",
+            {
+                resolve = function(context)
+                    if context.mood == "rejection" then
+                        return { damage(3), removeMood("rejection", 1) }
+                    end
+                    return {}
+                end,
+            }
+        ),
+
+        p020_steady_gaze = card(
+            "p020_steady_gaze", "버티는 눈빛", "threat", 0, 2, {},
+            "::tag[threat]:: 행동으로 물러서지 않는 태도를 보입니다.",
+            { "의심 또는 거절이면 은폐 2 회복." },
+            "의심과 거절에도 흔들리지 않고 시선을 유지한다.",
+            {
+                resolve = function(context)
+                    if negative(context.mood) then return { recoverStealth(2) } end
+                    return {}
+                end,
+            }
+        ),
+
+        p021_room_for_misunderstanding = card(
+            "p021_room_for_misunderstanding", "오해의 여지", "deception", 1, 4, {},
+            "::tag[deception]:: 행동으로 상반된 인상을 남깁니다.",
+            { "의심 토큰 1개와 혼란 토큰 2개 추가." },
+            "해석의 여지를 남겨 판단을 서로 다른 방향으로 흔든다.",
+            {
+                resolve = function(context)
+                    return { addMood("suspicion", 1), addMood("confusion", 2) }
+                end,
+            }
+        ),
+
+        p024_stay_calm_to_end = card(
+            "p024_stay_calm_to_end", "끝까지 침착하게", "threat", 3, 3, { "remove" },
+            "::tag[threat]:: 행동으로 부정적인 분위기를 견디며, 사용 후 ::tag[remove]::됩니다.",
+            { "의심 또는 거절일 때만 사용 가능.", "턴 종료 무드를 무시로 강제 변경." },
+            "흔들리지 않는 태도로 압박하며 분위기를 무시 쪽으로 돌린다.",
+            {
+                canPlay = function(context)
+                    if negative(context.mood) then return true end
+                    return false, "requires_negative_mood"
+                end,
+                resolve = function(context) return { forceMood("ignore") } end,
+            }
+        ),
+
+        p025_silent_promise = planCard(
+            "p025_silent_promise", "말 없는 약속", "approach", 1,
+            "::tag[approach]:: 행동으로 안정감을 만드는 ::tag[plan]::을 배치합니다.",
+            { "배치 시 무시 토큰 1개 추가.", "지속 3턴, 충전 2.", "긍정 무드의 턴 시작에 은폐 2 회복." },
+            "다음 대화를 이어 가겠다는 신호를 남긴다.",
+            "앞서 남긴 신호가 안정감을 만든다.",
+            {
+                event = "turn_start", durationTurns = 3, charges = 2,
+                trigger = function(context, event)
+                    return event.type == "turn_start" and positive(context.mood)
+                end,
+                resolve = function(context, event) return { recoverStealth(2, "plan") } end,
             },
-            narration = {
-                play = {
-                    actorAction = "돌이킬 수 없을 만큼 강하게 상대의 경계를 밀어붙인다.",
+            { resolve = function(context) return { addMood("ignore", 1) } end }
+        ),
+
+        p026_shaken_balance = planCard(
+            "p026_shaken_balance", "흔들린 균형", "observation", 0,
+            "::tag[observation]:: 행동으로 감정의 균형을 노리는 ::tag[plan]::을 배치합니다.",
+            { "지속 3턴, 충전 1.", "턴 시작 시 토큰 2개 이상인 무드가 둘 이상이면 저항 피해 5." },
+            "상반된 감정이 팽팽해지는 순간을 기다린다.",
+            "흔들린 감정의 균형을 파고든다.",
+            {
+                event = "turn_start", durationTurns = 3, charges = 1,
+                trigger = function(context, event)
+                    if event.type ~= "turn_start" then return false end
+                    local count = 0
+                    for _, amount in pairs(context.character.moodTokens) do
+                        if amount >= 2 then count = count + 1 end
+                    end
+                    return count >= 2
+                end,
+                resolve = function(context, event) return { damage(5, "plan") } end,
+            }
+        ),
+
+        p027_emotional_fuse = planCard(
+            "p027_emotional_fuse", "감정의 도화선", "deception", 2,
+            "::tag[deception]:: 행동으로 감정의 흐름을 이용하는 ::tag[plan]::을 배치합니다.",
+            { "지속 3턴, 충전 2.", "긍정 무드의 턴 시작에 저항 피해 3." },
+            "감정이 움직일 때 이어질 압박을 심어 둔다.",
+            "긍정적으로 기운 감정의 흐름을 타고 압박한다.",
+            {
+                event = "turn_start", durationTurns = 3, charges = 2,
+                trigger = function(context, event)
+                    return event.type == "turn_start" and positive(context.mood)
+                end,
+                resolve = function(context, event) return { damage(3, "plan") } end,
+            }
+        ),
+
+        p028_no_retreat_conversation = planCard(
+            "p028_no_retreat_conversation", "퇴로 없는 대화", "threat", 2,
+            "::tag[threat]:: 행동으로 부정적인 무드를 흔드는 ::tag[plan]::을 배치합니다.",
+            { "지속 3턴, 충전 1.", "부정 무드의 턴 시작에 혼란 토큰 2개 추가." },
+            "부정적으로 반응할수록 선택지가 좁아지는 흐름을 만든다.",
+            "의심과 거절이 깊어진 순간에 혼란을 키운다.",
+            {
+                event = "turn_start", durationTurns = 3, charges = 1,
+                trigger = function(context, event)
+                    return event.type == "turn_start" and negative(context.mood)
+                end,
+                resolve = function(context, event) return { addMood("confusion", 2, "plan") } end,
+            }
+        ),
+
+        p029_answer_at_next_stop = card(
+            "p029_answer_at_next_stop", "다음 역의 대답", "observation", 0, 2, {},
+            "::tag[observation]:: 행동으로 무드에 맞는 다음 반응을 준비합니다.",
+            { "부정 무드이면 무시 토큰 1개, 그 외에는 순응 토큰 1개 추가." },
+            "다음 역까지의 시간을 재며 상대의 반응에 맞는 대답을 고른다.",
+            {
+                resolve = function(context)
+                    if negative(context.mood) then return { addMood("ignore", 1) } end
+                    return { addMood("compliance", 1) }
+                end,
+            }
+        ),
+
+        p031_rewind_impression = card(
+            "p031_rewind_impression", "되감는 인상", "deception", 1, 2, {},
+            "::tag[deception]:: 행동으로 현재 감정의 흔적을 줄입니다.",
+            { "현재 무드 토큰 1개 제거.", "무시 토큰 1개 추가." },
+            "직전 인상을 되짚어 아무렇지 않은 분위기로 돌린다.",
+            {
+                resolve = function(context)
+                    return { removeMood(context.mood, 1), addMood("ignore", 1) }
+                end,
+            }
+        ),
+
+        p033_read_hidden_reaction = card(
+            "p033_read_hidden_reaction", "숨은 반응 읽기", "observation", 0, 0, { "chain", "insight" },
+            "::tag[observation]:: 행동으로 반응을 살피는 ::tag[chain]:: 카드이며 ::tag[insight]::를 가집니다.",
+            { "다른 수치 효과 없음." },
+            "상대가 감추려는 작은 반응을 세밀하게 살핀다."
+        ),
+
+        p034_analyze_tone = card(
+            "p034_analyze_tone", "말투 분석", "observation", 0, 0, { "chain" },
+            "::tag[observation]:: 행동으로 덜 쌓인 감정을 보강하는 ::tag[chain]:: 카드입니다.",
+            { "무시와 혼란 중 토큰이 더 적은 쪽에 1개 추가.", "동률이면 선택." },
+            "말투를 분석해 아직 약한 감정의 흐름을 키운다.",
+            {
+                effectChoices = {
+                    {
+                        id = "add_ignore", label = "무시 보강",
+                        description = "무시 토큰을 1개 추가합니다.",
+                        unavailableText = "혼란 토큰이 더 적어 선택할 수 없습니다.",
+                        canSelect = function(context)
+                            if context.character.moodTokens.ignore <= context.character.moodTokens.confusion then return true end
+                            return false, "ignore_not_lower"
+                        end,
+                    },
+                    {
+                        id = "add_confusion", label = "혼란 보강",
+                        description = "혼란 토큰을 1개 추가합니다.",
+                        unavailableText = "무시 토큰이 더 적어 선택할 수 없습니다.",
+                        canSelect = function(context)
+                            if context.character.moodTokens.confusion <= context.character.moodTokens.ignore then return true end
+                            return false, "confusion_not_lower"
+                        end,
+                    },
                 },
-            },
-            prototype = true,
-        },
+                resolve = function(context)
+                    local mood = context.effectChoiceId == "add_ignore" and "ignore" or "confusion"
+                    return { addMood(mood, 1, "cardChoice") }
+                end,
+            }
+        ),
+
+        p035_direction_of_gaze = card(
+            "p035_direction_of_gaze", "시선의 방향", "observation", 1, 0, { "chain" },
+            "::tag[observation]:: 행동으로 카드를 미리 보는 ::tag[chain]:: 카드입니다.",
+            { "카드를 1장 미리 뽑음.", "의심이면 무시 토큰 1개, 거절이면 혼란 토큰 1개 추가." },
+            "시선이 향하는 곳을 따라 다음 움직임과 감정의 방향을 읽는다.",
+            {
+                selectionPreview = {
+                    effects = {
+                        { id = "draw_one", op = "draw_cards", target = "player", amount = 1 },
+                    },
+                },
+                resolve = function(context)
+                    if context.mood == "suspicion" then return { addMood("ignore", 1) } end
+                    if context.mood == "rejection" then return { addMood("confusion", 1) } end
+                    return {}
+                end,
+            }
+        ),
+
+        p036_question_for_reaction = card(
+            "p036_question_for_reaction", "반응 유도 질문", "deception", 1, 2, {},
+            "::tag[deception]:: 행동으로 공개된 방어 태세를 흔듭니다.",
+            { "혼란 토큰 1개 추가.", "공개 태그가 vigilance 또는 block이면 추가 피해 2." },
+            "방어에 집중한 틈을 노려 대답하기 곤란한 질문을 던진다.",
+            {
+                resolve = function(context)
+                    local commands = { addMood("confusion", 1) }
+                    local tag = context.character.publicActionTag
+                    if tag == "vigilance" or tag == "block" then commands[#commands + 1] = damage(2) end
+                    return commands
+                end,
+            }
+        ),
+
+        p038_silent_understanding = card(
+            "p038_silent_understanding", "침묵의 합의", "approach", 1, 3, {},
+            "::tag[approach]:: 행동으로 말없이 호흡을 맞춥니다.",
+            { "무시 무드이면 순응 토큰 2개, 그 외에는 무시 토큰 1개 추가." },
+            "짧은 침묵 속에서 서로의 호흡을 맞춘다.",
+            {
+                resolve = function(context)
+                    if context.mood == "ignore" then return { addMood("compliance", 2) } end
+                    return { addMood("ignore", 1) }
+                end,
+            }
+        ),
+
+        p039_catch_contradiction = card(
+            "p039_catch_contradiction", "모순 포착", "observation", 2, 4, {},
+            "::tag[observation]:: 행동으로 감정 변화의 모순을 짚습니다.",
+            { "현재 무드가 직전 턴 최종 무드와 다르면 추가 피해 2." },
+            "방금 전과 달라진 태도의 모순을 정확히 짚는다.",
+            {
+                resolve = function(context)
+                    local previous = context.history.previousTurn
+                    if previous ~= nil and previous.endMood ~= context.mood then return { damage(2) } end
+                    return {}
+                end,
+            }
+        ),
+
+        p041_break_balance = card(
+            "p041_break_balance", "균형 붕괴", "threat", 2, 5, {},
+            "::tag[threat]:: 행동으로 감정의 균형을 무너뜨립니다.",
+            { "혼란 또는 순응이면 추가 피해 2." },
+            "감정이 흔들린 순간을 놓치지 않고 강하게 밀어붙인다.",
+            {
+                resolve = function(context)
+                    if positive(context.mood) then return { damage(2) } end
+                    return {}
+                end,
+            }
+        ),
+
+        p043_push_past_limit = card(
+            "p043_push_past_limit", "한계 넘기", "violation", 5, 9, { "remove" },
+            "::tag[violation]:: 행동으로 한계를 넘어 압박하고, 사용 후 ::tag[remove]::됩니다.",
+            { "별도의 추가 효과 없음." },
+            "돌이킬 수 없는 선까지 밀어붙여 저항을 크게 무너뜨린다."
+        ),
+
+        p044_no_time_to_breathe = card(
+            "p044_no_time_to_breathe", "숨 돌릴 틈 없이", "threat", 2, 3, {},
+            "::tag[threat]:: 행동으로 쉬지 않고 압박합니다.",
+            { "부정 무드이면 혼란 토큰 2개 추가.", "그 외에는 추가 피해 2." },
+            "상대가 숨을 고를 틈을 주지 않고 압박의 방향을 바꾼다.",
+            {
+                resolve = function(context)
+                    if negative(context.mood) then return { addMood("confusion", 2) } end
+                    return { damage(2) }
+                end,
+            }
+        ),
+
+        p045_lowered_guard = card(
+            "p045_lowered_guard", "낮아진 경계", "contact", 1, 4, {},
+            "::tag[contact]:: 행동으로 낮아진 경계를 파고듭니다.",
+            { "무시·혼란·순응이면 추가 피해 1." },
+            "경계가 낮아진 순간에 거리를 좁혀 압박한다.",
+            {
+                resolve = function(context)
+                    if nonNegative(context.mood) then return { damage(1) } end
+                    return {}
+                end,
+            }
+        ),
+
+        p047_unhesitating_touch = card(
+            "p047_unhesitating_touch", "망설임 없는 손길", "contact", 3, 7, { "insight" },
+            "::tag[contact]:: 행동으로 주저 없이 압박하며 ::tag[insight]::를 가집니다.",
+            { "별도의 추가 효과 없음." },
+            "망설임 없이 움직이면서도 상대가 준비한 반격을 읽는다."
+        ),
     },
 }
