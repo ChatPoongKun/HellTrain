@@ -9,7 +9,7 @@ local function loadModule(path)
     if _VERSION == "Lua 5.1" then
         chunk, loadError = loader(source, "@" .. path)
     else
-        chunk, loadError = loader(source, "@" .. path, "t", {})
+        chunk, loadError = loader(source, "@" .. path, "t", { pairs = pairs })
     end
     assert(chunk, loadError)
     return chunk()
