@@ -112,6 +112,10 @@ for cardId, card in pairs(database.cards) do
             "missing mechanism tag token: " .. cardId .. "/" .. mechanismId
         )
     end
+    assert(
+        not (card.selectionPreview ~= nil and card.resolve ~= nil),
+        "selection preview card cannot define resolve: " .. cardId
+    )
 end
 
 assert(count == #expectedIds, "player card count mismatch")
@@ -121,5 +125,12 @@ end
 for _, cardId in ipairs(deprecatedIds) do
     assert(database.cards[cardId] == nil, "deprecated test card remains: " .. cardId)
 end
+
+local directionOfGaze = database.cards.p035_direction_of_gaze
+assert(directionOfGaze.selectionPreview ~= nil)
+assert(directionOfGaze.resolve == nil)
+assert(type(directionOfGaze.moodEffects) == "table")
+assert(type(directionOfGaze.moodEffects.suspicion) == "function")
+assert(type(directionOfGaze.moodEffects.rejection) == "function")
 
 print("player card catalog check: ok")
