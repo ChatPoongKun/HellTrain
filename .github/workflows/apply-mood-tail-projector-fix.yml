@@ -34,8 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git diff -- System/turnEventProjector.lua
-          luac5.4 -p System/turnEventProjector.lua
+          lua5.4 -e 'local f=assert(io.open("System/turnEventProjector.lua", "rb")); local s=f:read("*a"); f:close(); assert(load("return " .. s, "@System/turnEventProjector.lua", "t", _G))'
           luac5.4 -p System/main.lua
           luac5.4 -p Tests/mood-tail-projector-check.lua
           lua5.4 Tests/mood-tail-projector-check.lua
