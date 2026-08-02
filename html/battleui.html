@@ -76,10 +76,16 @@
 <div class="ht-layout">
 <aside class="ht-character" aria-label="캐릭터 상태">
 <div class="ht-portrait">
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}
+<img src="{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}_함락}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}} 함락" />
+{{/if}}
+{{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}}}
 <img src="{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />
+{{/if}}
 <div class="ht-character-name">
 <strong>{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}</strong>
-<span>ENCOUNTER TARGET</span>
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}<span>CONQUERED TARGET</span>{{/if}}
+{{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}}}<span>ENCOUNTER TARGET</span>{{/if}}
 </div>
 </div>
 <div class="ht-side-section ht-side-section--traits">
