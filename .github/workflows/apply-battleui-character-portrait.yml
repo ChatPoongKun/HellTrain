@@ -90,7 +90,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$workflow_path" html/battleui.html
+          git add -A
           git commit -m "fix: battle UI에 선택 캐릭터 이미지 표시" \
             -m "전투 상대 ID에 따라 imgs 디렉터리의 캐릭터 PNG를 프로필 이미지로 렌더링합니다."
           git push origin HEAD:main
