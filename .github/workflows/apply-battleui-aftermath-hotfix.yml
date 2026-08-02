@@ -6,6 +6,13 @@ on:
       - main
     paths:
       - .github/workflows/apply-battleui-aftermath-hotfix.yml
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
 
 permissions:
   contents: write
