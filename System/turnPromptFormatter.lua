@@ -666,11 +666,10 @@
         if pending.beforeState.turnNumber == 1
             and string.find(pending.beforeState.battleId, "-session-", 1, true) then
             local character = staticData.characters[pending.beforeState.character.characterId]
-            instructions[#instructions + 1] = "다음 세션의 첫 장면이므로, 경찰에 연행되던 플레이어가 문밖으로 한 발을 내딛는 순간 시야가 검게 끊기며 의식을 잃고, 다시 정신을 차리자 눈앞에 "
-                .. character.name .. "이 보이는 모습으로 시작한 뒤 이번 턴 사건을 이어서 묘사하십시오."
+            instructions[#instructions + 1] = "이번 턴 사건을 이어서 묘사하십시오."
         end
         if pending.afterState.status == "defeat" then
-            instructions[#instructions + 1] = "패배 장면의 끝에서 경찰이 다가와 플레이어를 연행하는 모습으로 마무리하십시오."
+            instructions[#instructions + 1] = "패배 장면의 끝에서 경찰이 다가와 플레이어를 연행하게 되고 열차 밖으로 끌려나가는 순간 시야가 검게 끊기며 의식을 잃는 모습으로 마무리 하십시오."
         end
         instructions[#instructions + 1] = "사건 JSON:"
         instructions[#instructions + 1] = encoded

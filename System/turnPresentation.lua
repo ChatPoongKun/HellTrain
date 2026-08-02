@@ -43,10 +43,10 @@
 
     local SYSTEM_EFFECT_SOURCES = {
         mood_state = {
-            name = "확정 무드",
+            name = "무드 효과",
             description = "턴 종료 시 확정된 무드가 은폐에 미치는 상태 효과입니다.",
             rules = {
-                "확정 무드에 따라 은폐가 감소하거나 회복됩니다.",
+                "무드 효과에 따라 은폐가 감소하거나 회복됩니다.",
             },
             tags = {},
         },
