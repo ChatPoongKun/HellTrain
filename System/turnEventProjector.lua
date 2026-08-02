@@ -1094,10 +1094,38 @@
         local sawStartDraw = { player = false, character = false }
         local sawCharacterIntent = false
         local sawMoodEvaluation = false
+        local expectedMoodStealthEffect = nil
+        local sawMoodStealthEffect = false
         local sawCleanup = false
         local sawSessionEnd = false
         local latchedOutcome = nil
         local postCleanupSnapshot = nil
+
+        local function moodStealthEffect(moodId, repeated)
+            local op
+            local amount
+            if moodId == "rejection" then
+                op = "lose_stealth"
+                amount = repeated and 6 or 3
+            elseif moodId == "suspicion" then
+                op = "lose_stealth"
+                amount = repeated and 2 or 1
+            elseif moodId == "confusion" then
+                op = "recover_stealth"
+                amount = 1
+            elseif moodId == "compliance" then
+                op = "recover_stealth"
+                amount = 2
+            else
+                return nil
+            end
+            return {
+                op = op,
+                amount = amount,
+                delta = op == "recover_stealth" and amount or -amount,
+            }
+        end
+
         local triggerPhases = {
             turn_start = true,
             player_card = true,
@@ -1675,8 +1703,26 @@
                     or not allowedAfterCleanup then
                     return failure({ makeError("invalid_post_cleanup_event", path, "턴 정리 뒤에는 세션 종료 감사 사건만 올 수 있습니다.") })
                 end
-            elseif sawMoodEvaluation and event.type ~= "turn_cleanup" then
-                return failure({ makeError("invalid_turn_tail_order", path, "무드 평가 바로 뒤에 턴 정리가 와야 합니다.") })
+            elseif sawMoodEvaluation then
+                local expectedTailType = "turn_cleanup"
+                if expectedMoodStealthEffect ~= nil and sawMoodStealthEffect ~= true then
+                    expectedTailType = "effect_applied"
+                elseif sawMoodStealthEffect == true
+                    and trackedStealth <= 0
+                    and latchedOutcome == nil then
+                    expectedTailType = "outcome_latched"
+                end
+                if event.type ~= expectedTailType then
+                    return failure({
+                        makeError(
+                            "invalid_turn_tail_order",
+                            path,
+                            "무드 평가 뒤 사건 순서가 올바르지 않습니다: "
+                                .. expectedTailType
+                                .. " 사건이 필요합니다."
+                        ),
+                    })
+                end
             elseif event.phase == "session_end" then
                 return failure({ makeError("invalid_turn_tail_order", path, "세션 종료 사건은 턴 정리 뒤에만 올 수 있습니다.") })
             end
@@ -1803,6 +1849,8 @@
                 )
                 pendingCharacterIntent = false
             elseif event.type == "effect_applied" then
+                local isMoodStateEffect = event.source.kind == "system"
+                    and event.source.id == "mood_state"
                 local allowedEffectSources = {
                     card = true,
                     plan = true,
@@ -1810,7 +1858,7 @@
                     perk = true,
                     environment = true,
                 }
-                if allowedEffectSources[event.source.kind] ~= true then
+                if allowedEffectSources[event.source.kind] ~= true and not isMoodStateEffect then
                     return failure({ makeError("invalid_effect_source", path .. ".source.kind", "효과 source 종류가 올바르지 않습니다.") })
                 end
                 if event.source.kind == "card" or event.source.kind == "plan" then
@@ -1854,6 +1902,27 @@
                     if event.phase ~= event.source.side .. "_card" then
                         return failure({ makeError("effect_phase_mismatch", path .. ".phase", "카드 효과 phase가 소유자와 다릅니다.") })
                     end
+                elseif isMoodStateEffect then
+                    if sawMoodEvaluation ~= true
+                        or sawMoodStealthEffect == true
+                        or expectedMoodStealthEffect == nil
+                        or event.phase ~= "turn_end"
+                        or event.side ~= "player"
+                        or event.source.side ~= nil
+                        or event.source.instanceId ~= nil
+                        or event.resolutionId ~= nil
+                        or type(event.cause) ~= "table"
+                        or event.cause.kind ~= "mood_state"
+                        or event.cause.resolutionId ~= nil
+                        or event.cause.eventId ~= nil then
+                        return failure({
+                            makeError(
+                                "invalid_mood_state_effect",
+                                path,
+                                "확정 무드 은폐 효과 사건의 위치 또는 출처가 올바르지 않습니다."
+                            ),
+                        })
+                    end
                 end
                 if payload.op == "pay_stealth_cost" then
                     if event.source.kind ~= "card" or event.side ~= "player" or event.phase ~= "player_card"
@@ -1877,6 +1946,26 @@
                 )
                 if effectError then
                     return failure({ effectError })
+                end
+                if isMoodStateEffect then
+                    local expected = expectedMoodStealthEffect
+                    if payload.index ~= 1
+                        or payload.cause ~= "moodState"
+                        or effect.op ~= expected.op
+                        or effect.target ~= "player"
+                        or effect.amount ~= expected.amount
+                        or effect.before ~= trackedStealth
+                        or effect.after ~= trackedStealth + expected.delta
+                        or effect.changed ~= true then
+                        return failure({
+                            makeError(
+                                "invalid_mood_state_effect",
+                                path .. ".payload",
+                                "확정 무드 은폐 효과가 무드 평가 결과와 다릅니다."
+                            ),
+                        })
+                    end
+                    sawMoodStealthEffect = true
                 end
                 if payload.op == "add_mood_token" or payload.op == "remove_mood_token" or payload.op == "force_mood" then
                     local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
@@ -2632,7 +2721,11 @@
                     or (trackedStealth <= 0 and "defeat" or nil)
                 local expectedOutcome = resourceOutcome
                 local expectedReason = event.phase == "turn_end" and "turn_end_checkpoint" or "card_checkpoint"
-                if resourceOutcome == nil
+                if event.phase == "turn_end"
+                    and sawMoodStealthEffect == true
+                    and resourceOutcome == "defeat" then
+                    expectedReason = "mood_state_checkpoint"
+                elseif resourceOutcome == nil
                     and event.phase == "turn_end"
                     and resolution.turnNumber == beforeState.turnLimit then
                     expectedOutcome = "defeat"
@@ -2736,6 +2829,13 @@
                 sawMoodEvaluation = true
                 trackedMood = payload.after
                 trackedMoodTokens = expectedTokensAfter
+                expectedMoodStealthEffect = nil
+                if latchedOutcome == nil then
+                    expectedMoodStealthEffect = moodStealthEffect(
+                        payload.after,
+                        resolution.turnNumber > 1 and payload.before == payload.after
+                    )
+                end
                 local safe = {
                     before = payload.before,
                     after = payload.after,
