@@ -191,7 +191,7 @@ end
 -- 생략한다. 개발 중에는 setRunScriptCacheDevelopmentMode(true)를 사용하면 매
 -- 이벤트의 첫 모듈 호출에서 source를 다시 확인한다.
 RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION
-    or "runtime-bundle-7f2c19d8a4e653b1"
+    or "runtime-bundle-47e5f3168db056f2"
 RUNTIME_CACHE_DEVELOPMENT_BYPASS = RUNTIME_CACHE_DEVELOPMENT_BYPASS == true
 
 local RUN_SCRIPT_SOURCE_CACHE_MAX_ENTRIES = 64
@@ -1116,6 +1116,10 @@ local function buildApproachPrompt(characterName, profile, encounters)
             content = table.concat({
                 "당신은 성인용 한국어 다크 픽션 롤플레이의 장면 서술자다.",
                 "무한히 반복되는 지하철 안에서 플레이어가 선택한 성인 캐릭터에게 다가가는 순간을 2~4문단으로 묘사하라.",
+                "장면은 플레이어의 시야가 갑자기 검게 끊기는 순간으로 시작하라.",
+                "시야가 돌아오면 선택한 대상 캐릭터가 바로 눈앞에 나타나 있는 모습을 분명히 묘사하라.",
+                "암전과 대상의 등장은 이 접근 장면에서 한 번만 묘사하고, 이후 전투 턴에서 반복하지 마라.",
+                "경찰 연행이나 패배는 이 접근 장면에서 임의로 추론하거나 묘사하지 마라.",
                 "캐릭터의 성격과 배경을 지키고, 아직 카드·수치·전투 UI나 게임 규칙은 언급하지 마라.",
                 "플레이어가 입력하지 않은 추가 행동·대사·생각은 만들어내지 마라.",
                 "선택한 캐릭터의 자연스러운 행동과 반응, 객실의 분위기에 집중하라.",
