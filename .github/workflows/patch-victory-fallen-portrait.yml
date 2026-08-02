@@ -1,0 +1,74 @@
+name: Patch victory fallen portrait
+
+on:
+  push:
+    branches:
+      - fix/victory-fallen-portrait
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/victory-fallen-portrait
+          fetch-depth: 0
+
+      - name: Update victory portrait markup
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("html/battleui.html")
+          text = path.read_text(encoding="utf-8")
+
+          old_image = '<img src="{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />'
+          new_image = '''{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}
+          <img src="{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}_함락}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}} 함락" />
+          {{/if}}
+          {{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}}}
+          <img src="{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />
+          {{/if}}'''
+
+          old_label = '<span>ENCOUNTER TARGET</span>'
+          new_label = '''{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}<span>CONQUERED TARGET</span>{{/if}}
+          {{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}}}<span>ENCOUNTER TARGET</span>{{/if}}'''
+
+          if text.count(old_image) != 1:
+              raise SystemExit(f"expected exactly one portrait image line, found {text.count(old_image)}")
+          if text.count(old_label) != 1:
+              raise SystemExit(f"expected exactly one portrait label line, found {text.count(old_label)}")
+
+          text = text.replace(old_image, new_image, 1)
+          text = text.replace(old_label, new_label, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Verify template contract
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          text = Path("html/battleui.html").read_text(encoding="utf-8")
+          expected = '{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}_함락}}'
+          fallback = '{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}}}'
+          assert text.count(expected) == 1
+          assert text.count(fallback) == 1
+          assert text.count('CONQUERED TARGET') == 1
+          assert text.count('ENCOUNTER TARGET') == 1
+          PY
+
+      - name: Commit UI change and remove patch workflow
+        shell: bash
+        run: |
+          rm .github/workflows/patch-victory-fallen-portrait.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add html/battleui.html .github/workflows/patch-victory-fallen-portrait.yml
+          git commit -m "ui: show fallen character portrait after victory"
+          git push origin HEAD:fix/victory-fallen-portrait
