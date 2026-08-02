@@ -2,7 +2,7 @@ name: Apply battle UI character portrait patch
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
 
 permissions:
   contents: write
@@ -22,14 +22,9 @@ jobs:
         run: |
           set -euo pipefail
           workflow_path=".github/workflows/apply-battleui-character-portrait.yml"
-          expected_base="${{ github.event.pull_request.base.sha }}"
 
           git fetch origin main
           git switch -C main origin/main
-          if [[ "$(git rev-parse HEAD)" != "$expected_base" ]]; then
-            echo "main moved after the trigger PR was opened" >&2
-            exit 1
-          fi
 
           python3 - <<'PY'
           from pathlib import Path
@@ -48,7 +43,16 @@ jobs:
           ]
           base = "https://raw.githubusercontent.com/ChatPoongKun/HellTrain/main/imgs/"
           replacement = "\n".join(
-              f'{{{{#if {{{{equal::{character_id}::{character_key}}}}}}}}<img src="{base}{filename}" alt="{name}" />{{{{/if}}}}'
+              "{{#if {{equal::"
+              + character_id
+              + "::"
+              + character_key
+              + "}}}}<img src=\""
+              + base
+              + filename
+              + "\" alt=\""
+              + name
+              + "\" />{{/if}}"
               for character_key, filename in portraits
           )
 
@@ -61,7 +65,7 @@ jobs:
           if "{{source::char}}" in rendered:
               raise RuntimeError("battle UI still references the host character avatar")
           for character_key, filename in portraits:
-              condition = f"equal::{character_id}::{character_key}"
+              condition = "equal::" + character_id + "::" + character_key
               url = base + filename
               if rendered.count(condition) != 1 or rendered.count(url) != 1:
                   raise RuntimeError(f"invalid portrait binding for {character_key}")
