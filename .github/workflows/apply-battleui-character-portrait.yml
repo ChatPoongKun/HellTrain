@@ -1,15 +1,15 @@
 name: Apply battle UI character portrait patch
 
 on:
-  push:
-    branches: [main]
+  pull_request:
+    types: [opened]
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.event.head_commit.message == 'chore: apply battle UI character portrait patch'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'automation/trigger-battleui-character-portrait'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,168 +21,72 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          expected_parent="6757fd76dd9449e3a9deefcc285642cffb3d96db"
           workflow_path=".github/workflows/apply-battleui-character-portrait.yml"
+          expected_base="${{ github.event.pull_request.base.sha }}"
 
           git fetch origin main
           git switch -C main origin/main
-          if [[ "$(git rev-parse HEAD^)" != "$expected_parent" ]]; then
-            echo "unexpected main parent" >&2
+          if [[ "$(git rev-parse HEAD)" != "$expected_base" ]]; then
+            echo "main moved after the trigger PR was opened" >&2
             exit 1
           fi
 
           python3 - <<'PY'
           from pathlib import Path
-          import re
 
-          REPO = "https://raw.githubusercontent.com/ChatPoongKun/HellTrain/main/imgs"
-          portraits = {
-              "Char/HanJenny.db": f"{REPO}/HanJenny.png",
-              "Char/SeoMiryeong.db": f"{REPO}/SeoMiryeong.png",
-              "Char/SisterAgnes.db": f"{REPO}/SisterAgnes.png",
-              "Char/YooJiyoung.db": f"{REPO}/YooJiyoung.png",
-              "Char/YoonSeoa.db": f"{REPO}/YoonSeoa.png",
-          }
-
-          def replace_once(path: str, old: str, new: str) -> None:
-              file_path = Path(path)
-              text = file_path.read_text(encoding="utf-8")
-              count = text.count(old)
-              if count != 1:
-                  raise RuntimeError(f"{path}: expected one replacement target, found {count}")
-              file_path.write_text(text.replace(old, new, 1), encoding="utf-8")
-
-          for path, url in portraits.items():
-              replace_once(
-                  path,
-                  "            publicProfile = {\n",
-                  "            publicProfile = {\n"
-                  f"                portraitUrl = \"{url}\",\n",
-              )
-
-          replace_once(
-              "System/staticData.lua",
-              '''                if type(character.publicProfile) ~= "table" then
-                    addError(errors, "missing_public_profile", path .. ".publicProfile", "공개 프로필이 없습니다.")
-                end
-''',
-              '''                if type(character.publicProfile) ~= "table" then
-                    addError(errors, "missing_public_profile", path .. ".publicProfile", "공개 프로필이 없습니다.")
-                elseif type(character.publicProfile.portraitUrl) ~= "string"
-                    or string.match(character.publicProfile.portraitUrl, "^https://[^%s]+$") == nil then
-                    addError(
-                        errors,
-                        "invalid_portrait_url",
-                        path .. ".publicProfile.portraitUrl",
-                        "캐릭터 프로필 이미지에는 HTTPS URL이 필요합니다."
-                    )
-                end
-''',
+          path = Path("html/battleui.html")
+          text = path.read_text(encoding="utf-8")
+          name = "{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}"
+          character_id = "{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::id}}"
+          old = f'<img src="{{{{source::char}}}}" alt="{name}" />'
+          portraits = [
+              ("han_jenny", "HanJenny.png"),
+              ("seo_miryeong", "SeoMiryeong.png"),
+              ("sister_agnes", "SisterAgnes.png"),
+              ("yoo_jiyoung", "YooJiyoung.png"),
+              ("yoon_seoa", "YoonSeoa.png"),
+          ]
+          base = "https://raw.githubusercontent.com/ChatPoongKun/HellTrain/main/imgs/"
+          replacement = "\n".join(
+              f'{{{{#if {{{{equal::{character_id}::{character_key}}}}}}}}<img src="{base}{filename}" alt="{name}" />{{{{/if}}}}'
+              for character_key, filename in portraits
           )
 
-          replace_once(
-              "System/viewBuilder.lua",
-              '''                id = characterDefinition.id,
-                name = characterDefinition.name,
-                resistance = displayState.character.resistance,
-''',
-              '''                id = characterDefinition.id,
-                name = characterDefinition.name,
-                portraitUrl = characterDefinition.publicProfile.portraitUrl,
-                resistance = displayState.character.resistance,
-''',
-          )
-          replace_once(
-              "System/viewBuilder.lua",
-              '''                id = true,
-                name = true,
-                resistance = true,
-''',
-              '''                id = true,
-                name = true,
-                portraitUrl = true,
-                resistance = true,
-''',
-          )
-          replace_once(
-              "System/viewBuilder.lua",
-              '''            if not isAsciiId(view.character.id) or type(view.character.name) ~= "string" then
-                addError(errors, "invalid_character_value", "$.character", "캐릭터 표시 값이 올바르지 않습니다.")
-            end
-            if not isFinite(view.character.resistance) or not isFinite(view.character.startingResistance) then
-''',
-              '''            if not isAsciiId(view.character.id) or type(view.character.name) ~= "string" then
-                addError(errors, "invalid_character_value", "$.character", "캐릭터 표시 값이 올바르지 않습니다.")
-            end
-            if type(view.character.portraitUrl) ~= "string"
-                or string.match(view.character.portraitUrl, "^https://[^%s]+$") == nil then
-                addError(errors, "invalid_character_portrait", "$.character.portraitUrl", "캐릭터 프로필 이미지 URL이 올바르지 않습니다.")
-            end
-            if not isFinite(view.character.resistance) or not isFinite(view.character.startingResistance) then
-''',
-          )
+          if text.count(old) != 1:
+              raise RuntimeError(f"expected one current portrait image, found {text.count(old)}")
+          text = text.replace(old, replacement, 1)
+          path.write_text(text, encoding="utf-8")
 
-          replace_once(
-              "html/battleui.html",
-              '<img src="{{source::char}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />',
-              '<img src="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::portraitUrl}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />',
-          )
-
-          main_path = Path("System/main.lua")
-          main_text = main_path.read_text(encoding="utf-8")
-          main_text, count = re.subn(
-              r'(RUNTIME_BUNDLE_REVISION\s*=\s*RUNTIME_BUNDLE_REVISION\s*\n\s*or ")runtime-bundle-[^"]+("\n)',
-              r'\1runtime-bundle-portrait-8f3c2a91d6e547b0\2',
-              main_text,
-              count=1,
-          )
-          if count != 1:
-              raise RuntimeError("System/main.lua: runtime bundle revision target not found")
-          main_path.write_text(main_text, encoding="utf-8")
-
-          battle_ui = Path("html/battleui.html").read_text(encoding="utf-8")
-          if "{{source::char}}" in battle_ui:
+          rendered = path.read_text(encoding="utf-8")
+          if "{{source::char}}" in rendered:
               raise RuntimeError("battle UI still references the host character avatar")
-          if "::portraitUrl}}" not in battle_ui:
-              raise RuntimeError("battle UI portrait binding is missing")
+          for character_key, filename in portraits:
+              condition = f"equal::{character_id}::{character_key}"
+              url = base + filename
+              if rendered.count(condition) != 1 or rendered.count(url) != 1:
+                  raise RuntimeError(f"invalid portrait binding for {character_key}")
+              image = Path("imgs") / filename
+              if not image.is_file() or image.stat().st_size == 0:
+                  raise RuntimeError(f"missing portrait asset: {image}")
 
-          for path, url in portraits.items():
-              db_text = Path(path).read_text(encoding="utf-8")
-              if db_text.count(f'portraitUrl = "{url}"') != 1:
-                  raise RuntimeError(f"{path}: portrait URL was not added exactly once")
-              image_path = Path("imgs") / Path(url).name
-              if not image_path.is_file() or image_path.stat().st_size == 0:
-                  raise RuntimeError(f"missing portrait asset: {image_path}")
-
-          view_text = Path("System/viewBuilder.lua").read_text(encoding="utf-8")
-          if view_text.count("portraitUrl = characterDefinition.publicProfile.portraitUrl") != 1:
-              raise RuntimeError("battle view portrait projection is missing")
-          print("validated 5 character portrait bindings and battle UI projection")
+          if rendered.count('<img src="https://raw.githubusercontent.com/ChatPoongKun/HellTrain/main/imgs/') != 5:
+              raise RuntimeError("expected exactly five character portrait images")
+          print("validated five selected-character portrait bindings")
           PY
 
           git rm "$workflow_path"
           git diff --check
-
-          expected_files="$(printf '%s\n' \
-            'Char/HanJenny.db' \
-            'Char/SeoMiryeong.db' \
-            'Char/SisterAgnes.db' \
-            'Char/YooJiyoung.db' \
-            'Char/YoonSeoa.db' \
-            'System/main.lua' \
-            'System/staticData.lua' \
-            'System/viewBuilder.lua' \
-            'html/battleui.html' | sort)"
-          actual_files="$(git diff --name-only | grep -v '^.github/workflows/apply-battleui-character-portrait.yml$' | sort)"
-          if [[ "$actual_files" != "$expected_files" ]]; then
+          changed="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' "$workflow_path" 'html/battleui.html' | sort)"
+          if [[ "$changed" != "$expected" ]]; then
             echo "unexpected changed files" >&2
-            printf 'expected:\n%s\nactual:\n%s\n' "$expected_files" "$actual_files" >&2
+            printf 'expected:\n%s\nactual:\n%s\n' "$expected" "$changed" >&2
             exit 1
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Char System/main.lua System/staticData.lua System/viewBuilder.lua html/battleui.html "$workflow_path"
+          git add "$workflow_path" html/battleui.html
           git commit -m "fix: battle UI에 선택 캐릭터 이미지 표시" \
-            -m "캐릭터 공개 프로필의 portraitUrl을 검증된 battleView로 전달하고, 전투 프로필 이미지가 선택된 상대의 PNG 자산을 사용하도록 연결합니다."
+            -m "전투 상대 ID에 따라 imgs 디렉터리의 캐릭터 PNG를 프로필 이미지로 렌더링합니다."
           git push origin HEAD:main
