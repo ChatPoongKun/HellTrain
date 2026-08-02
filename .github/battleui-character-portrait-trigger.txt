@@ -1,0 +1,1 @@
+Trigger the one-shot battle UI character portrait patch.
