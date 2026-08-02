@@ -110,4 +110,12 @@ local nextTurn = assertOk("turnInitializer.prepareTurn(next)", runScript(nil, "t
     turnId = nextTurnId,
 }))
 assert(type(nextTurn.state) == "table" and type(nextTurn.draft) == "table")
-print("hypnotic runtime commit check: ok")
+
+local builtView = assertOk("viewBuilder.buildBattleView", runScript(nil, "viewBuilder", "buildBattleView", nextTurn.state, staticData, {
+    draft = nextTurn.draft,
+    lastCommittedPending = pending,
+}))
+local encodedView = assertOk("dataBridge.encode", runScript(nil, "dataBridge", "encode", "battleView", builtView.view))
+assert(type(encodedView.encoded) == "string" and #encodedView.encoded > 0)
+print("next stealth=" .. tostring(nextTurn.state.player.stealth))
+print("hypnotic runtime commit and view check: ok")
