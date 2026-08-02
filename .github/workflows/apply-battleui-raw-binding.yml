@@ -1,0 +1,41 @@
+name: Apply battle UI raw binding
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/apply-battleui-raw-binding.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Replace Risu image helper and remove temporary workflow
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          target = Path('html/battleui.html')
+          text = target.read_text(encoding='utf-8')
+          old = 'src="{{img::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}}}"'
+          new = 'src="{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}}}"'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one old binding, found {text.count(old)}')
+          updated = text.replace(old, new)
+          if updated.count(new) != 1 or '{{img::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}}}' in updated:
+              raise SystemExit('replacement validation failed')
+          target.write_text(updated, encoding='utf-8')
+          Path('.github/workflows/apply-battleui-raw-binding.yml').unlink()
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add html/battleui.html .github/workflows/apply-battleui-raw-binding.yml
+          git commit -m "fix: battle UI 캐릭터 이미지를 Risu raw로 호출"
+          git push
