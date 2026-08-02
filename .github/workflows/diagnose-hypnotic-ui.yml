@@ -19,13 +19,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: fix/mood-tail-projector
-      - name: Inventory tests and controller references
+      - name: Install Lua
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4
+      - name: Run hypnotic runtime commit trace
         shell: bash
         run: |
           set -euo pipefail
-          echo '=== test files ==='
-          find Tests .agents -maxdepth 3 -type f 2>/dev/null | sort || true
-          echo '=== battle controller references ==='
-          grep -RIl 'battleController' Tests .agents 2>/dev/null | sort || true
-          echo '=== hypnotic references ==='
-          grep -RIn 'hypnotic_whisper\|최면의 속삭임' Tests .agents System DB 2>/dev/null || true
+          lua5.4 Tests/hypnotic-runtime-commit-check.lua
