@@ -76,7 +76,11 @@
 <div class="ht-layout">
 <aside class="ht-character" aria-label="캐릭터 상태">
 <div class="ht-portrait">
-<img src="{{source::char}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::id}}::han_jenny}}}}<img src="https://raw.githubusercontent.com/ChatPoongKun/HellTrain/main/imgs/HanJenny.png" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />{{/if}}
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::id}}::seo_miryeong}}}}<img src="https://raw.githubusercontent.com/ChatPoongKun/HellTrain/main/imgs/SeoMiryeong.png" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />{{/if}}
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::id}}::sister_agnes}}}}<img src="https://raw.githubusercontent.com/ChatPoongKun/HellTrain/main/imgs/SisterAgnes.png" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />{{/if}}
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::id}}::yoo_jiyoung}}}}<img src="https://raw.githubusercontent.com/ChatPoongKun/HellTrain/main/imgs/YooJiyoung.png" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />{{/if}}
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::id}}::yoon_seoa}}}}<img src="https://raw.githubusercontent.com/ChatPoongKun/HellTrain/main/imgs/YoonSeoa.png" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />{{/if}}
 <div class="ht-character-name">
 <strong>{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}</strong>
 <span>ENCOUNTER TARGET</span>
