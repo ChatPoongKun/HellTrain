@@ -477,6 +477,7 @@
         trait = "특징",
         perk = "퍽",
         environment = "환경",
+        system = "상태 효과",
     }
 
     local function collectRelatedTags(explicitTags, descriptionSegments, ruleLines)
