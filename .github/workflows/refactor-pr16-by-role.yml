@@ -1,0 +1,139 @@
+name: Refactor PR16 by Lua roles
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/pr16-role-refactor-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Audit Lua roles and refactor
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('.')
+          report = []
+          for path in sorted(root.rglob('*.lua')):
+              if '.git' in path.parts:
+                  continue
+              text = path.read_text(encoding='utf-8')
+              actions = sorted(set(re.findall(r'action\s*==\s*"([^"]+)"', text)))
+              deps = sorted(set(re.findall(r'runScript\s*\([^\n]*?"([A-Za-z0-9_]+)"', text)))
+              hosts = [name for name in (
+                  'LLM', 'getLoreBooks', 'getState', 'setState', 'getChatVar', 'setChatVar',
+                  'getFullChat', 'addChat', 'removeChat', 'reloadChat', 'reloadDisplay'
+              ) if re.search(r'\b' + re.escape(name) + r'\b', text)]
+              wrapper = 'main-script' if path.as_posix() == 'System/main.lua' else (
+                  'lore-module' if text.lstrip().startswith('(function') else 'other'
+              )
+              report.append('\t'.join([
+                  path.as_posix(), wrapper, ','.join(actions), ','.join(deps), ','.join(hosts)
+              ]))
+          Path('/tmp/lua-role-audit.tsv').write_text(
+              'path\twrapper\tactions\trunScriptDeps\thostApis\n' + '\n'.join(report) + '\n',
+              encoding='utf-8'
+          )
+
+          core_path = Path('System/battleControllerCore.lua')
+          controller_path = Path('System/battleController.lua')
+          adapter_path = Path('System/aftermathSkipScene.lua')
+          html_path = Path('html/battleui.html')
+          assert core_path.exists(), 'battleControllerCore.lua missing'
+          assert controller_path.exists(), 'battleController.lua missing'
+          assert adapter_path.exists(), 'aftermathSkipScene.lua missing'
+
+          controller = core_path.read_text(encoding='utf-8')
+          old_name = '    local function skipAftermath(expectedBattleId, expectedViewTurnId)\n'
+          new_name = '    local function prepareAftermathSkip(expectedBattleId, expectedViewTurnId)\n'
+          assert controller.count(old_name) == 1, 'skipAftermath definition mismatch'
+          controller = controller.replace(old_name, new_name, 1)
+
+          cancel_marker = '    local function cancelAftermathSkip(expectedBattleId, expectedViewTurnId)\n'
+          assert controller.count(cancel_marker) == 1, 'cancelAftermathSkip marker mismatch'
+          compatibility = '''    -- 기존 battleController 직접 호출과 새 전용 어댑터 호출을 모두 지원한다.\n    -- 실제 LLM·채팅 호스트 작업은 aftermathSkipScene이 담당하고,\n    -- 전투 상태와 영수증 전이는 이 컨트롤러의 공개 action만 거친다.\n    local function skipAftermath(expectedBattleId, expectedViewTurnId)\n        local delegated, delegateErrors = callModule(\n            "aftermathSkipScene",\n            "run",\n            expectedBattleId,\n            expectedViewTurnId\n        )\n        if delegateErrors then return failure(delegateErrors) end\n        return delegated\n    end\n\n'''
+          controller = controller.replace(cancel_marker, compatibility + cancel_marker, 1)
+
+          dispatch_old = '''    elseif action == "skipAftermath" then\n        return skipAftermath(arguments[1], arguments[2])\n    elseif action == "cancelAftermathSkip" then\n'''
+          dispatch_new = '''    elseif action == "prepareAftermathSkip" then\n        return prepareAftermathSkip(arguments[1], arguments[2])\n    elseif action == "skipAftermath" then\n        return skipAftermath(arguments[1], arguments[2])\n    elseif action == "cancelAftermathSkip" then\n'''
+          assert controller.count(dispatch_old) == 1, 'controller dispatch mismatch'
+          controller = controller.replace(dispatch_old, dispatch_new, 1)
+          controller_path.write_text(controller, encoding='utf-8')
+          core_path.unlink()
+
+          adapter = adapter_path.read_text(encoding='utf-8')
+          adapter = adapter.replace('callCore', 'callController')
+          adapter = adapter.replace('battleControllerCore', 'battleController')
+
+          constants_marker = '    local SAY_NOTHING = "*says nothing*"\n'
+          assert adapter.count(constants_marker) == 1, 'adapter constants marker mismatch'
+          cache_helper = '''    local controllerSourcePrepared = false\n\n    local function prepareControllerSource()\n        if controllerSourcePrepared then return end\n        controllerSourcePrepared = true\n        -- main.lua revision을 건드리지 않는 제약 아래, 새 어댑터가 처음\n        -- 실행될 때 기존 battleController warm handler만 명시적으로 비운다.\n        if type(clearRunScriptCache) == "function" then\n            pcall(clearRunScriptCache, "battleController")\n        end\n    end\n'''
+          adapter = adapter.replace(constants_marker, constants_marker + cache_helper, 1)
+
+          run_marker = '''    local function run(battleId, viewTurnId)\n        if type(LLM) ~= "function" then\n'''
+          assert adapter.count(run_marker) == 1, 'adapter run marker mismatch'
+          run_preamble = '''    local function run(battleId, viewTurnId)\n        prepareControllerSource()\n        local prepared, prepareErrors = callController(\n            "prepareAftermathSkip",\n            battleId,\n            viewTurnId\n        )\n        if prepareErrors then\n            return failure(prepareErrors, {\n                restored = false,\n                outputPersisted = false,\n            })\n        end\n        if prepared.aftermathComplete == true\n            or prepared.outputCommitted == true then\n            return prepared\n        end\n        if prepared.generationReady ~= true\n            and prepared.requestInFlight ~= true then\n            return prepared\n        end\n\n        if type(LLM) ~= "function" then\n'''
+          adapter = adapter.replace(run_marker, run_preamble, 1)
+          adapter_path.write_text(adapter, encoding='utf-8')
+
+          html = html_path.read_text(encoding='utf-8')
+          old_button = 'risu-btn="battleController|skipAftermath|'
+          new_button = 'risu-btn="aftermathSkipScene|run|'
+          assert html.count(old_button) == 1, 'aftermath skip button wiring mismatch'
+          html = html.replace(old_button, new_button, 1)
+          html_path.write_text(html, encoding='utf-8')
+
+          for temporary in (
+              Path('.github/workflows/audit-lua-roles.yml'),
+              Path('.github/pr16-role-refactor-trigger'),
+          ):
+              if temporary.exists():
+                  temporary.unlink()
+          PY
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.4
+          for file in System/*.lua; do
+            if [ "$(basename "$file")" = "main.lua" ]; then
+              luac5.4 -p "$file"
+            else
+              { printf 'return '; cat "$file"; } | luac5.4 -p -
+            fi
+          done
+
+          test ! -e System/battleControllerCore.lua
+          grep -Fq 'local ACTIVE_REQUEST_SCHEMA_VERSION = 3' System/battleController.lua
+          grep -Fq 'local function prepareAftermathSkip' System/battleController.lua
+          grep -Fq '"aftermathSkipScene"' System/battleController.lua
+          grep -Fq '"prepareAftermathSkip"' System/aftermathSkipScene.lua
+          grep -Fq '"battleController"' System/aftermathSkipScene.lua
+          ! grep -Fq 'battleControllerCore' System/aftermathSkipScene.lua
+          grep -Fq 'risu-btn="aftermathSkipScene|run|' html/battleui.html
+          git diff --exit-code origin/main -- System/main.lua
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'refactor: restore Lua module responsibilities'
+          git push
+      - name: Upload Lua role audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: lua-role-audit
+          path: /tmp/lua-role-audit.tsv
+          if-no-files-found: error
