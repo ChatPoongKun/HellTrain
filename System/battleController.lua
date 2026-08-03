@@ -2261,6 +2261,96 @@
         })
     end
 
+    local function skipAftermath(expectedBattleId, expectedViewTurnId)
+        local staticData, staticErrors = loadStaticData()
+        if staticErrors then return failure(staticErrors) end
+        local authority, authorityErrors = readStored(KEYS.authority, true)
+        if authorityErrors then return failure(authorityErrors) end
+        if expectedBattleId ~= authority.battleId then
+            return failure({
+                makeError("stale_aftermath_skip", "$.expectedBattleId", "현재 전투와 다른 화면의 도착 건너뛰기 요청입니다."),
+            })
+        end
+
+        local aftermath, aftermathReadErrors = readStored(KEYS.aftermath, false)
+        if aftermathReadErrors then return failure(aftermathReadErrors) end
+        if aftermath == nil then
+            return failure({
+                makeError("aftermath_skip_unavailable", "$.aftermath", "건너뛸 승리 후 자유행동이 없습니다."),
+            })
+        end
+        local aftermathErrors = validateAftermath(aftermath, authority)
+        if #aftermathErrors > 0 then return failure(aftermathErrors) end
+        local migrated, migrationErrors = migrateLegacyAftermath(authority, aftermath)
+        if migrationErrors then return failure(migrationErrors) end
+        aftermath = migrated
+
+        if aftermath.phase == "complete" then
+            return success({
+                generationReady = false,
+                outputCommitted = true,
+                aftermathComplete = true,
+                skipped = true,
+                reused = true,
+                status = authority.status,
+            })
+        end
+        local currentViewTurnId = string.format(
+            "%s-aftermath-%03d",
+            authority.battleId,
+            aftermath.completedTurnNumber
+        )
+        if expectedViewTurnId ~= currentViewTurnId then
+            return failure({
+                makeError("stale_aftermath_skip", "$.expectedViewTurnId", "현재 승리 후 화면과 다른 도착 건너뛰기 요청입니다."),
+            })
+        end
+        if aftermath.phase ~= "ready" then
+            return failure({
+                makeError("aftermath_skip_in_flight", "$.aftermath.phase", "자유행동 장면을 생성하는 중에는 남은 턴을 건너뛸 수 없습니다."),
+            })
+        end
+
+        local chat, chatErrors = readChat()
+        if chatErrors then return failure(chatErrors) end
+        local committedErrors = validateAftermathCommittedChat(aftermath, chat)
+        if committedErrors then return failure(committedErrors) end
+        local responseLuaIndex = aftermath.lastCommitted.responseLuaIndex
+        local suffixCount = #chat - responseLuaIndex
+        if suffixCount < 0
+            or suffixCount > 1
+            or (suffixCount == 1 and not isExactUiAnchor(chat[responseLuaIndex + 1])) then
+            return failure({
+                makeError("aftermath_skip_chat_not_clean", "$.chat", "확정 장면 뒤에 자유행동 입력 또는 예상하지 않은 메시지가 있어 건너뛸 수 없습니다."),
+            })
+        end
+
+        local previousCompletedTurnNumber = aftermath.completedTurnNumber
+        local committedReceipt, receiptErrors = buildAftermathCommitted(
+            chat,
+            authority.turnLimit,
+            responseLuaIndex
+        )
+        if receiptErrors then return failure(receiptErrors) end
+        aftermath.schemaVersion = AFTERMATH_SCHEMA_VERSION
+        aftermath.completedTurnNumber = authority.turnLimit
+        aftermath.lastCommitted = committedReceipt
+        aftermath.request = nil
+        aftermath.phase = "settling"
+        local validationErrors = validateAftermath(aftermath, authority)
+        if #validationErrors > 0 then return failure(validationErrors) end
+        local writeErrors = writeStored(KEYS.aftermath, aftermath)
+        if writeErrors then return failure(writeErrors) end
+
+        local settled = settleAftermath(authority, aftermath, staticData)
+        if type(settled) == "table" and settled.ok == true then
+            settled.skipped = true
+            settled.reused = false
+            settled.skippedTurnCount = authority.turnLimit - previousCompletedTurnNumber
+        end
+        return settled
+    end
+
     local function prepareAftermathGeneration(authority, aftermath, staticData)
         if aftermath.phase == "complete" then
             return success({
@@ -4414,6 +4504,8 @@
         return injectRequest(arguments[1])
     elseif action == "commitOutput" then
         return commitOutput()
+    elseif action == "skipAftermath" then
+        return skipAftermath(arguments[1], arguments[2])
     elseif action == "publishCurrentView" then
         return publishCurrentView()
     elseif action == "getSnapshot" then

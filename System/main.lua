@@ -191,7 +191,7 @@ end
 -- 생략한다. 개발 중에는 setRunScriptCacheDevelopmentMode(true)를 사용하면 매
 -- 이벤트의 첫 모듈 호출에서 source를 다시 확인한다.
 RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION
-    or "runtime-bundle-47e5f3168db056f2"
+    or "runtime-bundle-9c1d7e4f3a6b2e10"
 RUNTIME_CACHE_DEVELOPMENT_BYPASS = RUNTIME_CACHE_DEVELOPMENT_BYPASS == true
 
 local RUN_SCRIPT_SOURCE_CACHE_MAX_ENTRIES = 64
@@ -1349,7 +1349,7 @@ end)
 --버튼 클릭시 동작
 local BUTTON_ACTIONS = {
     init = { start = true, choose = true, chooseCharacter = true },
-    battleController = { clickCard = true, registerCard = true, cancelCard = true, selectCardEffect = true },
+    battleController = { clickCard = true, registerCard = true, cancelCard = true, selectCardEffect = true, skipAftermath = true },
     popupManage = { root = true, push = true, replace = true, back = true, close = true },
 }
 
