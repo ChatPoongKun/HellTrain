@@ -1,0 +1,44 @@
+name: Apply defeat ending by reason
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/defeat-ending-by-reason'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/defeat-ending-by-reason
+          fetch-depth: 0
+
+      - name: Apply ending split
+        run: python .github/scripts/apply-defeat-ending-by-reason.py
+
+      - name: Verify Lua syntax
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.4
+          { printf 'return '; cat System/turnPromptFormatter.lua; } | luac5.4 -p -
+          luac5.4 -p System/main.lua
+
+      - name: Commit product changes
+        run: |
+          rm -f .github/scripts/apply-defeat-ending-by-reason.py .github/defeat-ending-trigger
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: 패배 원인별 종료 장면 분리"
+          git push origin HEAD:fix/defeat-ending-by-reason
