@@ -1,0 +1,251 @@
+name: Apply aftermath destination skip
+
+on:
+  push:
+    branches:
+      - feat/skip-aftermath-to-destination
+    paths:
+      - .github/workflows/apply-aftermath-skip.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/skip-aftermath-to-destination
+          fetch-depth: 0
+
+      - name: Add skip-to-destination action and button
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str, label: str) -> None:
+              source = path.read_text(encoding="utf-8")
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label} anchor count: {count}")
+              path.write_text(source.replace(old, new, 1), encoding="utf-8")
+
+          controller = Path("System/battleController.lua")
+          prepare_anchor = '''    local function prepareAftermathGeneration(authority, aftermath, staticData)
+          '''
+          skip_function = '''    local function skipAftermath(expectedBattleId, expectedViewTurnId)
+              local staticData, staticErrors = loadStaticData()
+              if staticErrors then return failure(staticErrors) end
+              local authority, authorityErrors = readStored(KEYS.authority, true)
+              if authorityErrors then return failure(authorityErrors) end
+              if expectedBattleId ~= authority.battleId then
+                  return failure({
+                      makeError("stale_aftermath_skip", "$.expectedBattleId", "현재 전투와 다른 화면의 도착 건너뛰기 요청입니다."),
+                  })
+              end
+
+              local aftermath, aftermathReadErrors = readStored(KEYS.aftermath, false)
+              if aftermathReadErrors then return failure(aftermathReadErrors) end
+              if aftermath == nil then
+                  return failure({
+                      makeError("aftermath_skip_unavailable", "$.aftermath", "건너뛸 승리 후 자유행동이 없습니다."),
+                  })
+              end
+              local aftermathErrors = validateAftermath(aftermath, authority)
+              if #aftermathErrors > 0 then return failure(aftermathErrors) end
+              local migrated, migrationErrors = migrateLegacyAftermath(authority, aftermath)
+              if migrationErrors then return failure(migrationErrors) end
+              aftermath = migrated
+
+              if aftermath.phase == "complete" then
+                  return success({
+                      generationReady = false,
+                      outputCommitted = true,
+                      aftermathComplete = true,
+                      skipped = true,
+                      reused = true,
+                      status = authority.status,
+                  })
+              end
+              local currentViewTurnId = string.format(
+                  "%s-aftermath-%03d",
+                  authority.battleId,
+                  aftermath.completedTurnNumber
+              )
+              if expectedViewTurnId ~= currentViewTurnId then
+                  return failure({
+                      makeError("stale_aftermath_skip", "$.expectedViewTurnId", "현재 승리 후 화면과 다른 도착 건너뛰기 요청입니다."),
+                  })
+              end
+              if aftermath.phase ~= "ready" then
+                  return failure({
+                      makeError("aftermath_skip_in_flight", "$.aftermath.phase", "자유행동 장면을 생성하는 중에는 남은 턴을 건너뛸 수 없습니다."),
+                  })
+              end
+
+              local chat, chatErrors = readChat()
+              if chatErrors then return failure(chatErrors) end
+              local committedErrors = validateAftermathCommittedChat(aftermath, chat)
+              if committedErrors then return failure(committedErrors) end
+              local responseLuaIndex = aftermath.lastCommitted.responseLuaIndex
+              local suffixCount = #chat - responseLuaIndex
+              if suffixCount < 0
+                  or suffixCount > 1
+                  or (suffixCount == 1 and not isExactUiAnchor(chat[responseLuaIndex + 1])) then
+                  return failure({
+                      makeError("aftermath_skip_chat_not_clean", "$.chat", "확정 장면 뒤에 자유행동 입력 또는 예상하지 않은 메시지가 있어 건너뛸 수 없습니다."),
+                  })
+              end
+
+              local previousCompletedTurnNumber = aftermath.completedTurnNumber
+              local committedReceipt, receiptErrors = buildAftermathCommitted(
+                  chat,
+                  authority.turnLimit,
+                  responseLuaIndex
+              )
+              if receiptErrors then return failure(receiptErrors) end
+              aftermath.schemaVersion = AFTERMATH_SCHEMA_VERSION
+              aftermath.completedTurnNumber = authority.turnLimit
+              aftermath.lastCommitted = committedReceipt
+              aftermath.request = nil
+              aftermath.phase = "settling"
+              local validationErrors = validateAftermath(aftermath, authority)
+              if #validationErrors > 0 then return failure(validationErrors) end
+              local writeErrors = writeStored(KEYS.aftermath, aftermath)
+              if writeErrors then return failure(writeErrors) end
+
+              local settled = settleAftermath(authority, aftermath, staticData)
+              if type(settled) == "table" and settled.ok == true then
+                  settled.skipped = true
+                  settled.reused = false
+                  settled.skippedTurnCount = authority.turnLimit - previousCompletedTurnNumber
+              end
+              return settled
+          end
+
+          ''' + prepare_anchor
+          replace_once(controller, prepare_anchor, skip_function, "battleController skip insertion")
+
+          dispatch_old = '''    elseif action == "commitOutput" then
+              return commitOutput()
+              elseif action == "publishCurrentView" then
+              return publishCurrentView()
+          '''
+          dispatch_new = '''    elseif action == "commitOutput" then
+              return commitOutput()
+              elseif action == "skipAftermath" then
+              return skipAftermath(arguments[1], arguments[2])
+              elseif action == "publishCurrentView" then
+              return publishCurrentView()
+          '''
+          replace_once(controller, dispatch_old, dispatch_new, "battleController dispatch")
+
+          main = Path("System/main.lua")
+          replace_once(
+              main,
+              '    or "runtime-bundle-47e5f3168db056f2"',
+              '    or "runtime-bundle-9c1d7e4f3a6b2e10"',
+              "runtime bundle revision",
+          )
+          replace_once(
+              main,
+              '    battleController = { clickCard = true, registerCard = true, cancelCard = true, selectCardEffect = true },',
+              '    battleController = { clickCard = true, registerCard = true, cancelCard = true, selectCardEffect = true, skipAftermath = true },',
+              "button action allowlist",
+          )
+
+          battle_ui = Path("html/battleui.html")
+          copy_anchor = '''<p class="ht-aftermath-copy">도착할 때까지 원하는 행위를 자유롭게 서술하세요.</p>
+          '''
+          copy_with_button = copy_anchor + '''{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::aftermath}}::awaitingOutput}}::false}}}}
+          <button type="button" class="ht-aftermath-skip" risu-btn="battleController|skipAftermath|{{dict_element::{{getvar::battleView}}::battleId}}|{{dict_element::{{getvar::battleView}}::turnId}}" aria-label="남은 자유행동을 건너뛰고 목적지로 바로 이동">
+          <span>남은 자유행동 건너뛰기</span>
+          <strong>바로 도착</strong>
+          </button>
+          {{/if}}
+          '''
+          replace_once(battle_ui, copy_anchor, copy_with_button, "aftermath skip button")
+
+          css = Path("html/embeddings.css")
+          final_anchor = '''.ht-aftermath-final {
+          margin: 10px 0 0;
+          color: #e7c978;
+          font-size: 9px;
+          font-weight: 800;
+          }
+          '''
+          skip_css = final_anchor + '''.ht-aftermath-skip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          margin: 12px 0 0;
+          padding: 8px 11px;
+          border: 1px solid rgba(231, 201, 120, .42);
+          border-radius: 8px;
+          color: #f2e5bd;
+          background: rgba(231, 201, 120, .08);
+          cursor: pointer;
+          touch-action: manipulation;
+          }
+          .ht-aftermath-skip:hover {
+          border-color: rgba(231, 201, 120, .72);
+          background: rgba(231, 201, 120, .14);
+          }
+          .ht-aftermath-skip:focus-visible {
+          outline: 2px solid rgba(255, 255, 255, .88);
+          outline-offset: 2px;
+          }
+          .ht-aftermath-skip span {
+          color: #c8c0b8;
+          font-size: 9px;
+          }
+          .ht-aftermath-skip strong {
+          color: #f2e5bd;
+          font-size: 10px;
+          }
+          '''
+          replace_once(css, final_anchor, skip_css, "aftermath skip styles")
+          PY
+
+      - name: Verify patched sources
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          controller = Path("System/battleController.lua").read_text(encoding="utf-8")
+          main = Path("System/main.lua").read_text(encoding="utf-8")
+          ui = Path("html/battleui.html").read_text(encoding="utf-8")
+          css = Path("html/embeddings.css").read_text(encoding="utf-8")
+
+          checks = {
+              "controller function": controller.count("local function skipAftermath(") == 1,
+              "controller dispatch": controller.count('action == "skipAftermath"') == 1,
+              "button allowlist": main.count("skipAftermath = true") == 1,
+              "bundle revision": main.count("runtime-bundle-9c1d7e4f3a6b2e10") == 1,
+              "UI button": ui.count('risu-btn="battleController|skipAftermath|') == 1,
+              "UI ready-only guard": ui.count("ht-aftermath-skip") == 1 and "awaitingOutput}}::false" in ui,
+              "button styles": css.count(".ht-aftermath-skip {") == 1,
+          }
+          failed = [name for name, ok in checks.items() if not ok]
+          if failed:
+              raise SystemExit("failed static checks: " + ", ".join(failed))
+          PY
+
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.4
+          luac5.4 -p System/battleController.lua
+          luac5.4 -p System/main.lua
+
+      - name: Commit patched files
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add System/battleController.lua System/main.lua html/battleui.html html/embeddings.css
+          git diff --cached --check
+          git commit -m "feat: 조기 승리 후 목적지 바로가기 추가"
+          git push origin HEAD:feat/skip-aftermath-to-destination
