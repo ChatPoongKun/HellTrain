@@ -2,6 +2,17 @@
     local SCHEMA_VERSION = 1
     local UI_ANCHOR_MARKER = "@@HELLTRAIN_UI_ANCHOR_V1@@"
     local SAY_NOTHING = "*says nothing*"
+    local controllerSourcePrepared = false
+
+    local function prepareControllerSource()
+        if controllerSourcePrepared then return end
+        controllerSourcePrepared = true
+        -- main.lua revision을 건드리지 않는 제약 아래, 새 어댑터가 처음
+        -- 실행될 때 기존 battleController warm handler만 명시적으로 비운다.
+        if type(clearRunScriptCache) == "function" then
+            pcall(clearRunScriptCache, "battleController")
+        end
+    end
 
     local function makeError(code, path, message)
         return {
@@ -31,7 +42,7 @@
         return report
     end
 
-    local function callCore(coreAction, ...)
+    local function callController(coreAction, ...)
         if type(runScript) ~= "function" then
             return nil, {
                 makeError("runtime_unavailable", "$.runtime", "runScript 실행기를 찾을 수 없습니다."),
@@ -40,7 +51,7 @@
         local ok, report = pcall(
             runScript,
             triggerId,
-            "battleControllerCore",
+            "battleController",
             coreAction,
             ...
         )
@@ -48,8 +59,8 @@
             return nil, {
                 makeError(
                     "controller_call_failed",
-                    "$.runtime.battleControllerCore",
-                    "battleControllerCore." .. coreAction .. " 호출 중 오류가 발생했습니다: " .. tostring(report)
+                    "$.runtime.battleController",
+                    "battleController." .. coreAction .. " 호출 중 오류가 발생했습니다: " .. tostring(report)
                 ),
             }
         end
@@ -60,8 +71,8 @@
             return nil, {
                 makeError(
                     "invalid_controller_result",
-                    "$.runtime.battleControllerCore",
-                    "battleControllerCore." .. coreAction .. " 결과 envelope가 올바르지 않습니다."
+                    "$.runtime.battleController",
+                    "battleController." .. coreAction .. " 결과 envelope가 올바르지 않습니다."
                 ),
             }
         end
@@ -144,7 +155,7 @@
     end
 
     local function cancelAndRestore(battleId, viewTurnId, detail)
-        local _, cancelErrors = callCore(
+        local _, cancelErrors = callController(
             "cancelAftermathSkip",
             battleId,
             viewTurnId
@@ -165,6 +176,27 @@
     end
 
     local function run(battleId, viewTurnId)
+        prepareControllerSource()
+        local prepared, prepareErrors = callController(
+            "prepareAftermathSkip",
+            battleId,
+            viewTurnId
+        )
+        if prepareErrors then
+            return failure(prepareErrors, {
+                restored = false,
+                outputPersisted = false,
+            })
+        end
+        if prepared.aftermathComplete == true
+            or prepared.outputCommitted == true then
+            return prepared
+        end
+        if prepared.generationReady ~= true
+            and prepared.requestInFlight ~= true then
+            return prepared
+        end
+
         if type(LLM) ~= "function" then
             return cancelAndRestore(
                 battleId,
@@ -177,7 +209,7 @@
         if promptError then
             return cancelAndRestore(battleId, viewTurnId, promptError)
         end
-        local injected, injectErrors = callCore("injectRequest", prompt)
+        local injected, injectErrors = callController("injectRequest", prompt)
         if injectErrors or type(injected.promptArray) ~= "table" then
             return cancelAndRestore(
                 battleId,
@@ -209,9 +241,9 @@
             return cancelAndRestore(battleId, viewTurnId, appendError)
         end
 
-        local committed, commitErrors = callCore("commitOutput")
+        local committed, commitErrors = callController("commitOutput")
         if commitErrors then
-            committed, commitErrors = callCore("commitOutput")
+            committed, commitErrors = callController("commitOutput")
         end
         if commitErrors
             or type(committed) ~= "table"

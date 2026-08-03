@@ -70,7 +70,7 @@
 </div>
 <p class="ht-aftermath-copy">도착할 때까지 원하는 행위를 자유롭게 서술하세요.</p>
 {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::aftermath}}::awaitingOutput}}::false}}}}
-<button type="button" class="ht-aftermath-skip" risu-btn="battleController|skipAftermath|{{dict_element::{{getvar::battleView}}::battleId}}|{{dict_element::{{getvar::battleView}}::turnId}}" aria-label="남은 자유행동을 건너뛰고 목적지로 바로 이동">
+<button type="button" class="ht-aftermath-skip" risu-btn="aftermathSkipScene|run|{{dict_element::{{getvar::battleView}}::battleId}}|{{dict_element::{{getvar::battleView}}::turnId}}" aria-label="남은 자유행동을 건너뛰고 목적지로 바로 이동">
 <span>남은 자유행동 건너뛰기</span>
 <strong>바로 도착</strong>
 </button>
