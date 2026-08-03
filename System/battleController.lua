@@ -2285,6 +2285,14 @@
         if migrationErrors then return failure(migrationErrors) end
         aftermath = migrated
 
+        if aftermath.phase == "settling" then
+            local settled = settleAftermath(authority, aftermath, staticData)
+            if type(settled) == "table" and settled.ok == true then
+                settled.skipped = true
+                settled.reused = true
+            end
+            return settled
+        end
         if aftermath.phase == "complete" then
             return success({
                 generationReady = false,
