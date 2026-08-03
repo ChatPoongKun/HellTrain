@@ -1425,6 +1425,35 @@ color: #e7c978;
 font-size: 9px;
 font-weight: 800;
 }
+.ht-aftermath-skip {
+display: inline-flex;
+align-items: center;
+gap: 8px;
+margin: 12px 0 0;
+padding: 8px 11px;
+border: 1px solid rgba(231, 201, 120, .42);
+border-radius: 8px;
+color: #f2e5bd;
+background: rgba(231, 201, 120, .08);
+cursor: pointer;
+touch-action: manipulation;
+}
+.ht-aftermath-skip:hover {
+border-color: rgba(231, 201, 120, .72);
+background: rgba(231, 201, 120, .14);
+}
+.ht-aftermath-skip:focus-visible {
+outline: 2px solid rgba(255, 255, 255, .88);
+outline-offset: 2px;
+}
+.ht-aftermath-skip span {
+color: #c8c0b8;
+font-size: 9px;
+}
+.ht-aftermath-skip strong {
+color: #f2e5bd;
+font-size: 10px;
+}
 .ht-aftermath .ht-processing {
 width: 100%;
 margin-top: 16px;
