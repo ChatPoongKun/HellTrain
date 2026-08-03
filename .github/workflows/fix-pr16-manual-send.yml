@@ -1,24 +1,24 @@
 name: Fix PR16 manual send flow
 
 on:
-  pull_request:
+  push:
     branches:
-      - main
+      - feat/aftermath-skip-arrival-scene
     paths:
       - .github/pr16-manual-send-trigger
+      - .github/workflows/fix-pr16-manual-send.yml
 
 permissions:
   contents: write
 
 jobs:
   fix:
-    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Checkout feature branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: feat/aftermath-skip-arrival-scene
           fetch-depth: 0
 
       - name: Apply manual-send architecture
@@ -335,4 +335,4 @@ jobs:
           git rm -f .github/workflows/fix-pr16-manual-send.yml .github/pr16-manual-send-trigger
           git add System/main.lua System/battleController.lua System/aftermathSkipScene.lua html/battleui.html
           git commit -m "fix: 목적지 바로가기를 수동 전송 흐름에 연결"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          git push origin HEAD:feat/aftermath-skip-arrival-scene
