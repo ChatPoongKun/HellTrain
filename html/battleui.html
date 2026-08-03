@@ -61,6 +61,13 @@
 <section class="ht-aftermath" aria-labelledby="ht-aftermath-title">
 <span class="ht-aftermath-kicker">VICTORY CONFIRMED</span>
 <h2 id="ht-aftermath-title">함락 성공!</h2>
+<div class="ht-portrait ht-aftermath-portrait" style="width: min(100%, 280px); height: 320px; margin: 8px 0 16px; flex: 0 0 auto;">
+<img src="{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}_함락}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}} 함락" />
+<div class="ht-character-name">
+<strong>{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}</strong>
+<span>CONQUERED TARGET</span>
+</div>
+</div>
 <p class="ht-aftermath-copy">도착할 때까지 원하는 행위를 자유롭게 서술하세요.</p>
 {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::aftermath}}::finalTurn}}::true}}}}
 <p class="ht-aftermath-final">다음 장면에서 열차가 목적지에 도착합니다.</p>
@@ -76,16 +83,10 @@
 <div class="ht-layout">
 <aside class="ht-character" aria-label="캐릭터 상태">
 <div class="ht-portrait">
-{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}
-<img src="{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}_함락}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}} 함락" />
-{{/if}}
-{{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}}}
 <img src="{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />
-{{/if}}
 <div class="ht-character-name">
 <strong>{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}</strong>
-{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}<span>CONQUERED TARGET</span>{{/if}}
-{{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}}}<span>ENCOUNTER TARGET</span>{{/if}}
+<span>ENCOUNTER TARGET</span>
 </div>
 </div>
 <div class="ht-side-section ht-side-section--traits">
