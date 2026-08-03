@@ -42,7 +42,7 @@
         return report
     end
 
-    local function callController(coreAction, ...)
+    local function callController(controllerAction, ...)
         if type(runScript) ~= "function" then
             return nil, {
                 makeError("runtime_unavailable", "$.runtime", "runScript 실행기를 찾을 수 없습니다."),
@@ -52,7 +52,7 @@
             runScript,
             triggerId,
             "battleController",
-            coreAction,
+            controllerAction,
             ...
         )
         if not ok then
@@ -60,7 +60,7 @@
                 makeError(
                     "controller_call_failed",
                     "$.runtime.battleController",
-                    "battleController." .. coreAction .. " 호출 중 오류가 발생했습니다: " .. tostring(report)
+                    "battleController." .. controllerAction .. " 호출 중 오류가 발생했습니다: " .. tostring(report)
                 ),
             }
         end
@@ -72,7 +72,7 @@
                 makeError(
                     "invalid_controller_result",
                     "$.runtime.battleController",
-                    "battleController." .. coreAction .. " 결과 envelope가 올바르지 않습니다."
+                    "battleController." .. controllerAction .. " 결과 envelope가 올바르지 않습니다."
                 ),
             }
         end
