@@ -70,7 +70,7 @@
 </div>
 <p class="ht-aftermath-copy">도착할 때까지 원하는 행위를 자유롭게 서술하세요.</p>
 {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::aftermath}}::awaitingOutput}}::false}}}}
-<button type="button" class="ht-aftermath-skip" risu-btn="aftermathSkipScene|run|{{dict_element::{{getvar::battleView}}::battleId}}|{{dict_element::{{getvar::battleView}}::turnId}}" aria-label="남은 자유행동을 건너뛰고 목적지로 바로 이동">
+<button type="button" class="ht-aftermath-skip" risu-btn="battleController|skipAftermath|{{dict_element::{{getvar::battleView}}::battleId}}|{{dict_element::{{getvar::battleView}}::turnId}}" aria-label="남은 자유행동을 건너뛰고 목적지로 바로 이동">
 <span>남은 자유행동 건너뛰기</span>
 <strong>바로 도착</strong>
 </button>
@@ -79,9 +79,8 @@
 <p class="ht-aftermath-final">다음 장면에서 열차가 목적지에 도착합니다.</p>
 {{/if}}
 {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::aftermath}}::awaitingOutput}}::true}}}}
-<div class="ht-processing" role="status" aria-live="polite" aria-label="처리중...">
-<span class="ht-processing-spinner" aria-hidden="true"></span>
-<span>장면을 이어가는 중<span aria-hidden="true"><span class="ht-processing-dot">.</span><span class="ht-processing-dot">.</span><span class="ht-processing-dot">.</span></span></span>
+<div class="ht-processing" role="status" aria-live="polite" aria-label="목적지 바로가기 전송 대기">
+<span>목적지 바로가기 준비 완료 · 입력 없이 전송 버튼을 눌러 장면을 생성하세요.</span>
 </div>
 {{/if}}
 </section>
