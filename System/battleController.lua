@@ -7,6 +7,7 @@
     local UI_BODY_NAME = "🔯🔯🔯"
     local UI_ANCHOR_MARKER = "@@HELLTRAIN_UI_ANCHOR_V1@@"
     local SAY_NOTHING = "*says nothing*"
+    local AFTERMATH_SKIP_INPUT = "[목적지 바로가기] 남은 자유행동을 건너뛴다."
     local CHAT_FINGERPRINT_ALGORITHM = "canonical_poly131_137_chat_v1"
 
     local KEYS = {
@@ -513,6 +514,7 @@
                     attemptNumber = true,
                     outputObserved = true,
                     recoveringCleanup = true,
+                    skipToDestination = true,
                 }
                 for key in pairs(request) do
                     if type(key) ~= "string" or not requestAllowed[key] then
@@ -536,6 +538,9 @@
                     errors[#errors + 1] = makeError("invalid_aftermath_attempt", path .. ".request.attemptNumber", "자유행동 요청 시도 번호가 올바르지 않습니다.")
                 elseif value.schemaVersion == AFTERMATH_SCHEMA_VERSION and not isInteger(request.attemptNumber, 1) then
                     errors[#errors + 1] = makeError("missing_aftermath_attempt", path .. ".request.attemptNumber", "자유행동 요청 시도 번호가 없습니다.")
+                end
+                if request.skipToDestination ~= nil and request.skipToDestination ~= true then
+                    errors[#errors + 1] = makeError("invalid_aftermath_skip_request", path .. ".request.skipToDestination", "목적지 바로가기 요청 표시는 true여야 합니다.")
                 end
                 validateFingerprint(request.userFingerprint, path .. ".request.userFingerprint", errors)
                 if request.outputObserved ~= nil then
@@ -1060,6 +1065,79 @@
             }
         end
         return copy, nil
+    end
+
+    local function appendChatVerified(role, data)
+        if type(addChat) ~= "function" then
+            return nil, {
+                makeError("chat_write_unavailable", "$.host.addChat", "장면 요청을 추가할 addChat 호스트 함수를 찾을 수 없습니다."),
+            }
+        end
+        local before, beforeErrors = readChat()
+        if beforeErrors then return nil, beforeErrors end
+        local ok, addError = pcall(addChat, triggerId, role, data)
+        if not ok then
+            return nil, {
+                makeError("chat_append_failed", "$.chat", "장면 요청 메시지를 추가하지 못했습니다: " .. tostring(addError)),
+            }
+        end
+        local after, afterErrors = readChat()
+        if afterErrors then return nil, afterErrors end
+        local appended = after[#after]
+        if #after ~= #before + 1
+            or type(appended) ~= "table"
+            or appended.role ~= role
+            or appended.data ~= data then
+            return nil, {
+                makeError("chat_append_not_persisted", "$.chat", "추가한 장면 요청 메시지가 대화에 정확히 저장되지 않았습니다."),
+            }
+        end
+        for index = 1, #before do
+            if not deepEqual(before[index], after[index]) then
+                return nil, {
+                    makeError("chat_prefix_changed", "$.chat[" .. index .. "]", "장면 요청을 추가하는 동안 기존 대화가 변경되었습니다."),
+                }
+            end
+        end
+        return after, nil
+    end
+
+    local function removeTrailingChatVerified(chat, luaIndex, role, data)
+        local message = type(chat) == "table" and chat[luaIndex] or nil
+        if luaIndex ~= #chat
+            or type(message) ~= "table"
+            or message.role ~= role
+            or message.data ~= data then
+            return nil, {
+                makeError("chat_remove_target_mismatch", "$.chat", "제거할 목적지 바로가기 요청이 대화 끝과 일치하지 않습니다."),
+            }
+        end
+        if type(removeChat) ~= "function" then
+            return nil, {
+                makeError("chat_write_unavailable", "$.host.removeChat", "목적지 바로가기 요청을 제거할 removeChat 호스트 함수를 찾을 수 없습니다."),
+            }
+        end
+        local ok, removeError = pcall(removeChat, triggerId, luaIndex - 1)
+        if not ok then
+            return nil, {
+                makeError("chat_remove_failed", "$.chat[" .. luaIndex .. "]", "목적지 바로가기 요청을 제거하지 못했습니다: " .. tostring(removeError)),
+            }
+        end
+        local after, afterErrors = readChat()
+        if afterErrors then return nil, afterErrors end
+        if #after ~= #chat - 1 then
+            return nil, {
+                makeError("chat_remove_not_persisted", "$.chat", "목적지 바로가기 요청 제거 뒤 대화 길이가 올바르지 않습니다."),
+            }
+        end
+        for index = 1, #after do
+            if not deepEqual(after[index], chat[index]) then
+                return nil, {
+                    makeError("chat_prefix_changed", "$.chat[" .. index .. "]", "목적지 바로가기 요청을 제거하는 동안 기존 대화가 변경되었습니다."),
+                }
+            end
+        end
+        return after, nil
     end
 
     local function isExactFiller(message)
@@ -1869,6 +1947,25 @@
     end
 
     local function buildAftermathInstruction(authority, aftermath)
+        local skipToDestination = type(aftermath.request) == "table"
+            and aftermath.request.skipToDestination == true
+        if skipToDestination then
+            local remainingTurns = authority.turnLimit - aftermath.completedTurnNumber
+            return {
+                role = "system",
+                content = table.concat({
+                    "[함락 후 목적지 바로가기]",
+                    "전투 승리는 이미 확정되었다. 카드, 저항, 은폐, 무드, 전투 판정이나 보상을 언급하지 마라.",
+                    "사용자는 남은 자유행동을 생략했다. 플레이어에게 새 행동, 대사 또는 생각을 임의로 부여하지 마라.",
+                    "남은 열차 시간을 하나의 압축된 장면으로 자연스럽게 이어서 묘사하라.",
+                    "캐릭터가 플레이어에게 일방적으로 농락당하고 압도되며 수세에 몰리는 흐름을 분명히 보여라.",
+                    "노골적인 성적 폭력, 강제적 성행위 또는 신체 훼손은 묘사하지 마라.",
+                    "목적지 도착 안내가 들리자 캐릭터가 흐트러진 상태로 황급히 열차에서 내리는 장면으로 반드시 마무리하라.",
+                    "건너뛴 남은 자유행동 턴 수: " .. tostring(remainingTurns),
+                }, "\n"),
+            }
+        end
+
         local finalTurn = aftermath.completedTurnNumber + 1 == authority.turnLimit
         local lines = {
             "[함락 후 자유행동]",
@@ -2230,11 +2327,16 @@
         local observedErrors = observeAftermathOutput(authority, aftermath, chat)
         if observedErrors then return failure(observedErrors) end
 
-        local completedTurnNumber = aftermath.completedTurnNumber + 1
+        local request = aftermath.request
+        local skipToDestination = request.skipToDestination == true
+        local previousCompletedTurnNumber = aftermath.completedTurnNumber
+        local completedTurnNumber = skipToDestination
+            and authority.turnLimit
+            or previousCompletedTurnNumber + 1
         local committedReceipt, receiptErrors = buildAftermathCommitted(
             chat,
             completedTurnNumber,
-            aftermath.request.userLuaIndex + 1
+            request.userLuaIndex + 1
         )
         if receiptErrors then return failure(receiptErrors) end
         aftermath.schemaVersion = AFTERMATH_SCHEMA_VERSION
@@ -2247,7 +2349,13 @@
         local writeErrors = writeStored(KEYS.aftermath, aftermath)
         if writeErrors then return failure(writeErrors) end
         if aftermath.phase == "settling" then
-            return settleAftermath(authority, aftermath, staticData)
+            local settled = settleAftermath(authority, aftermath, staticData)
+            if skipToDestination and type(settled) == "table" and settled.ok == true then
+                settled.skipped = true
+                settled.skippedSceneGenerated = true
+                settled.skippedTurnCount = authority.turnLimit - previousCompletedTurnNumber
+            end
+            return settled
         end
 
         local published, publishErrors = publishCurrentViewInternal(staticData, true)
@@ -2313,6 +2421,19 @@
                 makeError("stale_aftermath_skip", "$.expectedViewTurnId", "현재 승리 후 화면과 다른 도착 건너뛰기 요청입니다."),
             })
         end
+        if (aftermath.phase == "inFlight" or aftermath.phase == "requestInjected")
+            and type(aftermath.request) == "table"
+            and aftermath.request.skipToDestination == true then
+            return success({
+                generationReady = false,
+                outputCommitted = false,
+                aftermathComplete = false,
+                skipped = true,
+                reused = true,
+                requestInFlight = true,
+                status = authority.status,
+            })
+        end
         if aftermath.phase ~= "ready" then
             return failure({
                 makeError("aftermath_skip_in_flight", "$.aftermath.phase", "자유행동 장면을 생성하는 중에는 남은 턴을 건너뛸 수 없습니다."),
@@ -2332,31 +2453,147 @@
                 makeError("aftermath_skip_chat_not_clean", "$.chat", "확정 장면 뒤에 자유행동 입력 또는 예상하지 않은 메시지가 있어 건너뛸 수 없습니다."),
             })
         end
+        if suffixCount == 1 then
+            local afterRemoval, _, removeErrors = removeUiAnchorAt(chat, responseLuaIndex + 1)
+            if removeErrors then return failure(removeErrors) end
+            chat = afterRemoval
+        end
 
-        local previousCompletedTurnNumber = aftermath.completedTurnNumber
-        local committedReceipt, receiptErrors = buildAftermathCommitted(
-            chat,
-            authority.turnLimit,
-            responseLuaIndex
+        local appended, appendErrors = appendChatVerified("user", AFTERMATH_SKIP_INPUT)
+        if appendErrors then return failure(appendErrors) end
+        local userLuaIndex = #appended
+        local fingerprint, fingerprintError = fingerprintChatRange(
+            appended,
+            userLuaIndex,
+            1,
+            "$.aftermath.request.user"
         )
-        if receiptErrors then return failure(receiptErrors) end
+        if fingerprintError then
+            removeTrailingChatVerified(appended, userLuaIndex, "user", AFTERMATH_SKIP_INPUT)
+            return failure({ fingerprintError })
+        end
+
         aftermath.schemaVersion = AFTERMATH_SCHEMA_VERSION
-        aftermath.completedTurnNumber = authority.turnLimit
-        aftermath.lastCommitted = committedReceipt
+        aftermath.phase = "inFlight"
+        aftermath.request = {
+            turnNumber = aftermath.completedTurnNumber + 1,
+            userLuaIndex = userLuaIndex,
+            userFingerprint = fingerprint,
+            attemptNumber = 1,
+            skipToDestination = true,
+        }
+        local validationErrors = validateAftermath(aftermath, authority)
+        if #validationErrors > 0 then
+            removeTrailingChatVerified(appended, userLuaIndex, "user", AFTERMATH_SKIP_INPUT)
+            return failure(validationErrors)
+        end
+        local writeErrors = writeStored(KEYS.aftermath, aftermath)
+        if writeErrors then
+            removeTrailingChatVerified(appended, userLuaIndex, "user", AFTERMATH_SKIP_INPUT)
+            return failure(writeErrors)
+        end
+        local published, publishErrors = publishCurrentViewInternal(staticData)
+        if publishErrors then
+            local latest, latestErrors = readChat()
+            if latestErrors == nil then
+                removeTrailingChatVerified(latest, #latest, "user", AFTERMATH_SKIP_INPUT)
+            end
+            aftermath.phase = "ready"
+            aftermath.request = nil
+            writeStored(KEYS.aftermath, aftermath)
+            return failure(publishErrors)
+        end
+        return success({
+            generationReady = true,
+            outputCommitted = false,
+            aftermathComplete = false,
+            aftermath = true,
+            skipped = true,
+            reused = false,
+            skipToDestination = true,
+            skippedTurnCount = authority.turnLimit - aftermath.completedTurnNumber,
+            turnNumber = aftermath.request.turnNumber,
+            attemptNumber = aftermath.request.attemptNumber,
+            view = published.view,
+        })
+    end
+
+    local function cancelAftermathSkip(expectedBattleId, expectedViewTurnId)
+        local staticData, staticErrors = loadStaticData()
+        if staticErrors then return failure(staticErrors) end
+        local authority, authorityErrors = readStored(KEYS.authority, true)
+        if authorityErrors then return failure(authorityErrors) end
+        if expectedBattleId ~= authority.battleId then
+            return failure({
+                makeError("stale_aftermath_skip_cancel", "$.expectedBattleId", "현재 전투와 다른 목적지 바로가기 취소 요청입니다."),
+            })
+        end
+        local aftermath, aftermathReadErrors = readStored(KEYS.aftermath, true)
+        if aftermathReadErrors then return failure(aftermathReadErrors) end
+        local aftermathErrors = validateAftermath(aftermath, authority)
+        if #aftermathErrors > 0 then return failure(aftermathErrors) end
+        local currentViewTurnId = string.format(
+            "%s-aftermath-%03d",
+            authority.battleId,
+            aftermath.completedTurnNumber
+        )
+        if expectedViewTurnId ~= currentViewTurnId then
+            return failure({
+                makeError("stale_aftermath_skip_cancel", "$.expectedViewTurnId", "현재 승리 후 화면과 다른 목적지 바로가기 취소 요청입니다."),
+            })
+        end
+        if aftermath.phase == "ready" then
+            return success({ restored = true, reused = true })
+        end
+        local request = aftermath.request
+        if (aftermath.phase ~= "inFlight" and aftermath.phase ~= "requestInjected")
+            or type(request) ~= "table"
+            or request.skipToDestination ~= true then
+            return failure({
+                makeError("aftermath_skip_cancel_unavailable", "$.aftermath", "취소할 목적지 바로가기 생성 요청이 없습니다."),
+            })
+        end
+        if request.outputObserved ~= nil or request.recoveringCleanup ~= nil then
+            return failure({
+                makeError("aftermath_skip_cancel_output_started", "$.aftermath.request", "출력이 관측된 목적지 바로가기 요청은 취소할 수 없습니다."),
+            })
+        end
+        local chat, chatErrors = readChat()
+        if chatErrors then return failure(chatErrors) end
+        local response, topologyErrors = validateAftermathRequestChat(aftermath, chat, false)
+        if topologyErrors then return failure(topologyErrors) end
+        if response ~= nil then
+            return failure({
+                makeError("aftermath_skip_cancel_output_started", "$.chat", "캐릭터 응답이 시작된 목적지 바로가기 요청은 취소할 수 없습니다."),
+            })
+        end
+        local afterRemoval, removeErrors = removeTrailingChatVerified(
+            chat,
+            request.userLuaIndex,
+            "user",
+            AFTERMATH_SKIP_INPUT
+        )
+        if removeErrors then return failure(removeErrors) end
+        if type(aftermath.lastCommitted) == "table"
+            and #afterRemoval ~= aftermath.lastCommitted.responseLuaIndex then
+            return failure({
+                makeError("aftermath_skip_cancel_topology_mismatch", "$.chat", "목적지 바로가기 취소 뒤 대화 위치가 확정 장면과 다릅니다."),
+            })
+        end
+        aftermath.phase = "ready"
         aftermath.request = nil
-        aftermath.phase = "settling"
         local validationErrors = validateAftermath(aftermath, authority)
         if #validationErrors > 0 then return failure(validationErrors) end
         local writeErrors = writeStored(KEYS.aftermath, aftermath)
         if writeErrors then return failure(writeErrors) end
-
-        local settled = settleAftermath(authority, aftermath, staticData)
-        if type(settled) == "table" and settled.ok == true then
-            settled.skipped = true
-            settled.reused = false
-            settled.skippedTurnCount = authority.turnLimit - previousCompletedTurnNumber
-        end
-        return settled
+        local published, publishErrors = publishCurrentViewInternal(staticData, true)
+        if publishErrors then return failure(publishErrors) end
+        return success({
+            restored = true,
+            reused = false,
+            uiAnchorRequired = true,
+            view = published.view,
+        })
     end
 
     local function prepareAftermathGeneration(authority, aftermath, staticData)
@@ -2633,7 +2870,8 @@
             injected = removed == 0,
             deduplicated = removed > 1,
             aftermath = true,
-            finalTurn = aftermath.completedTurnNumber + 1 == authority.turnLimit,
+            finalTurn = aftermath.request.skipToDestination == true
+                or aftermath.completedTurnNumber + 1 == authority.turnLimit,
             requestPhase = aftermath.phase,
             attemptNumber = aftermath.request.attemptNumber,
         })
@@ -4514,6 +4752,8 @@
         return commitOutput()
     elseif action == "skipAftermath" then
         return skipAftermath(arguments[1], arguments[2])
+    elseif action == "cancelAftermathSkip" then
+        return cancelAftermathSkip(arguments[1], arguments[2])
     elseif action == "publishCurrentView" then
         return publishCurrentView()
     elseif action == "getSnapshot" then
