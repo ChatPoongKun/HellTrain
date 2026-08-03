@@ -1,0 +1,81 @@
+name: Apply aftermath fallen image fix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/apply-aftermath-fallen-image-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fix branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/aftermath-fallen-image-visible
+          fetch-depth: 0
+
+      - name: Move fallen portrait into visible aftermath screen
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('html/battleui.html')
+          source = path.read_text(encoding='utf-8')
+
+          old_aftermath = '''<span class="ht-aftermath-kicker">VICTORY CONFIRMED</span>
+          <h2 id="ht-aftermath-title">함락 성공!</h2>
+          <p class="ht-aftermath-copy">도착할 때까지 원하는 행위를 자유롭게 서술하세요.</p>'''
+          new_aftermath = '''<span class="ht-aftermath-kicker">VICTORY CONFIRMED</span>
+          <h2 id="ht-aftermath-title">함락 성공!</h2>
+          <div class="ht-portrait ht-aftermath-portrait" style="width: min(100%, 280px); height: 320px; margin: 8px 0 16px; flex: 0 0 auto;">
+          <img src="{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}_함락}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}} 함락" />
+          <div class="ht-character-name">
+          <strong>{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}</strong>
+          <span>CONQUERED TARGET</span>
+          </div>
+          </div>
+          <p class="ht-aftermath-copy">도착할 때까지 원하는 행위를 자유롭게 서술하세요.</p>'''
+
+          old_sidebar = '''<div class="ht-portrait">
+          {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}
+          <img src="{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}_함락}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}} 함락" />
+          {{/if}}
+          {{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}}}
+          <img src="{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />
+          {{/if}}
+          <div class="ht-character-name">
+          <strong>{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}</strong>
+          {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}<span>CONQUERED TARGET</span>{{/if}}
+          {{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::outcome}}::status}}::victory}}}}}}<span>ENCOUNTER TARGET</span>{{/if}}
+          </div>
+          </div>'''
+          new_sidebar = '''<div class="ht-portrait">
+          <img src="{{raw::{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}}}" alt="{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}" />
+          <div class="ht-character-name">
+          <strong>{{dict_element::{{dict_element::{{getvar::battleView}}::character}}::name}}</strong>
+          <span>ENCOUNTER TARGET</span>
+          </div>
+          </div>'''
+
+          if source.count(old_aftermath) != 1:
+              raise SystemExit(f'aftermath anchor count: {source.count(old_aftermath)}')
+          if source.count(old_sidebar) != 1:
+              raise SystemExit(f'sidebar anchor count: {source.count(old_sidebar)}')
+
+          source = source.replace(old_aftermath, new_aftermath, 1)
+          source = source.replace(old_sidebar, new_sidebar, 1)
+          path.write_text(source, encoding='utf-8')
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add html/battleui.html
+          git commit -m "fix: 조기 승리 화면에 함락 이미지 표시"
+          git push origin HEAD:fix/aftermath-fallen-image-visible
