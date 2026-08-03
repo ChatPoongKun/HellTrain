@@ -1,9 +1,9 @@
 name: Audit Lua roles
 
 on:
-  push:
+  pull_request:
     branches:
-      - feat/aftermath-skip-arrival-scene
+      - main
 
 permissions:
   contents: read
