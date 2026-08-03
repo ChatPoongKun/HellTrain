@@ -191,7 +191,7 @@ end
 -- 생략한다. 개발 중에는 setRunScriptCacheDevelopmentMode(true)를 사용하면 매
 -- 이벤트의 첫 모듈 호출에서 source를 다시 확인한다.
 RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION
-    or "runtime-bundle-4b8d2f7c91a6e305"
+    or "runtime-bundle-9c1d7e4f3a6b2e10"
 RUNTIME_CACHE_DEVELOPMENT_BYPASS = RUNTIME_CACHE_DEVELOPMENT_BYPASS == true
 
 local RUN_SCRIPT_SOURCE_CACHE_MAX_ENTRIES = 64
@@ -783,7 +783,6 @@ local UI_READY_VAR = "gameSetupReady"
 local APPROACH_RETRY_VAR = "helltrainApproachRetryV1"
 local RUN_PROGRESSION_AUTHORITY_KEY = "runProgressionV1.authority"
 local APPROACH_REQUEST_ATTEMPTS = 1
-local AFTERMATH_SKIP_REQUEST_ATTEMPTS = 1
 local SETUP_START_MARKUP = [[<section class="helltrain-setup" aria-labelledby="helltrain-start-title">
 <p class="helltrain-setup-label">BOARDING PROTOCOL</p>
 <h2 class="helltrain-setup-title" id="helltrain-start-title">지옥철에 탑승하시겠습니까?</h2>
@@ -1205,147 +1204,6 @@ local function generateApproachScene(triggerId, report, characterId)
     return nil, lastError
 end
 
-
-local function buildAftermathSkipPrompt(triggerId)
-    if type(getFullChat) ~= "function" then
-        error("getFullChat host function is unavailable")
-    end
-    local chat = getFullChat(triggerId)
-    if type(chat) ~= "table" then
-        error("failed to read chat for aftermath skip prompt")
-    end
-    local history = {}
-    for _, message in ipairs(chat) do
-        local role = type(message) == "table" and message.role or nil
-        local content = type(message) == "table" and message.data or nil
-        if type(content) == "string"
-            and content:match("%S") ~= nil
-            and content ~= UI_ANCHOR_MARKER
-            and content ~= "*says nothing*"
-            and (role == "user" or role == "char") then
-            history[#history + 1] = {
-                role = role == "char" and "assistant" or "user",
-                content = content,
-            }
-        end
-    end
-    if #history == 0 or history[#history].role ~= "user" then
-        error("aftermath skip prompt is missing its synthetic user request")
-    end
-    local prompt = {}
-    local first = math.max(1, #history - 11)
-    for index = first, #history do
-        prompt[#prompt + 1] = history[index]
-    end
-    return prompt
-end
-
-local function runAftermathSkipScene(triggerId)
-    if type(LLM) ~= "function" then
-        return false, false, "LLM 함수를 사용할 수 없습니다. Lua 스크립트의 low-level access를 활성화해야 합니다."
-    end
-    local promptOk, prompt = pcall(buildAftermathSkipPrompt, triggerId)
-    if not promptOk then
-        return false, false, tostring(prompt)
-    end
-    local injected = runScript(
-        triggerId,
-        "battleController",
-        "injectRequest",
-        prompt
-    )
-    if not controllerSucceeded("aftermath skip injectRequest", injected)
-        or type(injected.promptArray) ~= "table" then
-        return false, false, "목적지 바로가기 장면 지시를 준비하지 못했습니다."
-    end
-
-    local lastError = "알 수 없는 LLM 오류"
-    for _ = 1, AFTERMATH_SKIP_REQUEST_ATTEMPTS do
-        local requestOk, response = pcall(
-            LLM,
-            triggerId,
-            injected.promptArray,
-            false,
-            { streaming = true }
-        )
-        if requestOk
-            and type(response) == "table"
-            and response.success == true
-            and type(response.result) == "string"
-            and response.result:match("%S") ~= nil then
-            local appendOk, appendError = pcall(
-                appendChatVerified,
-                triggerId,
-                "char",
-                response.result
-            )
-            if not appendOk then
-                return false, false, tostring(appendError)
-            end
-            local committed = runScript(
-                triggerId,
-                "battleController",
-                "commitOutput"
-            )
-            if not controllerSucceeded("aftermath skip commitOutput", committed) then
-                committed = runScript(
-                    triggerId,
-                    "battleController",
-                    "commitOutput"
-                )
-            end
-            if type(committed) == "table"
-                and committed.ok == true
-                and committed.outputCommitted == true then
-                return true, true, nil
-            end
-            return false, true, "도착 장면은 생성됐지만 정산을 완료하지 못했습니다."
-        end
-        if requestOk and type(response) == "table" and response.result ~= nil then
-            lastError = tostring(response.result)
-        elseif not requestOk then
-            lastError = tostring(response)
-        end
-    end
-    return false, false, lastError
-end
-
-local function finishAftermathSkipButton(triggerId, report, battleId, viewTurnId)
-    local completed, outputPersisted, detail = runAftermathSkipScene(triggerId)
-    if completed then
-        local anchorOk, anchorError = pcall(ensureGameUiAnchor, triggerId)
-        if not anchorOk then
-            debug(1, "aftermath skip: UI anchor 생성 실패: " .. tostring(anchorError))
-        end
-        return true
-    end
-
-    if not outputPersisted then
-        local cancelled = runScript(
-            triggerId,
-            "battleController",
-            "cancelAftermathSkip",
-            battleId,
-            viewTurnId
-        )
-        controllerSucceeded("aftermath skip cancel", cancelled)
-        pcall(ensureGameUiAnchor, triggerId)
-    end
-    debug(1, "aftermath skip: 생성 또는 정산 실패: " .. tostring(detail))
-    if type(alertError) == "function" then
-        local guidance = outputPersisted
-            and "장면은 저장되었습니다. 전송 버튼을 눌러 정산을 다시 시도하세요."
-            or "기존 자유행동 화면으로 복구했습니다. 버튼을 다시 눌러 시도하세요."
-        pcall(
-            alertError,
-            triggerId,
-            "목적지 바로가기 장면을 완료하지 못했습니다.\n"
-                .. guidance .. "\n" .. tostring(detail)
-        )
-    end
-    return false
-end
-
 local function removeApproachRetryFiller(triggerId)
     if type(getFullChat) ~= "function" then
         error("getFullChat host function is unavailable")
@@ -1562,19 +1420,6 @@ onButtonClick = async(function(triggerId, data)
             parts[2],
             "pending"
         )
-    elseif script == "battleController" and parts[1] == "skipAftermath" then
-        if not controllerSucceeded("onButtonClick.skipAftermath", report) then
-            pcall(ensureGameUiAnchor, triggerId)
-            return
-        end
-        if report.generationReady == true then
-            finishAftermathSkipButton(
-                triggerId,
-                report,
-                parts[2],
-                parts[3]
-            )
-        end
     end
 end)
 
