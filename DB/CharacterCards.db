@@ -79,6 +79,70 @@ return {
     schemaVersion = 1,
     kind = "cardDatabase",
     cards = {
+        jiyoung_close_collar = card(
+            "jiyoung_close_collar", "옷깃을 여미다", "block", {},
+            "::tag[block]:: 행동으로 흐트러진 옷깃을 급히 여미며 몸 앞을 가리고 저항을 회복합니다.",
+            { "저항을 3 회복합니다." },
+            "흐트러진 옷깃을 급히 여미며 몸 앞을 가린다.",
+            "더 흐트러지기 전에 가려야 해...",
+            {
+                resolve = function(context)
+                    return { recoverResistance(3) }
+                end,
+            }
+        ),
+
+        jiyoung_quiet_warning = card(
+            "jiyoung_quiet_warning", "작은 목소리의 경고", "vigilance", {},
+            "::tag[vigilance]:: 행동으로 시선을 피한 채 그만두라고 말해 플레이어의 은폐를 낮춥니다.",
+            { "플레이어가 은폐를 2 잃습니다." },
+            "시선을 피한 채 떨리는 목소리로 그만두라고 말한다.",
+            "크게 말하진 못해도, 분명히 멈추라고 해야 해...",
+            {
+                resolve = function(context)
+                    return { loseStealth(2) }
+                end,
+            }
+        ),
+
+        jiyoung_turn_to_corner = card(
+            "jiyoung_turn_to_corner", "구석으로 몸을 돌리다", "evade", {},
+            "::tag[evade]:: 행동으로 벽과 좌석 쪽으로 몸을 돌려 거리를 벌리고 저항을 회복합니다.",
+            { "저항을 4 회복합니다." },
+            "벽과 좌석 쪽으로 몸을 돌려 최대한 거리를 벌린다.",
+            "구석으로 피하면 더는 가까이 오기 어렵겠지...",
+            {
+                resolve = function(context)
+                    return { recoverResistance(4) }
+                end,
+            }
+        ),
+
+        jiyoung_silent_glare = planCard(
+            "jiyoung_silent_glare", "말없이 노려보기", "intimidate",
+            "::tag[intimidate]:: 행동으로 용기를 내어 상대를 노려보며 다음 움직임에 반응하는 ::tag[plan]::을 배치합니다.",
+            { "지속 1턴, 충전 1.", "다음 플레이어 카드가 선언되면 플레이어가 은폐를 3 잃습니다." },
+            "입술을 굳게 다문 채 상대를 똑바로 바라보며 다음 움직임을 경계한다.",
+            "무서워도 피하지만 말자. 다시 움직이면 바로 알릴 거야...",
+            "상대가 움직이자 시선을 거두지 않고 주변이 들을 만큼 또렷하게 항의한다.",
+            "이번에는 그냥 넘어가지 않을 거야.",
+            1, 1,
+            function(context, event) return { loseStealth(3, "plan") } end
+        ),
+
+        jiyoung_timid_call_for_help = card(
+            "jiyoung_timid_call_for_help", "머뭇거리며 도움 청하기", "expose", {},
+            "::tag[expose]:: 행동으로 가까운 승객에게 조심스럽게 도움을 청해 플레이어의 은폐를 낮추고 의심을 키웁니다.",
+            { "플레이어가 은폐를 2 잃습니다.", "의심 토큰 1개를 추가합니다." },
+            "몇 번이나 망설이다가 가까운 승객에게 작은 목소리로 상황을 설명한다.",
+            "혼자 참는 것보다 누군가에게 말하는 게 나을 거야...",
+            {
+                resolve = function(context)
+                    return { loseStealth(2), addMood("suspicion", 1) }
+                end,
+            }
+        ),
+
         seoa_document_bag_guard = card(
             "seoa_document_bag_guard", "서류 가방으로 가로막기", "block", {},
             "::tag[block]:: 행동으로 단단한 서류 가방을 몸 앞에 세워 저항을 회복합니다.",
@@ -86,7 +150,9 @@ return {
             "서류 가방을 몸 앞에 비스듬히 세워 빈틈없이 거리를 막는다.",
             "업무도 끝났는데 이런 일에 시간을 낭비할 수는 없어.",
             {
-                resolve = function(context) return { recoverResistance(4) } end,
+                resolve = function(context)
+                    return { recoverResistance(4) }
+                end,
             }
         ),
 
@@ -97,7 +163,9 @@ return {
             "주변 사람은 눈치채지 못할 만큼 낮은 목소리로 단호한 최후통첩을 건넨다.",
             "한 번만 더 움직이면 직접 책임지게 만들겠어.",
             {
-                resolve = function(context) return { loseStealth(4) } end,
+                resolve = function(context)
+                    return { loseStealth(4) }
+                end,
             }
         ),
 
@@ -108,7 +176,9 @@ return {
             "고개를 들어 가까운 승객들과 차례로 눈을 맞추며 상황을 알릴 준비를 한다.",
             "숨길 수 있을 거라고 생각했다면 오산이야.",
             {
-                resolve = function(context) return { loseStealth(5) } end,
+                resolve = function(context)
+                    return { loseStealth(5) }
+                end,
             }
         ),
 
@@ -119,7 +189,9 @@ return {
             "안경을 고쳐 쓰고 상대의 손과 시선을 번갈아 살피며 꼿꼿한 자세를 되찾는다.",
             "감정적으로 반응하지 마. 움직임을 전부 읽으면 돼.",
             {
-                resolve = function(context) return { recoverResistance(1), loseStealth(3) } end,
+                resolve = function(context)
+                    return { recoverResistance(1), loseStealth(3) }
+                end,
             }
         ),
 
@@ -142,7 +214,9 @@ return {
             "놀리는 듯한 웃음을 흘리며 몸을 틀어 한 걸음 옆으로 빠져나간다.",
             "뭐야, 그 정도로 날 붙잡을 수 있을 줄 알았어?",
             {
-                resolve = function(context) return { recoverResistance(2) } end,
+                resolve = function(context)
+                    return { recoverResistance(2) }
+                end,
             }
         ),
 
@@ -153,7 +227,9 @@ return {
             "휴대전화를 얼굴 높이까지 들고 녹화 버튼을 누르는 시늉을 한다.",
             "찍히는 건 무섭지? 표정부터 굳었네.",
             {
-                resolve = function(context) return { loseStealth(3) } end,
+                resolve = function(context)
+                    return { loseStealth(3) }
+                end,
             }
         ),
 
@@ -164,7 +240,9 @@ return {
             "웃는 얼굴로 가볍게 넘기는 듯하다가 끝말에 날카로운 경고를 섞는다.",
             "농담인지 아닌지 헷갈리면, 함부로 움직이기도 어렵겠지?",
             {
-                resolve = function(context) return { loseStealth(1), addMood("suspicion", 1), addMood("confusion", 1) } end,
+                resolve = function(context)
+                    return { loseStealth(1), addMood("suspicion", 1), addMood("confusion", 1) }
+                end,
             }
         ),
 
@@ -187,7 +265,9 @@ return {
             "갑자기 창밖을 가리키며 대화의 초점과 주변의 시선을 다른 곳으로 돌린다.",
             "다들 저쪽을 보면, 이 분위기도 금방 식겠지.",
             {
-                resolve = function(context) return { removeMood(context.mood, 1), addMood("ignore", 1) } end,
+                resolve = function(context)
+                    return { removeMood(context.mood, 1), addMood("ignore", 1) }
+                end,
             }
         ),
 
@@ -198,7 +278,9 @@ return {
             "흐트러진 카디건의 앞섶을 차분히 여미고 팔로 몸 앞을 감싼다.",
             "서두르지 말고, 먼저 몸을 제대로 가리자.",
             {
-                resolve = function(context) return { recoverResistance(5) } end,
+                resolve = function(context)
+                    return { recoverResistance(5) }
+                end,
             }
         ),
 
@@ -209,7 +291,9 @@ return {
             "미소를 거두지 않은 채 더 가까이 오지 말라고 낮고 분명하게 말한다.",
             "좋게 말할 때 알아들었으면 좋겠는데.",
             {
-                resolve = function(context) return { recoverResistance(2), loseStealth(2) } end,
+                resolve = function(context)
+                    return { recoverResistance(2), loseStealth(2) }
+                end,
             }
         ),
 
@@ -220,7 +304,9 @@ return {
             "상대를 자극하지 않는 걸음으로 사람들이 잘 보이는 출입문 곁에 자리를 잡는다.",
             "눈에 띄는 곳이라면 함부로 따라오진 못하겠지.",
             {
-                resolve = function(context) return { recoverResistance(4) } end,
+                resolve = function(context)
+                    return { recoverResistance(4) }
+                end,
             }
         ),
 
@@ -259,7 +345,9 @@ return {
             "넓은 수도복 소매를 모아 몸 앞을 빈틈없이 가리고 한 걸음 물러선다.",
             "침착해야 해. 두려움에 마음을 내주지 말자.",
             {
-                resolve = function(context) return { recoverResistance(4) } end,
+                resolve = function(context)
+                    return { recoverResistance(4) }
+                end,
             }
         ),
 
@@ -270,7 +358,9 @@ return {
             "상대의 눈을 피하지 않고 무엇이 잘못되었는지 조용하지만 분명하게 타이른다.",
             "스스로 멈출 기회를 주어야 해.",
             {
-                resolve = function(context) return { loseStealth(3) } end,
+                resolve = function(context)
+                    return { loseStealth(3) }
+                end,
             }
         ),
 
@@ -281,7 +371,9 @@ return {
             "십자가를 한 손에 쥐고 다음 객차로 이어지는 출입문 앞으로 빠르게 자리를 옮긴다.",
             "이 자리를 피하는 것이 가장 현명해.",
             {
-                resolve = function(context) return { recoverResistance(5) } end,
+                resolve = function(context)
+                    return { recoverResistance(5) }
+                end,
             }
         ),
 
@@ -304,9 +396,10 @@ return {
             "십자가를 굳게 쥔 채 더는 어떤 대화도 받아들이지 않겠다고 선언한다.",
             "이제 끝이야. 더는 한마디도 들을 필요 없어.",
             {
-                resolve = function(context) return { loseStealth(2), forceMood("rejection") } end,
+                resolve = function(context)
+                    return { loseStealth(2), forceMood("rejection") }
+                end,
             }
         ),
-
     },
 }
