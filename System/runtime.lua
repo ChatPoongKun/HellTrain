@@ -533,12 +533,88 @@ function clearRunScriptCache(script)
     return removedSources
 end
 
+
+local turnInitializationDepth = 0
+
+local function policyIsFinite(value)
+    return type(value) == "number"
+        and value == value
+        and value ~= math.huge
+        and value ~= -math.huge
+end
+
+local function policyIsInteger(value, minimum)
+    return policyIsFinite(value)
+        and value % 1 == 0
+        and (minimum == nil or value >= minimum)
+end
+
+local function copyPolicyTable(value)
+    local copy = {}
+    for key, item in pairs(value) do
+        copy[key] = item
+    end
+    return copy
+end
+
+-- 완료 이력은 직전 턴의 finish를 기록한다. 다음 턴 초기화 중에는
+-- turn_start 효과가 현재 은폐·저항·무드를 합법적으로 바꿀 수 있으므로,
+-- battleHistory의 연속성 비교에만 직전 finish를 투영한다. 실제 state는
+-- 바꾸지 않으며 stateSchema의 나머지 검증은 원본 state를 계속 검사한다.
+local function projectHistoryValidationState(history, state)
+    if type(history) ~= "table"
+        or type(history.turns) ~= "table"
+        or type(state) ~= "table"
+        or state.status ~= "active"
+        or not policyIsInteger(state.turnNumber, 1) then
+        return state, false
+    end
+
+    local turnCount = #history.turns
+    if turnCount == 0 or state.turnNumber ~= turnCount + 1 then
+        return state, false
+    end
+
+    local last = history.turns[turnCount]
+    local finish = type(last) == "table" and last.finish or nil
+    if type(finish) ~= "table"
+        or state.lastCommittedTurnId ~= last.turnId
+        or not policyIsFinite(finish.stealth)
+        or not policyIsFinite(finish.resistance)
+        or type(finish.mood) ~= "string"
+        or finish.status ~= "active"
+        or type(state.player) ~= "table"
+        or type(state.character) ~= "table" then
+        return state, false
+    end
+
+    local receipt = state.turnStartReceipt
+    if receipt ~= nil then
+        local baseline = type(receipt) == "table" and receipt.baseline or nil
+        if type(baseline) ~= "table"
+            or baseline.stealth ~= finish.stealth
+            or baseline.resistance ~= finish.resistance
+            or baseline.mood ~= finish.mood then
+            return state, false
+        end
+    end
+
+    local projected = copyPolicyTable(state)
+    projected.player = copyPolicyTable(state.player)
+    projected.character = copyPolicyTable(state.character)
+    projected.player.stealth = finish.stealth
+    projected.character.resistance = finish.resistance
+    projected.character.mood = finish.mood
+    return projected, true
+end
+
 function getRunScriptCacheDiagnostics()
     local diagnostics = {
         bundleRevision = currentRunScriptBundleRevision(),
         developmentBypass = RUNTIME_CACHE_DEVELOPMENT_BYPASS,
         cacheEpoch = runScriptCacheEpoch,
         currentMode = currentRuntimeMode,
+        turnInitializationDepth = turnInitializationDepth,
         maxSourceEntries = RUN_SCRIPT_SOURCE_CACHE_MAX_ENTRIES,
         maxWarmEntries = RUN_SCRIPT_WARM_CACHE_MAX_ENTRIES,
         maxTransactionEntries = RUN_SCRIPT_TRANSACTION_MAX_ENTRIES,
@@ -621,13 +697,53 @@ local function invokeRunScriptHandler(handler, triggerId, ...)
     return table.unpack(packed, 2, packed.n)
 end
 
+local function invokeRunScriptWithPolicy(handler, triggerId, script, ...)
+    local arguments = table.pack(...)
+    local action = arguments[1]
+    local isTurnInitialization = script == "turnInitializer"
+        and action == "prepareTurn"
+
+    if isTurnInitialization then
+        turnInitializationDepth = turnInitializationDepth + 1
+    end
+
+    local packed = table.pack(pcall(function()
+        if turnInitializationDepth > 0
+            and script == "battleHistory"
+            and action == "validate" then
+            local projected, applied = projectHistoryValidationState(
+                arguments[2],
+                arguments[3]
+            )
+            if applied then
+                arguments[3] = projected
+            end
+        end
+        return invokeRunScriptHandler(
+            handler,
+            triggerId,
+            table.unpack(arguments, 1, arguments.n)
+        )
+    end))
+
+    if isTurnInitialization then
+        turnInitializationDepth = turnInitializationDepth - 1
+    end
+
+    if not packed[1] then
+        debug(1, "runtime policy execution error: " .. tostring(packed[2]))
+        return nil
+    end
+    return table.unpack(packed, 2, packed.n)
+end
+
 function runScript(triggerId, script, ...)
     runScriptCacheStats.requests = runScriptCacheStats.requests + 1
     local event = ensureRunScriptEvent(triggerId)
     local transactionHandler = event.handlers[script]
     if transactionHandler ~= nil then
         runScriptCacheStats.transactionHits = runScriptCacheStats.transactionHits + 1
-        return invokeRunScriptHandler(transactionHandler, triggerId, ...)
+        return invokeRunScriptWithPolicy(transactionHandler, triggerId, script, ...)
     end
 
     local handler = nil
@@ -669,7 +785,7 @@ function runScript(triggerId, script, ...)
         runScriptCacheStats.transactionCapacitySkips = runScriptCacheStats.transactionCapacitySkips + 1
     end
 
-    return invokeRunScriptHandler(handler, triggerId, ...)
+    return invokeRunScriptWithPolicy(handler, triggerId, script, ...)
 end
 
 --로어북에서 db를 호출해 return
