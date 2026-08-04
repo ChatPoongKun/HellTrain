@@ -1,0 +1,200 @@
+name: One-shot UI anchor recovery fix
+
+on:
+  push:
+    branches:
+      - fix/preserve-ui-anchor-on-output-failure
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/preserve-ui-anchor-on-output-failure
+          fetch-depth: 0
+
+      - name: Delay UI anchor removal until commit succeeds
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("System/battleController.lua")
+          source = path.read_text(encoding="utf-8")
+
+          old_observation = '''        if binding.phase == "requestInjected" then
+              local chat, chatErrors = readChat()
+              if chatErrors then return failure(chatErrors) end
+              local topology, topologyErrors = inspectObservedOutput(binding, chat, false)
+              if topologyErrors then return failure(topologyErrors) end
+              if binding.outputObserved == nil then
+                  local observedBinding, cloneError = cloneJson(binding, "$.activeRequest")
+                  if cloneError then return failure({ cloneError }) end
+                  observedBinding.outputObserved = {
+                      schemaVersion = 1,
+                      kind = "battleOutputObserved",
+                      attemptNumber = binding.attemptNumber,
+                      responseIndex = topology.responseIndex,
+                      responseFingerprint = topology.responseFingerprint,
+                  }
+                  local observedErrors = validateBinding(observedBinding, selectedPending)
+                  if #observedErrors > 0 then return failure(observedErrors) end
+                  local observedWriteErrors = writeStored(KEYS.activeRequest, observedBinding)
+                  if observedWriteErrors then return failure(observedWriteErrors) end
+                  binding = observedBinding
+              end
+              -- 완성 출력이 실제 채팅에 도착한 것이 확인된 뒤에만 이전 UI를
+              -- 제거한다. 응답 자체는 그대로 두고 다음 onOutput UI anchor가
+              -- 응답 아래에 배치될 수 있도록 한다.
+              local _, _, uiRemoveErrors = removeUiAnchorAt(chat, topology.uiAnchorLuaIndex)
+              if uiRemoveErrors then return failure(uiRemoveErrors) end
+          end
+          '''
+
+          new_observation = '''        -- 출력 관측 영수증은 먼저 내구성 있게 저장하되, 표시용 UI anchor는
+          -- 상태 commit과 다음 View 게시가 모두 성공할 때까지 보존한다. 검증 실패
+          -- 전에 anchor를 제거하면 onOutput이 실패한 뒤 복구할 UI가 사라진다.
+          local observedChat = nil
+          local observedUiAnchorLuaIndex = nil
+          if binding.phase == "requestInjected" then
+              local chat, chatErrors = readChat()
+              if chatErrors then return failure(chatErrors) end
+              local topology, topologyErrors = inspectObservedOutput(binding, chat, false)
+              if topologyErrors then return failure(topologyErrors) end
+              if binding.outputObserved == nil then
+                  local observedBinding, cloneError = cloneJson(binding, "$.activeRequest")
+                  if cloneError then return failure({ cloneError }) end
+                  observedBinding.outputObserved = {
+                      schemaVersion = 1,
+                      kind = "battleOutputObserved",
+                      attemptNumber = binding.attemptNumber,
+                      responseIndex = topology.responseIndex,
+                      responseFingerprint = topology.responseFingerprint,
+                  }
+                  local observedErrors = validateBinding(observedBinding, selectedPending)
+                  if #observedErrors > 0 then return failure(observedErrors) end
+                  local observedWriteErrors = writeStored(KEYS.activeRequest, observedBinding)
+                  if observedWriteErrors then return failure(observedWriteErrors) end
+                  binding = observedBinding
+              end
+              observedChat = chat
+              observedUiAnchorLuaIndex = topology.uiAnchorLuaIndex
+          end
+          '''
+
+          if source.count(old_observation) != 1:
+              raise SystemExit("commitOutput observation block was not found exactly once")
+          source = source.replace(old_observation, new_observation, 1)
+
+          old_return = '''        return success({
+              generationReady = false,
+              outputCommitted = true,
+              turnId = committed.turnId,
+              applied = committed.applied == true,
+              initializedNextTurn = initialized,
+              status = nextState.status,
+              turnNumber = nextState.turnNumber,
+              publicResult = selectedPending.turnResult.publicResult,
+              view = published.view,
+              progressionState = progressionState,
+          })
+          '''
+
+          new_return = '''        -- 이제 authority/draft/request와 canonical View가 모두 확정됐다. 이전
+          -- anchor 정리는 이 시점에만 수행한다. 정리 실패는 이미 완료된 commit을
+          -- 실패로 되돌리지 않는다. hostFlow가 outputCommitted를 보고 새 anchor를
+          -- 만들며, 이전 marker는 active index가 아니므로 화면에서는 렌더되지 않는다.
+          local removedUiAnchor = false
+          local uiAnchorCleanupError = nil
+          if observedChat ~= nil then
+              local _, removed, uiRemoveErrors = removeUiAnchorAt(
+                  observedChat,
+                  observedUiAnchorLuaIndex
+              )
+              removedUiAnchor = removed == true
+              if uiRemoveErrors then
+                  uiAnchorCleanupError = uiRemoveErrors[1]
+                  if type(debug) == "function" then
+                      local detail = type(uiAnchorCleanupError) == "table"
+                          and uiAnchorCleanupError.message
+                          or uiAnchorCleanupError
+                      debug(
+                          1,
+                          "commitOutput: output committed but previous UI anchor cleanup failed: "
+                              .. tostring(detail)
+                      )
+                  end
+              end
+          end
+
+          return success({
+              generationReady = false,
+              outputCommitted = true,
+              turnId = committed.turnId,
+              applied = committed.applied == true,
+              initializedNextTurn = initialized,
+              status = nextState.status,
+              turnNumber = nextState.turnNumber,
+              publicResult = selectedPending.turnResult.publicResult,
+              view = published.view,
+              progressionState = progressionState,
+              removedUiAnchor = removedUiAnchor,
+              uiAnchorCleanupError = uiAnchorCleanupError,
+          })
+          '''
+
+          if source.count(old_return) != 1:
+              raise SystemExit("commitOutput success block was not found exactly once")
+          source = source.replace(old_return, new_return, 1)
+          path.write_text(source, encoding="utf-8")
+
+          test = Path("Tests/ui-anchor-commit-order-check.lua")
+          test.write_text(r'''local path = "System/battleController.lua"
+          local file = assert(io.open(path, "rb"))
+          local source = file:read("*a")
+          file:close()
+
+          local observation = assert(source:find("local observedChat = nil", 1, true))
+          local commitCall = assert(source:find('"commitPending"', observation, true))
+          local authorityWrite = assert(source:find("writeStored(KEYS.authority, nextState)", commitCall, true))
+          local publishComment = assert(source:find("이제 authority/draft/request와 canonical View가 모두 확정됐다", authorityWrite, true))
+          local anchorRemoval = assert(source:find("removeUiAnchorAt(", publishComment, true))
+          local successReturn = assert(source:find("outputCommitted = true", anchorRemoval, true))
+
+          assert(observation < commitCall)
+          assert(commitCall < authorityWrite)
+          assert(authorityWrite < publishComment)
+          assert(publishComment < anchorRemoval)
+          assert(anchorRemoval < successReturn)
+          assert(not source:find("removeUiAnchorAt(chat, topology.uiAnchorLuaIndex)", 1, true))
+          assert(source:find("uiAnchorCleanupError = uiRemoveErrors[1]", anchorRemoval, true))
+
+          print("ui anchor commit ordering check passed")
+          ''', encoding="utf-8")
+
+      - name: Install Lua
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4
+
+      - name: Validate syntax and regression guard
+        run: |
+          luac5.4 -p System/battleController.lua
+          lua5.4 Tests/ui-anchor-commit-order-check.lua
+          git diff --check
+
+      - name: Remove one-shot workflow
+        run: rm -f .github/workflows/fix-ui-anchor-output-failure.yml
+
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: preserve UI anchor until output commit succeeds"
+          git push origin HEAD:fix/preserve-ui-anchor-on-output-failure
