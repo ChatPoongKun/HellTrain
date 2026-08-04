@@ -1,9 +1,8 @@
 -- RisuAI host entrypoint. Runtime and host orchestration are loaded lazily
 -- because lore access requires the current event triggerId.
-RUNTIME_BUNDLE_REVISION = "runtime-bundle-turn-start-history-policy-v1-20260805"
+RUNTIME_BUNDLE_REVISION = "runtime-bundle-turn-start-history-integrated-v1-20260805"
 
 local runtimeHandler = nil
-local runtimePolicyHandler = nil
 local hostFlowHandler = nil
 local UI_READY_VAR = "gameSetupReady"
 
@@ -71,10 +70,6 @@ end
 local function ensureBootstrap(triggerId)
     if runtimeHandler == nil then
         runtimeHandler = installBootstrapHandler(triggerId, "runtime")
-    end
-
-    if runtimePolicyHandler == nil then
-        runtimePolicyHandler = installBootstrapHandler(triggerId, "runtimePolicy")
     end
 
     if hostFlowHandler == nil then
