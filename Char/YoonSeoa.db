@@ -53,6 +53,7 @@ return {
                     "seoa_measured_warning",
                     "seoa_scan_for_witnesses",
                     "seoa_cold_stare",
+                    "seoa_calculated_gaze",
                 },
             },
         },
