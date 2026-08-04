@@ -1,6 +1,7 @@
 -- RisuAI host entrypoint. Runtime and host orchestration are loaded lazily
 -- because lore access requires the current event triggerId.
 local runtimeHandler = nil
+local runtimePolicyHandler = nil
 local hostFlowHandler = nil
 local UI_READY_VAR = "gameSetupReady"
 
@@ -56,14 +57,22 @@ local function loadBootstrapLore(triggerId, moduleName)
     return handler
 end
 
+local function installBootstrapHandler(triggerId, moduleName)
+    local candidate = loadBootstrapLore(triggerId, moduleName)
+    local installed, result = pcall(candidate, triggerId, "install")
+    if not installed or result ~= true then
+        error(moduleName .. " bootstrap failed: " .. tostring(result))
+    end
+    return candidate
+end
+
 local function ensureBootstrap(triggerId)
     if runtimeHandler == nil then
-        local candidate = loadBootstrapLore(triggerId, "runtime")
-        local installed, result = pcall(candidate, triggerId, "install")
-        if not installed or result ~= true then
-            error("runtime bootstrap failed: " .. tostring(result))
-        end
-        runtimeHandler = candidate
+        runtimeHandler = installBootstrapHandler(triggerId, "runtime")
+    end
+
+    if runtimePolicyHandler == nil then
+        runtimePolicyHandler = installBootstrapHandler(triggerId, "runtimePolicy")
     end
 
     if hostFlowHandler == nil then
