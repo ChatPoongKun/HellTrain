@@ -23,6 +23,7 @@ end
 
 local database = loadModule("DB/CharacterCards.db")
 local registry = loadModule("DB/GameRegistry.db")
+local characterList = loadModule("Char/CharacterList.db")
 
 assert(database.schemaVersion == 1)
 assert(database.kind == "cardDatabase")
@@ -70,6 +71,65 @@ for characterId, cardIds in pairs(expectedByCharacter) do
     end
 end
 assert(expectedCount == 20)
+
+assert(characterList.schemaVersion == 1)
+assert(characterList.kind == "characterList")
+assert(type(characterList.characters) == "table")
+assert(characterList.characters.yoo_jiyoung == nil, "prototype character remains in manifest")
+
+local characterSources = {
+    seoa = {
+        characterId = "yoon_seoa",
+        database = "YoonSeoa.db",
+        path = "Char/YoonSeoa.db",
+    },
+    jenny = {
+        characterId = "han_jenny",
+        database = "HanJenny.db",
+        path = "Char/HanJenny.db",
+    },
+    miryeong = {
+        characterId = "seo_miryeong",
+        database = "SeoMiryeong.db",
+        path = "Char/SeoMiryeong.db",
+    },
+    agnes = {
+        characterId = "sister_agnes",
+        database = "SisterAgnes.db",
+        path = "Char/SisterAgnes.db",
+    },
+}
+
+local manifestCount = 0
+for _ in pairs(characterList.characters) do manifestCount = manifestCount + 1 end
+assert(manifestCount == 4, "active character count mismatch")
+
+local assigned = {}
+for characterKey, source in pairs(characterSources) do
+    local manifest = assert(characterList.characters[source.characterId])
+    assert(manifest.id == source.characterId)
+    assert(manifest.database == source.database)
+
+    local module = loadModule(source.path)
+    assert(module.schemaVersion == 1)
+    assert(module.kind == "characterDatabase")
+    local character = assert(module.characters[source.characterId])
+    local deck = assert(character.battle and character.battle.deck)
+    assert(#deck == 5, "character deck must contain five cards: " .. source.characterId)
+
+    local expectedDeck = {}
+    for _, cardId in ipairs(expectedByCharacter[characterKey]) do
+        expectedDeck[cardId] = true
+    end
+    for _, cardId in ipairs(deck) do
+        assert(expectedDeck[cardId], "unexpected deck card: " .. source.characterId .. "/" .. cardId)
+        assert(assigned[cardId] == nil, "character card assigned more than once: " .. cardId)
+        assigned[cardId] = source.characterId
+    end
+end
+for cardId in pairs(expected) do
+    assert(assigned[cardId] ~= nil, "character card is not assigned to a deck: " .. cardId)
+end
 
 local deprecatedIds = {
     "close_collar",
