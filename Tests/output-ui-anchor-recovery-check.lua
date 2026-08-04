@@ -1,0 +1,21 @@
+local file = assert(io.open("System/main.lua", "rb"))
+local source = file:read("*a")
+file:close()
+
+local helper = assert(source:find("local function restoreOutputUiAnchor", 1, true))
+local outputHook = assert(source:find("onOutput = async(function", helper, true))
+local protectedDispatch = assert(source:find("table.pack(pcall(", outputHook, true))
+local recoveryCall = assert(source:find("restoreOutputUiAnchor(triggerId)", protectedDispatch, true))
+local rethrow = assert(source:find("if not packed[1] then", recoveryCall, true))
+local returnValues = assert(source:find("table.unpack(packed, 2, packed.n)", rethrow, true))
+
+assert(helper < outputHook)
+assert(outputHook < protectedDispatch)
+assert(protectedDispatch < recoveryCall)
+assert(recoveryCall < rethrow)
+assert(rethrow < returnValues)
+assert(source:find('local UI_READY_VAR = "gameSetupReady"', 1, true))
+assert(source:find('type(ensureGameUiAnchor) ~= "function"', helper, true))
+assert(source:find('ready ~= "ready"', helper, true))
+
+print("onOutput UI anchor recovery check passed")
