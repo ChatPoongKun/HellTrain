@@ -1,5 +1,7 @@
 -- RisuAI host entrypoint. Runtime and host orchestration are loaded lazily
 -- because lore access requires the current event triggerId.
+RUNTIME_BUNDLE_REVISION = "runtime-bundle-character-cards-v1-20260805"
+
 local runtimeHandler = nil
 local hostFlowHandler = nil
 
