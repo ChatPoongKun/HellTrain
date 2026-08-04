@@ -17,11 +17,11 @@ assert(rethrow < returnValues)
 assert(source:find('local UI_READY_VAR = "gameSetupReady"', 1, true))
 assert(source:find('type(ensureGameUiAnchor) ~= "function"', helper, true))
 assert(source:find('ready ~= "ready"', helper, true))
-assert(source:find('installBootstrapHandler(triggerId, "runtimePolicy")', 1, true))
 assert(source:find(
-    'RUNTIME_BUNDLE_REVISION = "runtime-bundle-turn-start-history-policy-v1-20260805"',
+    'RUNTIME_BUNDLE_REVISION = "runtime-bundle-turn-start-history-integrated-v1-20260805"',
     1,
     true
 ))
+assert(not source:find("runtimePolicy", 1, true))
 
-print("onOutput UI anchor recovery check passed")
+io.stdout:write("onOutput UI anchor recovery check passed\n")

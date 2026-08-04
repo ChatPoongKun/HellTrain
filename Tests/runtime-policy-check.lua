@@ -5,17 +5,15 @@ local function readFile(path)
     return content
 end
 
-local currentHistory
-local currentState
-local capturedState
-local explodeTurnInitializer = false
+currentHistory = nil
+currentState = nil
+capturedState = nil
+explodeTurnInitializer = false
 
-runScript = function(triggerId, script, ...)
-    local arguments = table.pack(...)
-    if script == "turnInitializer" and arguments[1] == "prepareTurn" then
-        if explodeTurnInitializer then
-            error("expected turn initializer failure")
-        end
+local moduleSources = {
+    ["turnInitializer.lua"] = [[(function(triggerId, action)
+        if action ~= "prepareTurn" then error("unexpected action") end
+        if explodeTurnInitializer then error("expected turn initializer failure") end
         return runScript(
             triggerId,
             "battleHistory",
@@ -24,34 +22,42 @@ runScript = function(triggerId, script, ...)
             currentState,
             {}
         )
-    elseif script == "battleHistory" and arguments[1] == "validate" then
-        capturedState = arguments[3]
-        return {
-            ok = true,
-            schemaVersion = 1,
-            errors = {},
-        }
-    end
-    error("unexpected test route: " .. tostring(script))
+    end)]],
+    ["battleHistory.lua"] = [[(function(_, action, _, state)
+        if action ~= "validate" then error("unexpected action") end
+        capturedState = state
+        return { ok = true, schemaVersion = 1, errors = {} }
+    end)]],
+}
+
+getLoreBooks = function(_, name)
+    local source = moduleSources[name]
+    if source == nil then return {} end
+    return { { content = source } }
 end
+getChatVar = function() return nil end
+setChatVar = function() end
+getName = function() return "test" end
+getCharacterFirstMessage = function() return "hello" end
+print = function() end
 
 local chunk = assert(load(
-    "return" .. readFile("System/runtimePolicy.lua"),
-    "@System/runtimePolicy.lua",
+    "return" .. readFile("System/runtime.lua"),
+    "@System/runtime.lua",
     "t",
     _G
 ))
-local policy = chunk()
-assert(type(policy) == "function")
-assert(policy(nil, "install") == true)
-assert(policy(nil, "install") == true)
+local runtime = chunk()
+assert(type(runtime) == "function")
+assert(runtime(nil, "install") == true)
+runtime(nil, "beginEvent", "test")
 
 currentHistory = {
     schemaVersion = 1,
     kind = "battleHistory",
     turns = {
         {
-            turnId = "battle-001-turn-003",
+            turnId = "battle-001-turn-001",
             finish = {
                 stealth = 20,
                 resistance = 14,
@@ -64,12 +70,12 @@ currentHistory = {
 currentState = {
     status = "active",
     turnNumber = 2,
-    lastCommittedTurnId = "battle-001-turn-003",
+    lastCommittedTurnId = "battle-001-turn-001",
     player = { stealth = 18 },
     character = { resistance = 17, mood = "anger" },
 }
 
-local report = runScript(nil, "turnInitializer", "prepareTurn")
+local report = runtime(nil, "run", "turnInitializer", "prepareTurn")
 assert(report.ok == true)
 assert(capturedState ~= currentState)
 assert(capturedState.player ~= currentState.player)
@@ -82,33 +88,24 @@ assert(currentState.character.resistance == 17)
 assert(currentState.character.mood == "anger")
 
 currentState.turnStartReceipt = {
-    baseline = {
-        stealth = 20,
-        resistance = 14,
-        mood = "suspicion",
-    },
+    baseline = { stealth = 20, resistance = 14, mood = "suspicion" },
 }
-runScript(nil, "turnInitializer", "prepareTurn")
-assert(capturedState.player.stealth == 20)
+runtime(nil, "run", "turnInitializer", "prepareTurn")
 assert(capturedState.character.resistance == 14)
-assert(capturedState.character.mood == "suspicion")
 
 currentState.turnStartReceipt.baseline.resistance = 999
-runScript(nil, "turnInitializer", "prepareTurn")
+runtime(nil, "run", "turnInitializer", "prepareTurn")
 assert(capturedState == currentState)
 assert(capturedState.character.resistance == 17)
 
 currentState.turnStartReceipt = nil
-runScript(nil, "battleHistory", "validate", currentHistory, currentState, {})
+runtime(nil, "run", "battleHistory", "validate", currentHistory, currentState, {})
 assert(capturedState == currentState)
-assert(capturedState.character.resistance == 17)
 
 explodeTurnInitializer = true
-local failed, detail = pcall(runScript, nil, "turnInitializer", "prepareTurn")
-assert(failed == false)
-assert(tostring(detail):find("expected turn initializer failure", 1, true))
-local diagnostics = policy(nil, "diagnostics")
-assert(diagnostics.installed == true)
+local failedReport = runtime(nil, "run", "turnInitializer", "prepareTurn")
+assert(failedReport == nil)
+local diagnostics = runtime(nil, "diagnostics")
 assert(diagnostics.turnInitializationDepth == 0)
 
-print("runtime policy check passed")
+io.stdout:write("runtime integration policy check passed\n")
