@@ -18,6 +18,7 @@ HellTrain 카드 아이디어 및 구현 현황
 - 캐릭터 카드 14종은 기존 고유 컨셉을 유지하고, 6종은 현행 시스템에서 구현 가능하도록 재설계한 뒤 구현했습니다.
 - 기존 프로토타입 캐릭터 유지영과 테스트 카드 4종을 제거했습니다.
 - 캐릭터별 전투 덱은 고유 카드 5장으로 구성하며 캐릭터 간 카드를 공유하지 않습니다.
+- 정적 DB 배포 캐시 무효화를 위해 `System/main.lua`의 `RUNTIME_BUNDLE_REVISION`을 갱신했습니다.
 - 기존 테스트용 플레이어 카드 11종은 `DB/PlayerCards.db`에서 모두 폐기했습니다.
 
 행동 태그 대응표
@@ -559,7 +560,7 @@ HellTrain 카드 아이디어 및 구현 현황
 - 제거한 프로토타입 카드: `close_collar`, `quiet_warning`, `turn_to_corner`, `silent_glare`
 - 기획에서 제외한 기존 카드: `jenny_teasing_counter`, `miryeong_calm_request_for_help`
 - 프로토타입 캐릭터 `yoo_jiyoung`은 활성 매니페스트와 개별 DB에서 제거
-- 시스템 모듈 변경 없음
+- 전투 규칙 로직 변경 없음. 정적 DB 배포 캐시 무효화를 위해 `System/main.lua`의 `RUNTIME_BUNDLE_REVISION`만 갱신
 - 결론: 20장 모두 현재 정적 데이터와 캐릭터 선택 규칙으로 구현 완료
 
 플레이어 미구현 사유 분류
