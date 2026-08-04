@@ -45,7 +45,7 @@ json.encode / json.decode
 
 ### 메인 스크립트
 
-`System/main.lua`는 RisuAI 이벤트와 게임 런타임을 연결하는 메인 스크립트입니다. 로어 조회, 모듈 캐시, UI anchor, 게임 시작, 캐릭터 접근 장면 생성, 전투 요청 및 출력 처리의 호스트 측 진입점을 담당합니다.
+`System/main.lua`는 RisuAI 이벤트를 등록하고 첫 이벤트에서 런타임을 bootstrap하는 얇은 진입점입니다. `System/runtime.lua`는 로어 조회·컴파일·캐시를, `System/hostFlow.lua`는 UI anchor·캐릭터 접근 장면·버튼 및 생성 훅 연결을 담당합니다.
 
 ### 실행 가능한 Lua 로어
 
@@ -111,7 +111,11 @@ RisuAI 이벤트 / risu-btn / LLM 출력
                 │
                 ▼
         System/main.lua
-  호스트 API · 로어 로딩 · 캐시 · UI anchor
+       이벤트 등록 · bootstrap
+                │
+                ▼
+ System/runtime.lua · System/hostFlow.lua
+ 로어 실행·캐시 · UI anchor · 호스트 흐름
                 │
                 ▼
       상위 컨트롤러 계층
@@ -140,7 +144,9 @@ RisuAI 이벤트 / risu-btn / LLM 출력
 
 | 경로 | 역할 |
 |---|---|
-| `System/main.lua` | RisuAI 호스트 이벤트, 로어 모듈 로더, 캐시, UI anchor, LLM 호출 연결 |
+| `System/main.lua` | RisuAI 이벤트 등록과 지연 bootstrap |
+| `System/runtime.lua` | 로어 조회·컴파일, 이벤트/웜 캐시와 진단 |
+| `System/hostFlow.lua` | UI anchor, 접근 장면, 버튼과 생성 훅 연결 |
 | `System/gameSetupController.lua` | 게임 준비, 캐릭터 선택, 진행 상태와 설정 View 관리 |
 | `System/battleController.lua` | 전투 상태 전이와 요청·출력 복구를 조정하는 상위 컨트롤러 |
 | `System/staticData.lua` | 정적 DB 로딩, 검증, 캐시 및 정규화 |
