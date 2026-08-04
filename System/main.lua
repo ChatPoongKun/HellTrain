@@ -2,6 +2,7 @@
 -- because lore access requires the current event triggerId.
 local runtimeHandler = nil
 local hostFlowHandler = nil
+local UI_READY_VAR = "gameSetupReady"
 
 local function loadBootstrapLore(triggerId, moduleName)
     local loreName = moduleName .. ".lua"
@@ -76,6 +77,34 @@ local function dispatch(triggerId, mode, action, ...)
     return hostFlowHandler(triggerId, action, ...)
 end
 
+-- commitOutput은 상태 검증 실패를 report로 반환할 수 있고, 예외 경로에서도
+-- 이미 출력 관측 과정에서 기존 UI anchor가 제거되었을 수 있다. 게임 UI가
+-- 활성화된 채팅에 한해 onOutput 종료 시 anchor를 멱등 복구한다.
+local function restoreOutputUiAnchor(triggerId)
+    if type(getChatVar) ~= "function"
+        or type(ensureGameUiAnchor) ~= "function" then
+        return false
+    end
+
+    local readyOk, ready = pcall(getChatVar, triggerId, UI_READY_VAR)
+    if not readyOk or ready ~= "ready" then
+        return false
+    end
+
+    local anchorOk, anchorError = pcall(ensureGameUiAnchor, triggerId)
+    if anchorOk then
+        return true
+    end
+
+    local message = "onOutput: UI anchor recovery failed: " .. tostring(anchorError)
+    if type(debug) == "function" then
+        debug(1, message)
+    elseif type(print) == "function" then
+        print(message)
+    end
+    return false
+end
+
 listenEdit("editDisplay", function(triggerId, data, meta)
     return dispatch(triggerId, "editDisplay", "editDisplay", data, meta)
 end)
@@ -97,5 +126,19 @@ onStart = async(function(triggerId)
 end)
 
 onOutput = async(function(triggerId)
-    return dispatch(triggerId, "onOutput", "output")
+    local packed = table.pack(pcall(
+        dispatch,
+        triggerId,
+        "onOutput",
+        "output"
+    ))
+
+    -- 성공 경로에서는 기존 ensureGameUiAnchor 호출을 멱등 재사용하고,
+    -- 실패 경로에서는 사라진 anchor를 즉시 다시 만든다.
+    restoreOutputUiAnchor(triggerId)
+
+    if not packed[1] then
+        error(packed[2])
+    end
+    return table.unpack(packed, 2, packed.n)
 end)
