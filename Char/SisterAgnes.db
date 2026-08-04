@@ -53,6 +53,7 @@ return {
                     "agnes_quiet_admonition",
                     "agnes_change_carriage",
                     "agnes_ask_nearby_passenger",
+                    "agnes_complete_break",
                 },
             },
         },
