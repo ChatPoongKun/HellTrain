@@ -15,16 +15,18 @@ local function loadBootstrapLore(triggerId, moduleName)
     for _, entry in ipairs(matches) do
         local content = type(entry) == "table" and entry.content or nil
         if type(content) == "string" and content ~= "" then
-  sourceCount = sourceCount + 1
-  source = content
+            sourceCount = sourceCount + 1
+            source = content
         end
     end
     if source == nil then
         error("bootstrap lore not found: " .. loreName)
     end
     if sourceCount > 1 and type(print) == "function" then
-        print("bootstrap warning: duplicate lorebook '" .. loreName
-  .. "'; using the last match.")
+        print(
+            "bootstrap warning: duplicate lorebook '" .. loreName
+                .. "'; using the last match."
+        )
     end
 
     local chunk, compileError = load(
@@ -34,14 +36,18 @@ local function loadBootstrapLore(triggerId, moduleName)
         _G
     )
     if not chunk then
-        error("bootstrap compile failed for " .. moduleName
-  .. ": " .. tostring(compileError))
+        error(
+            "bootstrap compile failed for " .. moduleName
+                .. ": " .. tostring(compileError)
+        )
     end
 
     local loaded, handler = pcall(chunk)
     if not loaded then
-        error("bootstrap load failed for " .. moduleName
-  .. ": " .. tostring(handler))
+        error(
+            "bootstrap load failed for " .. moduleName
+                .. ": " .. tostring(handler)
+        )
     end
     if type(handler) ~= "function" then
         error("bootstrap lore did not return a handler: " .. moduleName)
@@ -50,23 +56,18 @@ local function loadBootstrapLore(triggerId, moduleName)
 end
 
 local function ensureBootstrap(triggerId)
-    if runtimeHandler ~= nil and hostFlowHandler ~= nil then
-        return
+    if runtimeHandler == nil then
+        local candidate = loadBootstrapLore(triggerId, "runtime")
+        local installed, result = pcall(candidate, triggerId, "install")
+        if not installed or result ~= true then
+            error("runtime bootstrap failed: " .. tostring(result))
+        end
+        runtimeHandler = candidate
     end
 
-    runtimeHandler = loadBootstrapLore(triggerId, "runtime")
-    local installed, result = pcall(runtimeHandler, triggerId, "install")
-    if not installed or result ~= true then
-        runtimeHandler = nil
-        error("runtime bootstrap failed: " .. tostring(result))
+    if hostFlowHandler == nil then
+        hostFlowHandler = loadBootstrapLore(triggerId, "hostFlow")
     end
-
-    local loaded, handler = pcall(loadBootstrapLore, triggerId, "hostFlow")
-    if not loaded then
-        runtimeHandler = nil
-        error(tostring(handler))
-    end
-    hostFlowHandler = handler
 end
 
 local function dispatch(triggerId, mode, action, ...)
