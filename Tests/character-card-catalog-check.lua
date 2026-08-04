@@ -30,6 +30,13 @@ assert(database.kind == "cardDatabase")
 assert(type(database.cards) == "table")
 
 local expectedByCharacter = {
+    jiyoung = {
+        "jiyoung_close_collar",
+        "jiyoung_quiet_warning",
+        "jiyoung_turn_to_corner",
+        "jiyoung_silent_glare",
+        "jiyoung_timid_call_for_help",
+    },
     seoa = {
         "seoa_document_bag_guard",
         "seoa_measured_warning",
@@ -70,14 +77,19 @@ for characterId, cardIds in pairs(expectedByCharacter) do
         expectedCount = expectedCount + 1
     end
 end
-assert(expectedCount == 20)
+assert(expectedCount == 25)
 
 assert(characterList.schemaVersion == 1)
 assert(characterList.kind == "characterList")
 assert(type(characterList.characters) == "table")
-assert(characterList.characters.yoo_jiyoung == nil, "prototype character remains in manifest")
+assert(characterList.characters.yoo_jiyoung ~= nil, "yoo_jiyoung missing from manifest")
 
 local characterSources = {
+    jiyoung = {
+        characterId = "yoo_jiyoung",
+        database = "YooJiyoung.db",
+        path = "Char/YooJiyoung.db",
+    },
     seoa = {
         characterId = "yoon_seoa",
         database = "YoonSeoa.db",
@@ -102,7 +114,7 @@ local characterSources = {
 
 local manifestCount = 0
 for _ in pairs(characterList.characters) do manifestCount = manifestCount + 1 end
-assert(manifestCount == 4, "active character count mismatch")
+assert(manifestCount == 5, "active character count mismatch")
 
 local assigned = {}
 for characterKey, source in pairs(characterSources) do
@@ -195,7 +207,13 @@ local function assertCommand(command, op, target, amount, mood)
 end
 
 local count = 0
-local countByCharacter = { seoa = 0, jenny = 0, miryeong = 0, agnes = 0 }
+local countByCharacter = {
+    jiyoung = 0,
+    seoa = 0,
+    jenny = 0,
+    miryeong = 0,
+    agnes = 0,
+}
 
 for cardId, card in pairs(database.cards) do
     count = count + 1
@@ -257,7 +275,7 @@ for cardId, card in pairs(database.cards) do
     assertLocalizedValue(card.narration, cardId .. ".narration")
 end
 
-assert(count == 20, "character card count mismatch")
+assert(count == 25, "character card count mismatch")
 for characterId, characterCount in pairs(countByCharacter) do
     assert(characterCount == 5, "character card count mismatch: " .. characterId)
 end
@@ -267,6 +285,13 @@ end
 for _, cardId in ipairs(deprecatedIds) do
     assert(database.cards[cardId] == nil, "deprecated character card remains: " .. cardId)
 end
+
+local jiyoungGlare = database.cards.jiyoung_silent_glare.mechanismData.plan.resolve({}, {})
+assertCommand(jiyoungGlare[1], "lose_stealth", "player", 3, nil)
+
+local jiyoungHelp = database.cards.jiyoung_timid_call_for_help.resolve({ mood = "ignore" })
+assertCommand(jiyoungHelp[1], "lose_stealth", "player", 2, nil)
+assertCommand(jiyoungHelp[2], "add_mood_token", "character", 1, "suspicion")
 
 local calculatedGaze = database.cards.seoa_calculated_gaze.mechanismData.plan.resolve({}, {})
 assertCommand(calculatedGaze[1], "lose_stealth", "player", 1, nil)
