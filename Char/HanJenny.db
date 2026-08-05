@@ -51,8 +51,9 @@ return {
                 deck = {
                     "jenny_slip_away_laughing",
                     "jenny_phone_camera_feint",
-                    "jenny_teasing_counter",
+                    "jenny_crossed_joke",
                     "jenny_fake_livestream",
+                    "jenny_redirect_attention",
                 },
             },
         },
