@@ -17,6 +17,7 @@
         pending = "battleRuntimeV1.pending",
         lastCommittedPending = "battleRuntimeV1.lastCommittedPending",
         activeRequest = "battleRuntimeV1.activeRequest",
+        submission = "battleRuntimeV1.submission",
         aftermath = "battleRuntimeV1.aftermath",
     }
 
@@ -803,6 +804,7 @@
             prefixMessageCount = true,
             responseIndex = true,
             prefixFingerprint = true,
+            repairableTail = true,
         }
         for key in pairs(anchor) do
             if type(key) ~= "string" or not allowed[key] then
@@ -819,6 +821,37 @@
             errors[#errors + 1] = makeError("invalid_chat_anchor_index", path .. ".responseIndex", "0-based 응답 위치가 prefix 메시지 수와 일치하지 않습니다.")
         end
         validateFingerprint(anchor.prefixFingerprint, path .. ".prefixFingerprint", errors)
+        if anchor.repairableTail ~= nil then
+            local repair = anchor.repairableTail
+            local repairPath = path .. ".repairableTail"
+            if type(repair) ~= "table" or getmetatable(repair) ~= nil then
+                errors[#errors + 1] = makeError("invalid_chat_anchor_repair", repairPath, "복원 가능한 채팅 tail이 일반 객체가 아닙니다.")
+            else
+                local repairAllowed = { message = true, prefixFingerprint = true }
+                for key in pairs(repair) do
+                    if type(key) ~= "string" or not repairAllowed[key] then
+                        errors[#errors + 1] = makeError("unknown_chat_anchor_repair_field", repairPath .. "." .. tostring(key), "복원 가능한 채팅 tail에 알 수 없는 필드가 있습니다.")
+                    end
+                end
+                local message = repair.message
+                if anchor.prefixMessageCount < 1
+                    or type(message) ~= "table"
+                    or getmetatable(message) ~= nil
+                    or message.role ~= "char"
+                    or type(message.data) ~= "string"
+                    or string.match(message.data, "%S") == nil
+                    or message.time ~= 0 then
+                    errors[#errors + 1] = makeError("invalid_chat_anchor_repair_message", repairPath .. ".message", "Lua로 추가된 실제 캐릭터 장면만 anchor tail로 복원할 수 있습니다.")
+                else
+                    for key in pairs(message) do
+                        if key ~= "role" and key ~= "data" and key ~= "time" then
+                            errors[#errors + 1] = makeError("unknown_chat_anchor_repair_message_field", repairPath .. ".message." .. tostring(key), "복원할 캐릭터 장면에 알 수 없는 필드가 있습니다.")
+                        end
+                    end
+                end
+                validateFingerprint(repair.prefixFingerprint, repairPath .. ".prefixFingerprint", errors)
+            end
+        end
     end
 
     local function validateOutputObserved(receipt, binding, path, errors)
@@ -1064,6 +1097,46 @@
         return copy, nil
     end
 
+    local function inspectDraftInteractionToken(authority, staticData, draft)
+        local inspected, inspectErrors = callModule(
+            "turnDraft",
+            "inspect",
+            authority,
+            staticData,
+            draft
+        )
+        if inspectErrors then return nil, inspectErrors end
+        if type(inspected.interactionToken) ~= "string" or inspected.interactionToken == "" then
+            return nil, {
+                makeError("missing_interaction_token", "$.runtime.turnDraft.inspect", "현재 turnDraft의 interaction token을 만들지 못했습니다."),
+            }
+        end
+        return inspected.interactionToken, nil
+    end
+
+    local function readArmedSubmission(authority, staticData, draft)
+        local receipt, readErrors = readStored(KEYS.submission, false)
+        if readErrors then return nil, readErrors end
+        if receipt == nil then return nil, nil end
+        if type(receipt) ~= "string" or receipt == "" then
+            return nil, {
+                makeError("invalid_submission", "$.submission", "턴 제출 변수는 비어 있지 않은 interaction token이어야 합니다."),
+            }
+        end
+        local interactionToken, tokenErrors = inspectDraftInteractionToken(authority, staticData, draft)
+        if tokenErrors then return nil, tokenErrors end
+        if receipt ~= interactionToken then
+            return nil, {
+                makeError("stale_submission", "$.submission", "턴 제출 변수가 현재 카드 선택과 일치하지 않습니다."),
+            }
+        end
+        return receipt, nil
+    end
+
+    local function clearSubmission()
+        return writeStored(KEYS.submission, nil)
+    end
+
     local function isExactFiller(message)
         return type(message) == "table"
             and message.role == "user"
@@ -1083,13 +1156,35 @@
             "$.chatAnchor.prefix"
         )
         if fingerprintError then return nil, { fingerprintError } end
-        return {
+        local anchor = {
             schemaVersion = 2,
             kind = "battleChatAnchor",
             prefixMessageCount = prefixMessageCount,
             responseIndex = prefixMessageCount,
             prefixFingerprint = fingerprint,
-        }, nil
+        }
+        local tail = chat[prefixMessageCount]
+        if prefixMessageCount > 0
+            and type(tail) == "table"
+            and tail.role == "char"
+            and type(tail.data) == "string"
+            and string.match(tail.data, "%S") ~= nil
+            and tail.time == 0 then
+            local previousFingerprint, previousFingerprintError = fingerprintChatRange(
+                chat,
+                1,
+                prefixMessageCount - 1,
+                "$.chatAnchor.repairablePrefix"
+            )
+            if previousFingerprintError then return nil, { previousFingerprintError } end
+            local tailCopy, tailCopyError = cloneJson(tail, "$.chatAnchor.repairableTail.message")
+            if tailCopyError then return nil, { tailCopyError } end
+            anchor.repairableTail = {
+                message = tailCopy,
+                prefixFingerprint = previousFingerprint,
+            }
+        end
+        return anchor, nil
     end
 
     local function validateAnchorPrefix(binding, chat)
@@ -1113,6 +1208,45 @@
             }
         end
         return nil
+    end
+
+    local function restoreRepairableAnchorTail(binding, chat)
+        local anchor = binding.chatAnchor
+        if #chat >= anchor.prefixMessageCount then
+            return chat, false, nil
+        end
+        local repair = anchor.repairableTail
+        if type(repair) ~= "table" or #chat ~= anchor.prefixMessageCount - 1 then
+            return chat, false, nil
+        end
+        local fingerprint, fingerprintError = fingerprintChatRange(
+            chat,
+            1,
+            #chat,
+            "$.chatAnchor.repairableCurrentPrefix"
+        )
+        if fingerprintError then return nil, false, { fingerprintError } end
+        if not fingerprintsEqual(fingerprint, repair.prefixFingerprint) then
+            return chat, false, nil
+        end
+        if type(addChat) ~= "function" then
+            return nil, false, {
+                makeError("chat_write_unavailable", "$.host.addChat", "리롤이 함께 제거한 접근 장면을 복원할 addChat 호스트 함수를 찾을 수 없습니다."),
+            }
+        end
+        local ok, addError = pcall(addChat, triggerId, "char", repair.message.data)
+        if not ok then
+            return nil, false, {
+                makeError("chat_anchor_repair_failed", "$.chat", "리롤이 함께 제거한 접근 장면을 복원하지 못했습니다: " .. tostring(addError)),
+            }
+        end
+        local restored, readErrors = readChat()
+        if readErrors then return nil, false, readErrors end
+        local prefixErrors = validateAnchorPrefix(binding, restored)
+        if prefixErrors then
+            return nil, false, prefixErrors
+        end
+        return restored, true, nil
     end
 
     local function inspectPreparingTopology(binding, chat)
@@ -1247,10 +1381,6 @@
         end
     end
 
-    local function hasFreshSubmitSuffix(chat)
-        return isExactFiller(chat[#chat])
-    end
-
     local function removeRecoveryResponse(chat, luaIndex, expectedFingerprint)
         if luaIndex ~= #chat then
             return nil, {
@@ -1376,6 +1506,16 @@
                         or activeRequest.phase == "inFlight"
                         or activeRequest.phase == "requestInjected") then
                     context.generationLocked = true
+                else
+                    local submission, submissionErrors = readArmedSubmission(
+                        authority,
+                        staticData,
+                        draft
+                    )
+                    if submissionErrors then return nil, submissionErrors end
+                    if submission ~= nil then
+                        context.submissionArmed = true
+                    end
                 end
             end
         end
@@ -1702,6 +1842,7 @@
             pending = nil,
             lastCommittedPending = nil,
             activeRequest = nil,
+            submission = nil,
             aftermath = nil,
             turnId = turnId,
         }, nil
@@ -1715,6 +1856,7 @@
             "pending",
             "lastCommittedPending",
             "activeRequest",
+            "submission",
             "aftermath",
         }) do
             local value, errors = readStored(KEYS[name], false)
@@ -2642,7 +2784,8 @@
         if current.lastCommittedPending == nil
             and current.draft == nil
             and current.pending == nil
-            and current.activeRequest == nil then
+            and current.activeRequest == nil
+            and current.submission == nil then
             -- startFromRun은 종료 영수증을 확인한 뒤 보조 상태를 먼저
             -- 비운다. 그 직후 중단된 경우에도 다음 호출이 run의 저장된
             -- 정산 영수증으로 retirement를 재개할 수 있게 identity만
@@ -2678,6 +2821,7 @@
             "pending",
             "lastCommittedPending",
             "activeRequest",
+            "submission",
             "aftermath",
         }) do
             local writeErrors = writeStored(KEYS[name], expected[name])
@@ -2797,6 +2941,7 @@
                 and current.pending == nil
                 and current.lastCommittedPending == nil
                 and current.activeRequest == nil
+                and current.submission == nil
                 and current.aftermath == nil
             if not looksLikeInitialPartial then
                 local published, publishErrors = publishCurrentViewInternal(staticData, true)
@@ -2827,6 +2972,7 @@
             "pending",
             "lastCommittedPending",
             "activeRequest",
+            "submission",
             "aftermath",
         }) do
             local existing = current[name]
@@ -3011,6 +3157,7 @@
         elseif current.draft ~= nil
             or current.pending ~= nil
             or current.activeRequest ~= nil
+            or current.submission ~= nil
             or current.aftermath ~= nil then
             return {
                 makeError(
@@ -3028,6 +3175,7 @@
             "draft",
             "pending",
             "activeRequest",
+            "submission",
             "aftermath",
             "lastCommittedPending",
         }) do
@@ -3059,6 +3207,7 @@
             current.draft = nil
             current.pending = nil
             current.activeRequest = nil
+            current.submission = nil
             current.lastCommittedPending = nil
             current.aftermath = nil
             retired = true
@@ -3091,6 +3240,7 @@
                 and current.pending == nil
                 and current.lastCommittedPending == nil
                 and current.activeRequest == nil
+                and current.submission == nil
                 and current.aftermath == nil
             if not looksLikeInitialPartial then
                 local published, publishErrors = publishCurrentViewInternal(
@@ -3116,6 +3266,7 @@
             "pending",
             "lastCommittedPending",
             "activeRequest",
+            "submission",
             "aftermath",
         }) do
             local existing = current[name]
@@ -3142,6 +3293,7 @@
             or current.pending ~= nil
             or current.lastCommittedPending ~= nil
             or current.activeRequest ~= nil
+            or current.submission ~= nil
             or current.aftermath ~= nil
         local writeErrors = writeInitialRuntime(expected)
         if writeErrors then return failure(writeErrors) end
@@ -3207,6 +3359,7 @@
             { KEYS.pending, nil },
             { KEYS.lastCommittedPending, nil },
             { KEYS.activeRequest, nil },
+            { KEYS.submission, nil },
             { KEYS.aftermath, nil },
         }) do
             local writeErrors = writeStored(write[1], write[2])
@@ -3357,6 +3510,11 @@
             if writeErrors then
                 return failure(writeErrors)
             end
+            local submissionWriteErrors = writeStored(
+                KEYS.submission,
+                interacted.interactionToken
+            )
+            if submissionWriteErrors then return failure(submissionWriteErrors) end
         end
         local published, publishErrors = publishCurrentViewInternal(staticData, true, false, true)
         if publishErrors then
@@ -3391,6 +3549,74 @@
 
     local function selectCardEffect(instanceId, choiceId, expectedInteractionToken)
         return interactCard("choose", instanceId, expectedInteractionToken, choiceId)
+    end
+
+    local function armSubmission(expectedInteractionToken)
+        if type(expectedInteractionToken) ~= "string" or expectedInteractionToken == "" then
+            return failure({
+                makeError("invalid_interaction_token", "$.expectedInteractionToken", "비어 있지 않은 draft interaction token이 필요합니다."),
+            })
+        end
+        local staticData, staticErrors = loadStaticData()
+        if staticErrors then return failure(staticErrors) end
+        local authority, authorityErrors = readStored(KEYS.authority, true)
+        if authorityErrors then return failure(authorityErrors) end
+        local pending, pendingErrors = readStored(KEYS.pending, false)
+        if pendingErrors then return failure(pendingErrors) end
+        if pending ~= nil then
+            return failure({
+                makeError("battle_view_locked", "$.pendingTurn", "출력 대기 중에는 턴 제출을 다시 준비할 수 없습니다."),
+            })
+        end
+        local activeRequest, requestErrors = readStored(KEYS.activeRequest, false)
+        if requestErrors then return failure(requestErrors) end
+        if type(activeRequest) == "table" then
+            local activeErrors = validateBinding(activeRequest, nil)
+            if #activeErrors > 0 then return failure(activeErrors) end
+            if activeRequest.phase ~= "committed" then
+                return failure({
+                    makeError("battle_view_locked", "$.activeRequest.phase", "생성 요청 처리 중에는 턴 제출을 다시 준비할 수 없습니다."),
+                })
+            end
+        end
+        local draft, draftErrors = readStored(KEYS.draft, true)
+        if draftErrors then return failure(draftErrors) end
+        local interactionToken, tokenErrors = inspectDraftInteractionToken(
+            authority,
+            staticData,
+            draft
+        )
+        if tokenErrors then return failure(tokenErrors) end
+        if interactionToken ~= expectedInteractionToken then
+            local published, publishErrors = publishCurrentViewInternal(
+                staticData,
+                true,
+                false,
+                true
+            )
+            if publishErrors then return failure(publishErrors) end
+            return success({
+                applied = false,
+                stale = true,
+                interactionToken = interactionToken,
+                view = published.view,
+            })
+        end
+        local writeErrors = writeStored(KEYS.submission, interactionToken)
+        if writeErrors then return failure(writeErrors) end
+        local published, publishErrors = publishCurrentViewInternal(
+            staticData,
+            true,
+            false,
+            true
+        )
+        if publishErrors then return failure(publishErrors) end
+        return success({
+            applied = true,
+            stale = false,
+            interactionToken = interactionToken,
+            view = published.view,
+        })
     end
 
     local loadBoundPending
@@ -3636,6 +3862,60 @@
         })
     end
 
+    local function retryCommittedOutput(binding, chat, staticData)
+        local repairedChat, repairedTail, repairErrors = restoreRepairableAnchorTail(
+            binding,
+            chat
+        )
+        if repairErrors then return failure(repairErrors) end
+        local topology, topologyErrors = inspectAnchoredTopology(
+            binding,
+            repairedChat,
+            false
+        )
+        if topologyErrors then return failure(topologyErrors) end
+        if topology.responsePresent or topology.fillerCount ~= 0 then
+            return failure({
+                makeError("committed_reroll_topology_mismatch", "$.chat", "확정 응답 리롤 뒤 응답 위치가 비어 있지 않습니다."),
+            })
+        end
+        local pending, _, boundErrors = loadAndValidateBoundRequest(binding, staticData)
+        if boundErrors then return failure(boundErrors) end
+        local nextBinding, cloneError = cloneJson(binding, "$.activeRequest")
+        if cloneError then return failure({ cloneError }) end
+        nextBinding.phase = "inFlight"
+        nextBinding.attemptNumber = nextBinding.attemptNumber + 1
+        nextBinding.outputObserved = nil
+        nextBinding.recoveringCleanup = nil
+        local validationErrors = validateBinding(nextBinding, pending)
+        if #validationErrors > 0 then return failure(validationErrors) end
+        local submissionClearErrors = clearSubmission()
+        if submissionClearErrors then return failure(submissionClearErrors) end
+        local writeErrors = writeStored(KEYS.activeRequest, nextBinding)
+        if writeErrors then return failure(writeErrors) end
+        local published, publishErrors = publishCurrentViewInternal(staticData)
+        if publishErrors then return failure(publishErrors) end
+        return success({
+            generationReady = true,
+            rerolledCommittedOutput = true,
+            repairedStoryTail = repairedTail,
+            recoveredAbandonedRequest = false,
+            zeroOutputRetry = false,
+            commitRecovered = false,
+            turnId = nextBinding.turnId,
+            turnNumber = nextBinding.turnNumber,
+            source = nextBinding.source,
+            publicMarker = nextBinding.publicMarker,
+            attemptNumber = nextBinding.attemptNumber,
+            reused = true,
+            removedSayNothing = false,
+            removedSayNothingCount = 0,
+            removedUncommittedOutput = false,
+            markerAdded = false,
+            view = published.view,
+        })
+    end
+
     local function prepareGeneration()
         local staticData, staticErrors = loadStaticData()
         if staticErrors then return failure(staticErrors) end
@@ -3653,7 +3933,9 @@
         end
         local chat, chatErrors = readChat()
         if chatErrors then return failure(chatErrors) end
-        local freshSend = hasFreshSubmitSuffix(chat)
+        local removedCount
+        chat, removedCount, chatErrors = removeTrailingSayNothing(chat)
+        if chatErrors then return failure(chatErrors) end
 
         local storedBinding, storedBindingErrors = readStored(KEYS.activeRequest, false)
         if storedBindingErrors then return failure(storedBindingErrors) end
@@ -3671,50 +3953,37 @@
                     if authorityErrors then return failure(authorityErrors) end
                     chat, chatErrors = readChat()
                     if chatErrors then return failure(chatErrors) end
-                    freshSend = hasFreshSubmitSuffix(chat)
+                    chat, removedCount, chatErrors = removeTrailingSayNothing(chat)
+                    if chatErrors then return failure(chatErrors) end
                     storedBinding, storedBindingErrors = readStored(KEYS.activeRequest, true)
                     if storedBindingErrors then return failure(storedBindingErrors) end
                 end
             end
 
-            -- commit은 끝났지만 onOutput의 UI target 갱신이 실패한 경우, 새 턴을
-            -- 만들지 않고 현재 View만 다시 게시해 main.onStart가 target을 복구한다.
-            if storedBinding.phase == "committed" and not freshSend then
+            if storedBinding.phase == "committed" then
+                local committedChat, repairedTail, repairErrors = restoreRepairableAnchorTail(
+                    storedBinding,
+                    chat
+                )
+                if repairErrors then return failure(repairErrors) end
+                chat = committedChat
                 local committedTopology, committedTopologyErrors = inspectAnchoredTopology(
                     storedBinding,
                     chat,
                     false
                 )
                 if committedTopologyErrors then return failure(committedTopologyErrors) end
-                if committedTopology.responsePresent and committedTopology.fillerCount == 0 then
-                    local published, publishErrors = publishCurrentViewInternal(staticData, true)
-                    if publishErrors then return failure(publishErrors) end
-                    return success({
-                        generationReady = false,
-                        uiTargetRequired = true,
-                        uiTargetIndex = storedBinding.chatAnchor.responseIndex,
-                        outputCommitted = false,
-                        commitRecovered = false,
-                        turnId = storedBinding.turnId,
-                        turnNumber = storedBinding.turnNumber,
-                        source = storedBinding.source,
-                        publicMarker = storedBinding.publicMarker,
-                        attemptNumber = storedBinding.attemptNumber,
-                        reused = true,
-                        removedSayNothing = false,
-                        removedSayNothingCount = 0,
-                        removedUncommittedOutput = false,
-                        markerAdded = false,
-                        view = published.view,
-                    })
+                if not committedTopology.responsePresent then
+                    local retried = retryCommittedOutput(
+                        storedBinding,
+                        chat,
+                        staticData
+                    )
+                    if type(retried) == "table" and retried.ok == true and repairedTail then
+                        retried.repairedStoryTail = true
+                    end
+                    return retried
                 end
-                return failure({
-                    makeError(
-                        "unsupported_generation_source",
-                        "$.chat",
-                        "직전 장면을 제거한 재생성은 현재 전투 요청 구조에서 지원하지 않습니다."
-                    ),
-                })
             end
 
             if storedBinding.phase == "inFlight" or storedBinding.phase == "requestInjected" then
@@ -3744,7 +4013,7 @@
                             makeError(
                                 "request_already_in_flight",
                                 "$.activeRequest.phase",
-                                "이미 생성 중이거나 프롬프트 주입을 마친 요청이 있습니다. 새 정확한 빈 입력만 실패 복구를 시작할 수 있습니다."
+                                "이미 생성 중이거나 프롬프트 주입을 마친 요청이 있습니다. 응답을 리롤한 뒤 다시 시도하세요."
                             ),
                         })
                     end
@@ -3757,38 +4026,39 @@
         local sourceName
         local reused = false
         local recoveryBinding
+        local pending, pendingErrors = readStored(KEYS.pending, false)
+        if pendingErrors then return failure(pendingErrors) end
         if type(storedBinding) == "table" and storedBinding.phase == "preparing" then
-            local pending, pendingErrors = loadBoundPending(storedBinding)
-            if pendingErrors then
-                return failure(pendingErrors)
+            local boundPending, boundPendingErrors = loadBoundPending(storedBinding)
+            if boundPendingErrors then
+                return failure(boundPendingErrors)
             end
-            selectedPending = pending
+            selectedPending = boundPending
             sourceName = storedBinding.source
             recoveryBinding = storedBinding
             reused = true
-        elseif freshSend then
-            local pending, pendingErrors = readStored(KEYS.pending, false)
-            if pendingErrors then
-                return failure(pendingErrors)
-            end
-            if pending ~= nil then
-                local reuse, reuseErrors = callModule(
-                    "battleRuntime",
-                    "reusePending",
-                    authority,
-                    staticData,
-                    pending
-                )
-                if reuseErrors then
-                    return failure(reuseErrors)
-                end
-                selectedPending = reuse.pendingTurn
-                reused = true
-            else
-                local draft, draftErrors = readStored(KEYS.draft, true)
-                if draftErrors then
-                    return failure(draftErrors)
-                end
+        elseif pending ~= nil then
+            local reuse, reuseErrors = callModule(
+                "battleRuntime",
+                "reusePending",
+                authority,
+                staticData,
+                pending
+            )
+            if reuseErrors then return failure(reuseErrors) end
+            selectedPending = reuse.pendingTurn
+            sourceName = "pending"
+            reused = true
+        else
+            local draft, draftErrors = readStored(KEYS.draft, true)
+            if draftErrors then return failure(draftErrors) end
+            local submission, submissionErrors = readArmedSubmission(
+                authority,
+                staticData,
+                draft
+            )
+            if submissionErrors then return failure(submissionErrors) end
+            if submission ~= nil then
                 local projected, projectErrors = callModule(
                     "turnDraft",
                     "project",
@@ -3815,15 +4085,39 @@
                     return failure(prepareErrors)
                 end
                 selectedPending = prepared.pendingTurn
+                sourceName = "pending"
             end
-            sourceName = "pending"
-        else
-            return failure({
-                makeError(
-                    "unsupported_generation_source",
-                    "$.chat",
-                    "제출할 전투 UI 메시지나 준비 중인 요청을 찾지 못했습니다."
-                ),
+        end
+
+        if selectedPending == nil then
+            if type(storedBinding) == "table" and storedBinding.phase == "committed" then
+                local published, publishErrors = publishCurrentViewInternal(staticData, true)
+                if publishErrors then return failure(publishErrors) end
+                return success({
+                    generationReady = false,
+                    idle = true,
+                    uiTargetRequired = true,
+                    uiTargetIndex = storedBinding.chatAnchor.responseIndex,
+                    outputCommitted = false,
+                    commitRecovered = false,
+                    turnId = storedBinding.turnId,
+                    turnNumber = storedBinding.turnNumber,
+                    source = storedBinding.source,
+                    publicMarker = storedBinding.publicMarker,
+                    attemptNumber = storedBinding.attemptNumber,
+                    reused = true,
+                    removedSayNothing = removedCount > 0,
+                    removedSayNothingCount = removedCount,
+                    removedUncommittedOutput = false,
+                    markerAdded = false,
+                    view = published.view,
+                })
+            end
+            return success({
+                generationReady = false,
+                idle = true,
+                removedSayNothing = removedCount > 0,
+                removedSayNothingCount = removedCount,
             })
         end
 
@@ -3878,6 +4172,8 @@
         if bindingWriteErrors then
             return failure(bindingWriteErrors)
         end
+        local submissionClearErrors = clearSubmission()
+        if submissionClearErrors then return failure(submissionClearErrors) end
 
         -- 생성 중에는 잠긴 canonical View만 영속한다. 전체 HTML/CBS 렌더는
         -- 응답 commit 뒤 게시하므로 HTTP 요청 전 중복 평가하지 않는다.
@@ -3886,20 +4182,7 @@
             return failure(publishErrors)
         end
 
-        -- State and the locked View must be durable before touching the chat. If a
-        -- host write above is silently dropped, the submit suffix remains and the
-        -- next onStart resumes the durable preparing binding first, or reuses the
-        -- stored pendingTurn when that binding itself was the dropped write.
-        local nextChat, removedCount, removeErrors = removeTrailingSayNothing(chat)
-        if removeErrors then
-            return failure(removeErrors)
-        end
-        if not freshSend and removedCount > 0 then
-            return failure({
-                makeError("generation_classification_changed", "$.chat", "생성 분류 뒤 대화의 제출 suffix 상태가 바뀌었습니다."),
-            })
-        end
-        local finalTopology, finalTopologyErrors = inspectAnchoredTopology(binding, nextChat, false)
+        local finalTopology, finalTopologyErrors = inspectAnchoredTopology(binding, chat, false)
         if finalTopologyErrors then return failure(finalTopologyErrors) end
         if finalTopology.responsePresent or finalTopology.fillerCount ~= 0 then
             return failure({
@@ -4038,7 +4321,7 @@
             elseif deepEqual(message, requestCue) then
                 cueCount = cueCount + 1
             elseif message.role == "user" and message.content == TURN_SUBMIT_MARKER then
-                -- 표시·제출 전용 marker는 모델 요청에 포함하지 않는다.
+                -- 이전 배포가 남긴 표시 전용 marker는 모델 요청에 포함하지 않는다.
             else
                 normalizedPrompt[#normalizedPrompt + 1] = message
             end
@@ -4382,6 +4665,7 @@
                 pending = KEYS.pending,
                 lastCommittedPending = KEYS.lastCommittedPending,
                 activeRequest = KEYS.activeRequest,
+                submission = KEYS.submission,
                 aftermath = KEYS.aftermath,
             },
         }
@@ -4395,6 +4679,8 @@
         if lastErrors then return failure(lastErrors) end
         local activeRequest, requestErrors = readStored(KEYS.activeRequest, false)
         if requestErrors then return failure(requestErrors) end
+        local submission, submissionErrors = readStored(KEYS.submission, false)
+        if submissionErrors then return failure(submissionErrors) end
         local aftermath, aftermathErrors = readStored(KEYS.aftermath, false)
         if aftermathErrors then return failure(aftermathErrors) end
 
@@ -4404,6 +4690,7 @@
         snapshot.pendingTurn = pending
         snapshot.lastCommittedPending = lastCommitted
         snapshot.activeRequest = activeRequest
+        snapshot.submission = submission
         snapshot.aftermath = aftermath
         if type(lastCommitted) == "table" and type(lastCommitted.turnResult) == "table" then
             snapshot.lastPublicResult = lastCommitted.turnResult.publicResult
@@ -4438,6 +4725,8 @@
         return cancelCard(arguments[1], arguments[2])
     elseif action == "selectCardEffect" then
         return selectCardEffect(arguments[1], arguments[2], arguments[3])
+    elseif action == "armSubmission" then
+        return armSubmission(arguments[1])
     elseif action == "prepareGeneration" then
         return prepareGeneration()
     elseif action == "injectRequest" then

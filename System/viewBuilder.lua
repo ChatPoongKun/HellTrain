@@ -921,12 +921,14 @@
             pendingTurn = true,
             lastCommittedPending = true,
             generationLocked = true,
+            submissionArmed = true,
             aftermath = true,
         }, "$.context", errors)
         local draftInput = rawget(context, "draft")
         local pendingInput = rawget(context, "pendingTurn")
         local lastCommittedInput = rawget(context, "lastCommittedPending")
         local generationLocked = rawget(context, "generationLocked")
+        local submissionArmed = rawget(context, "submissionArmed")
         local aftermathInput = rawget(context, "aftermath")
         if generationLocked ~= nil and generationLocked ~= true then
             addError(
@@ -935,6 +937,19 @@
                 "$.context.generationLocked",
                 "generationLocked는 생성을 기다리는 동안에만 true로 지정할 수 있습니다."
             )
+            return failure(errors)
+        end
+        if submissionArmed ~= nil and submissionArmed ~= true then
+            addError(
+                errors,
+                "invalid_submission_armed",
+                "$.context.submissionArmed",
+                "submissionArmed는 검증된 제출 영수증이 있을 때만 true로 지정할 수 있습니다."
+            )
+            return failure(errors)
+        end
+        if submissionArmed and (draftInput == nil or generationLocked) then
+            addError(errors, "ambiguous_submission_armed", "$.context", "선택 가능한 draft에만 제출 준비 상태를 표시할 수 있습니다.")
             return failure(errors)
         end
         if draftInput ~= nil and pendingInput ~= nil then
@@ -1341,6 +1356,7 @@
             mode = mode,
             hasMainAction = hasMainAction,
             canSubmit = canSubmit,
+            submissionArmed = phase == "selecting" and submissionArmed == true,
             reasonCode = selectionReason,
         }
         if phase == "selecting" and focusedInstanceId ~= nil then
@@ -2209,6 +2225,7 @@
                 mode = true,
                 hasMainAction = true,
                 canSubmit = true,
+                submissionArmed = true,
                 reasonCode = true,
                 focusedInstanceId = true,
             }, "$.selection", errors)
@@ -2218,6 +2235,7 @@
                     and view.selection.mode ~= "action")
                 or (view.selection.hasMainAction ~= true and view.selection.hasMainAction ~= false)
                 or (view.selection.canSubmit ~= true and view.selection.canSubmit ~= false)
+                or (view.selection.submissionArmed ~= true and view.selection.submissionArmed ~= false)
                 or type(view.selection.reasonCode) ~= "string" then
                 addError(errors, "invalid_selection_value", "$.selection", "선택 표시 값이 올바르지 않습니다.")
             end
