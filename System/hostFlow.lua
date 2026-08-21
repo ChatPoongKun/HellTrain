@@ -29,15 +29,16 @@ local function controllerSucceeded(label, report)
     return false
 end
 
-local UI_ANCHOR_MARKER = "@@HELLTRAIN_UI_ANCHOR_V1@@"
 local UI_BODY_VAR = "🔯🔯🔯"
 local UI_SHELL_VAR = "helltrainUiShellV1"
 local UI_POPUP_VAR = "helltrainUiPopupV1"
-local UI_ANCHOR_INDEX_VAR = "helltrainUiAnchorIndexV1"
+local UI_TARGET_INDEX_VAR = "helltrainUiTargetIndexV1"
 local UI_READY_VAR = "gameSetupReady"
 local APPROACH_RETRY_VAR = "helltrainApproachRetryV1"
 local RUN_PROGRESSION_AUTHORITY_KEY = "runProgressionV1.authority"
 local APPROACH_REQUEST_ATTEMPTS = 1
+local UI_CONTAINER_OPEN = [[<div class="helltrain-dynamic-ui" aria-label="게임 화면">]]
+local UI_CONTAINER_EMPTY = UI_CONTAINER_OPEN .. "</div>"
 local SETUP_START_MARKUP = [[<section class="helltrain-setup" aria-labelledby="helltrain-start-title">
 <p class="helltrain-setup-label">BOARDING PROTOCOL</p>
 <h2 class="helltrain-setup-title" id="helltrain-start-title">지옥철에 탑승하시겠습니까?</h2>
@@ -146,7 +147,7 @@ local function readUiFragment(triggerId, name)
     return ok and type(value) == "string" and value ~= "null" and value or ""
 end
 
-local function parseUiAnchorIndex(rawIndex)
+local function parseUiTargetIndex(rawIndex)
     local index = tonumber(rawIndex)
     if index == nil or index % 1 ~= 0 or index < -1 then
         return nil
@@ -154,23 +155,23 @@ local function parseUiAnchorIndex(rawIndex)
     return index
 end
 
-local function isExactUiAnchorMessage(message)
-    return type(message) == "table"
-        and message.role == "user"
-        and message.data == UI_ANCHOR_MARKER
-end
-
--- 현재 UI 전용 사용자 메시지만 다시 그린다. 초기 진입 전에는 first message의
--- -1 anchor를 사용하고, 게임 시작 뒤에는 실제 채팅 인덱스를 chatVar로 추적한다.
-function refreshGameUi(triggerId)
-    local rawIndex = readUiFragment(triggerId, UI_ANCHOR_INDEX_VAR)
-    local index = parseUiAnchorIndex(rawIndex)
-    if index == nil then
-        index = -1
-        if rawIndex ~= "" then
-            debug(2, "invalid UI anchor index; falling back to first message: " .. tostring(rawIndex))
+local function latestCharacterIndex(triggerId)
+    if type(getFullChat) ~= "function" then
+        error("getFullChat host function is unavailable")
+    end
+    local readOk, chat = pcall(getFullChat, triggerId)
+    if not readOk or type(chat) ~= "table" then
+        error("failed to read chat for UI target: " .. tostring(chat))
+    end
+    for index = #chat, 1, -1 do
+        if type(chat[index]) == "table" and chat[index].role == "char" then
+            return index - 1
         end
     end
+    return -1
+end
+
+local function reloadGameUiAt(triggerId, index)
     if type(reloadChat) == "function" then
         local targetedOk, targetedError = pcall(reloadChat, triggerId, index)
         if targetedOk then
@@ -185,56 +186,55 @@ function refreshGameUi(triggerId)
     return true
 end
 
--- 게임 UI를 장면 채팅과 분리된 마지막 user 메시지에 둔다. 같은 anchor가 이미
--- 마지막에 있으면 재사용하므로 onOutput/복구 훅이 중복 호출돼도 메시지가 늘지 않는다.
-function ensureGameUiAnchor(triggerId)
-    if type(getFullChat) ~= "function" or type(addChat) ~= "function" then
-        error("getFullChat/addChat host functions are unavailable")
-    end
-    local readOk, chat = pcall(getFullChat, triggerId)
-    if not readOk or type(chat) ~= "table" then
-        error("failed to read chat for UI anchor: " .. tostring(chat))
-    end
-
-    local previousIndex = parseUiAnchorIndex(readUiFragment(triggerId, UI_ANCHOR_INDEX_VAR))
-    if previousIndex == nil then
-        previousIndex = -1
-    end
-    local anchorIndex
-    if isExactUiAnchorMessage(chat[#chat]) then
-        anchorIndex = #chat - 1
-    else
-        local addOk, addError = pcall(addChat, triggerId, "user", UI_ANCHOR_MARKER)
-        if not addOk then
-            error("failed to add UI anchor: " .. tostring(addError))
+-- 초기 진입 전에는 first message(-1), 이후에는 UI가 붙은 캐릭터 메시지만 다시 그린다.
+function refreshGameUi(triggerId)
+    local rawIndex = readUiFragment(triggerId, UI_TARGET_INDEX_VAR)
+    local index = parseUiTargetIndex(rawIndex)
+    if index == nil then
+        index = -1
+        if rawIndex ~= "" then
+            debug(2, "invalid UI target index; falling back to first message: " .. tostring(rawIndex))
         end
-        local verifyOk, after = pcall(getFullChat, triggerId)
-        if not verifyOk
-            or type(after) ~= "table"
-            or #after ~= #chat + 1
-            or not isExactUiAnchorMessage(after[#after]) then
-            error("UI anchor write was not persisted")
-        end
-        anchorIndex = #after - 1
     end
+    return reloadGameUiAt(triggerId, index)
+end
 
+-- UI를 붙일 메시지를 바꾸고 이전/새 대상만 다시 그린다. nil이면 최신 char를 찾는다.
+function syncGameUiTarget(triggerId, targetIndex)
+    if targetIndex == nil then
+        targetIndex = latestCharacterIndex(triggerId)
+    end
+    if type(targetIndex) ~= "number"
+        or targetIndex % 1 ~= 0
+        or targetIndex < -1 then
+        error("invalid UI target index: " .. tostring(targetIndex))
+    end
     if type(setChatVar) ~= "function" then
         error("setChatVar host function is unavailable")
     end
-    setChatVar(triggerId, UI_ANCHOR_INDEX_VAR, tostring(anchorIndex))
-    if readUiFragment(triggerId, UI_ANCHOR_INDEX_VAR) ~= tostring(anchorIndex) then
-        error("UI anchor index write was not persisted")
-    end
 
-    -- 새 anchor를 활성화한 뒤 이전 UI가 있던 메시지도 다시 그려 잔상을 없앤다.
-    if previousIndex ~= nil and previousIndex ~= anchorIndex and type(reloadChat) == "function" then
-        local retiredOk, retiredError = pcall(reloadChat, triggerId, previousIndex)
-        if not retiredOk then
-            debug(2, "previous UI anchor reload failed: " .. tostring(retiredError))
+    local rawPreviousIndex = readUiFragment(triggerId, UI_TARGET_INDEX_VAR)
+    local previousIndex = parseUiTargetIndex(rawPreviousIndex)
+    if previousIndex == nil then
+        previousIndex = -1
+    end
+    local encodedTargetIndex = tostring(targetIndex)
+    if rawPreviousIndex ~= encodedTargetIndex then
+        setChatVar(triggerId, UI_TARGET_INDEX_VAR, encodedTargetIndex)
+        if readUiFragment(triggerId, UI_TARGET_INDEX_VAR) ~= encodedTargetIndex then
+            error("UI target index write was not persisted")
         end
     end
-    refreshGameUi(triggerId)
-    return anchorIndex
+
+    -- 새 대상을 먼저 저장해야 이전 메시지의 editDisplay가 UI를 제거한다.
+    if previousIndex ~= targetIndex and type(reloadChat) == "function" then
+        local retiredOk, retiredError = pcall(reloadChat, triggerId, previousIndex)
+        if not retiredOk then
+            debug(2, "previous UI target reload failed: " .. tostring(retiredError))
+        end
+    end
+    reloadGameUiAt(triggerId, targetIndex)
+    return targetIndex
 end
 
 local function writeUiFragmentVerified(triggerId, name, value)
@@ -485,9 +485,9 @@ local function finishApproachTransition(triggerId)
     if not controllerSucceeded("approach.init.start", report) then
         return false
     end
-    local anchorOk, anchorError = pcall(ensureGameUiAnchor, triggerId)
-    if not anchorOk then
-        debug(1, "approach: Battle UI anchor 생성 실패: " .. tostring(anchorError))
+    local targetOk, targetError = pcall(syncGameUiTarget, triggerId)
+    if not targetOk then
+        debug(1, "approach: Battle UI target 갱신 실패: " .. tostring(targetError))
         return false
     end
     return true
@@ -538,26 +538,19 @@ local function resumeApproachWithAlert(triggerId, report, characterId, phase)
     return false
 end
 
--- outer CBS가 이미 계산된 msgDisplay를 특정 메시지만 remount해도 최신 UI로
--- 바꿀 수 있도록, exact sentinel을 editDisplay 단계에서 렌더된 fragment로 치환한다.
+-- target 메시지에만 최신 UI를 붙인다. 이전 target은 reloadChat될 때 원문으로 돌아간다.
 local function handleEditDisplay(triggerId, data, meta)
     if type(data) ~= "string" then
         return data
     end
-    local markerStart = string.find(data, UI_ANCHOR_MARKER, 1, true)
-    if markerStart == nil then
+    local index = type(meta) == "table" and meta.index or nil
+    if type(index) ~= "number" then
         return data
     end
 
-    local index = type(meta) == "table" and meta.index or nil
-    local dedicatedAnchor = data == UI_ANCHOR_MARKER and type(index) == "number" and index >= 0
-    local activeIndex = parseUiAnchorIndex(readUiFragment(triggerId, UI_ANCHOR_INDEX_VAR))
-    local renderHere = (dedicatedAnchor and activeIndex == index)
-        or (index == -1 and (activeIndex == nil or activeIndex == -1))
-    if not renderHere then
-        local markerEnd = markerStart + #UI_ANCHOR_MARKER - 1
-        return string.sub(data, 1, markerStart - 1)
-            .. string.sub(data, markerEnd + 1)
+    local activeIndex = parseUiTargetIndex(readUiFragment(triggerId, UI_TARGET_INDEX_VAR)) or -1
+    if index ~= activeIndex then
+        return data
     end
 
     local rendered = SETUP_START_MARKUP
@@ -566,10 +559,16 @@ local function handleEditDisplay(triggerId, data, meta)
             .. readUiFragment(triggerId, UI_BODY_VAR)
             .. readUiFragment(triggerId, UI_POPUP_VAR)
     end
-    local markerEnd = markerStart + #UI_ANCHOR_MARKER - 1
-    return string.sub(data, 1, markerStart - 1)
-        .. rendered
-        .. string.sub(data, markerEnd + 1)
+    if index == -1 then
+        local containerStart = string.find(data, UI_CONTAINER_EMPTY, 1, true)
+        if containerStart ~= nil then
+            local containerEnd = containerStart + #UI_CONTAINER_EMPTY - 1
+            return string.sub(data, 1, containerStart - 1)
+                .. UI_CONTAINER_OPEN .. rendered .. "</div>"
+                .. string.sub(data, containerEnd + 1)
+        end
+    end
+    return data .. "\n" .. UI_CONTAINER_OPEN .. rendered .. "</div>"
 end
 
 --전투 중 입력은 filler로 정규화하되, 조기 승리 뒤 자유행동은 원문을 보존
@@ -643,9 +642,9 @@ local function handleButtonClick(triggerId, data)
     local report = runScript(triggerId, script, table.unpack(parts))
     if script == "init" and parts[1] == "start" then
         if controllerSucceeded("onButtonClick.init.start", report) then
-            local anchorOk, anchorError = pcall(ensureGameUiAnchor, triggerId)
-            if not anchorOk then
-                debug(1, "onButtonClick.init.start: UI anchor 생성 실패: " .. tostring(anchorError))
+            local targetOk, targetError = pcall(syncGameUiTarget, triggerId)
+            if not targetOk then
+                debug(1, "onButtonClick.init.start: UI target 갱신 실패: " .. tostring(targetError))
             end
         end
     elseif script == "init"
@@ -724,10 +723,10 @@ local function handleStart(triggerId)
         return false
     end
 
-    if report.commitRecovered == true or report.uiAnchorRequired == true then
-        local anchorOk, anchorError = pcall(ensureGameUiAnchor, triggerId)
-        if not anchorOk then
-            debug(1, "onStart: 복구 UI anchor 생성 실패: " .. tostring(anchorError))
+    if report.commitRecovered == true or report.uiTargetRequired == true then
+        local targetOk, targetError = pcall(syncGameUiTarget, triggerId, report.uiTargetIndex)
+        if not targetOk then
+            debug(1, "onStart: 복구 UI target 갱신 실패: " .. tostring(targetError))
             return false
         end
     end
@@ -743,12 +742,8 @@ local function handleOutput(triggerId)
         "battleController",
         "commitOutput"
     )
-    if controllerSucceeded("onOutput", report) and report.outputCommitted == true then
-        local anchorOk, anchorError = pcall(ensureGameUiAnchor, triggerId)
-        if not anchorOk then
-            debug(1, "onOutput: 다음 턴 UI anchor 생성 실패: " .. tostring(anchorError))
-        end
-    end
+    controllerSucceeded("onOutput", report)
+    return report
 end
 
     return function(triggerId, action, ...)

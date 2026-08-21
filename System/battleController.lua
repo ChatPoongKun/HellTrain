@@ -5,7 +5,6 @@
     local VIEW_NAME = "battleView"
     local BATTLE_LOG_VIEW_NAME = "battleLogView"
     local UI_BODY_NAME = "🔯🔯🔯"
-    local UI_ANCHOR_MARKER = "@@HELLTRAIN_UI_ANCHOR_V1@@"
     local SAY_NOTHING = "*says nothing*"
     local CHAT_FINGERPRINT_ALGORITHM = "canonical_poly131_137_chat_v1"
 
@@ -1068,18 +1067,9 @@
             and message.data == SAY_NOTHING
     end
 
-    local function isExactUiAnchor(message)
-        return type(message) == "table"
-            and message.role == "user"
-            and message.data == UI_ANCHOR_MARKER
-    end
-
     local function createPlannedChatAnchor(chat)
         local logicalLength = #chat
         while logicalLength > 0 and isExactFiller(chat[logicalLength]) do
-            logicalLength = logicalLength - 1
-        end
-        if logicalLength > 0 and isExactUiAnchor(chat[logicalLength]) then
             logicalLength = logicalLength - 1
         end
         local prefixMessageCount = logicalLength
@@ -1126,22 +1116,16 @@
         local prefixErrors = validateAnchorPrefix(binding, chat)
         if prefixErrors then return nil, prefixErrors end
         local cursor = binding.chatAnchor.prefixMessageCount + 1
-        local uiAnchorPresent = false
-        if isExactUiAnchor(chat[cursor]) then
-            uiAnchorPresent = true
-            cursor = cursor + 1
-        end
         local fillerCount = 0
         for index = cursor, #chat do
             if not isExactFiller(chat[index]) then
                 return nil, {
-                    makeError("preparing_chat_topology_mismatch", "$.chat[" .. index .. "]", "준비 중인 요청의 anchor 뒤에는 UI 제출 메시지와 trailing filler만 올 수 있습니다."),
+                    makeError("preparing_chat_topology_mismatch", "$.chat[" .. index .. "]", "준비 중인 요청의 기준 대화 뒤에는 trailing filler만 올 수 있습니다."),
                 }
             end
             fillerCount = fillerCount + 1
         end
         return {
-            uiAnchorPresent = uiAnchorPresent,
             fillerCount = fillerCount,
         }, nil
     end
@@ -1161,14 +1145,9 @@
                 makeError("recovery_filler_missing", "$.chat", "잠긴 요청을 복구하려면 새 정확한 빈 입력이 필요합니다."),
             }
         end
-        local uiAnchorLuaIndex = prefixCount + 1
-        local uiAnchorPresent = isExactUiAnchor(chat[uiAnchorLuaIndex])
-        if not uiAnchorPresent then
-            uiAnchorLuaIndex = nil
-        end
         local responsePresent = false
         local responseFingerprint
-        local responseLuaIndex = prefixCount + (uiAnchorPresent and 2 or 1)
+        local responseLuaIndex = prefixCount + 1
         if cursor == responseLuaIndex then
             local response = chat[responseLuaIndex]
             if type(response) ~= "table" or response.role ~= "char" then
@@ -1185,38 +1164,18 @@
                 "$.recovery.response"
             )
             if fingerprintError then return nil, { fingerprintError } end
-        elseif cursor ~= prefixCount + (uiAnchorPresent and 1 or 0) then
+        elseif cursor ~= prefixCount then
             return nil, {
-                makeError("recovery_chat_topology_mismatch", "$.chat", "채팅 anchor 뒤에 자동 복구가 소유한다고 증명할 수 없는 메시지가 있습니다."),
+                makeError("recovery_chat_topology_mismatch", "$.chat", "요청 기준 대화 뒤에 자동 복구가 소유한다고 증명할 수 없는 메시지가 있습니다."),
             }
         end
         return {
-            uiAnchorLuaIndex = uiAnchorLuaIndex,
-            uiAnchorPresent = uiAnchorPresent,
             responseLuaIndex = responseLuaIndex,
-            -- UI anchor는 요청에 포함되지 않는 표시 전용 메시지다. 응답의
-            -- 논리 위치는 anchor가 제거된 뒤의 0-based 위치로 기록한다.
             responseIndex = binding.chatAnchor.responseIndex,
             responsePresent = responsePresent,
             responseFingerprint = responseFingerprint,
             fillerCount = fillerCount,
         }, nil
-    end
-
-    local function inspectCommittedUiSubmission(binding, chat)
-        local cursor = #chat
-        while cursor > 0 and isExactFiller(chat[cursor]) do
-            cursor = cursor - 1
-        end
-        if cursor == 0 or not isExactUiAnchor(chat[cursor]) then
-            return nil, false, nil
-        end
-        local withoutUi = {}
-        for index = 1, cursor - 1 do
-            withoutUi[index] = chat[index]
-        end
-        local topology, topologyErrors = inspectAnchoredTopology(binding, withoutUi, false)
-        return topology, true, topologyErrors
     end
 
     local function inspectObservedOutput(binding, chat, allowTrailingFillers)
@@ -1287,47 +1246,8 @@
         end
     end
 
-    local function removeUiAnchorAt(chat, luaIndex)
-        if luaIndex == nil or not isExactUiAnchor(chat[luaIndex]) then
-            return chat, false, nil
-        end
-        if type(removeChat) ~= "function" then
-            return nil, false, {
-                makeError("chat_write_unavailable", "$.host.removeChat", "UI 제출 메시지를 제거할 removeChat 호스트 함수를 찾을 수 없습니다."),
-            }
-        end
-        local ok, removeError = pcall(removeChat, triggerId, luaIndex - 1)
-        if not ok then
-            return nil, false, {
-                makeError("ui_anchor_remove_failed", "$.chat[" .. luaIndex .. "]", "이전 전투 UI 메시지를 제거하지 못했습니다: " .. tostring(removeError)),
-            }
-        end
-        local after, readErrors = readChat()
-        if readErrors then return nil, false, readErrors end
-        if #after ~= #chat - 1 then
-            return nil, false, {
-                makeError("ui_anchor_remove_not_persisted", "$.chat", "전투 UI 메시지 제거 뒤 대화 길이가 바뀌지 않았습니다."),
-            }
-        end
-        for index = 1, #after do
-            local sourceIndex = index < luaIndex and index or index + 1
-            if not deepEqual(after[index], chat[sourceIndex]) then
-                return nil, false, {
-                    makeError("ui_anchor_remove_mismatch", "$.chat[" .. index .. "]", "전투 UI 메시지 제거가 다른 대화를 변경했습니다."),
-                }
-            end
-        end
-        return after, true, nil
-    end
-
     local function hasFreshSubmitSuffix(chat)
-        local cursor = #chat
-        local fillerFound = false
-        while cursor > 0 and isExactFiller(chat[cursor]) do
-            fillerFound = true
-            cursor = cursor - 1
-        end
-        return fillerFound or (cursor > 0 and isExactUiAnchor(chat[cursor]))
+        return isExactFiller(chat[#chat])
     end
 
     local function removeRecoveryResponse(chat, luaIndex, expectedFingerprint)
@@ -1983,22 +1903,13 @@
         if aftermath.phase == "ready" then
             local suffixCount = #chat - responseLuaIndex
             local first = chat[responseLuaIndex + 1]
-            local second = chat[responseLuaIndex + 2]
             local firstIsInput = type(first) == "table"
                 and first.role == "user"
-                and not isExactUiAnchor(first)
                 and not isExactFiller(first)
-            local secondIsInput = type(second) == "table"
-                and second.role == "user"
-                and not isExactUiAnchor(second)
-                and not isExactFiller(second)
             if suffixCount < 0
                 or (suffixCount == 1
-                    and not (isExactUiAnchor(first) or firstIsInput or isExactFiller(first)))
-                or (suffixCount == 2
-                    and not (isExactUiAnchor(first)
-                        and (secondIsInput or isExactFiller(second))))
-                or suffixCount > 2 then
+                    and not (firstIsInput or isExactFiller(first)))
+                or suffixCount > 1 then
                 return nil, {
                     makeError("legacy_aftermath_migration_unsafe", "$.chat", "기존 자유행동 대화 끝을 안전하게 이전할 수 없습니다."),
                 }
@@ -2041,7 +1952,7 @@
         if committedErrors then return nil, committedErrors end
         local request = aftermath.request
         local user = type(request) == "table" and chat[request.userLuaIndex] or nil
-        if type(user) ~= "table" or user.role ~= "user" or isExactUiAnchor(user) then
+        if type(user) ~= "table" or user.role ~= "user" then
             return nil, {
                 makeError("aftermath_user_missing", "$.chat", "자유행동 요청에 연결된 사용자 입력이 없습니다."),
             }
@@ -2200,6 +2111,7 @@
         return success({
             generationReady = false,
             outputCommitted = true,
+            uiTargetIndex = aftermath.lastCommitted.responseLuaIndex - 1,
             aftermathComplete = true,
             status = authority.status,
             view = settled.view,
@@ -2255,6 +2167,7 @@
         return success({
             generationReady = false,
             outputCommitted = true,
+            uiTargetIndex = aftermath.lastCommitted.responseLuaIndex - 1,
             aftermathComplete = false,
             status = authority.status,
             view = published.view,
@@ -2297,6 +2210,7 @@
             return success({
                 generationReady = false,
                 outputCommitted = true,
+                uiTargetIndex = aftermath.lastCommitted.responseLuaIndex - 1,
                 aftermathComplete = true,
                 skipped = true,
                 reused = true,
@@ -2324,10 +2238,7 @@
         local committedErrors = validateAftermathCommittedChat(aftermath, chat)
         if committedErrors then return failure(committedErrors) end
         local responseLuaIndex = aftermath.lastCommitted.responseLuaIndex
-        local suffixCount = #chat - responseLuaIndex
-        if suffixCount < 0
-            or suffixCount > 1
-            or (suffixCount == 1 and not isExactUiAnchor(chat[responseLuaIndex + 1])) then
+        if #chat ~= responseLuaIndex then
             return failure({
                 makeError("aftermath_skip_chat_not_clean", "$.chat", "확정 장면 뒤에 자유행동 입력 또는 예상하지 않은 메시지가 있어 건너뛸 수 없습니다."),
             })
@@ -2512,7 +2423,8 @@
                 generationReady = false,
                 outputCommitted = false,
                 aftermathComplete = false,
-                uiAnchorRequired = true,
+                uiTargetRequired = true,
+                uiTargetIndex = aftermath.lastCommitted.responseLuaIndex - 1,
                 commitRecovered = false,
                 removedSayNothing = removedFillers > 0,
                 removedSayNothingCount = removedFillers,
@@ -2526,16 +2438,10 @@
         end
         local userLuaIndex = #chat
         local user = chat[userLuaIndex]
-        if type(user) ~= "table" or user.role ~= "user" or isExactUiAnchor(user) then
+        if type(user) ~= "table" or user.role ~= "user" then
             return failure({
                 makeError("missing_aftermath_input", "$.chat", "함락 후에는 원하는 행위를 입력한 뒤 전송해야 합니다."),
             })
-        end
-        if userLuaIndex > 1 and isExactUiAnchor(chat[userLuaIndex - 1]) then
-            local after, _, removeErrors = removeUiAnchorAt(chat, userLuaIndex - 1)
-            if removeErrors then return failure(removeErrors) end
-            chat = after
-            userLuaIndex = #chat
         end
         if type(aftermath.lastCommitted) == "table"
             and userLuaIndex ~= aftermath.lastCommitted.responseLuaIndex + 1 then
@@ -2616,7 +2522,7 @@
         for _, message in ipairs(promptCopy) do
             if deepEqual(message, instruction) then
                 removed = removed + 1
-            elseif not (message.role == "user" and message.content == UI_ANCHOR_MARKER) then
+            else
                 normalized[#normalized + 1] = message
             end
         end
@@ -3720,8 +3626,8 @@
                 end
             end
 
-            -- commit은 끝났지만 onOutput의 UI anchor 추가가 실패한 경우, 새 턴을
-            -- 만들지 않고 현재 View만 다시 게시해 main.onStart가 anchor를 복구한다.
+            -- commit은 끝났지만 onOutput의 UI target 갱신이 실패한 경우, 새 턴을
+            -- 만들지 않고 현재 View만 다시 게시해 main.onStart가 target을 복구한다.
             if storedBinding.phase == "committed" and not freshSend then
                 local committedTopology, committedTopologyErrors = inspectAnchoredTopology(
                     storedBinding,
@@ -3734,7 +3640,8 @@
                     if publishErrors then return failure(publishErrors) end
                     return success({
                         generationReady = false,
-                        uiAnchorRequired = true,
+                        uiTargetRequired = true,
+                        uiTargetIndex = storedBinding.chatAnchor.responseIndex,
                         outputCommitted = false,
                         commitRecovered = false,
                         turnId = storedBinding.turnId,
@@ -3745,7 +3652,6 @@
                         reused = true,
                         removedSayNothing = false,
                         removedSayNothingCount = 0,
-                        removedUiAnchor = false,
                         removedUncommittedOutput = false,
                         markerAdded = false,
                         view = published.view,
@@ -3755,26 +3661,9 @@
                     makeError(
                         "unsupported_generation_source",
                         "$.chat",
-                        "직전 장면을 제거한 재생성은 전투 UI anchor 구조에서 지원하지 않습니다."
+                        "직전 장면을 제거한 재생성은 현재 전투 요청 구조에서 지원하지 않습니다."
                     ),
                 })
-            end
-
-            if storedBinding.phase == "committed" and freshSend then
-                local submittedTopology, hasUiAnchor, submittedTopologyErrors = inspectCommittedUiSubmission(
-                    storedBinding,
-                    chat
-                )
-                if submittedTopologyErrors then return failure(submittedTopologyErrors) end
-                if hasUiAnchor and not submittedTopology.responsePresent then
-                    return failure({
-                        makeError(
-                            "unsupported_generation_source",
-                            "$.chat",
-                            "직전 장면이 없는 UI anchor에서는 다음 턴을 시작할 수 없습니다."
-                        ),
-                    })
-                end
             end
 
             if storedBinding.phase == "inFlight" or storedBinding.phase == "requestInjected" then
@@ -3984,8 +3873,6 @@
             reused = reused,
             removedSayNothing = removedCount > 0,
             removedSayNothingCount = removedCount,
-            -- 표시 전용 anchor는 결과가 도착할 때까지 남겨 대기 UI를 유지한다.
-            removedUiAnchor = false,
             markerAdded = false,
             attemptNumber = binding.attemptNumber,
             recoveredAbandonedRequest = false,
@@ -4093,16 +3980,12 @@
         }
         local systemCount = 0
         local cueCount = 0
-        local uiAnchorCount = 0
         local normalizedPrompt = {}
         for _, message in ipairs(promptCopy) do
             if deepEqual(message, formatted.message) then
                 systemCount = systemCount + 1
             elseif deepEqual(message, requestCue) then
                 cueCount = cueCount + 1
-            elseif message.role == "user" and message.content == UI_ANCHOR_MARKER then
-                -- 화면에는 결과 도착까지 남아 있지만 모델 입력에는 포함하지 않는다.
-                uiAnchorCount = uiAnchorCount + 1
             else
                 normalizedPrompt[#normalizedPrompt + 1] = message
             end
@@ -4137,7 +4020,6 @@
             promptArray = promptCopy,
             injected = not alreadyInjected,
             deduplicated = deduplicated,
-            removedUiAnchorCount = uiAnchorCount,
             turnId = binding.turnId,
             requestPhase = binding.phase,
         })
@@ -4211,6 +4093,7 @@
                 return success({
                     generationReady = false,
                     outputCommitted = true,
+                    uiTargetIndex = aftermath.lastCommitted.responseLuaIndex - 1,
                     aftermathComplete = false,
                     status = authority.status,
                     view = published.view,
@@ -4219,6 +4102,7 @@
                 return success({
                     generationReady = false,
                     outputCommitted = true,
+                    uiTargetIndex = aftermath.lastCommitted.responseLuaIndex - 1,
                     aftermathComplete = true,
                     status = authority.status,
                 })
@@ -4279,11 +4163,6 @@
                 if observedWriteErrors then return failure(observedWriteErrors) end
                 binding = observedBinding
             end
-            -- 완성 출력이 실제 채팅에 도착한 것이 확인된 뒤에만 이전 UI를
-            -- 제거한다. 응답 자체는 그대로 두고 다음 onOutput UI anchor가
-            -- 응답 아래에 배치될 수 있도록 한다.
-            local _, _, uiRemoveErrors = removeUiAnchorAt(chat, topology.uiAnchorLuaIndex)
-            if uiRemoveErrors then return failure(uiRemoveErrors) end
         end
 
         local committed, commitErrors = callModule(
@@ -4360,9 +4239,8 @@
             end
         end
 
-        -- 현재 턴 UI 메시지는 완성 출력 관측 뒤 제거됐다. 활성 전투는
-        -- 다음 턴 View를, 종료 전투는 멱등 정산 뒤 결과/보상 View를
-        -- 게시한다. onOutput 훅이 응답 다음에 새 UI anchor를 만든다.
+        -- 활성 전투는 다음 턴 View를, 종료 전투는 멱등 정산 뒤 결과/보상 View를
+        -- 게시한다. onOutput 훅이 완성 응답을 새 UI target으로 지정한다.
         local published
         local progressionState
         if nextState.status == "active" then
@@ -4431,6 +4309,7 @@
         return success({
             generationReady = false,
             outputCommitted = true,
+            uiTargetIndex = committedBinding.chatAnchor.responseIndex,
             turnId = committed.turnId,
             applied = committed.applied == true,
             initializedNextTurn = initialized,

@@ -1,6 +1,6 @@
 -- RisuAI host entrypoint. Runtime and host orchestration are loaded lazily
 -- because lore access requires the current event triggerId.
-RUNTIME_BUNDLE_REVISION = "runtime-bundle-turn-start-history-character-cards-v1-20260805"
+RUNTIME_BUNDLE_REVISION = "runtime-bundle-editdisplay-ui-target-v1-20260822"
 
 local runtimeHandler = nil
 local hostFlowHandler = nil
@@ -83,12 +83,11 @@ local function dispatch(triggerId, mode, action, ...)
     return hostFlowHandler(triggerId, action, ...)
 end
 
--- commitOutput은 상태 검증 실패를 report로 반환할 수 있고, 예외 경로에서도
--- 이미 출력 관측 과정에서 기존 UI anchor가 제거되었을 수 있다. 게임 UI가
--- 활성화된 채팅에 한해 onOutput 종료 시 anchor를 멱등 복구한다.
-local function restoreOutputUiAnchor(triggerId)
+-- commitOutput 성공 시 알려준 응답 인덱스를 사용하고, 예외 경로에서는 최신
+-- 캐릭터 메시지를 찾아 onOutput 종료 시 UI target을 한 번만 복구한다.
+local function restoreOutputUiTarget(triggerId, report)
     if type(getChatVar) ~= "function"
-        or type(ensureGameUiAnchor) ~= "function" then
+        or type(syncGameUiTarget) ~= "function" then
         return false
     end
 
@@ -97,12 +96,13 @@ local function restoreOutputUiAnchor(triggerId)
         return false
     end
 
-    local anchorOk, anchorError = pcall(ensureGameUiAnchor, triggerId)
-    if anchorOk then
+    local targetIndex = type(report) == "table" and report.uiTargetIndex or nil
+    local targetOk, targetError = pcall(syncGameUiTarget, triggerId, targetIndex)
+    if targetOk then
         return true
     end
 
-    local message = "onOutput: UI anchor recovery failed: " .. tostring(anchorError)
+    local message = "onOutput: UI target recovery failed: " .. tostring(targetError)
     if type(debug) == "function" then
         debug(1, message)
     elseif type(print) == "function" then
@@ -139,9 +139,7 @@ onOutput = async(function(triggerId)
         "output"
     ))
 
-    -- 성공 경로에서는 기존 ensureGameUiAnchor 호출을 멱등 재사용하고,
-    -- 실패 경로에서는 사라진 anchor를 즉시 다시 만든다.
-    restoreOutputUiAnchor(triggerId)
+    restoreOutputUiTarget(triggerId, packed[1] and packed[2] or nil)
 
     if not packed[1] then
         error(packed[2])
