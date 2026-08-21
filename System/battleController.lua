@@ -5,6 +5,8 @@
     local VIEW_NAME = "battleView"
     local BATTLE_LOG_VIEW_NAME = "battleLogView"
     local UI_BODY_NAME = "🔯🔯🔯"
+    local UI_INTERACTION_NAME = "helltrainBattleInteractionV1"
+    local UI_INTERACTION_MARKER = "<!--HELLTRAIN_BATTLE_INTERACTION_V1-->"
     local SAY_NOTHING = "*says nothing*"
     local CHAT_FINGERPRINT_ALGORITHM = "canonical_poly131_137_chat_v1"
 
@@ -1301,7 +1303,7 @@
         return after, nil
     end
 
-    local function publishCurrentViewInternal(staticData, suppressRefresh, skipUiRender)
+    local function publishCurrentViewInternal(staticData, suppressRefresh, skipUiRender, interactionOnly)
         staticData = staticData or select(1, loadStaticData())
         if staticData == nil then
             local _, errors = loadStaticData()
@@ -1436,22 +1438,11 @@
         end
 
         -- getLoreBooks/loadLores는 HTML을 반환하기 전에 CBS를 평가한다.
-        -- 따라서 battleui.html은 방금 쓴 battleView wire를 재읽어 확인한
-        -- 뒤에만 로드해야 현재 턴의 View로 렌더링된다.
+        -- 따라서 UI 조각은 방금 쓴 battleView wire를 재읽어 확인한 뒤에만
+        -- 로드해야 현재 턴의 View로 렌더링된다.
         if type(loadLores) ~= "function" then
             return nil, {
                 makeError("lore_loader_unavailable", "$.host.loadLores", "전투 UI 로어북을 읽을 loadLores 함수를 찾을 수 없습니다."),
-            }
-        end
-        local loadOk, battleUi = pcall(loadLores, triggerId, "battleui.html")
-        if not loadOk then
-            return nil, {
-                makeError("lore_load_failed", "$.lore.battleui", "battleui.html을 읽지 못했습니다: " .. tostring(battleUi)),
-            }
-        end
-        if type(battleUi) ~= "string" or battleUi == "" then
-            return nil, {
-                makeError("missing_lore", "$.lore.battleui", "battleui.html 로어북 내용이 없습니다."),
             }
         end
         if type(setChatVar) ~= "function" or type(getChatVar) ~= "function" then
@@ -1459,21 +1450,80 @@
                 makeError("ui_write_unavailable", "$.host.setChatVar", "전투 UI를 게시할 setChatVar/getChatVar 함수를 찾을 수 없습니다."),
             }
         end
-        local uiWriteOk, uiWriteError = pcall(setChatVar, triggerId, UI_BODY_NAME, battleUi)
-        if not uiWriteOk then
+
+        local frameUi = nil
+        if interactionOnly == true then
+            local frameReadOk, storedFrame = pcall(getChatVar, triggerId, UI_BODY_NAME)
+            if frameReadOk
+                and type(storedFrame) == "string"
+                and string.find(storedFrame, UI_INTERACTION_MARKER, 1, true) ~= nil then
+                frameUi = storedFrame
+            else
+                return nil, {
+                    makeError("missing_ui_frame", "$.chatVar.battleUi", "카드 상호작용을 반영할 현재 턴의 전투 UI 프레임이 없습니다."),
+                }
+            end
+        end
+
+        if interactionOnly ~= true then
+            local frameLoadOk, loadedFrame = pcall(loadLores, triggerId, "battleui.html")
+            if not frameLoadOk then
+                return nil, {
+                    makeError("lore_load_failed", "$.lore.battleui", "battleui.html을 읽지 못했습니다: " .. tostring(loadedFrame)),
+                }
+            end
+            if type(loadedFrame) ~= "string"
+                or loadedFrame == ""
+                or string.find(loadedFrame, UI_INTERACTION_MARKER, 1, true) == nil then
+                return nil, {
+                    makeError("invalid_ui_frame", "$.lore.battleui", "battleui.html 고정 프레임에 상호작용 마커가 없습니다."),
+                }
+            end
+            frameUi = loadedFrame
+        end
+
+        local interactionLoadOk, interactionUi = pcall(loadLores, triggerId, "battleui-interaction.html")
+        if not interactionLoadOk then
             return nil, {
-                makeError("ui_write_failed", "$.chatVar.battleUi", "전투 UI 쓰기에 실패했습니다: " .. tostring(uiWriteError)),
+                makeError("lore_load_failed", "$.lore.battleuiInteraction", "battleui-interaction.html을 읽지 못했습니다: " .. tostring(interactionUi)),
             }
         end
-        local uiReadOk, storedUi = pcall(getChatVar, triggerId, UI_BODY_NAME)
-        if not uiReadOk then
+        if type(interactionUi) ~= "string" or interactionUi == "" then
             return nil, {
-                makeError("ui_verify_read_failed", "$.chatVar.battleUi", "쓰기 뒤 전투 UI를 읽지 못했습니다: " .. tostring(storedUi)),
+                makeError("missing_lore", "$.lore.battleuiInteraction", "battleui-interaction.html 로어북 내용이 없습니다."),
             }
         end
-        if storedUi ~= battleUi then
+
+        if interactionOnly ~= true then
+            local frameWriteOk, frameWriteError = pcall(setChatVar, triggerId, UI_BODY_NAME, frameUi)
+            if not frameWriteOk then
+                return nil, {
+                    makeError("ui_write_failed", "$.chatVar.battleUi", "전투 UI 프레임 쓰기에 실패했습니다: " .. tostring(frameWriteError)),
+                }
+            end
+            local frameReadOk, storedFrame = pcall(getChatVar, triggerId, UI_BODY_NAME)
+            if not frameReadOk or storedFrame ~= frameUi then
+                return nil, {
+                    makeError("ui_write_not_persisted", "$.chatVar.battleUi", "쓰기 뒤 읽은 전투 UI 프레임이 battleui.html과 다릅니다."),
+                }
+            end
+        end
+
+        local interactionWriteOk, interactionWriteError = pcall(
+            setChatVar,
+            triggerId,
+            UI_INTERACTION_NAME,
+            interactionUi
+        )
+        if not interactionWriteOk then
             return nil, {
-                makeError("ui_write_not_persisted", "$.chatVar.battleUi", "쓰기 뒤 읽은 전투 UI가 로드한 battleui.html과 다릅니다."),
+                makeError("ui_write_failed", "$.chatVar.battleUiInteraction", "전투 UI 상호작용 조각 쓰기에 실패했습니다: " .. tostring(interactionWriteError)),
+            }
+        end
+        local interactionReadOk, storedInteraction = pcall(getChatVar, triggerId, UI_INTERACTION_NAME)
+        if not interactionReadOk or storedInteraction ~= interactionUi then
+            return nil, {
+                makeError("ui_write_not_persisted", "$.chatVar.battleUiInteraction", "쓰기 뒤 읽은 전투 UI 상호작용 조각이 로어북과 다릅니다."),
             }
         end
         if suppressRefresh ~= true then
@@ -1495,7 +1545,9 @@
             view = built.view,
             wireFormat = published.wireFormat,
             bytes = published.bytes,
-            ui = battleUi,
+            uiFrame = frameUi,
+            uiInteraction = interactionUi,
+            interactionOnly = interactionOnly == true,
         }, nil
     end
 
@@ -3283,7 +3335,7 @@
             end
             -- risu-btn host가 클릭 message를 자동 remount하므로 수동
             -- refresh를 중복하지 않는다.
-            local published, publishErrors = publishCurrentViewInternal(staticData, true)
+            local published, publishErrors = publishCurrentViewInternal(staticData, true, false, true)
             if publishErrors then
                 return failure(publishErrors)
             end
@@ -3307,7 +3359,7 @@
                 return failure(writeErrors)
             end
         end
-        local published, publishErrors = publishCurrentViewInternal(staticData, true)
+        local published, publishErrors = publishCurrentViewInternal(staticData, true, false, true)
         if publishErrors then
             return failure(publishErrors)
         end

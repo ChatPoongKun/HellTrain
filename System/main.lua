@@ -1,6 +1,6 @@
 -- RisuAI host entrypoint. Runtime and host orchestration are loaded lazily
 -- because lore access requires the current event triggerId.
-RUNTIME_BUNDLE_REVISION = "runtime-bundle-editdisplay-ui-target-v1-20260822"
+RUNTIME_BUNDLE_REVISION = "runtime-bundle-battle-ui-fragments-v1-20260822"
 
 local runtimeHandler = nil
 local hostFlowHandler = nil
