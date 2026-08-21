@@ -3,6 +3,7 @@
     local ACTIVE_REQUEST_SCHEMA_VERSION = 3
     local AFTERMATH_SCHEMA_VERSION = 2
     local VIEW_NAME = "battleView"
+    local INTERACTION_VIEW_NAME = "battleInteractionView"
     local BATTLE_LOG_VIEW_NAME = "battleLogView"
     local UI_BODY_NAME = "🔯🔯🔯"
     local UI_INTERACTION_NAME = "helltrainBattleInteractionV1"
@@ -23,7 +24,9 @@
 
     local function permitCanonicalBattleView(purpose, viewName)
         return purpose == "dataBridgeCanonicalV1"
-            and (viewName == VIEW_NAME or viewName == BATTLE_LOG_VIEW_NAME)
+            and (viewName == VIEW_NAME
+                or viewName == INTERACTION_VIEW_NAME
+                or viewName == BATTLE_LOG_VIEW_NAME)
     end
 
     local function makeError(code, path, message)
@@ -1522,7 +1525,7 @@
 
         local built, buildErrors = callModule(
             "viewBuilder",
-            "buildBattleView",
+            interactionOnly == true and "buildBattleInteractionView" or "buildBattleView",
             authority,
             staticData,
             context
@@ -1535,12 +1538,25 @@
                 makeError("missing_battle_view", "$.runtime.viewBuilder.view", "viewBuilder 성공 결과에 battleView가 없습니다."),
             }
         end
+        local interactionView = interactionOnly == true and built.view or built.interactionView
+        if type(interactionView) ~= "table" then
+            return nil, {
+                makeError(
+                    "missing_battle_interaction_view",
+                    "$.runtime.viewBuilder.interactionView",
+                    "viewBuilder 성공 결과에 battleInteractionView가 없습니다."
+                ),
+            }
+        end
+
+        local publishedViewName = interactionOnly == true and INTERACTION_VIEW_NAME or VIEW_NAME
+        local publishedView = interactionOnly == true and interactionView or built.view
 
         local published, publishErrors = callModule(
             "dataBridge",
             "_publishCanonical",
-            VIEW_NAME,
-            built.view,
+            publishedViewName,
+            publishedView,
             permitCanonicalBattleView
         )
         if publishErrors then
@@ -1553,31 +1569,31 @@
         end
         if type(getChatVar) ~= "function" then
             return nil, {
-                makeError("view_verify_unavailable", "$.host.getChatVar", "게시한 battleView를 검증할 getChatVar가 없습니다."),
+                makeError("view_verify_unavailable", "$.host.getChatVar", "게시한 View를 검증할 getChatVar가 없습니다."),
             }
         end
-        local readOk, storedWire = pcall(getChatVar, triggerId, VIEW_NAME)
+        local readOk, storedWire = pcall(getChatVar, triggerId, publishedViewName)
         if not readOk then
             return nil, {
-                makeError("view_verify_read_failed", "$.chatVar.battleView", "게시 뒤 battleView를 읽지 못했습니다: " .. tostring(storedWire)),
+                makeError("view_verify_read_failed", "$.chatVar." .. publishedViewName, "게시 뒤 " .. publishedViewName .. "를 읽지 못했습니다: " .. tostring(storedWire)),
             }
         end
         if storedWire ~= published.encoded then
             return nil, {
-                makeError("view_write_not_persisted", "$.chatVar.battleView", "게시 뒤 읽은 battleView가 인코딩 결과와 다릅니다."),
+                makeError("view_write_not_persisted", "$.chatVar." .. publishedViewName, "게시 뒤 읽은 " .. publishedViewName .. "가 인코딩 결과와 다릅니다."),
             }
         end
 
         if skipUiRender == true then
             return {
-                view = built.view,
+                view = publishedView,
                 wireFormat = published.wireFormat,
                 bytes = published.bytes,
             }, nil
         end
 
         -- getLoreBooks/loadLores는 HTML을 반환하기 전에 CBS를 평가한다.
-        -- 따라서 UI 조각은 방금 쓴 battleView wire를 재읽어 확인한 뒤에만
+        -- 따라서 UI 조각은 방금 쓴 View wire를 재읽어 확인한 뒤에만
         -- 로드해야 현재 턴의 View로 렌더링된다.
         if type(loadLores) ~= "function" then
             return nil, {
@@ -1588,6 +1604,43 @@
             return nil, {
                 makeError("ui_write_unavailable", "$.host.setChatVar", "전투 UI를 게시할 setChatVar/getChatVar 함수를 찾을 수 없습니다."),
             }
+        end
+
+        if interactionOnly ~= true then
+            local interactionPublished, interactionPublishErrors = callModule(
+                "dataBridge",
+                "_publishCanonical",
+                INTERACTION_VIEW_NAME,
+                interactionView,
+                permitCanonicalBattleView
+            )
+            if interactionPublishErrors then
+                return nil, interactionPublishErrors
+            end
+            if type(interactionPublished.encoded) ~= "string"
+                or interactionPublished.encoded == "" then
+                return nil, {
+                    makeError(
+                        "missing_published_view",
+                        "$.runtime.dataBridge.encoded",
+                        "dataBridge 성공 결과에 interaction 게시 문자열이 없습니다."
+                    ),
+                }
+            end
+            local interactionReadOk, storedInteractionWire = pcall(
+                getChatVar,
+                triggerId,
+                INTERACTION_VIEW_NAME
+            )
+            if not interactionReadOk or storedInteractionWire ~= interactionPublished.encoded then
+                return nil, {
+                    makeError(
+                        "view_write_not_persisted",
+                        "$.chatVar." .. INTERACTION_VIEW_NAME,
+                        "battleInteractionView 게시 결과가 저장되지 않았습니다."
+                    ),
+                }
+            end
         end
 
         local frameUi = nil
@@ -1681,7 +1734,7 @@
         end
 
         return {
-            view = built.view,
+            view = publishedView,
             wireFormat = published.wireFormat,
             bytes = published.bytes,
             uiFrame = frameUi,

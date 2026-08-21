@@ -887,7 +887,7 @@
         }
     end
 
-    local function buildBattleView(state, staticData, context)
+    local function buildBattleView(state, staticData, context, interactionOnly)
         local errors = {}
         local data = normalizeStaticData(staticData)
         if type(data) ~= "table"
@@ -1092,59 +1092,64 @@
                 or string.format("%s-turn-%03d", state.battleId, state.turnNumber)
         end
 
-        local lastTurn = { available = false }
-        if lastCommittedInput ~= nil then
-            if state.lastCommittedTurnId == nil then
-                addError(
-                    errors,
-                    "unexpected_last_committed_pending",
-                    "$.context.lastCommittedPending",
-                    "확정 턴이 없는 상태에는 직전 pendingTurn을 표시할 수 없습니다."
+        local lastTurn = nil
+        local characterDefinition = nil
+        local environment = nil
+        if interactionOnly ~= true then
+            lastTurn = { available = false }
+            if lastCommittedInput ~= nil then
+                if state.lastCommittedTurnId == nil then
+                    addError(
+                        errors,
+                        "unexpected_last_committed_pending",
+                        "$.context.lastCommittedPending",
+                        "확정 턴이 없는 상태에는 직전 pendingTurn을 표시할 수 없습니다."
+                    )
+                    return failure(errors)
+                end
+                if type(lastCommittedInput) ~= "table"
+                    or lastCommittedInput.battleId ~= state.battleId
+                    or lastCommittedInput.turnId ~= state.lastCommittedTurnId then
+                    addError(
+                        errors,
+                        "last_committed_pending_mismatch",
+                        "$.context.lastCommittedPending",
+                        "직전 pendingTurn이 현재 전투의 마지막 확정 턴과 일치하지 않습니다."
+                    )
+                    return failure(errors)
+                end
+                local presented, presentationCallError = callRuntime(
+                    "turnPresentation",
+                    "build",
+                    lastCommittedInput,
+                    data
                 )
-                return failure(errors)
+                if presentationCallError then
+                    table.insert(errors, presentationCallError)
+                    return failure(errors)
+                end
+                if presented.ok ~= true then
+                    appendNestedErrors(errors, "$.context.lastCommittedPending", presented)
+                    return failure(errors)
+                end
+                if type(presented.lastTurn) ~= "table" or presented.lastTurn.available ~= true then
+                    addError(
+                        errors,
+                        "missing_last_turn_presentation",
+                        "$.context.lastCommittedPending",
+                        "직전 확정 턴에서 공개 표시 자료를 만들지 못했습니다."
+                    )
+                    return failure(errors)
+                end
+                lastTurn = buildLastTurnView(presented.lastTurn, data.registry, errors)
             end
-            if type(lastCommittedInput) ~= "table"
-                or lastCommittedInput.battleId ~= state.battleId
-                or lastCommittedInput.turnId ~= state.lastCommittedTurnId then
-                addError(
-                    errors,
-                    "last_committed_pending_mismatch",
-                    "$.context.lastCommittedPending",
-                    "직전 pendingTurn이 현재 전투의 마지막 확정 턴과 일치하지 않습니다."
-                )
-                return failure(errors)
-            end
-            local presented, presentationCallError = callRuntime(
-                "turnPresentation",
-                "build",
-                lastCommittedInput,
-                data
-            )
-            if presentationCallError then
-                table.insert(errors, presentationCallError)
-                return failure(errors)
-            end
-            if presented.ok ~= true then
-                appendNestedErrors(errors, "$.context.lastCommittedPending", presented)
-                return failure(errors)
-            end
-            if type(presented.lastTurn) ~= "table" or presented.lastTurn.available ~= true then
-                addError(
-                    errors,
-                    "missing_last_turn_presentation",
-                    "$.context.lastCommittedPending",
-                    "직전 확정 턴에서 공개 표시 자료를 만들지 못했습니다."
-                )
-                return failure(errors)
-            end
-            lastTurn = buildLastTurnView(presented.lastTurn, data.registry, errors)
-        end
 
-        local characterDefinition = data.characters[displayState.character.characterId]
-        local environment = data.environments[displayState.environmentId]
-        if type(characterDefinition) ~= "table" or type(environment) ~= "table" then
-            addError(errors, "missing_static_reference", "$", "캐릭터 또는 환경 정의를 찾을 수 없습니다.")
-            return failure(errors)
+            characterDefinition = data.characters[displayState.character.characterId]
+            environment = data.environments[displayState.environmentId]
+            if type(characterDefinition) ~= "table" or type(environment) ~= "table" then
+                addError(errors, "missing_static_reference", "$", "캐릭터 또는 환경 정의를 찾을 수 없습니다.")
+                return failure(errors)
+            end
         end
 
         local selectedOrder = {}
@@ -1325,6 +1330,42 @@
             selectionReason = "unplayable_selection"
         end
 
+        local selectionView = {
+            count = selectedCount,
+            mode = mode,
+            hasMainAction = hasMainAction,
+            canSubmit = canSubmit,
+            submissionArmed = phase == "selecting" and submissionArmed == true,
+            reasonCode = selectionReason,
+        }
+        if phase == "selecting" and focusedInstanceId ~= nil then
+            selectionView.focusedInstanceId = focusedInstanceId
+        end
+
+        local interactionView = {
+            schemaVersion = SCHEMA_VERSION,
+            kind = "battleInteractionView",
+            battleId = displayState.battleId,
+            turnId = turnId,
+            phase = phase,
+            locked = locked,
+            hand = {
+                count = #handItems,
+                items = handItems,
+            },
+            selection = selectionView,
+            zones = countZones(displayState.cardInstances),
+        }
+        if interactionToken ~= nil then
+            interactionView.interactionToken = interactionToken
+        end
+        if interactionOnly == true then
+            if #errors > 0 then
+                return failure(errors)
+            end
+            return success("view", interactionView)
+        end
+
         local publicAction = { status = "none" }
         if displayState.characterIntent.publicActionTag ~= nil then
             local tag = lookupTag(data.registry, displayState.characterIntent.publicActionTag, "$.character.publicAction.tag", errors)
@@ -1349,18 +1390,6 @@
         )
         if subwayView == nil then
             return failure(errors)
-        end
-
-        local selectionView = {
-            count = selectedCount,
-            mode = mode,
-            hasMainAction = hasMainAction,
-            canSubmit = canSubmit,
-            submissionArmed = phase == "selecting" and submissionArmed == true,
-            reasonCode = selectionReason,
-        }
-        if phase == "selecting" and focusedInstanceId ~= nil then
-            selectionView.focusedInstanceId = focusedInstanceId
         end
 
         local view = {
@@ -1408,12 +1437,9 @@
                     errors
                 ),
             },
-            hand = {
-                count = #handItems,
-                items = handItems,
-            },
-            selection = selectionView,
-            zones = countZones(displayState.cardInstances),
+            hand = interactionView.hand,
+            selection = interactionView.selection,
+            zones = interactionView.zones,
             lastTurn = lastTurn,
             battleLog = buildBattleLogView(displayState, data, errors),
             outcome = {
@@ -1434,7 +1460,9 @@
             return failure(errors)
         end
 
-        return success("view", view)
+        local built = success("view", view)
+        built.interactionView = interactionView
+        return built
     end
 
     local function validateTagView(value, path, errors, expectedTagKind)
@@ -2445,6 +2473,8 @@
         return success("removed", removed)
     elseif action == "validateBattleView" then
         return validateBattleView(arguments[1])
+    elseif action == "buildBattleInteractionView" then
+        return buildBattleView(arguments[1], arguments[2], arguments[3], true)
     elseif action == "buildBattleView" then
         local built = buildBattleView(arguments[1], arguments[2], arguments[3])
         if type(built) ~= "table" or built.ok ~= true then

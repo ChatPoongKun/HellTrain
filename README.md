@@ -266,6 +266,7 @@ battleRuntimeV1.aftermath
 
 ```text
 battleView
+battleInteractionView
 battleLogView
 ```
 
@@ -329,7 +330,7 @@ battleLogView
 
 ### View에서 계산하고 HTML에서는 표시합니다
 
-`battleui.html`과 `battleui-interaction.html`은 가능한 한 `battleView`의 값을 그대로 표시해야 합니다. 복잡한 조건이나 규칙 계산은 Lua의 View 생성 단계에서 처리하십시오.
+`battleui.html`은 `battleView`, `battleui-interaction.html`은 손패·선택 상태만 투영한 `battleInteractionView`의 값을 그대로 표시해야 합니다. 복잡한 조건이나 규칙 계산은 Lua의 View 생성 단계에서 처리하십시오.
 
 ### interaction token을 유지합니다
 
@@ -372,7 +373,7 @@ helltrainUiTargetIndexV1
 
 ### 전투 UI 변경
 
-1. 필요한 데이터가 이미 `battleView`에 있는지 확인합니다.
+1. 필요한 데이터가 이미 `battleView` 또는 `battleInteractionView`에 있는지 확인합니다.
 2. 없다면 Lua View 생성부에서 표시용 값을 만듭니다.
 3. View 스키마 또는 검증을 갱신합니다.
 4. 턴 고정 내용은 `html/battleui.html`, 카드 선택 반응은 `html/battleui-interaction.html`에 표시 로직만 추가합니다.

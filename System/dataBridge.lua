@@ -8,6 +8,9 @@
             errorMessage = "battleView 스키마 검증에 실패했습니다.",
             validatorMessage = "viewBuilder.validateBattleView 검증을 통과하지 못했습니다.",
         },
+        battleInteractionView = {
+            canonicalOnly = true,
+        },
         battleLogView = {
             moduleName = "battleHistory",
             action = "validatePublicView",
@@ -268,6 +271,15 @@
                     "unsupported_view",
                     "$",
                     "지원하지 않는 View입니다: " .. tostring(viewName)
+                ),
+            })
+        end
+        if config.canonicalOnly then
+            return failure({
+                makeError(
+                    "internal_view",
+                    "$",
+                    "내부 전용 View는 공식 builder의 canonical 경로에서만 게시할 수 있습니다."
                 ),
             })
         end
