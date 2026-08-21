@@ -45,7 +45,7 @@ json.encode / json.decode
 
 ### 메인 스크립트
 
-`System/main.lua`는 RisuAI 이벤트를 등록하고 첫 이벤트에서 런타임을 bootstrap하는 얇은 진입점입니다. `System/runtime.lua`는 로어 조회·컴파일·캐시를, `System/hostFlow.lua`는 UI anchor·캐릭터 접근 장면·버튼 및 생성 훅 연결을 담당합니다.
+`System/main.lua`는 RisuAI 이벤트를 등록하고 첫 이벤트에서 런타임을 bootstrap하는 얇은 진입점입니다. `System/runtime.lua`는 로어 조회·컴파일·캐시를, `System/hostFlow.lua`는 editDisplay UI target·캐릭터 접근 장면·버튼 및 생성 훅 연결을 담당합니다.
 
 ### 실행 가능한 Lua 로어
 
@@ -115,7 +115,7 @@ RisuAI 이벤트 / risu-btn / LLM 출력
                 │
                 ▼
  System/runtime.lua · System/hostFlow.lua
- 로어 실행·캐시 · UI anchor · 호스트 흐름
+ 로어 실행·캐시 · editDisplay UI target · 호스트 흐름
                 │
                 ▼
       상위 컨트롤러 계층
@@ -146,7 +146,7 @@ RisuAI 이벤트 / risu-btn / LLM 출력
 |---|---|
 | `System/main.lua` | RisuAI 이벤트 등록과 지연 bootstrap |
 | `System/runtime.lua` | 로어 조회·컴파일, 이벤트/웜 캐시와 진단 |
-| `System/hostFlow.lua` | UI anchor, 접근 장면, 버튼과 생성 훅 연결 |
+| `System/hostFlow.lua` | editDisplay UI target, 접근 장면, 버튼과 생성 훅 연결 |
 | `System/gameSetupController.lua` | 게임 준비, 캐릭터 선택, 진행 상태와 설정 View 관리 |
 | `System/battleController.lua` | 전투 상태 전이와 요청·출력 복구를 조정하는 상위 컨트롤러 |
 | `System/staticData.lua` | 정적 DB 로딩, 검증, 캐시 및 정규화 |
@@ -330,15 +330,15 @@ battleLogView
 
 카드 버튼은 현재 `interactionToken`을 전달해야 합니다. token 검증을 제거하면 오래된 렌더의 클릭이 최신 draft를 덮어쓸 수 있습니다.
 
-### UI anchor를 임의 변경하지 않습니다
+### editDisplay UI target을 임의 변경하지 않습니다
 
-게임 UI는 일반 장면 채팅과 분리된 전용 user 메시지에 배치됩니다.
+게임 UI는 채팅에 전용 메시지를 저장하지 않습니다. `editDisplay`가 초기에는 first message(`-1`), 이후에는 최신 캐릭터 응답에 UI를 렌더 시점에만 덧붙입니다.
 
 ```text
-@@HELLTRAIN_UI_ANCHOR_V1@@
+helltrainUiTargetIndexV1
 ```
 
-`main.lua`는 anchor의 채팅 인덱스를 추적하고, 출력이 도착한 뒤 이전 UI를 제거하거나 새 위치에 다시 게시합니다. anchor 문자열, 인덱스 저장, `reloadChat` 호출을 변경할 때는 정상 흐름뿐 아니라 훅 재호출과 실패 복구도 확인해야 합니다.
+`main.lua`는 완성 응답의 채팅 인덱스를 target으로 저장하고, 이전 target과 새 target만 `reloadChat`합니다. target 인덱스 저장이나 갱신 호출을 변경할 때는 정상 흐름뿐 아니라 훅 재호출과 실패 복구도 확인해야 합니다.
 
 ### Risu 템플릿 문법을 보존합니다
 
@@ -449,10 +449,10 @@ runScript(triggerId, "battleController", "getSnapshot")
 |---|---|
 | `lorebook ... not found` | 파일명과 로어 이름, 등록 범위, 빈 로어 여부 |
 | 코드 수정이 반영되지 않음 | `RUNTIME_BUNDLE_REVISION`, 개발 캐시 모드, 중복 로어 |
-| UI가 갱신되지 않음 | View 게시 성공 여부, chatVar, UI anchor 인덱스, `reloadChat` |
+| UI가 갱신되지 않음 | View 게시 성공 여부, chatVar, UI target 인덱스, `reloadChat` |
 | 오래된 카드 클릭이 상태를 바꿈 | `interactionToken` 전달과 stale 처리 |
 | 출력이 중복 반영됨 | `activeRequest.phase`, `outputObserved`, `lastCommittedPending` |
-| 복구 중 요청이 반복됨 | `recoveringCleanup`, 채팅 anchor와 response fingerprint |
+| 복구 중 요청이 반복됨 | `recoveringCleanup`, 요청 prefix 영수증과 response fingerprint |
 | 정적 데이터 로딩 실패 | DB 로어 이름, JSON 형식, 레지스트리 참조 |
 
 ## 변경 후 확인
