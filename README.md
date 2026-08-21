@@ -207,6 +207,7 @@ choose
 
 ```text
 draft
+  → submission
   → pending
   → activeRequest.preparing
   → activeRequest.inFlight
@@ -219,6 +220,7 @@ draft
 주요 단계는 다음과 같습니다.
 
 - `prepareGeneration`: 현재 draft를 확정 가능한 pending turn으로 준비합니다.
+- `submission`: 최신 카드 interaction token에 연결된 생성 의도입니다. 채팅 filler 대신 사용하며 생성 시작 시 소비합니다.
 - `injectRequest`: 모델 입력에 확정 사건과 장면 생성 지시를 주입합니다.
 - `commitOutput`: 실제 캐릭터 출력이 채팅에 도착한 것을 확인한 뒤 권위 상태를 확정합니다.
 - `outputObserved`: 같은 출력을 중복 확정하지 않도록 채팅 위치와 fingerprint를 기록합니다.
@@ -291,6 +293,7 @@ battleLogView
 | `registerCard` | 카드 사용 순서 등록 |
 | `cancelCard` | 등록 취소 |
 | `selectCardEffect` | 선택형 카드 효과 결정 |
+| `armSubmission` | 무선택 패스 또는 리롤 뒤 보존된 선택을 전송 준비 상태로 설정 |
 | `prepareGeneration` | 현재 턴을 생성 요청 직전 상태로 준비 |
 | `injectRequest` | 모델 프롬프트에 전투 사건과 출력 지시 주입 |
 | `commitOutput` | 도착한 출력을 검증하고 턴 확정 |

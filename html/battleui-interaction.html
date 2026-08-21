@@ -79,8 +79,12 @@
 {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::mode}}::chain_pass}}}}연계만 사용 · 주 행동 패스{{/if}}
 {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::mode}}::action}}}}{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::count}}장 선택됨{{/if}}
 </div>
+{{#if {{equal::{{dict_element::{{getvar::battleView}}::phase}}::selecting}}}}
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::submissionArmed}}::true}}}}<button type="button" class="ht-submit is-armed" disabled aria-label="현재 카드 선택 전송 준비 완료">전송 준비됨</button>{{/if}}
+{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::submissionArmed}}::false}}}}<button type="button" class="ht-submit" risu-btn="battleController|armSubmission|{{dict_element::{{getvar::battleView}}::interactionToken}}" {{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::canSubmit}}::false}}}}disabled{{/if}}>{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::mode}}::pass}}}}턴 넘기기 준비{{/if}}{{#if {{not::{{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::mode}}::pass}}}}}}선택 확정{{/if}}</button>{{/if}}
+{{/if}}
 <div class="ht-selection-help">
-{{#if {{equal::{{dict_element::{{getvar::battleView}}::phase}}::selecting}}}}입력창을 비운 채 <strong>전송하면 확정</strong>{{/if}}
+{{#if {{equal::{{dict_element::{{getvar::battleView}}::phase}}::selecting}}}}{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::submissionArmed}}::true}}}}입력창을 비운 채 <strong>전송하면 확정</strong>{{/if}}{{#if {{equal::{{dict_element::{{dict_element::{{getvar::battleView}}::selection}}::submissionArmed}}::false}}}}먼저 턴을 준비하세요{{/if}}{{/if}}
 {{#if {{equal::{{dict_element::{{getvar::battleView}}::phase}}::awaitingOutput}}}}턴 결과를 기다리는 중…{{/if}}
 {{#if {{equal::{{dict_element::{{getvar::battleView}}::phase}}::ended}}}}전투 종료{{/if}}
 </div>

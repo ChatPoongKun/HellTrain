@@ -41,8 +41,8 @@ local APPROACH_REQUEST_ATTEMPTS = 1
 local UI_CONTAINER_OPEN = [[<div class="helltrain-dynamic-ui" aria-label="게임 화면">]]
 local UI_CONTAINER_EMPTY = UI_CONTAINER_OPEN .. "</div>"
 local UI_INTERACTION_MARKER = "<!--HELLTRAIN_BATTLE_INTERACTION_V1-->"
+-- 이전 배포가 남긴 marker는 표시하지 않고 다음 생성 준비 때 제거한다.
 local TURN_SUBMIT_MARKER = "@@HELLTRAIN_TURN_SUBMIT_V1@@"
-local SAY_NOTHING = "*says nothing*"
 local TURN_SUBMIT_HIDDEN_MARKUP = [[<style>
 [data-chat-index]:has([data-helltrain-turn-submit]) { display: none !important; }
 </style>
@@ -179,72 +179,7 @@ local function latestCharacterIndex(triggerId)
     return -1
 end
 
-local function isExactTurnSubmitMarker(message)
-    return type(message) == "table"
-        and message.role == "user"
-        and message.data == TURN_SUBMIT_MARKER
-end
-
-local function isExactSayNothing(message)
-    return type(message) == "table"
-        and message.role == "user"
-        and message.data == SAY_NOTHING
-end
-
 local appendChatVerified
-
--- Risu의 빈 전송은 useSayNothing 설정에 따라 메시지를 만들지 않으므로,
--- active 전투에는 정확히 하나의 작은 제출 marker를 chat tail suffix로 둔다.
-local function ensureTurnSubmitSentinel(triggerId)
-    if type(getState) ~= "function" then
-        error("getState host function is unavailable")
-    end
-    local authorityOk, authority = pcall(getState, triggerId, "battleRuntimeV1.authority")
-    if not authorityOk then
-        error("failed to read battle state for turn submit marker: " .. tostring(authority))
-    end
-    if type(authority) ~= "table"
-        or authority.kind ~= "battleState"
-        or authority.status ~= "active" then
-        return nil
-    end
-    local aftermathOk, aftermath = pcall(getState, triggerId, "battleRuntimeV1.aftermath")
-    if not aftermathOk then
-        error("failed to read aftermath state for turn submit marker: " .. tostring(aftermath))
-    end
-    if type(aftermath) == "table" then
-        return nil
-    end
-    if type(getFullChat) ~= "function" or type(addChat) ~= "function" then
-        error("getFullChat/addChat host functions are unavailable")
-    end
-    local chatOk, chat = pcall(getFullChat, triggerId)
-    if not chatOk or type(chat) ~= "table" then
-        error("failed to read chat for turn submit marker: " .. tostring(chat))
-    end
-    local markerIndex
-    for index, message in ipairs(chat) do
-        if isExactTurnSubmitMarker(message) then
-            if markerIndex ~= nil then
-                error("turn submit marker is duplicated")
-            end
-            markerIndex = index
-        end
-    end
-    if markerIndex ~= nil then
-        for index = markerIndex + 1, #chat do
-            if not isExactSayNothing(chat[index]) then
-                error("turn submit marker is no longer followed only by empty-submit fillers")
-            end
-        end
-        return markerIndex - 1
-    end
-    if isExactSayNothing(chat[#chat]) then
-        return #chat - 1
-    end
-    appendChatVerified(triggerId, "user", TURN_SUBMIT_MARKER)
-    return #chat
-end
 
 local function reloadGameUiAt(triggerId, index)
     if type(reloadChat) == "function" then
@@ -565,11 +500,6 @@ local function finishApproachTransition(triggerId)
         debug(1, "approach: Battle UI target 갱신 실패: " .. tostring(targetError))
         return false
     end
-    local submitOk, submitError = pcall(ensureTurnSubmitSentinel, triggerId)
-    if not submitOk then
-        debug(1, "approach: 턴 제출 marker 생성 실패: " .. tostring(submitError))
-        return false
-    end
     return true
 end
 
@@ -661,37 +591,10 @@ local function handleEditDisplay(triggerId, data, meta)
     return data .. "\n" .. UI_CONTAINER_OPEN .. rendered .. "</div>"
 end
 
---전투 중 입력은 filler로 정규화하되, 조기 승리 뒤 자유행동은 원문을 보존
-local function handleEditInput(triggerId, data)
-    local readOk, authority = pcall(
-        getState,
-        triggerId,
-        "battleRuntimeV1.authority"
-    )
-    if readOk
-        and type(authority) == "table"
-        and authority.kind == "battleState" then
-        local aftermathOk, aftermath = pcall(
-            getState,
-            triggerId,
-            "battleRuntimeV1.aftermath"
-        )
-        if aftermathOk
-            and type(aftermath) == "table"
-            and aftermath.kind == "battleAftermath"
-            and aftermath.battleId == authority.battleId
-            and aftermath.phase == "ready" then
-            return data
-        end
-        return "*says nothing*"
-    end
-    return data
-end
-
 --버튼 클릭시 동작
 local BUTTON_ACTIONS = {
     init = { start = true, choose = true, chooseCharacter = true },
-    battleController = { clickCard = true, registerCard = true, cancelCard = true, selectCardEffect = true, skipAftermath = true },
+    battleController = { clickCard = true, registerCard = true, cancelCard = true, selectCardEffect = true, armSubmission = true, skipAftermath = true },
     popupManage = { root = true, push = true, replace = true, back = true, close = true },
 }
 
@@ -707,7 +610,11 @@ local function isAllowedButtonRoute(script, arguments)
             or (action == "chooseCharacter" and #arguments == 3)
     elseif script == "battleController" then
         return (action == "selectCardEffect" and #arguments == 4)
-            or (action ~= "selectCardEffect" and #arguments == 3)
+            or (action == "armSubmission" and #arguments == 2)
+            or ((action == "clickCard"
+                or action == "registerCard"
+                or action == "cancelCard"
+                or action == "skipAftermath") and #arguments == 3)
     elseif action == "back" or action == "close" then
         return #arguments == 1
     end
@@ -804,11 +711,6 @@ local function handleStart(triggerId)
         )
         return false
     end
-    local submitOk, submitError = pcall(ensureTurnSubmitSentinel, triggerId)
-    if not submitOk then
-        debug(1, "onStart: 턴 제출 marker 준비 실패: " .. tostring(submitError))
-        return false
-    end
     local report = runScript(
         triggerId,
         "battleController",
@@ -824,11 +726,6 @@ local function handleStart(triggerId)
             debug(1, "onStart: 복구 UI target 갱신 실패: " .. tostring(targetError))
             return false
         end
-        submitOk, submitError = pcall(ensureTurnSubmitSentinel, triggerId)
-        if not submitOk then
-            debug(1, "onStart: 턴 제출 marker 복구 실패: " .. tostring(submitError))
-            return false
-        end
     end
 
     -- 관측된 출력을 보존하고 commit만 복구한 경우 새 HTTP 요청은 취소한다.
@@ -837,25 +734,16 @@ end
 
 --완성 응답을 관측한 뒤 턴을 한 번만 확정
 local function handleOutput(triggerId)
-    local report = runScript(
+    return runScript(
         triggerId,
         "battleController",
         "commitOutput"
     )
-    if controllerSucceeded("onOutput", report) and report.outputCommitted == true then
-        local submitOk, submitError = pcall(ensureTurnSubmitSentinel, triggerId)
-        if not submitOk then
-            error("onOutput: 턴 제출 marker 복구 실패: " .. tostring(submitError))
-        end
-    end
-    return report
 end
 
     return function(triggerId, action, ...)
         if action == "editDisplay" then
             return handleEditDisplay(triggerId, ...)
-        elseif action == "editInput" then
-            return handleEditInput(triggerId, ...)
         elseif action == "buttonClick" then
             return handleButtonClick(triggerId, ...)
         elseif action == "editRequest" then

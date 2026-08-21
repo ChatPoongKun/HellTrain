@@ -1264,11 +1264,35 @@ background: var(--green);
 .ht-selection-dot--wait {
 background: var(--amber);
 }
+.ht-submit {
+margin-left: auto;
+padding: 4px 7px;
+border: 1px solid rgba(223, 174, 63, .38);
+border-radius: 6px;
+color: #f0d887;
+background: rgba(223, 174, 63, .09);
+font-size: 8px;
+font-weight: 850;
+cursor: pointer;
+}
+.ht-submit.is-armed,
+.ht-submit:disabled {
+cursor: default;
+opacity: .72;
+}
+.ht-submit.is-armed {
+border-color: rgba(104, 194, 139, .34);
+color: #9fd9b6;
+background: rgba(104, 194, 139, .08);
+}
 .ht-selection-help {
 margin-left: auto;
 color: var(--muted);
 font-size: 8px;
 text-align: right;
+}
+.ht-submit + .ht-selection-help {
+margin-left: 0;
 }
 .ht-selection-help strong {
 color: #e6dfd9;

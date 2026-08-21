@@ -1,6 +1,6 @@
 -- RisuAI host entrypoint. Runtime and host orchestration are loaded lazily
 -- because lore access requires the current event triggerId.
-RUNTIME_BUNDLE_REVISION = "runtime-bundle-turn-submit-sentinel-v1-20260822"
+RUNTIME_BUNDLE_REVISION = "runtime-bundle-state-submit-reroll-v1-20260822"
 
 local runtimeHandler = nil
 local hostFlowHandler = nil
@@ -113,10 +113,6 @@ end
 
 listenEdit("editDisplay", function(triggerId, data, meta)
     return dispatch(triggerId, "editDisplay", "editDisplay", data, meta)
-end)
-
-listenEdit("editInput", function(triggerId, data)
-    return dispatch(triggerId, "editInput", "editInput", data)
 end)
 
 onButtonClick = async(function(triggerId, data)
