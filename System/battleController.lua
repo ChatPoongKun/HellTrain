@@ -7,6 +7,7 @@
     local UI_BODY_NAME = "🔯🔯🔯"
     local UI_INTERACTION_NAME = "helltrainBattleInteractionV1"
     local UI_INTERACTION_MARKER = "<!--HELLTRAIN_BATTLE_INTERACTION_V1-->"
+    local TURN_SUBMIT_MARKER = "@@HELLTRAIN_TURN_SUBMIT_V1@@"
     local SAY_NOTHING = "*says nothing*"
     local CHAT_FINGERPRINT_ALGORITHM = "canonical_poly131_137_chat_v1"
 
@@ -1066,7 +1067,7 @@
     local function isExactFiller(message)
         return type(message) == "table"
             and message.role == "user"
-            and message.data == SAY_NOTHING
+            and (message.data == SAY_NOTHING or message.data == TURN_SUBMIT_MARKER)
     end
 
     local function createPlannedChatAnchor(chat)
@@ -1211,9 +1212,7 @@
         while true do
             local last = current[#current]
             if #current <= (minimumLength or 0)
-                or type(last) ~= "table"
-                or last.role ~= "user"
-                or last.data ~= SAY_NOTHING then
+                or not isExactFiller(last) then
                 return current, removedCount, nil
             end
             if type(removeChat) ~= "function" then
@@ -1224,7 +1223,7 @@
             local ok, removeError = pcall(removeChat, triggerId, #current - 1)
             if not ok then
                 return nil, removedCount, {
-                    makeError("say_nothing_remove_failed", "$.chat[" .. #current .. "]", "자동 빈 입력 메시지를 제거하지 못했습니다: " .. tostring(removeError)),
+                    makeError("say_nothing_remove_failed", "$.chat[" .. #current .. "]", "자동 제출 메시지를 제거하지 못했습니다: " .. tostring(removeError)),
                 }
             end
             local after, readErrors = readChat()
@@ -1233,13 +1232,13 @@
             end
             if #after ~= #current - 1 then
                 return nil, removedCount, {
-                    makeError("say_nothing_remove_not_persisted", "$.chat", "자동 빈 입력 메시지 제거 뒤 대화 길이가 바뀌지 않았습니다."),
+                    makeError("say_nothing_remove_not_persisted", "$.chat", "자동 제출 메시지 제거 뒤 대화 길이가 바뀌지 않았습니다."),
                 }
             end
             for index = 1, #after do
                 if not deepEqual(after[index], current[index]) then
                     return nil, removedCount, {
-                        makeError("say_nothing_remove_mismatch", "$.chat[" .. index .. "]", "자동 빈 입력 메시지 제거가 앞선 대화를 변경했습니다."),
+                        makeError("say_nothing_remove_mismatch", "$.chat[" .. index .. "]", "자동 제출 메시지 제거가 앞선 대화를 변경했습니다."),
                     }
                 end
             end
@@ -3888,7 +3887,7 @@
         end
 
         -- State and the locked View must be durable before touching the chat. If a
-        -- host write above is silently dropped, the exact filler remains and the
+        -- host write above is silently dropped, the submit suffix remains and the
         -- next onStart resumes the durable preparing binding first, or reuses the
         -- stored pendingTurn when that binding itself was the dropped write.
         local nextChat, removedCount, removeErrors = removeTrailingSayNothing(chat)
@@ -3897,7 +3896,7 @@
         end
         if not freshSend and removedCount > 0 then
             return failure({
-                makeError("generation_classification_changed", "$.chat", "생성 분류 뒤 대화의 빈 입력 상태가 바뀌었습니다."),
+                makeError("generation_classification_changed", "$.chat", "생성 분류 뒤 대화의 제출 suffix 상태가 바뀌었습니다."),
             })
         end
         local finalTopology, finalTopologyErrors = inspectAnchoredTopology(binding, nextChat, false)
@@ -4038,6 +4037,8 @@
                 systemCount = systemCount + 1
             elseif deepEqual(message, requestCue) then
                 cueCount = cueCount + 1
+            elseif message.role == "user" and message.content == TURN_SUBMIT_MARKER then
+                -- 표시·제출 전용 marker는 모델 요청에 포함하지 않는다.
             else
                 normalizedPrompt[#normalizedPrompt + 1] = message
             end
