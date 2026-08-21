@@ -32,6 +32,7 @@ end
 local UI_BODY_VAR = "🔯🔯🔯"
 local UI_SHELL_VAR = "helltrainUiShellV1"
 local UI_POPUP_VAR = "helltrainUiPopupV1"
+local UI_INTERACTION_VAR = "helltrainBattleInteractionV1"
 local UI_TARGET_INDEX_VAR = "helltrainUiTargetIndexV1"
 local UI_READY_VAR = "gameSetupReady"
 local APPROACH_RETRY_VAR = "helltrainApproachRetryV1"
@@ -39,6 +40,7 @@ local RUN_PROGRESSION_AUTHORITY_KEY = "runProgressionV1.authority"
 local APPROACH_REQUEST_ATTEMPTS = 1
 local UI_CONTAINER_OPEN = [[<div class="helltrain-dynamic-ui" aria-label="게임 화면">]]
 local UI_CONTAINER_EMPTY = UI_CONTAINER_OPEN .. "</div>"
+local UI_INTERACTION_MARKER = "<!--HELLTRAIN_BATTLE_INTERACTION_V1-->"
 local SETUP_START_MARKUP = [[<section class="helltrain-setup" aria-labelledby="helltrain-start-title">
 <p class="helltrain-setup-label">BOARDING PROTOCOL</p>
 <h2 class="helltrain-setup-title" id="helltrain-start-title">지옥철에 탑승하시겠습니까?</h2>
@@ -555,8 +557,15 @@ local function handleEditDisplay(triggerId, data, meta)
 
     local rendered = SETUP_START_MARKUP
     if readUiFragment(triggerId, UI_READY_VAR) == "ready" then
+        local body = readUiFragment(triggerId, UI_BODY_VAR)
+        local markerStart = string.find(body, UI_INTERACTION_MARKER, 1, true)
+        if markerStart ~= nil then
+            body = string.sub(body, 1, markerStart - 1)
+                .. readUiFragment(triggerId, UI_INTERACTION_VAR)
+                .. string.sub(body, markerStart + #UI_INTERACTION_MARKER)
+        end
         rendered = readUiFragment(triggerId, UI_SHELL_VAR)
-            .. readUiFragment(triggerId, UI_BODY_VAR)
+            .. body
             .. readUiFragment(triggerId, UI_POPUP_VAR)
     end
     if index == -1 then

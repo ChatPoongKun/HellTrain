@@ -99,10 +99,11 @@ DB 이름은 런타임 계약의 일부입니다. 이름을 변경하려면 `sta
 
 HTML 파일도 일반 웹 문서가 아니라 RisuAI 템플릿입니다.
 
-- `html/battleui.html`: `battleView`를 표시하는 전투 및 승리 후 행동 UI
+- `html/battleui.html`: 턴 동안 고정되는 전투 및 승리 후 행동 UI 프레임
+- `html/battleui-interaction.html`: 카드 선택 때 다시 평가하는 손패·선택 상태 UI 조각
 - `html/embeddings.css`: 채팅 임베딩에 적용되는 공용 스타일
 
-`{{getvar::...}}`, `{{dict_element::...}}`, `{{#if ...}}`, `{{#each ...}}`, `risu-btn` 같은 표현은 RisuAI가 해석합니다. 따라서 `battleui.html`을 브라우저에서 직접 열어도 실제 데이터 바인딩과 버튼 동작은 재현되지 않습니다.
+`{{getvar::...}}`, `{{dict_element::...}}`, `{{#if ...}}`, `{{#each ...}}`, `risu-btn` 같은 표현은 RisuAI가 해석합니다. 따라서 전투 UI 프레임과 상호작용 조각을 브라우저에서 직접 열어도 실제 데이터 바인딩과 버튼 동작은 재현되지 않습니다.
 
 ## 전체 아키텍처
 
@@ -157,7 +158,8 @@ RisuAI 이벤트 / risu-btn / LLM 출력
 | `System/effectEngine.lua` | 카드 효과, modifier 및 상태 변화 계산 |
 | `System/characterSelector.lua` | 캐릭터 AI의 행동 후보 평가와 선택 |
 | `System/turnEventProjector.lua` | 턴 사건을 표시 및 후속 처리에 필요한 형태로 투영 |
-| `html/battleui.html` | 전투와 승리 후 행동 화면 템플릿 |
+| `html/battleui.html` | 전투와 승리 후 행동 화면의 고정 프레임 |
+| `html/battleui-interaction.html` | 카드 선택용 손패·상태 조각 |
 | `html/embeddings.css` | 임베딩 공용 스타일 |
 | `imgs/` | 캐릭터 등 표시용 이미지 자산 |
 
@@ -324,7 +326,7 @@ battleLogView
 
 ### View에서 계산하고 HTML에서는 표시합니다
 
-`battleui.html`은 가능한 한 `battleView`의 값을 그대로 표시해야 합니다. 복잡한 조건이나 규칙 계산은 Lua의 View 생성 단계에서 처리하십시오.
+`battleui.html`과 `battleui-interaction.html`은 가능한 한 `battleView`의 값을 그대로 표시해야 합니다. 복잡한 조건이나 규칙 계산은 Lua의 View 생성 단계에서 처리하십시오.
 
 ### interaction token을 유지합니다
 
@@ -370,7 +372,7 @@ helltrainUiTargetIndexV1
 1. 필요한 데이터가 이미 `battleView`에 있는지 확인합니다.
 2. 없다면 Lua View 생성부에서 표시용 값을 만듭니다.
 3. View 스키마 또는 검증을 갱신합니다.
-4. `html/battleui.html`에는 표시 로직만 추가합니다.
+4. 턴 고정 내용은 `html/battleui.html`, 카드 선택 반응은 `html/battleui-interaction.html`에 표시 로직만 추가합니다.
 5. RisuAI에서 카드 클릭, popover, 이미지, aftermath 입력창을 확인합니다.
 
 ### 새 컨트롤러 action 추가
