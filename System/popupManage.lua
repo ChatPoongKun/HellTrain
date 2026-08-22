@@ -18,7 +18,7 @@
     end
 
     local function getPopupState()
-        local state = getState(triggerId, POPUP_STATE)
+        local state = HostCompat.readState(triggerId, POPUP_STATE)
 
         if type(state) ~= "table" then
             return emptyState()
@@ -32,17 +32,16 @@
     end
 
     local function setPopupState(state)
-        setState(triggerId, POPUP_STATE, state)
+        HostCompat.writeState(triggerId, POPUP_STATE, state)
 
-        local savedState = getState(triggerId, POPUP_STATE)
-        local ok, encoded = pcall(json.encode, savedState)
+        local ok, encoded = pcall(json.encode, state)
         if ok then
             debug(2, "popup state saved: " .. encoded)
         end
     end
 
     local function clearPopupHtml()
-        setChatVar(triggerId, POPUP_VAR, "")
+        HostCompat.writeChatVar(triggerId, POPUP_VAR, "")
     end
 
     local function makeEntry(script, args)

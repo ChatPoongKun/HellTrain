@@ -219,8 +219,8 @@ function syncGameUiTarget(triggerId, targetIndex)
         or targetIndex < -1 then
         error("invalid UI target index: " .. tostring(targetIndex))
     end
-    if type(setChatVar) ~= "function" then
-        error("setChatVar host function is unavailable")
+    if type(HostCompat) ~= "table" or type(HostCompat.writeChatVar) ~= "function" then
+        error("chat variable write compatibility function is unavailable")
     end
 
     local rawPreviousIndex = readUiFragment(triggerId, UI_TARGET_INDEX_VAR)
@@ -230,10 +230,7 @@ function syncGameUiTarget(triggerId, targetIndex)
     end
     local encodedTargetIndex = tostring(targetIndex)
     if rawPreviousIndex ~= encodedTargetIndex then
-        setChatVar(triggerId, UI_TARGET_INDEX_VAR, encodedTargetIndex)
-        if readUiFragment(triggerId, UI_TARGET_INDEX_VAR) ~= encodedTargetIndex then
-            error("UI target index write was not persisted")
-        end
+        HostCompat.writeChatVar(triggerId, UI_TARGET_INDEX_VAR, encodedTargetIndex)
     end
 
     -- 새 대상을 먼저 저장해야 이전 메시지의 editDisplay가 UI를 제거한다.
@@ -247,15 +244,11 @@ function syncGameUiTarget(triggerId, targetIndex)
     return targetIndex
 end
 
-local function writeUiFragmentVerified(triggerId, name, value)
-    if type(setChatVar) ~= "function" or type(getChatVar) ~= "function" then
-        error("setChatVar/getChatVar host functions are unavailable")
+local function writeUiFragment(triggerId, name, value)
+    if type(HostCompat) ~= "table" or type(HostCompat.writeChatVar) ~= "function" then
+        error("chat variable write compatibility function is unavailable")
     end
-    setChatVar(triggerId, name, value)
-    local stored = getChatVar(triggerId, name)
-    if stored ~= value then
-        error("UI fragment write was not persisted: " .. tostring(name))
-    end
+    HostCompat.writeChatVar(triggerId, name, value)
 end
 
 local function readApproachRetry(triggerId)
@@ -288,13 +281,13 @@ local function writeApproachRetryVerified(triggerId, phase, characterId)
     if phase ~= nil then
         value = phase .. "|" .. characterId
     end
-    writeUiFragmentVerified(triggerId, APPROACH_RETRY_VAR, value)
+    writeUiFragment(triggerId, APPROACH_RETRY_VAR, value)
 end
 
 local function showApproachProcessing(triggerId)
-    writeUiFragmentVerified(triggerId, UI_BODY_VAR, APPROACH_PROCESSING_MARKUP)
-    writeUiFragmentVerified(triggerId, UI_POPUP_VAR, "")
-    writeUiFragmentVerified(triggerId, UI_READY_VAR, "ready")
+    writeUiFragment(triggerId, UI_BODY_VAR, APPROACH_PROCESSING_MARKUP)
+    writeUiFragment(triggerId, UI_POPUP_VAR, "")
+    writeUiFragment(triggerId, UI_READY_VAR, "ready")
     refreshGameUi(triggerId)
 end
 
@@ -336,8 +329,10 @@ local function pastApproachEncounters(triggerId, report, characterId)
         and report.state.kind == "runProgressionV1"
         and report.state
         or nil
-    if runState == nil and type(getState) == "function" then
-        local readOk, stored = pcall(getState, triggerId, RUN_PROGRESSION_AUTHORITY_KEY)
+    if runState == nil
+        and type(HostCompat) == "table"
+        and type(HostCompat.readState) == "function" then
+        local readOk, stored = pcall(HostCompat.readState, triggerId, RUN_PROGRESSION_AUTHORITY_KEY)
         if readOk and type(stored) == "table" and stored.kind == "runProgressionV1" then
             runState = stored
         end

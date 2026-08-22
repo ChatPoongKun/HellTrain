@@ -4,5 +4,5 @@
         debug(1, "캐릭터 프로필 UI를 불러오지 못했습니다: " .. tostring(characterName))
         return
     end
-    setChatVar(triggerId, "helltrainUiPopupV1", uiAppend)
+    HostCompat.writeChatVar(triggerId, "helltrainUiPopupV1", uiAppend)
 end)
