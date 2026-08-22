@@ -143,7 +143,7 @@ animation: none;
 <div class="helltrain-approach-processing__body">
 <span class="helltrain-approach-processing__spinner" aria-hidden="true"></span>
 <p class="helltrain-approach-processing__label">처리중<span aria-hidden="true"><span class="helltrain-approach-processing__dot">.</span><span class="helltrain-approach-processing__dot">.</span><span class="helltrain-approach-processing__dot">.</span></span></p>
-<p class="helltrain-approach-processing__copy">선택한 상대에게 접근하는 장면을 만들고 있습니다.</p>
+<p class="helltrain-approach-processing__copy">선택한 상대에게 접근하고 있습니다.</p>
 </div>
 </section>]]
 
@@ -423,23 +423,14 @@ local function generateApproachScene(triggerId, report, characterId)
         return nil, "LLM 함수를 사용할 수 없습니다. Lua 스크립트의 low-level access를 활성화해야 합니다."
     end
     local characterName, profile = selectedApproachCharacter(triggerId, report, characterId)
-    local approachMessage = characterName .. "에게 접근한다."
     local chat = getFullChat(triggerId)
     local last = type(chat) == "table" and chat[#chat] or nil
-    local previous = type(chat) == "table" and chat[#chat - 1] or nil
     if type(last) == "table"
         and last.role == "char"
         and type(last.data) == "string"
         and last.data:match("%S") ~= nil
-        and type(previous) == "table"
-        and previous.role == "user"
-        and previous.data == approachMessage then
+        and last.time == 0 then
         return last.data, nil
-    end
-    if type(last) ~= "table"
-        or last.role ~= "user"
-        or last.data ~= approachMessage then
-        appendChatVerified(triggerId, "user", approachMessage)
     end
 
     local encounters = pastApproachEncounters(triggerId, report, characterId)
@@ -582,6 +573,7 @@ local function handleEditDisplay(triggerId, data, meta)
                 .. UI_CONTAINER_OPEN .. rendered .. "</div>"
                 .. string.sub(data, containerEnd + 1)
         end
+        return data
     end
     return data .. "\n" .. UI_CONTAINER_OPEN .. rendered .. "</div>"
 end
