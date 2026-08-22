@@ -16,15 +16,15 @@
 
     local renderModes = {
         set = function()
-            setChatVar(triggerId, UI_VAR, html)
+            HostCompat.writeChatVar(triggerId, UI_VAR, html)
         end,
         append = function()
             -- 기존 버튼 route 이름은 호환용으로 유지한다. popup slot은 한 번에
             -- 하나의 창만 소유하므로 append도 교체로 처리한다.
-            setChatVar(triggerId, POPUP_VAR, html)
+            HostCompat.writeChatVar(triggerId, POPUP_VAR, html)
         end,
         popup = function()
-            setChatVar(triggerId, POPUP_VAR, html)
+            HostCompat.writeChatVar(triggerId, POPUP_VAR, html)
         end
     }
 

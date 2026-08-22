@@ -1,7 +1,8 @@
 -- RisuAI host entrypoint. Runtime and host orchestration are loaded lazily
 -- because lore access requires the current event triggerId.
-RUNTIME_BUNDLE_REVISION = "runtime-bundle-ui-perf-v1-20260822"
+RUNTIME_BUNDLE_REVISION = "runtime-bundle-host-write-compat-v1-20260823"
 
+local hostCompatHandler = nil
 local runtimeHandler = nil
 local hostFlowHandler = nil
 local UI_READY_VAR = "gameSetupReady"
@@ -67,6 +68,12 @@ local function installBootstrapHandler(triggerId, moduleName)
     return candidate
 end
 
+local function ensureHostCompat(triggerId)
+    if hostCompatHandler == nil then
+        hostCompatHandler = installBootstrapHandler(triggerId, "hostCompat")
+    end
+end
+
 local function ensureRuntime(triggerId)
     if runtimeHandler == nil then
         runtimeHandler = installBootstrapHandler(triggerId, "runtime")
@@ -80,6 +87,7 @@ local function ensureHostFlow(triggerId)
 end
 
 local function dispatch(triggerId, mode, action, ...)
+    ensureHostCompat(triggerId)
     if mode ~= "editDisplay" then
         ensureRuntime(triggerId)
         runtimeHandler(triggerId, "beginEvent", mode)

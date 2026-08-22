@@ -337,12 +337,12 @@
     end
 
     local function readAuthority(required)
-        if type(getState) ~= "function" then
+        if type(HostCompat) ~= "table" or type(HostCompat.readState) ~= "function" then
             return nil, {
-                makeError("state_read_unavailable", "$.host.getState", "getState 호스트 함수를 찾을 수 없습니다."),
+                makeError("state_read_unavailable", "$.host.getState", "상태 읽기 호환 함수를 찾을 수 없습니다."),
             }
         end
-        local ok, value = pcall(getState, triggerId, AUTHORITY_KEY)
+        local ok, value = pcall(HostCompat.readState, triggerId, AUTHORITY_KEY)
         if not ok then
             return nil, {
                 makeError("state_read_failed", "$.state.authority", "게임 설정 상태를 읽지 못했습니다: " .. tostring(value)),
@@ -362,12 +362,12 @@
     end
 
     local function readRunAuthority(required)
-        if type(getState) ~= "function" then
+        if type(HostCompat) ~= "table" or type(HostCompat.readState) ~= "function" then
             return nil, {
-                makeError("state_read_unavailable", "$.host.getState", "getState 호스트 함수를 찾을 수 없습니다."),
+                makeError("state_read_unavailable", "$.host.getState", "상태 읽기 호환 함수를 찾을 수 없습니다."),
             }
         end
-        local ok, value = pcall(getState, triggerId, RUN_AUTHORITY_KEY)
+        local ok, value = pcall(HostCompat.readState, triggerId, RUN_AUTHORITY_KEY)
         if not ok then
             return nil, {
                 makeError("state_read_failed", "$.state.runAuthority", "진행 상태를 읽지 못했습니다: " .. tostring(value)),
@@ -555,12 +555,12 @@
 
     local function preflightHost(writeAuthority)
         local required = {
-            { name = "setChatVar", value = setChatVar },
+            { name = "writeChatVar", value = type(HostCompat) == "table" and HostCompat.writeChatVar or nil },
             { name = "getChatVar", value = getChatVar },
         }
         if writeAuthority then
-            required[#required + 1] = { name = "setState", value = setState }
-            required[#required + 1] = { name = "getState", value = getState }
+            required[#required + 1] = { name = "writeState", value = type(HostCompat) == "table" and HostCompat.writeState or nil }
+            required[#required + 1] = { name = "readState", value = type(HostCompat) == "table" and HostCompat.readState or nil }
         end
         local errors = {}
         for _, entry in ipairs(required) do
@@ -576,22 +576,11 @@
         return nil
     end
 
-    local function writeChatVarVerified(name, value, path)
-        local writeOk, writeError = pcall(setChatVar, triggerId, name, value)
+    local function writeChatVarStored(name, value, path)
+        local writeOk, writeError = pcall(HostCompat.writeChatVar, triggerId, name, value)
         if not writeOk then
             return {
                 makeError("chat_var_write_failed", path, "채팅 변수 쓰기에 실패했습니다: " .. tostring(writeError)),
-            }
-        end
-        local readOk, stored = pcall(getChatVar, triggerId, name)
-        if not readOk then
-            return {
-                makeError("chat_var_verify_failed", path, "쓰기 뒤 채팅 변수를 읽지 못했습니다: " .. tostring(stored)),
-            }
-        end
-        if stored ~= value then
-            return {
-                makeError("chat_var_write_not_persisted", path, "쓰기 뒤 읽은 값이 저장하려던 문자열과 다릅니다."),
             }
         end
         return nil
@@ -627,9 +616,9 @@
                 makeError("missing_lore", "$.lore.sideBar", "sideBar.html 로어북 내용이 없습니다."),
             }
         end
-        local shellErrors = writeChatVarVerified(UI_SHELL_NAME, sideBar, "$.chatVar.uiShell")
+        local shellErrors = writeChatVarStored(UI_SHELL_NAME, sideBar, "$.chatVar.uiShell")
         if shellErrors then return shellErrors end
-        return writeChatVarVerified(
+        return writeChatVarStored(
             UI_SHELL_REVISION_NAME,
             UI_SHELL_REVISION,
             "$.chatVar.uiShellRevision"
@@ -637,7 +626,7 @@
     end
 
     local function verifyExpectedAuthority(expectedAuthority, expectMissing)
-        local beforeOk, before = pcall(getState, triggerId, AUTHORITY_KEY)
+        local beforeOk, before = pcall(HostCompat.readState, triggerId, AUTHORITY_KEY)
         if not beforeOk then
             return {
                 makeError(
@@ -675,13 +664,13 @@
 
         local storedCopy, copyError = cloneJson(state, "$.state.authority")
         if copyError then return { copyError } end
-        local writeOk, writeError = pcall(setState, triggerId, AUTHORITY_KEY, storedCopy)
+        local writeOk, writeError = pcall(HostCompat.writeState, triggerId, AUTHORITY_KEY, storedCopy)
         if not writeOk then
             return {
                 makeError("state_write_failed", "$.state.authority", "게임 설정 상태 저장에 실패했습니다: " .. tostring(writeError)),
             }
         end
-        local readOk, stored = pcall(getState, triggerId, AUTHORITY_KEY)
+        local readOk, stored = pcall(HostCompat.readState, triggerId, AUTHORITY_KEY)
         if not readOk then
             return {
                 makeError("state_verify_read_failed", "$.state.authority", "쓰기 뒤 게임 설정 상태를 읽지 못했습니다: " .. tostring(stored)),
@@ -699,7 +688,7 @@
     end
 
     local function verifyExpectedRunAuthority(expectedAuthority, expectMissing)
-        local beforeOk, before = pcall(getState, triggerId, RUN_AUTHORITY_KEY)
+        local beforeOk, before = pcall(HostCompat.readState, triggerId, RUN_AUTHORITY_KEY)
         if not beforeOk then
             return {
                 makeError(
@@ -737,13 +726,13 @@
 
         local storedCopy, copyError = cloneJson(state, "$.state.runAuthority")
         if copyError then return { copyError } end
-        local writeOk, writeError = pcall(setState, triggerId, RUN_AUTHORITY_KEY, storedCopy)
+        local writeOk, writeError = pcall(HostCompat.writeState, triggerId, RUN_AUTHORITY_KEY, storedCopy)
         if not writeOk then
             return {
                 makeError("state_write_failed", "$.state.runAuthority", "진행 상태 저장에 실패했습니다: " .. tostring(writeError)),
             }
         end
-        local readOk, stored = pcall(getState, triggerId, RUN_AUTHORITY_KEY)
+        local readOk, stored = pcall(HostCompat.readState, triggerId, RUN_AUTHORITY_KEY)
         if not readOk then
             return {
                 makeError("state_verify_read_failed", "$.state.runAuthority", "쓰기 뒤 진행 상태를 읽지 못했습니다: " .. tostring(stored)),
@@ -766,7 +755,7 @@
             if concurrentErrors then return failure(concurrentErrors) end
         end
 
-        local updatingErrors = writeChatVarVerified(READY_NAME, "updating", "$.chatVar.gameSetupReady")
+        local updatingErrors = writeChatVarStored(READY_NAME, "updating", "$.chatVar.gameSetupReady")
         if updatingErrors then return failure(updatingErrors) end
 
         return nil
@@ -781,7 +770,7 @@
             if concurrentErrors then return failure(concurrentErrors) end
         end
 
-        local updatingErrors = writeChatVarVerified(READY_NAME, "updating", "$.chatVar.gameSetupReady")
+        local updatingErrors = writeChatVarStored(READY_NAME, "updating", "$.chatVar.gameSetupReady")
         if updatingErrors then return failure(updatingErrors) end
 
         return nil
@@ -823,29 +812,16 @@
                 makeError("missing_published_view", "$.runtime.dataBridge.encoded", "게시 결과에 gameSetupView 문자열이 없습니다."),
             })
         end
-        local viewReadOk, storedView = pcall(getChatVar, triggerId, VIEW_NAME)
-        if not viewReadOk then
-            return failure({
-                makeError("view_verify_read_failed", "$.chatVar.gameSetupView", "게시 뒤 gameSetupView를 읽지 못했습니다: " .. tostring(storedView)),
-            })
-        end
-        if storedView ~= published.encoded then
-            return failure({
-                makeError("view_write_not_persisted", "$.chatVar.gameSetupView", "게시된 gameSetupView가 인코딩 결과와 다릅니다."),
-            })
-        end
-
         local shellErrors = ensureUiShell()
         if shellErrors then return failure(shellErrors) end
 
-        -- getLoreBooks는 로어 내용을 반환하기 전에 CBS를 평가한다. 따라서
-        -- setup HTML은 방금 게시한 gameSetupView를 재읽을 수 있게 View
-        -- write-read 검증이 끝난 뒤에만 로드해야 한다.
+        -- getLoreBooks는 로어 내용을 반환하기 전에 CBS를 평가하므로
+        -- gameSetupView를 먼저 쓴 뒤 setup HTML을 로드한다.
         local ui, loadUiErrors = loadSetupUi(state.phase)
         if loadUiErrors then return failure(loadUiErrors) end
-        local uiErrors = writeChatVarVerified(UI_NAME, ui, "$.chatVar.ui")
+        local uiErrors = writeChatVarStored(UI_NAME, ui, "$.chatVar.ui")
         if uiErrors then return failure(uiErrors) end
-        local readyErrors = writeChatVarVerified(READY_NAME, "ready", "$.chatVar.gameSetupReady")
+        local readyErrors = writeChatVarStored(READY_NAME, "ready", "$.chatVar.gameSetupReady")
         if readyErrors then return failure(readyErrors) end
 
         -- start/choose는 risu-btn 호출 전용이다. RisuAI가 button trigger
@@ -912,33 +888,13 @@
                 ),
             })
         end
-        local viewReadOk, storedView = pcall(getChatVar, triggerId, RUN_VIEW_NAME)
-        if not viewReadOk then
-            return failure({
-                makeError(
-                    "view_verify_read_failed",
-                    "$.chatVar.runProgressionView",
-                    "게시 뒤 runProgressionView를 읽지 못했습니다: " .. tostring(storedView)
-                ),
-            })
-        end
-        if storedView ~= published.encoded then
-            return failure({
-                makeError(
-                    "view_write_not_persisted",
-                    "$.chatVar.runProgressionView",
-                    "게시된 runProgressionView가 인코딩 결과와 다릅니다."
-                ),
-            })
-        end
-
         local shellErrors = ensureUiShell()
         if shellErrors then return failure(shellErrors) end
         local ui, loadUiErrors = loadRunUi()
         if loadUiErrors then return failure(loadUiErrors) end
-        local uiErrors = writeChatVarVerified(UI_NAME, ui, "$.chatVar.ui")
+        local uiErrors = writeChatVarStored(UI_NAME, ui, "$.chatVar.ui")
         if uiErrors then return failure(uiErrors) end
-        local readyErrors = writeChatVarVerified(READY_NAME, "ready", "$.chatVar.gameSetupReady")
+        local readyErrors = writeChatVarStored(READY_NAME, "ready", "$.chatVar.gameSetupReady")
         if readyErrors then return failure(readyErrors) end
 
         local returnState, stateError = cloneJson(target.state, "$.result.state")
@@ -1115,7 +1071,7 @@
             })
         end
 
-        local readyErrors = writeChatVarVerified(READY_NAME, "ready", "$.chatVar.gameSetupReady")
+        local readyErrors = writeChatVarStored(READY_NAME, "ready", "$.chatVar.gameSetupReady")
         if readyErrors then return failure(readyErrors) end
 
         local returnState, stateError = cloneJson(target.state, "$.result.state")
@@ -1203,7 +1159,7 @@
             })
         end
 
-        local readyErrors = writeChatVarVerified(READY_NAME, "ready", "$.chatVar.gameSetupReady")
+        local readyErrors = writeChatVarStored(READY_NAME, "ready", "$.chatVar.gameSetupReady")
         if readyErrors then return failure(readyErrors) end
 
         local returnState, stateError = cloneJson(target.state, "$.result.state")

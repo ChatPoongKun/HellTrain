@@ -33,6 +33,7 @@ HellTrain은 다음 RisuAI 호스트 기능을 전제로 합니다.
 getLoreBooks
 getState / setState
 getChatVar / setChatVar
+setStateChanged / setChatVarChanged (지원 시 자동 사용)
 getFullChat / addChat / removeChat
 reloadChat / reloadDisplay
 LLM
@@ -45,7 +46,7 @@ json.encode / json.decode
 
 ### 메인 스크립트
 
-`System/main.lua`는 RisuAI 이벤트를 등록하고 첫 이벤트에서 런타임을 bootstrap하는 얇은 진입점입니다. `System/runtime.lua`는 로어 조회·컴파일·캐시를, `System/hostFlow.lua`는 editDisplay UI target·캐릭터 접근 장면·버튼 및 생성 훅 연결을 담당합니다.
+`System/main.lua`는 RisuAI 이벤트를 등록하고 첫 이벤트에서 호스트 호환층과 런타임을 bootstrap하는 얇은 진입점입니다. `System/hostCompat.lua`는 구·신 RisuAI 상태 및 chatVar API 차이를 흡수하고, `System/runtime.lua`는 로어 조회·컴파일·캐시를, `System/hostFlow.lua`는 editDisplay UI target·캐릭터 접근 장면·버튼 및 생성 훅 연결을 담당합니다.
 
 ### 실행 가능한 Lua 로어
 
@@ -115,8 +116,8 @@ RisuAI 이벤트 / risu-btn / LLM 출력
        이벤트 등록 · bootstrap
                 │
                 ▼
- System/runtime.lua · System/hostFlow.lua
- 로어 실행·캐시 · editDisplay UI target · 호스트 흐름
+ System/hostCompat.lua · System/runtime.lua · System/hostFlow.lua
+ 호스트 API 호환 · 로어 실행·캐시 · editDisplay UI target · 호스트 흐름
                 │
                 ▼
       상위 컨트롤러 계층
@@ -146,6 +147,7 @@ RisuAI 이벤트 / risu-btn / LLM 출력
 | 경로 | 역할 |
 |---|---|
 | `System/main.lua` | RisuAI 이벤트 등록과 지연 bootstrap |
+| `System/hostCompat.lua` | 구·신 RisuAI 상태·chatVar·채팅 읽기 API 호환 |
 | `System/runtime.lua` | 로어 조회·컴파일, 이벤트/웜 캐시와 진단 |
 | `System/hostFlow.lua` | editDisplay UI target, 접근 장면, 버튼과 생성 훅 연결 |
 | `System/gameSetupController.lua` | 게임 준비, 캐릭터 선택, 진행 상태와 설정 View 관리 |

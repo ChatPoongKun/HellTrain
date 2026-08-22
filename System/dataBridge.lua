@@ -514,7 +514,9 @@
             return result
         end
 
-        local writeOk, writeError = pcall(setChatVar, triggerId, viewName, result.encoded)
+        local writeOk, writeError = pcall(function()
+            return HostCompat.writeChatVar(triggerId, viewName, result.encoded)
+        end)
         if not writeOk then
             return failure({
                 makeError(
@@ -534,7 +536,9 @@
             return result
         end
 
-        local writeOk, writeError = pcall(setChatVar, triggerId, viewName, result.encoded)
+        local writeOk, writeError = pcall(function()
+            return HostCompat.writeChatVar(triggerId, viewName, result.encoded)
+        end)
         if not writeOk then
             return failure({
                 makeError(

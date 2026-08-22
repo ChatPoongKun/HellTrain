@@ -27,11 +27,11 @@ end
 --json을 chatVar 형식으로 저장
 function toChatVar(triggerId, name, data)
     if data == nil then
-        data = getState(triggerId, name)
+        data = HostCompat.readState(triggerId, name)
     end
 
     if type(data) ~= "table" then
-        setChatVar(triggerId, name, tostring(data))
+        HostCompat.writeChatVar(triggerId, name, tostring(data))
         return tostring(data)
     end
 
@@ -58,7 +58,7 @@ function toChatVar(triggerId, name, data)
     end
 
     local encoded = encodeForChatVar(data)
-    setChatVar(triggerId, name, encoded)
+    HostCompat.writeChatVar(triggerId, name, encoded)
     return encoded
 end
 
@@ -68,8 +68,9 @@ function toState(triggerId, name)
 
     if not source or source == "" then
         debug(1, "toState error: chat var " .. tostring(name) .. " is empty.")
-        setState(triggerId, name, {})
-        return getState(triggerId, name)
+        local empty = {}
+        HostCompat.writeState(triggerId, name, empty)
+        return empty
     end
 
     local function tryDecode(value)
@@ -109,12 +110,12 @@ function toState(triggerId, name)
 
     local root = tryDecode(source)
     if not root then
-        setState(triggerId, name, source)
+        HostCompat.writeState(triggerId, name, source)
         return source
     end
 
     local decoded = decodeFromChatVar(root)
-    setState(triggerId, name, decoded)
+    HostCompat.writeState(triggerId, name, decoded)
     return decoded
 end
 
@@ -285,8 +286,8 @@ local function resolveRunScriptNamespace(triggerId)
     end
 
     local generated = "runtime-ns-v1:" .. fingerprintRunScriptIdentity(tostring(triggerId or ""))
-    if type(setChatVar) == "function" then
-        local writeOk = pcall(setChatVar, triggerId, RUN_SCRIPT_NAMESPACE_VAR, generated)
+    if type(HostCompat) == "table" and type(HostCompat.writeChatVar) == "function" then
+        local writeOk = pcall(HostCompat.writeChatVar, triggerId, RUN_SCRIPT_NAMESPACE_VAR, generated)
         if writeOk then
             runScriptCacheStats.namespaceWrites = runScriptCacheStats.namespaceWrites + 1
             local readOk, stored = pcall(getChatVar, triggerId, RUN_SCRIPT_NAMESPACE_VAR)

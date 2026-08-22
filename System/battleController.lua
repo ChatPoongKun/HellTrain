@@ -673,12 +673,12 @@
     end
 
     local function readStored(key, required)
-        if type(getState) ~= "function" then
+        if type(HostCompat) ~= "table" or type(HostCompat.readState) ~= "function" then
             return nil, {
-                makeError("state_read_unavailable", "$.host.getState", "getState 호스트 함수를 찾을 수 없습니다."),
+                makeError("state_read_unavailable", "$.host.getState", "상태 읽기 호환 함수를 찾을 수 없습니다."),
             }
         end
-        local ok, value = pcall(getState, triggerId, key)
+        local ok, value = pcall(HostCompat.readState, triggerId, key)
         if not ok then
             return nil, {
                 makeError("state_read_failed", "$.state[" .. string.format("%q", key) .. "]", "저장 상태를 읽지 못했습니다: " .. tostring(value)),
@@ -699,23 +699,31 @@
         return copy, nil
     end
 
-    local function writeStored(key, value)
-        if type(setState) ~= "function" or type(getState) ~= "function" then
+    local function writeStored(key, value, verify)
+        if type(HostCompat) ~= "table" or type(HostCompat.writeState) ~= "function" then
             return {
-                makeError("state_write_unavailable", "$.host.setState", "setState/getState 호스트 함수를 찾을 수 없습니다."),
+                makeError("state_write_unavailable", "$.host.setState", "상태 쓰기 호환 함수를 찾을 수 없습니다."),
+            }
+        end
+        if verify == true and type(HostCompat.readState) ~= "function" then
+            return {
+                makeError("state_read_unavailable", "$.host.getState", "상태 검증용 읽기 호환 함수를 찾을 수 없습니다."),
             }
         end
         local storedCopy, cloneError = cloneJson(value, "$.state[" .. string.format("%q", key) .. "]")
         if cloneError then
             return { cloneError }
         end
-        local writeOk, writeError = pcall(setState, triggerId, key, storedCopy)
+        local writeOk, writeError = pcall(HostCompat.writeState, triggerId, key, storedCopy)
         if not writeOk then
             return {
                 makeError("state_write_failed", "$.state[" .. string.format("%q", key) .. "]", "저장 상태 쓰기에 실패했습니다: " .. tostring(writeError)),
             }
         end
-        local readOk, readValue = pcall(getState, triggerId, key)
+        if verify ~= true then
+            return nil
+        end
+        local readOk, readValue = pcall(HostCompat.readState, triggerId, key)
         if not readOk then
             return {
                 makeError("state_verify_read_failed", "$.state[" .. string.format("%q", key) .. "]", "쓰기 뒤 저장 상태를 다시 읽지 못했습니다: " .. tostring(readValue)),
@@ -1567,23 +1575,6 @@
                 makeError("missing_published_view", "$.runtime.dataBridge.encoded", "dataBridge 성공 결과에 게시 문자열이 없습니다."),
             }
         end
-        if type(getChatVar) ~= "function" then
-            return nil, {
-                makeError("view_verify_unavailable", "$.host.getChatVar", "게시한 View를 검증할 getChatVar가 없습니다."),
-            }
-        end
-        local readOk, storedWire = pcall(getChatVar, triggerId, publishedViewName)
-        if not readOk then
-            return nil, {
-                makeError("view_verify_read_failed", "$.chatVar." .. publishedViewName, "게시 뒤 " .. publishedViewName .. "를 읽지 못했습니다: " .. tostring(storedWire)),
-            }
-        end
-        if storedWire ~= published.encoded then
-            return nil, {
-                makeError("view_write_not_persisted", "$.chatVar." .. publishedViewName, "게시 뒤 읽은 " .. publishedViewName .. "가 인코딩 결과와 다릅니다."),
-            }
-        end
-
         if skipUiRender == true then
             return {
                 view = publishedView,
@@ -1592,17 +1583,17 @@
             }, nil
         end
 
-        -- getLoreBooks/loadLores는 HTML을 반환하기 전에 CBS를 평가한다.
-        -- 따라서 UI 조각은 방금 쓴 View wire를 재읽어 확인한 뒤에만
-        -- 로드해야 현재 턴의 View로 렌더링된다.
+        -- getLoreBooks/loadLores는 HTML을 반환하기 전에 CBS를 평가하므로
+        -- View를 먼저 쓴 뒤 UI 조각을 로드한다.
         if type(loadLores) ~= "function" then
             return nil, {
                 makeError("lore_loader_unavailable", "$.host.loadLores", "전투 UI 로어북을 읽을 loadLores 함수를 찾을 수 없습니다."),
             }
         end
-        if type(setChatVar) ~= "function" or type(getChatVar) ~= "function" then
+        if type(HostCompat) ~= "table" or type(HostCompat.writeChatVar) ~= "function"
+            or type(getChatVar) ~= "function" then
             return nil, {
-                makeError("ui_write_unavailable", "$.host.setChatVar", "전투 UI를 게시할 setChatVar/getChatVar 함수를 찾을 수 없습니다."),
+                makeError("ui_write_unavailable", "$.host.setChatVar", "전투 UI를 게시할 호환 쓰기/getChatVar 함수를 찾을 수 없습니다."),
             }
         end
 
@@ -1624,20 +1615,6 @@
                         "missing_published_view",
                         "$.runtime.dataBridge.encoded",
                         "dataBridge 성공 결과에 interaction 게시 문자열이 없습니다."
-                    ),
-                }
-            end
-            local interactionReadOk, storedInteractionWire = pcall(
-                getChatVar,
-                triggerId,
-                INTERACTION_VIEW_NAME
-            )
-            if not interactionReadOk or storedInteractionWire ~= interactionPublished.encoded then
-                return nil, {
-                    makeError(
-                        "view_write_not_persisted",
-                        "$.chatVar." .. INTERACTION_VIEW_NAME,
-                        "battleInteractionView 게시 결과가 저장되지 않았습니다."
                     ),
                 }
             end
@@ -1687,22 +1664,16 @@
         end
 
         if interactionOnly ~= true then
-            local frameWriteOk, frameWriteError = pcall(setChatVar, triggerId, UI_BODY_NAME, frameUi)
+            local frameWriteOk, frameWriteError = pcall(HostCompat.writeChatVar, triggerId, UI_BODY_NAME, frameUi)
             if not frameWriteOk then
                 return nil, {
                     makeError("ui_write_failed", "$.chatVar.battleUi", "전투 UI 프레임 쓰기에 실패했습니다: " .. tostring(frameWriteError)),
                 }
             end
-            local frameReadOk, storedFrame = pcall(getChatVar, triggerId, UI_BODY_NAME)
-            if not frameReadOk or storedFrame ~= frameUi then
-                return nil, {
-                    makeError("ui_write_not_persisted", "$.chatVar.battleUi", "쓰기 뒤 읽은 전투 UI 프레임이 battleui.html과 다릅니다."),
-                }
-            end
         end
 
         local interactionWriteOk, interactionWriteError = pcall(
-            setChatVar,
+            HostCompat.writeChatVar,
             triggerId,
             UI_INTERACTION_NAME,
             interactionUi
@@ -1710,12 +1681,6 @@
         if not interactionWriteOk then
             return nil, {
                 makeError("ui_write_failed", "$.chatVar.battleUiInteraction", "전투 UI 상호작용 조각 쓰기에 실패했습니다: " .. tostring(interactionWriteError)),
-            }
-        end
-        local interactionReadOk, storedInteraction = pcall(getChatVar, triggerId, UI_INTERACTION_NAME)
-        if not interactionReadOk or storedInteraction ~= interactionUi then
-            return nil, {
-                makeError("ui_write_not_persisted", "$.chatVar.battleUiInteraction", "쓰기 뒤 읽은 전투 UI 상호작용 조각이 로어북과 다릅니다."),
             }
         end
         if suppressRefresh ~= true then
@@ -1773,22 +1738,6 @@
         if type(published.encoded) ~= "string" or published.encoded == "" then
             return nil, {
                 makeError("missing_published_battle_log", "$.runtime.dataBridge.encoded", "상세 전투 로그 게시 문자열이 없습니다."),
-            }
-        end
-        if type(getChatVar) ~= "function" then
-            return nil, {
-                makeError("battle_log_verify_unavailable", "$.host.getChatVar", "게시한 상세 전투 로그를 검증할 수 없습니다."),
-            }
-        end
-        local readOk, storedWire = pcall(getChatVar, triggerId, BATTLE_LOG_VIEW_NAME)
-        if not readOk then
-            return nil, {
-                makeError("battle_log_verify_failed", "$.chatVar.battleLogView", "게시한 상세 전투 로그를 다시 읽지 못했습니다: " .. tostring(storedWire)),
-            }
-        end
-        if storedWire ~= published.encoded then
-            return nil, {
-                makeError("battle_log_write_not_persisted", "$.chatVar.battleLogView", "게시 뒤 읽은 상세 전투 로그가 인코딩 결과와 다릅니다."),
             }
         end
         return built.view, nil
@@ -3737,7 +3686,7 @@
         }
         local validationErrors = validateBinding(nextBinding, pending)
         if #validationErrors > 0 then return nil, nil, nil, validationErrors end
-        local writeErrors = writeStored(KEYS.activeRequest, nextBinding)
+        local writeErrors = writeStored(KEYS.activeRequest, nextBinding, true)
         if writeErrors then return nil, nil, nil, writeErrors end
         return nextBinding, pending, topology, nil
     end
@@ -3828,7 +3777,7 @@
         -- cannot consume a retry attempt.
         local published, publishErrors = publishCurrentViewInternal(staticData)
         if publishErrors then return failure(publishErrors) end
-        local writeErrors = writeStored(KEYS.activeRequest, nextBinding)
+        local writeErrors = writeStored(KEYS.activeRequest, nextBinding, true)
         if writeErrors then return failure(writeErrors) end
         return success({
             generationReady = true,
@@ -3892,7 +3841,7 @@
         workingBinding.recoveringCleanup = nil
         local validationErrors = validateBinding(workingBinding, pending)
         if #validationErrors > 0 then return failure(validationErrors) end
-        local writeErrors = writeStored(KEYS.activeRequest, workingBinding)
+        local writeErrors = writeStored(KEYS.activeRequest, workingBinding, true)
         if writeErrors then return failure(writeErrors) end
         local published, publishErrors = publishCurrentViewInternal(staticData)
         if publishErrors then return failure(publishErrors) end
@@ -3944,7 +3893,7 @@
         if #validationErrors > 0 then return failure(validationErrors) end
         local submissionClearErrors = clearSubmission()
         if submissionClearErrors then return failure(submissionClearErrors) end
-        local writeErrors = writeStored(KEYS.activeRequest, nextBinding)
+        local writeErrors = writeStored(KEYS.activeRequest, nextBinding, true)
         if writeErrors then return failure(writeErrors) end
         local published, publishErrors = publishCurrentViewInternal(staticData)
         if publishErrors then return failure(publishErrors) end
@@ -4247,7 +4196,7 @@
         binding.recoveringCleanup = nil
         local finalBindingErrors = validateBinding(binding, selectedPending)
         if #finalBindingErrors > 0 then return failure(finalBindingErrors) end
-        local readyWriteErrors = writeStored(KEYS.activeRequest, binding)
+        local readyWriteErrors = writeStored(KEYS.activeRequest, binding, true)
         if readyWriteErrors then
             return failure(readyWriteErrors)
         end
@@ -4400,7 +4349,7 @@
         -- onOutput and commit a turn whose event/cue never reached the model.
         if binding.phase == "inFlight" then
             binding.phase = "requestInjected"
-            local receiptWriteErrors = writeStored(KEYS.activeRequest, binding)
+            local receiptWriteErrors = writeStored(KEYS.activeRequest, binding, true)
             if receiptWriteErrors then
                 return failure(receiptWriteErrors)
             end
@@ -4548,7 +4497,7 @@
                 }
                 local observedErrors = validateBinding(observedBinding, selectedPending)
                 if #observedErrors > 0 then return failure(observedErrors) end
-                local observedWriteErrors = writeStored(KEYS.activeRequest, observedBinding)
+                local observedWriteErrors = writeStored(KEYS.activeRequest, observedBinding, true)
                 if observedWriteErrors then return failure(observedWriteErrors) end
                 binding = observedBinding
             end
@@ -4603,7 +4552,7 @@
         if lastWriteErrors then
             return failure(lastWriteErrors)
         end
-        local authorityWriteErrors = writeStored(KEYS.authority, nextState)
+        local authorityWriteErrors = writeStored(KEYS.authority, nextState, true)
         if authorityWriteErrors then
             return failure(authorityWriteErrors)
         end
@@ -4611,7 +4560,7 @@
         if draftWriteErrors then
             return failure(draftWriteErrors)
         end
-        local bindingWriteErrors = writeStored(KEYS.activeRequest, committedBinding)
+        local bindingWriteErrors = writeStored(KEYS.activeRequest, committedBinding, true)
         if bindingWriteErrors then
             return failure(bindingWriteErrors)
         end
