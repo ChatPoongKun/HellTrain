@@ -35,8 +35,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      HELLTRAIN_CARD_VERSION: ${{ github.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
