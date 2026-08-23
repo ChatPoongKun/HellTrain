@@ -1,0 +1,46 @@
+{
+  "name": "HellTrain",
+  "creator": "ChatPoongKun",
+  "character_version": "dev",
+  "description": "RisuAI의 Lua 로어북 런타임과 HTML 임베딩으로 구동되는 한국어 카드 전투형 롤플레이 프로젝트입니다.",
+  "creator_notes": "이 카드는 RisuAI low-level access를 사용합니다. 임포트 시 권한 확인이 표시되는 것이 정상입니다.",
+  "tags": [
+    "RisuAI",
+    "한국어",
+    "카드 전투",
+    "게임"
+  ],
+  "source": [
+    "https://github.com/ChatPoongKun/HellTrain"
+  ],
+  "first_message": "Prompt/firstmsg.html",
+  "entry_script": "System/main.lua",
+  "trigger_name": "HellTrain Runtime",
+  "cover": "card/cover.jpg",
+  "output_basename": "HellTrain",
+  "lore_globs": [
+    "System/*.lua",
+    "DB/*.db",
+    "Char/*.db",
+    "html/*.html",
+    "html/*.css"
+  ],
+  "asset_globs": [
+    "imgs/*"
+  ],
+  "required_lore": [
+    "hostCompat.lua",
+    "runtime.lua",
+    "hostFlow.lua",
+    "GameRegistry.db",
+    "PlayerCards.db",
+    "CharacterCards.db",
+    "CharTraits.db",
+    "Environments.db",
+    "TokyoSubwayLines.db",
+    "CharacterList.db",
+    "battleui.html",
+    "battleui-interaction.html",
+    "embeddings.css"
+  ]
+}
