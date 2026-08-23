@@ -319,6 +319,19 @@ battleLogView
 - runtime ID와 enum은 기존 패턴을 따르십시오.
 - `schemaVersion`과 `kind`는 저장 구조의 계약입니다.
 
+### 신뢰 경계와 canonical 객체
+
+이 프로젝트의 공식 정책은 **경계 검증 후 transaction 내부 신뢰**입니다.
+
+- 버튼·hook·LLM/chat 입력, DB/lore, state/chatVar에서 읽은 값은 외부 경계이므로 전체 스키마와 의미를 검증합니다.
+- 공식 validator 또는 domain transition이 현재 transaction에서 반환한 값은 canonical입니다. 같은 transaction의 내부 consumer는 전체 replay를 반복하지 않고 envelope, `kind`, identity와 필수 필드 같은 저렴한 postcondition만 확인합니다.
+- canonical 값은 입력 불변으로 취급합니다. 변경이 필요한 모듈은 새 객체를 반환하거나 소유권 경계에서 한 번 복제합니다.
+- 저장, 인코딩, host 호출, 다음 hook/event 또는 임의 mutation을 거친 값은 canonical 자격을 잃습니다. 다시 읽을 때 전체 경계 검증을 수행합니다.
+- 새 권위 상태, receipt와 공개 View처럼 새로운 경계를 만드는 출력은 경계를 넘기 전에 한 번 검증합니다. 공개 View allowlist와 JSON-safe 검사는 비공개 정보 누출 및 직렬화 방지를 위해 생략하지 않습니다.
+- 내부 canonical action은 문자열 route로 호출할 수 없도록 함수 capability를 요구합니다. capability는 호출 경로만 제한하며 저장 가능한 인증 seal로 사용하지 않습니다.
+
+동일 transaction에서 canonical snapshot을 저장하고 readback이 exact-equal인 경우에는 전체 의미 검증을 다시 실행하지 않습니다. exact 비교는 host 쓰기·동시 변경 확인이고, 다음 이벤트의 저장값 검증은 별도의 경계 검사입니다.
+
 상태 필드를 추가하거나 의미를 변경할 때는 생성 코드뿐 아니라 다음 항목을 함께 검토해야 합니다.
 
 1. 스키마의 허용 필드와 타입 검증
@@ -384,7 +397,7 @@ helltrainUiTargetIndexV1
 ### 새 컨트롤러 action 추가
 
 1. 입력을 검증합니다.
-2. 도메인 모듈의 결과를 다시 검증합니다.
+2. 도메인 모듈 결과의 envelope, identity와 필수 postcondition을 확인합니다. 같은 transaction의 canonical 결과를 전체 replay하지 않습니다.
 3. 저장 순서와 실패 시 복구 가능성을 정의합니다.
 4. 같은 action이 재호출될 때 멱등적으로 동작할지 명시합니다.
 5. 성공 결과는 `{ ok = true, schemaVersion, errors = {} }` 형태를 유지합니다.

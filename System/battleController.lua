@@ -29,6 +29,12 @@
                 or viewName == BATTLE_LOG_VIEW_NAME)
     end
 
+    local function allowsCanonicalHandoff(capability, purpose)
+        if type(capability) ~= "function" then return false end
+        local ok, allowed = pcall(capability, purpose)
+        return ok and allowed == true
+    end
+
     local function makeError(code, path, message)
         return {
             code = code,
@@ -1799,6 +1805,37 @@
         }, nil
     end
 
+    local function inspectCanonicalBattleReadySetup(setupState)
+        if type(setupState) ~= "table"
+            or getmetatable(setupState) ~= nil
+            or setupState.schemaVersion ~= SCHEMA_VERSION
+            or setupState.kind ~= "gameSetupV1"
+            or setupState.phase ~= "battleReady"
+            or not isRuntimeId(setupState.setupId)
+            or type(setupState.selectedCardIds) ~= "table"
+            or type(setupState.selectedCharacterId) ~= "string"
+            or type(setupState.battleSpec) ~= "table"
+            or getmetatable(setupState.battleSpec) ~= nil
+            or not isRuntimeId(setupState.battleSpec.battleId)
+            or not isInteger(setupState.battleSpec.seed, 1)
+            or type(setupState.battleSpec.environmentId) ~= "string" then
+            return nil, nil, {
+                makeError(
+                    "invalid_canonical_setup_contract",
+                    "$.setupState",
+                    "내부 canonical battleReady 설정이 필수 postcondition을 만족하지 않습니다."
+                ),
+            }
+        end
+        return setupState, {
+            battleId = setupState.battleSpec.battleId,
+            seed = setupState.battleSpec.seed,
+            playerCardIds = setupState.selectedCardIds,
+            characterId = setupState.selectedCharacterId,
+            environmentId = setupState.battleSpec.environmentId,
+        }, nil
+    end
+
     local function buildInitialBattleFromSetup(spec, staticData)
         local bootstrap, bootstrapErrors = callModule(
             "battleBootstrap",
@@ -2905,12 +2942,17 @@
         return nil
     end
 
-    local function startFromSetup(setupState)
+    local function startFromSetup(setupState, canonicalInput)
         local staticData, staticErrors = loadStaticData()
         if staticErrors then
             return failure(staticErrors)
         end
-        local canonicalSetup, spec, setupErrors = validateBattleReadySetup(setupState, staticData)
+        local canonicalSetup, spec, setupErrors
+        if canonicalInput == true then
+            canonicalSetup, spec, setupErrors = inspectCanonicalBattleReadySetup(setupState)
+        else
+            canonicalSetup, spec, setupErrors = validateBattleReadySetup(setupState, staticData)
+        end
         if setupErrors then
             return failure(setupErrors)
         end
@@ -3078,6 +3120,41 @@
         }, nil
     end
 
+    local function inspectCanonicalBattleReadyRun(runState, setupState)
+        local canonicalSetup, _, setupErrors = inspectCanonicalBattleReadySetup(setupState)
+        if setupErrors then return nil, nil, nil, setupErrors end
+        local battleSpec = type(runState) == "table" and runState.battleSpec or nil
+        if type(runState) ~= "table"
+            or getmetatable(runState) ~= nil
+            or runState.schemaVersion ~= SCHEMA_VERSION
+            or runState.kind ~= "runProgressionV1"
+            or runState.phase ~= "battleReady"
+            or runState.setupId ~= canonicalSetup.setupId
+            or type(runState.sessions) ~= "table"
+            or type(battleSpec) ~= "table"
+            or getmetatable(battleSpec) ~= nil
+            or not isRuntimeId(battleSpec.battleId)
+            or not isInteger(battleSpec.seed, 1)
+            or type(battleSpec.playerCardIds) ~= "table"
+            or type(battleSpec.characterId) ~= "string"
+            or type(battleSpec.environmentId) ~= "string" then
+            return nil, nil, nil, {
+                makeError(
+                    "invalid_canonical_run_contract",
+                    "$.runState",
+                    "내부 canonical battleReady 진행 상태가 필수 postcondition을 만족하지 않습니다."
+                ),
+            }
+        end
+        return runState, canonicalSetup, {
+            battleId = battleSpec.battleId,
+            seed = battleSpec.seed,
+            playerCardIds = battleSpec.playerCardIds,
+            characterId = battleSpec.characterId,
+            environmentId = battleSpec.environmentId,
+        }, nil
+    end
+
     local function latestRunSession(runState)
         local sessions = type(runState) == "table" and runState.sessions or nil
         if type(sessions) ~= "table" then return nil end
@@ -3187,11 +3264,17 @@
         return nil
     end
 
-    local function startFromRun(runState, setupState)
+    local function startFromRun(runState, setupState, canonicalInput)
         local staticData, staticErrors = loadStaticData()
         if staticErrors then return failure(staticErrors) end
-        local canonicalRun, canonicalSetup, spec, runErrors =
-            validateBattleReadyRun(runState, setupState, staticData)
+        local canonicalRun, canonicalSetup, spec, runErrors
+        if canonicalInput == true then
+            canonicalRun, canonicalSetup, spec, runErrors =
+                inspectCanonicalBattleReadyRun(runState, setupState)
+        else
+            canonicalRun, canonicalSetup, spec, runErrors =
+                validateBattleReadyRun(runState, setupState, staticData)
+        end
         if runErrors then return failure(runErrors) end
 
         local current, currentErrors = readRuntimeBundle()
@@ -4715,6 +4798,20 @@
     local arguments = { ... }
     if action == "startVerticalSlice" then
         return startVerticalSlice(arguments[1], arguments[2])
+    elseif action == "_startFromCanonicalSetup" then
+        if not allowsCanonicalHandoff(arguments[2], "battleControllerCanonicalSetupV1") then
+            return failure({
+                makeError("internal_action_denied", "$.action", "내부 canonical setup 인계 작업에 접근할 수 없습니다."),
+            })
+        end
+        return startFromSetup(arguments[1], true)
+    elseif action == "_startFromCanonicalRun" then
+        if not allowsCanonicalHandoff(arguments[3], "battleControllerCanonicalRunV1") then
+            return failure({
+                makeError("internal_action_denied", "$.action", "내부 canonical run 인계 작업에 접근할 수 없습니다."),
+            })
+        end
+        return startFromRun(arguments[1], arguments[2], true)
     elseif action == "startFromSetup" then
         return startFromSetup(arguments[1])
     elseif action == "startFromRun" then
