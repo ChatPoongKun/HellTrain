@@ -1,0 +1,58 @@
+name: Build RisuAI character card
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "System/**"
+      - "DB/**"
+      - "Char/**"
+      - "Prompt/**"
+      - "html/**"
+      - "imgs/**"
+      - "card/**"
+      - "tools/build_risu_card.py"
+      - ".github/workflows/build-risu-character-card.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "System/**"
+      - "DB/**"
+      - "Char/**"
+      - "Prompt/**"
+      - "html/**"
+      - "imgs/**"
+      - "card/**"
+      - "tools/build_risu_card.py"
+      - ".github/workflows/build-risu-character-card.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HELLTRAIN_CARD_VERSION: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build and verify character card
+        run: python tools/build_risu_card.py
+
+      - name: Upload character card
+        uses: actions/upload-artifact@v4
+        with:
+          name: HellTrain-risu-card
+          path: |
+            dist/HellTrain.charx
+            dist/HellTrain.jpg
+          if-no-files-found: error
+          retention-days: 14
