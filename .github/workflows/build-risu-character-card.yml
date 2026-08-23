@@ -10,11 +10,7 @@ on:
       - "Prompt/**"
       - "html/**"
       - "imgs/**"
-      - "card/**"
-      - "tools/build_risu_card.py"
-      - "tools/risu_card_native.py"
-      - "tools/risu_rpack.py"
-      - "tools/requirements-card-build.txt"
+      - "build/**"
       - ".github/workflows/build-risu-character-card.yml"
   push:
     branches:
@@ -26,11 +22,7 @@ on:
       - "Prompt/**"
       - "html/**"
       - "imgs/**"
-      - "card/**"
-      - "tools/build_risu_card.py"
-      - "tools/risu_card_native.py"
-      - "tools/risu_rpack.py"
-      - "tools/requirements-card-build.txt"
+      - "build/**"
       - ".github/workflows/build-risu-character-card.yml"
 
 permissions:
@@ -49,17 +41,17 @@ jobs:
           python-version: "3.12"
 
       - name: Install card build dependencies
-        run: python -m pip install -r tools/requirements-card-build.txt
+        run: python -m pip install -r build/requirements.txt
 
       - name: Build and verify character card
-        run: python tools/build_risu_card.py
+        run: python build/build_risu_card.py
 
       - name: Upload character card
         uses: actions/upload-artifact@v4
         with:
           name: HellTrain-risu-card
           path: |
-            dist/HellTrain.charx
-            dist/HellTrain.jpg
+            build/HellTrain.charx
+            build/HellTrain.jpg
           if-no-files-found: error
           retention-days: 14
