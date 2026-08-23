@@ -1,32 +1,39 @@
 {
-  "name": "HellTrain",
-  "creator": "ChatPoongKun",
-  "character_version": "dev",
-  "description": "RisuAI의 Lua 로어북 런타임과 HTML 임베딩으로 구동되는 한국어 카드 전투형 롤플레이 프로젝트입니다.",
-  "creator_notes": "이 카드는 RisuAI low-level access를 사용합니다. 임포트 시 권한 확인이 표시되는 것이 정상입니다.",
-  "tags": [
-    "RisuAI",
-    "한국어",
-    "카드 전투",
-    "게임"
-  ],
-  "source": [
-    "https://github.com/ChatPoongKun/HellTrain"
-  ],
+  "name": "함락! 무한의 지옥철",
+  "description": "",
+  "personality": "",
+  "scenario": "",
+  "mes_example": "",
+  "creator_notes": "\n# `en`\n ",
+  "system_prompt": "",
+  "post_history_instructions": "",
+  "alternate_greetings": [],
+  "tags": [],
+  "creator": "",
+  "character_version": "",
+  "source": [],
+  "creation_date": 1782919817620,
   "first_message": "Prompt/firstmsg.html",
   "entry_script": "System/main.lua",
-  "trigger_name": "HellTrain Runtime",
-  "cover": "imgs/game_icon.png",
+  "background_html": "html/embeddings.css",
+  "icon": "imgs/game_icon.png",
   "output_basename": "HellTrain",
-  "lore_globs": [
-    "System/*.lua",
-    "DB/*.db",
-    "Char/*.db",
-    "html/*.html",
-    "html/*.css"
+  "prebuilt_asset_exclude": [
+    "assets/594c0c4399331a399f99a23f568f5d0a6e8d4fcfd10a9a70632abbc5ebb86b1d.png"
   ],
-  "asset_globs": [
-    "imgs/*"
+  "asset_order": [
+    "cost.png",
+    "damage.png",
+    "한제니.png",
+    "윤서아.png",
+    "유지영.png",
+    "아그네스.png",
+    "서미령.png",
+    "서미령_함락.png",
+    "윤서아_함락.png",
+    "한제니_함락.png",
+    "아그네스_함락.png",
+    "유지영_함락.png"
   ],
   "required_lore": [
     "hostCompat.lua",
@@ -40,7 +47,6 @@
     "TokyoSubwayLines.db",
     "CharacterList.db",
     "battleui.html",
-    "battleui-interaction.html",
-    "embeddings.css"
+    "battleui-interaction.html"
   ]
 }
