@@ -12,6 +12,7 @@ on:
       - "imgs/**"
       - "card/**"
       - "tools/build_risu_card.py"
+      - "tools/requirements-card-build.txt"
       - ".github/workflows/build-risu-character-card.yml"
   push:
     branches:
@@ -25,6 +26,7 @@ on:
       - "imgs/**"
       - "card/**"
       - "tools/build_risu_card.py"
+      - "tools/requirements-card-build.txt"
       - ".github/workflows/build-risu-character-card.yml"
 
 permissions:
@@ -43,6 +45,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Install card build dependencies
+        run: python -m pip install -r tools/requirements-card-build.txt
 
       - name: Build and verify character card
         run: python tools/build_risu_card.py
