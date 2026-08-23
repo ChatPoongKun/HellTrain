@@ -12,6 +12,8 @@ on:
       - "imgs/**"
       - "card/**"
       - "tools/build_risu_card.py"
+      - "tools/risu_card_native.py"
+      - "tools/risu_rpack.py"
       - "tools/requirements-card-build.txt"
       - ".github/workflows/build-risu-character-card.yml"
   push:
@@ -26,6 +28,8 @@ on:
       - "imgs/**"
       - "card/**"
       - "tools/build_risu_card.py"
+      - "tools/risu_card_native.py"
+      - "tools/risu_rpack.py"
       - "tools/requirements-card-build.txt"
       - ".github/workflows/build-risu-character-card.yml"
 
