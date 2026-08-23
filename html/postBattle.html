@@ -40,9 +40,9 @@
 
 <article class="run-result{{#when::keep::{{dictelement::{{tempvar::run_progression_result}}::status}}::is::victory}} run-is-victory{{/when}}{{#when::keep::{{dictelement::{{tempvar::run_progression_result}}::status}}::is::defeat}} run-is-defeat{{/when}}" aria-label="최근 전투 결과">
 {{#when::keep::{{dictelement::{{tempvar::run_progression_result}}::status}}::is::victory}}
-<figure class="run-result-portrait" style="position:relative;margin:0;padding:10px 12px 0;">
-<img src="{{raw::{{dictelement::{{tempvar::run_progression_character}}::name}}_함락}}" alt="{{dictelement::{{tempvar::run_progression_character}}::name}} 함락" style="display:block;width:100%;max-height:360px;margin:0;object-fit:contain;object-position:center;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(0,0,0,.28);" />
-<figcaption style="position:absolute;right:20px;bottom:8px;padding:3px 7px;border-radius:999px;color:#f3eee6;background:rgba(8,8,9,.78);font-size:8px;font-weight:800;letter-spacing:.12em;">CONQUERED · {{dictelement::{{tempvar::run_progression_character}}::name}}</figcaption>
+<figure class="run-result-portrait">
+<img src="{{raw::{{dictelement::{{tempvar::run_progression_character}}::name}}_함락}}" alt="{{dictelement::{{tempvar::run_progression_character}}::name}} 함락" />
+<figcaption>CONQUERED · {{dictelement::{{tempvar::run_progression_character}}::name}}</figcaption>
 </figure>
 {{/when}}
 <div class="run-result-main">
