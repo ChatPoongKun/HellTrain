@@ -17,6 +17,10 @@ local function recoverStealth(amount, cause)
     return command("recover_stealth", "player", amount, nil, cause)
 end
 
+local function drawCards(amount, cause)
+    return command("draw_cards", "player", amount, nil, cause)
+end
+
 local function addMood(mood, amount, cause)
     return command("add_mood_token", "character", amount, mood, cause)
 end
@@ -461,7 +465,7 @@ return {
                         { id = "draw_one", op = "draw_cards", target = "player", amount = 1 },
                     },
                 },
-                resolve = function(context) return { manipulate(context, 1) } end,
+                resolve = function(context) return { drawCards(1), manipulate(context, 1) } end,
             }
         ),
 
