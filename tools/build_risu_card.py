@@ -94,14 +94,37 @@ def make_lore_entries(root: Path, manifest: dict) -> list[dict]:
     return entries
 
 
+def load_cover_jpeg(path: Path) -> bytes:
+    raw = path.read_bytes()
+    if raw.startswith(JPEG_SOI) and JPEG_EOI in raw:
+        return raw
+
+    try:
+        from PIL import Image
+    except ImportError as exc:
+        raise BuildError(
+            f"Cover is not JPEG ({path}); install Pillow to convert it"
+        ) from exc
+
+    try:
+        with Image.open(path) as image:
+            rgb = image.convert("RGB")
+            out = io.BytesIO()
+            rgb.save(out, format="JPEG", quality=95, optimize=True)
+    except Exception as exc:
+        raise BuildError(f"Unable to convert cover image {path}: {exc}") from exc
+    data = out.getvalue()
+    if not data.startswith(JPEG_SOI) or JPEG_EOI not in data:
+        raise BuildError(f"Converted cover is not a valid JPEG: {path}")
+    return data
+
+
 def make_asset_records(root: Path, manifest: dict) -> tuple[list[dict], list[tuple[str, bytes]]]:
     records: list[dict] = []
     payloads: list[tuple[str, bytes]] = []
 
     cover_path = root / manifest["cover"]
-    cover = cover_path.read_bytes()
-    if not cover.startswith(JPEG_SOI) or JPEG_EOI not in cover:
-        raise BuildError(f"Cover must be a JPEG file: {cover_path}")
+    cover = load_cover_jpeg(cover_path)
 
     cover_arc = "assets/icon/cover.jpg"
     records.append(
@@ -192,7 +215,7 @@ def build_card(root: Path, manifest: dict) -> tuple[dict, list[tuple[str, bytes]
     }
 
     card = {"spec": "chara_card_v3", "spec_version": "3.0", "data": data}
-    cover = (root / manifest["cover"]).read_bytes()
+    cover = load_cover_jpeg(root / manifest["cover"])
     return card, payloads, cover
 
 
