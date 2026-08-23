@@ -16,7 +16,7 @@
   "first_message": "Prompt/firstmsg.html",
   "entry_script": "System/main.lua",
   "trigger_name": "HellTrain Runtime",
-  "cover": "card/cover.jpg",
+  "cover": "imgs/game_icon.png",
   "output_basename": "HellTrain",
   "lore_globs": [
     "System/*.lua",
