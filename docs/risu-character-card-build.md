@@ -1,45 +1,96 @@
 # RisuAI 캐릭터 카드 빌드
 
-HellTrain 저장소의 소스 파일을 RisuAI에서 바로 임포트할 수 있는 Character Card V3 패키지로 묶는다.
+HellTrain 저장소의 소스 파일을 RisuAI의 **네이티브 CHARX export 구조와 같은 형태**로 묶는다.
 
-## 출력 형식
-
-빌더는 한 번의 실행으로 다음 두 파일을 생성한다.
-
-- `dist/HellTrain.charx`: 표준 CHARX ZIP 아카이브
-- `dist/HellTrain.jpg`: JPEG 커버 뒤에 동일한 CHARX ZIP을 붙인 RisuAI JPEG 하이브리드 카드
-
-JPEG 하이브리드는 사람이 보면 일반 JPEG이고, RisuAI에서는 뒤에 붙은 ZIP payload를 캐릭터 카드로 읽을 수 있다.
-
-CHARX 내부에는 다음 항목이 들어간다.
+## 출력
 
 ```text
-card.json
-assets/icon/cover.jpg
-assets/x-risu-asset/...
+dist/HellTrain.charx
+dist/HellTrain.jpg
 ```
 
-`card.json`은 `chara_card_v3` / `3.0` 스키마를 사용한다.
+- `HellTrain.charx`: Character Card V3 CHARX ZIP
+- `HellTrain.jpg`: JPEG 앞부분 뒤에 동일한 CHARX ZIP을 붙인 RisuAI 하이브리드 카드
 
-## HellTrain 런타임 매핑
+## 기준 구조
 
-HellTrain은 일반 캐릭터 프롬프트만으로 동작하지 않고 RisuAI의 Lua low-level access와 로어북 조회를 사용한다. 빌더는 저장소 구조를 다음처럼 카드 구조에 매핑한다.
+RisuAI에서 직접 export한 HellTrain CHARX를 기준으로 다음 레이아웃을 유지한다.
 
-- `Prompt/firstmsg.html` → `data.first_mes`
-- `System/main.lua` → `extensions.risuai.triggerscript`의 `triggerlua` 진입점
-- `System/*.lua`, `DB/*.db`, `Char/*.db`, `html/*.html`, `html/*.css` → `data.character_book.entries`
-- `imgs/*` → `x-risu-asset`
-- `imgs/game_icon.png` → JPEG로 변환해 카드 메인 아이콘 + JPEG 하이브리드의 앞부분
+```text
+x_meta/<asset-name>.json
+assets/other/image/<filename>.<ext>
+x_meta/main.json
+assets/icon/image/main.<ext>
+module.risum
+card.json
+```
 
-로어 항목의 `name`/`comment`는 파일 basename을 그대로 사용한다. 예를 들어 `System/battleController.lua`는 `battleController.lua`라는 로어가 된다. HellTrain 런타임이 `getLoreBooks(triggerId, "battleController.lua")`처럼 이름으로 조회하므로 이 규칙을 바꾸면 안 된다.
+이미지 파일은 RisuAI의 기본 image compression과 같은 정책으로 WebP quality 75로 다시 인코딩한다. 원래 확장자와 asset 이름은 `card.json`에 그대로 남기며 `x_meta/*.json`에 원본 이미지 형식을 기록한다.
 
-런타임 소스 로어는 LLM 프롬프트에 우연히 활성화되지 않도록 `constant: false`이며 저장소 경로 기반의 전용 sentinel key를 사용한다. Lua low-level API의 직접 로어 조회는 활성화 여부와 관계없이 `comment`가 정확히 일치하는 항목을 읽는다.
+예를 들어 `imgs/서미령.png`는 다음처럼 들어간다.
 
-이미지 asset의 이름은 확장자를 뺀 파일명으로 등록한다. 따라서 `imgs/서미령.png`는 `{{raw::서미령}}`, `imgs/서미령_함락.png`는 `{{raw::서미령_함락}}`에서 사용할 수 있다.
+```text
+x_meta/서미령.png.json
+assets/other/image/서미령.png.png
+```
 
-## `module.risum`을 만들지 않는 이유
+`card.json`의 asset record도 RisuAI native export처럼 `name: "서미령.png"`, `ext: "png"`를 사용한다.
 
-RisuAI의 CHARX는 선택적으로 `module.risum`을 포함할 수 있지만 필수는 아니다. 현재 빌드는 공개 Character Card V3 필드인 `character_book`과 `extensions.risuai.triggerscript`에 로어와 트리거를 직접 기록한다. RisuAI importer가 이 두 필드를 네이티브로 읽으므로 HellTrain에 필요한 기능은 유지하면서 별도의 RPack/`.risum` 인코더 의존성을 피할 수 있다.
+## 런타임 매핑
+
+### 첫 메시지
+
+`Prompt/firstmsg.html`은 `data.first_mes`가 된다.
+
+### background embedding
+
+`html/embeddings.css`는 lore가 아니라 `data.extensions.risuai.backgroundHTML`에 그대로 저장한다. HellTrain UI 스타일은 이 필드에 의존하므로 일반 lore로 넣으면 원본 카드와 동작이 달라진다.
+
+### lorebook
+
+RisuAI native export와 동일하게 다음 4개 folder entry를 만들고 파일을 그 아래에 배치한다.
+
+```text
+DB
+Chars
+HTML
+System
+```
+
+매핑은 다음과 같다.
+
+- `DB/*.db` → `DB`
+- `Char/*.db` → `Chars`
+- `html/*.html` → `HTML`
+- `System/*.lua` → `System`
+
+`System/main.lua`는 lore에서 제외한다. 나머지 lore의 `comment`/`name`은 파일 basename을 그대로 사용하고, `insertorder`는 100, `alwaysActive`는 false로 유지한다.
+
+HellTrain runtime의 `getLoreBooks(triggerId, "battleController.lua")` 같은 조회는 lore `comment`의 정확한 이름을 사용하므로 basename을 변경하면 안 된다.
+
+### `module.risum`
+
+RisuAI native CHARX는 trigger와 lorebook을 `module.risum`에도 저장한다. 따라서 빌더도 legacy Risu module framing과 RPack byte map을 사용해 `module.risum`을 생성한다.
+
+`module.risum`에는 다음이 들어간다.
+
+- `System/main.lua`를 실행하는 `triggerlua` 1개
+- low-level access 활성화
+- regex 목록
+- 전체 lorebook
+- module metadata
+
+RisuAI importer는 CHARX에서 `module.risum`을 발견하면 여기의 trigger/lorebook을 읽어 character import에 적용한다. 따라서 `card.json`의 `extensions.risuai`에는 `triggerscript`/`customScripts`를 중복 기록하지 않는다.
+
+### Character Card V3 lore 복제
+
+RisuAI native export 자체가 `module.risum`의 lorebook과 같은 내용을 `card.json.data.character_book.entries`에도 기록한다. 빌더 역시 이 중복 구조를 유지한다.
+
+## 원본 카드와의 비교에서 확인한 차이
+
+참조 CHARX를 구조적으로 다시 생성한 fixture에서는 folder UUID를 정규화했을 때 `card.json`의 의미 있는 차이는 export 시각을 나타내는 `modification_date`뿐이었다. `module.risum`도 module UUID와 일부 optional false 필드를 제외하면 같은 구조로 재구성된다.
+
+완전한 byte-for-byte 동일성은 목표가 아니다. RisuAI native export에는 실행 시각, UUID, ZIP writer 세부사항, 브라우저 WebP encoder 결과처럼 export 환경에 따라 달라지는 값이 있기 때문이다. 대신 RisuAI가 읽는 필드, lore 구조, module framing, asset naming, background embedding과 import 결과가 같도록 맞춘다.
 
 ## 로컬 빌드
 
@@ -50,9 +101,7 @@ python -m pip install -r tools/requirements-card-build.txt
 python tools/build_risu_card.py
 ```
 
-커버가 이미 JPEG라면 Pillow 없이도 빌드할 수 있지만, 기본 manifest는 `imgs/game_icon.png`를 사용하므로 의존성을 설치하는 것이 권장된다.
-
-다른 manifest 또는 출력 디렉터리를 사용할 수도 있다.
+다른 manifest 또는 출력 디렉터리를 사용할 수 있다.
 
 ```bash
 python tools/build_risu_card.py \
@@ -60,22 +109,23 @@ python tools/build_risu_card.py \
   --output dist
 ```
 
-빌더는 생성 직후 다음을 검증하고 하나라도 어긋나면 실패한다.
+## 검증
+
+빌더는 생성 직후 다음을 검사한다.
 
 - CHARX ZIP 무결성
-- JPEG SOI/EOI와 appended ZIP 존재 여부
-- `card.json` Character Card V3 스키마 표식
-- RisuAI low-level access 플래그
-- `triggerlua` 진입점
-- 필수 로어 파일 존재 여부
-- 로어 basename 및 asset 이름 중복 여부
+- JPEG + appended CHARX 구조
+- `chara_card_v3` / `3.0`
+- `extensions.risuai.lowLevelAccess`
+- `backgroundHTML` 존재
+- `card.json`에 trigger가 중복되지 않았는지
+- `module.risum` magic/version/RPack payload
+- `module.risum`의 `triggerlua`
+- module/card lore entry 수 일치
+- `System/main.lua`가 lore에 잘못 포함되지 않았는지
+- 모든 embedded asset과 대응 `x_meta` 존재
+- 필수 HellTrain lore 존재
 
 ## GitHub Actions
 
-`.github/workflows/build-risu-character-card.yml`은 관련 소스가 변경된 PR, `main` push, 수동 실행에서 카드 빌드를 수행한다. 성공하면 `HellTrain-risu-card` artifact에 `.charx`와 `.jpg`를 함께 업로드한다.
-
-CI에서는 `HELLTRAIN_CARD_VERSION`에 현재 Git commit SHA를 넣어 `character_version`을 자동 기록한다. 로컬 빌드는 `card/manifest.json`의 fallback 값을 사용한다.
-
-## 커버 교체
-
-기본 커버 원본은 `imgs/game_icon.png`다. `card/manifest.json`의 `cover`를 다른 PNG/JPEG 경로로 바꾸면 다음 빌드부터 카드 아이콘과 JPEG 하이브리드의 보이는 이미지가 함께 변경된다. PNG 등 비-JPEG 입력은 Pillow로 RGB JPEG로 변환된다.
+`.github/workflows/build-risu-character-card.yml`은 관련 소스 변경 PR, `main` push, 수동 실행에서 빌드를 수행한다. 성공하면 `HellTrain-risu-card` artifact로 `.charx`와 `.jpg`를 업로드한다.
