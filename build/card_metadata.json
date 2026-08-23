@@ -1,0 +1,94 @@
+{
+  "name": "함락! 무한의 지옥철",
+  "description": "",
+  "personality": "",
+  "scenario": "",
+  "mes_example": "",
+  "creator_notes": "\n# `en`\n ",
+  "system_prompt": "",
+  "post_history_instructions": "",
+  "alternate_greetings": [],
+  "group_only_greetings": [],
+  "tags": [],
+  "creator": "",
+  "character_version": "",
+  "nickname": "",
+  "source": [],
+  "creation_date": 1782919817620,
+  "modification_date": null,
+  "depth_prompt": {
+    "depth": 0,
+    "prompt": ""
+  },
+  "risuai": {
+    "bias": [],
+    "viewScreen": "none",
+    "utilityBot": false,
+    "sdData": [
+      ["always", "solo, 1girl"],
+      ["negative", ""],
+      ["|character's appearance", ""],
+      ["current situation", ""],
+      ["$character's pose", ""],
+      ["$character's emotion", ""],
+      ["current location", ""]
+    ],
+    "additionalText": "",
+    "largePortrait": false,
+    "lorePlus": false,
+    "newGenData": {
+      "prompt": "",
+      "negative": "",
+      "instructions": "",
+      "emotionInstructions": ""
+    },
+    "vits": {},
+    "defaultVariables": "",
+    "prebuiltAssetCommand": "",
+    "prebuiltAssetExclude": [
+      "assets/594c0c4399331a399f99a23f568f5d0a6e8d4fcfd10a9a70632abbc5ebb86b1d.png"
+    ],
+    "prebuiltAssetStyle": "",
+    "toggles": ""
+  },
+  "module": {
+    "name": "",
+    "description": "",
+    "id": "",
+    "trigger_comment": "",
+    "regex": []
+  },
+  "first_message": "Prompt/firstmsg.html",
+  "entry_script": "System/main.lua",
+  "background_html": "html/embeddings.css",
+  "icon": "imgs/game_icon.png",
+  "output_basename": "HellTrain",
+  "asset_order": [
+    "cost.png",
+    "damage.png",
+    "한제니.png",
+    "윤서아.png",
+    "유지영.png",
+    "아그네스.png",
+    "서미령.png",
+    "서미령_함락.png",
+    "윤서아_함락.png",
+    "한제니_함락.png",
+    "아그네스_함락.png",
+    "유지영_함락.png"
+  ],
+  "required_lore": [
+    "hostCompat.lua",
+    "runtime.lua",
+    "hostFlow.lua",
+    "GameRegistry.db",
+    "PlayerCards.db",
+    "CharacterCards.db",
+    "CharTraits.db",
+    "Environments.db",
+    "TokyoSubwayLines.db",
+    "CharacterList.db",
+    "battleui.html",
+    "battleui-interaction.html"
+  ]
+}
