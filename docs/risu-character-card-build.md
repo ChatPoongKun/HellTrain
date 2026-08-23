@@ -7,7 +7,7 @@ HellTrain 저장소의 소스 파일을 RisuAI에서 바로 임포트할 수 있
 빌더는 한 번의 실행으로 다음 두 파일을 생성한다.
 
 - `dist/HellTrain.charx`: 표준 CHARX ZIP 아카이브
-- `dist/HellTrain.jpg`: `card/cover.jpg` JPEG 뒤에 동일한 CHARX ZIP을 붙인 RisuAI JPEG 하이브리드 카드
+- `dist/HellTrain.jpg`: JPEG 커버 뒤에 동일한 CHARX ZIP을 붙인 RisuAI JPEG 하이브리드 카드
 
 JPEG 하이브리드는 사람이 보면 일반 JPEG이고, RisuAI에서는 뒤에 붙은 ZIP payload를 캐릭터 카드로 읽을 수 있다.
 
@@ -29,7 +29,7 @@ HellTrain은 일반 캐릭터 프롬프트만으로 동작하지 않고 RisuAI�
 - `System/main.lua` → `extensions.risuai.triggerscript`의 `triggerlua` 진입점
 - `System/*.lua`, `DB/*.db`, `Char/*.db`, `html/*.html`, `html/*.css` → `data.character_book.entries`
 - `imgs/*` → `x-risu-asset`
-- `card/cover.jpg` → 카드 메인 아이콘 + JPEG 하이브리드의 앞부분
+- `imgs/game_icon.png` → JPEG로 변환해 카드 메인 아이콘 + JPEG 하이브리드의 앞부분
 
 로어 항목의 `name`/`comment`는 파일 basename을 그대로 사용한다. 예를 들어 `System/battleController.lua`는 `battleController.lua`라는 로어가 된다. HellTrain 런타임이 `getLoreBooks(triggerId, "battleController.lua")`처럼 이름으로 조회하므로 이 규칙을 바꾸면 안 된다.
 
@@ -43,11 +43,14 @@ RisuAI의 CHARX는 선택적으로 `module.risum`을 포함할 수 있지만 필
 
 ## 로컬 빌드
 
-Python 3.10 이상만 필요하며 외부 패키지는 사용하지 않는다.
+Python 3.10 이상과 Pillow가 필요하다.
 
 ```bash
+python -m pip install -r tools/requirements-card-build.txt
 python tools/build_risu_card.py
 ```
+
+커버가 이미 JPEG라면 Pillow 없이도 빌드할 수 있지만, 기본 manifest는 `imgs/game_icon.png`를 사용하므로 의존성을 설치하는 것이 권장된다.
 
 다른 manifest 또는 출력 디렉터리를 사용할 수도 있다.
 
@@ -75,4 +78,4 @@ CI에서는 `HELLTRAIN_CARD_VERSION`에 현재 Git commit SHA를 넣어 `charact
 
 ## 커버 교체
 
-`card/cover.jpg`를 다른 JPEG로 교체하면 다음 빌드부터 카드 아이콘과 JPEG 하이브리드의 보이는 이미지가 함께 변경된다. PNG를 그대로 지정하지 말고 JPEG로 저장해야 한다.
+기본 커버 원본은 `imgs/game_icon.png`다. `card/manifest.json`의 `cover`를 다른 PNG/JPEG 경로로 바꾸면 다음 빌드부터 카드 아이콘과 JPEG 하이브리드의 보이는 이미지가 함께 변경된다. PNG 등 비-JPEG 입력은 Pillow로 RGB JPEG로 변환된다.
