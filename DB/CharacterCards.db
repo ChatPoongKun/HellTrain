@@ -32,7 +32,12 @@ end
 local function adjacentMood(currentMood, delta)
     local index = MOOD_INDEX[currentMood]
     if index == nil then return currentMood end
-    local target = math.max(1, math.min(#MOOD_ORDER, index + delta))
+    local target = index + delta
+    if target < 1 then
+        target = 1
+    elseif target > 5 then
+        target = 5
+    end
     return MOOD_ORDER[target]
 end
 
