@@ -479,11 +479,15 @@
         return runUi, nil
     end
 
-    local function permitCanonicalView(purpose, viewName)
+    local function permitCanonicalOperation(purpose, viewName)
         if purpose == "gameSetupViewCanonicalV1" then
             return true
         end
         if purpose == "runProgressionViewCanonicalV1" then
+            return true
+        end
+        if purpose == "battleControllerCanonicalSetupV1"
+            or purpose == "battleControllerCanonicalRunV1" then
             return true
         end
         return purpose == "dataBridgeCanonicalV1"
@@ -502,7 +506,7 @@
             "_buildCanonical",
             stateCopy,
             staticData,
-            permitCanonicalView
+            permitCanonicalOperation
         )
         if viewErrors then return nil, viewErrors end
         if type(viewReport.view) ~= "table" or getmetatable(viewReport.view) ~= nil then
@@ -531,7 +535,7 @@
             runCopy,
             setupCopy,
             staticData,
-            permitCanonicalView
+            permitCanonicalOperation
         )
         if viewErrors then return nil, viewErrors end
         if type(viewReport.view) ~= "table" or getmetatable(viewReport.view) ~= nil then
@@ -804,7 +808,7 @@
             "_publishCanonical",
             VIEW_NAME,
             target.view,
-            permitCanonicalView
+            permitCanonicalOperation
         )
         if publishErrors then return failure(publishErrors) end
         if type(published.encoded) ~= "string" or published.encoded == "" then
@@ -876,7 +880,7 @@
             "_publishCanonical",
             RUN_VIEW_NAME,
             target.view,
-            permitCanonicalView
+            permitCanonicalOperation
         )
         if publishErrors then return failure(publishErrors) end
         if type(published.encoded) ~= "string" or published.encoded == "" then
@@ -1050,8 +1054,9 @@
 
         local battle, battleErrors = callModule(
             "battleController",
-            "startFromSetup",
-            target.state
+            "_startFromCanonicalSetup",
+            target.state,
+            permitCanonicalOperation
         )
         if battleErrors then return failure(battleErrors) end
         if type(battle.applied) ~= "boolean"
@@ -1135,9 +1140,10 @@
         if shellErrors then return failure(shellErrors) end
         local battle, battleErrors = callModule(
             "battleController",
-            "startFromRun",
+            "_startFromCanonicalRun",
             target.state,
-            target.setupState
+            target.setupState,
+            permitCanonicalOperation
         )
         if battleErrors then return failure(battleErrors) end
         local battleSpec = target.state.battleSpec
