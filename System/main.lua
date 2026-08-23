@@ -1,6 +1,6 @@
 -- RisuAI host entrypoint. Runtime and host orchestration are loaded lazily
 -- because lore access requires the current event triggerId.
-RUNTIME_BUNDLE_REVISION = "runtime-bundle-host-write-compat-v1-20260823"
+RUNTIME_BUNDLE_REVISION = "runtime-bundle-mood-tempo-pr20-v1-20260823"
 
 local hostCompatHandler = nil
 local runtimeHandler = nil
@@ -124,6 +124,24 @@ local function restoreOutputUiTarget(triggerId, report)
     return false
 end
 
+local function outputFailureMessage(report)
+    if type(report) ~= "table" or report.ok ~= false then
+        return nil
+    end
+    local parts = { "전투 턴 확정에 실패했습니다." }
+    local errors = type(report.errors) == "table" and report.errors or {}
+    for _, item in ipairs(errors) do
+        if type(item) == "table" then
+            parts[#parts + 1] = "[" .. tostring(item.code or "error") .. "] "
+                .. tostring(item.message or "알 수 없는 오류")
+                .. " (" .. tostring(item.path or "$") .. ")"
+        else
+            parts[#parts + 1] = tostring(item)
+        end
+    end
+    return table.concat(parts, "\n")
+end
+
 listenEdit("editDisplay", function(triggerId, data, meta)
     return dispatch(triggerId, "editDisplay", "editDisplay", data, meta)
 end)
@@ -148,10 +166,22 @@ onOutput = async(function(triggerId)
         "output"
     ))
 
-    restoreOutputUiTarget(triggerId, packed[1] and packed[2] or nil)
+    local report = packed[1] and packed[2] or nil
+    restoreOutputUiTarget(triggerId, report)
 
     if not packed[1] then
         error(packed[2])
     end
+
+    local failureMessage = outputFailureMessage(report)
+    if failureMessage ~= nil then
+        if type(debug) == "function" then
+            debug(1, failureMessage)
+        elseif type(print) == "function" then
+            print(failureMessage)
+        end
+        error(failureMessage)
+    end
+
     return table.unpack(packed, 2, packed.n)
 end)
