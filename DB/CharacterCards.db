@@ -151,6 +151,64 @@ return {
             { resolve = function(context) return { loseStealth(2), addMood("suspicion", 1) } end }
         ),
 
+        jiyoung_hug_bag_close = card(
+            "jiyoung_hug_bag_close", "가방을 끌어안다", "block", {},
+            "::tag[block]:: 행동으로 가방을 품에 꼭 끌어안고 몸을 웅크려 흔들린 마음을 추스릅니다.",
+            { "저항을 2 회복합니다.", "현재 무드가 혼란 또는 순응이면 대신 저항을 4 회복합니다." },
+            "가방을 가슴 앞에 꼭 끌어안고 어깨를 움츠린 채 몸을 작게 만든다.",
+            "당황하지 말자. 그냥 내 공간만 지키면 돼...",
+            {
+                resolve = function(context)
+                    local amount = (context.mood == "confusion" or context.mood == "compliance") and 4 or 2
+                    return { recoverResistance(amount) }
+                end,
+            }
+        ),
+
+        jiyoung_half_step_back = card(
+            "jiyoung_half_step_back", "반걸음 물러서기", "evade", {},
+            "::tag[evade]:: 행동으로 눈치를 보며 반걸음 물러서 상대의 흐름에 강하게 반발합니다.",
+            { "반발 2." },
+            "눈치를 살피다가 조심스럽지만 분명하게 반걸음 뒤로 물러난다.",
+            "조금만 멀어지면... 나도 다시 생각할 수 있을 거야.",
+            { resolve = function(context) return { backlash(context, 2) } end }
+        ),
+
+        jiyoung_avoid_eye_contact = card(
+            "jiyoung_avoid_eye_contact", "시선을 피하다", "evade", {},
+            "::tag[evade]:: 행동으로 시선을 바닥에 고정해 상대가 쌓은 긍정 방향의 압력을 강하게 냉각합니다.",
+            { "냉각 2." },
+            "얼굴을 붉힌 채 시선을 바닥으로 떨구고 더는 눈을 마주치지 않는다.",
+            "보지 않으면... 더 휘말리지 않을 거야.",
+            { resolve = function(context) return { cool(context, 2) } end }
+        ),
+
+        jiyoung_find_courage = card(
+            "jiyoung_find_courage", "용기 내어 목소리 높이기", "expose", {},
+            "::tag[expose]:: 행동으로 주변에도 들릴 만큼 목소리를 높입니다. 이미 의심이나 거절 상태라면 압박이 크게 강해집니다.",
+            { "플레이어가 은폐를 2 잃습니다.", "현재 무드가 의심 또는 거절이면 대신 은폐를 4 잃습니다." },
+            "한참 망설인 끝에 주변 사람도 알아들을 만큼 또렷하게 그만두라고 말한다.",
+            "무서워도 말해야 해. 계속 참기만 하면 안 돼.",
+            {
+                resolve = function(context)
+                    local amount = (context.mood == "suspicion" or context.mood == "rejection") and 4 or 2
+                    return { loseStealth(amount) }
+                end,
+            }
+        ),
+
+        jiyoung_phone_in_hand = planCard(
+            "jiyoung_phone_in_hand", "휴대전화를 쥔 채 망설이기", "intimidate",
+            "::tag[intimidate]:: 행동으로 휴대전화를 손에 쥔 채 다음 움직임을 기다리는 ::tag[plan]::을 배치합니다.",
+            { "지속 2턴, 충전 1.", "다음 플레이어 카드가 선언되면 은폐를 1 잃고 냉각 2." },
+            "휴대전화를 양손으로 꼭 쥔 채 화면을 켜고 상대의 다음 움직임을 살핀다.",
+            "또 움직이면... 그땐 정말 누군가에게 보여줄 거야.",
+            "상대가 다시 움직이자 휴대전화를 들어 보이며 몸을 뒤로 빼고 시선을 끊는다.",
+            "이제 못 본 척하지 않을 거야.",
+            2, 1,
+            function(context, event) return { loseStealth(1, "plan"), cool(context, 2, "plan") } end
+        ),
+
         -- 윤서아: 통제와 경계. 반발을 준비하고 의심/거절에서 직접 압박을 회수한다.
         seoa_document_bag_guard = card(
             "seoa_document_bag_guard", "서류 가방으로 가로막기", "block", {},
@@ -205,6 +263,59 @@ return {
             function(context, event) return { loseStealth(1, "plan"), backlash(context, 1, "plan") } end
         ),
 
+        seoa_square_shoulders = card(
+            "seoa_square_shoulders", "자세를 바로잡다", "block", {},
+            "::tag[block]:: 행동으로 흐트러진 자세를 즉시 바로잡고 긍정 방향의 압력을 식힙니다.",
+            { "저항을 2 회복합니다.", "냉각 1." },
+            "어깨를 펴고 안경을 고쳐 쓰며 다시 빈틈없는 자세를 취한다.",
+            "표정 하나 흐트러졌다고 주도권까지 넘긴 건 아니야.",
+            { resolve = function(context) return { recoverResistance(2), cool(context, 1) } end }
+        ),
+
+        seoa_issue_instruction = card(
+            "seoa_issue_instruction", "명령하듯 거리 두기", "intimidate", {},
+            "::tag[intimidate]:: 행동으로 업무 지시를 내리듯 단호하게 거리를 요구해 강하게 반발합니다.",
+            { "반발 2." },
+            "감정을 섞지 않은 목소리로 정확한 거리를 지키라고 짧게 지시한다.",
+            "설명할 필요 없어. 지켜야 할 선만 지키게 만들면 돼.",
+            { resolve = function(context) return { backlash(context, 2) } end }
+        ),
+
+        seoa_state_consequences = card(
+            "seoa_state_consequences", "책임을 조목조목 짚다", "expose", {},
+            "::tag[expose]:: 행동으로 상대가 감수하게 될 결과를 차갑게 열거합니다. 의심이나 거절에서 압박이 더 강합니다.",
+            { "플레이어가 은폐를 2 잃습니다.", "현재 무드가 의심 또는 거절이면 대신 은폐를 4 잃습니다." },
+            "회사 보고서를 읽듯 침착하게 상대의 행동이 어떤 결과를 부를지 하나씩 짚는다.",
+            "감정적으로 화낼 필요도 없어. 결과를 알면 스스로 멈추겠지.",
+            {
+                resolve = function(context)
+                    local amount = (context.mood == "suspicion" or context.mood == "rejection") and 4 or 2
+                    return { loseStealth(amount) }
+                end,
+            }
+        ),
+
+        seoa_cut_off_exchange = card(
+            "seoa_cut_off_exchange", "대화를 잘라내다", "vigilance", {},
+            "::tag[vigilance]:: 행동으로 더 이상의 여지를 주지 않고 대화를 끊어 냉각과 반발을 동시에 만듭니다.",
+            { "냉각 1.", "반발 1." },
+            "상대의 말을 끝까지 듣지 않고 짧은 한마디로 대화를 끊은 뒤 시선을 거둔다.",
+            "대화가 길어질수록 틈만 생겨. 여기서 끝내.",
+            { resolve = function(context) return { cool(context, 1), backlash(context, 1) } end }
+        ),
+
+        seoa_silent_audit = planCard(
+            "seoa_silent_audit", "침묵 속 계산", "vigilance",
+            "::tag[vigilance]:: 행동으로 상대의 다음 수를 말없이 재는 ::tag[plan]::을 배치합니다.",
+            { "지속 2턴, 충전 1.", "다음 플레이어 카드가 선언되면 은폐를 1 잃고 냉각 2." },
+            "팔짱을 끼고 아무 말 없이 상대의 손과 시선을 번갈아 확인한다.",
+            "움직이는 순간 빈틈이 드러나. 그때 흐름을 끊으면 돼.",
+            "상대가 움직이자 즉시 시선을 고정하고 단호하게 제동을 건다.",
+            "예상 범위 안이야. 여기서 더 넘어오게 두지 않아.",
+            2, 1,
+            function(context, event) return { loseStealth(1, "plan"), cool(context, 2, "plan") } end
+        ),
+
         -- 한제니: 변칙적인 심리전. 직접 압박과 중립 토큰 교란을 섞는다.
         jenny_slip_away_laughing = card(
             "jenny_slip_away_laughing", "웃으며 빠져나가기", "evade", {},
@@ -252,6 +363,59 @@ return {
             "갑자기 창밖을 가리키며 대화의 초점과 주변의 시선을 다른 곳으로 돌린다.",
             "다들 저쪽을 보면, 이 분위기도 금방 식겠지.",
             { resolve = function(context) return { cool(context, 2) } end }
+        ),
+
+        jenny_smirk_and_sidstep = card(
+            "jenny_smirk_and_sidstep", "비웃으며 옆으로 빠지기", "evade", {},
+            "::tag[evade]:: 행동으로 웃음을 잃지 않은 채 옆으로 빠져나가 강하게 반발합니다.",
+            { "반발 2." },
+            "입꼬리를 올린 채 몸을 비껴 한 걸음 빠지고 일부러 여유로운 표정을 짓는다.",
+            "내가 당황한 줄 알았어? 분위기는 내가 다시 가져오면 돼.",
+            { resolve = function(context) return { backlash(context, 2) } end }
+        ),
+
+        jenny_fix_makeup = card(
+            "jenny_fix_makeup", "거울 보며 표정 고치기", "block", {},
+            "::tag[block]:: 행동으로 휴대전화 화면에 비친 표정을 고치며 흐름을 냉각하고 태연함을 되찾습니다.",
+            { "저항을 2 회복합니다.", "냉각 1." },
+            "휴대전화 전면 화면을 거울처럼 보며 머리카락과 표정을 빠르게 정돈한다.",
+            "표정부터 관리해. 페이스 잃은 티만 안 나면 돼.",
+            { resolve = function(context) return { recoverResistance(2), cool(context, 1) } end }
+        ),
+
+        jenny_turn_joke_back = card(
+            "jenny_turn_joke_back", "농담을 되받아치다", "intimidate", {},
+            "::tag[intimidate]:: 행동으로 상대의 말을 비꼬아 되돌려줍니다. 의심이나 거절 상태라면 공개적인 망신으로 이어집니다.",
+            { "플레이어가 은폐를 2 잃습니다.", "현재 무드가 의심 또는 거절이면 대신 은폐를 4 잃습니다." },
+            "상대의 말을 그대로 비틀어 큰 소리로 되받아치고 주변 반응을 슬쩍 확인한다.",
+            "그 말, 그대로 돌려주면 누가 더 곤란해질까?",
+            {
+                resolve = function(context)
+                    local amount = (context.mood == "suspicion" or context.mood == "rejection") and 4 or 2
+                    return { loseStealth(amount) }
+                end,
+            }
+        ),
+
+        jenny_call_out_behavior = card(
+            "jenny_call_out_behavior", "웃으며 행동 지적하기", "expose", {},
+            "::tag[expose]:: 행동으로 장난스러운 말투를 유지한 채 상대의 행동을 주변에 들리도록 지적합니다.",
+            { "플레이어가 은폐를 2 잃습니다.", "반발 1." },
+            "웃는 얼굴 그대로 상대의 행동을 큰 소리로 짚어 주변의 시선을 끌어온다.",
+            "이 정도면 농담으로 넘기기엔 좀 티 나지 않아?",
+            { resolve = function(context) return { loseStealth(2), backlash(context, 1) } end }
+        ),
+
+        jenny_record_button_hover = planCard(
+            "jenny_record_button_hover", "녹화 버튼 위의 손가락", "expose",
+            "::tag[expose]:: 행동으로 실제 녹화 버튼 위에 손가락을 올린 채 다음 움직임을 기다리는 ::tag[plan]::을 배치합니다.",
+            { "지속 2턴, 충전 1.", "다음 플레이어 카드가 선언되면 은폐를 1 잃고 의심 토큰 1개를 추가합니다." },
+            "휴대전화를 세로로 들고 녹화 버튼 바로 위에 엄지를 올린 채 웃음을 거둔다.",
+            "이번엔 진짜 누를 수도 있는데. 그래도 움직일래?",
+            "상대가 움직이는 순간 녹화를 시작하고 화면을 주변에서도 보이게 들어 올린다.",
+            "오케이, 이건 이제 장난 아니야.",
+            2, 1,
+            function(context, event) return { loseStealth(1, "plan"), addMood("suspicion", 1, "plan") } end
         ),
 
         -- 서미령: 안정적인 제어. 회복과 냉각으로 시간을 벌고 반발을 차분히 쌓는다.
@@ -303,6 +467,59 @@ return {
             { resolve = function(context) return { cool(context, 1), backlash(context, 1) } end }
         ),
 
+        miryeong_touch_wedding_ring = card(
+            "miryeong_touch_wedding_ring", "결혼반지를 만지다", "block", {},
+            "::tag[block]:: 행동으로 결혼반지를 천천히 만지며 자신의 기준을 되새기고 긍정 방향의 압력을 강하게 냉각합니다.",
+            { "저항을 1 회복합니다.", "냉각 2." },
+            "왼손의 결혼반지를 엄지로 천천히 문지르며 시선을 차분하게 가라앉힌다.",
+            "내가 지킬 선은 이미 알고 있어. 잠깐 흔들렸다고 달라지진 않아.",
+            { resolve = function(context) return { recoverResistance(1), cool(context, 2) } end }
+        ),
+
+        miryeong_step_back_smile_fades = card(
+            "miryeong_step_back_smile_fades", "미소를 거두고 물러서기", "evade", {},
+            "::tag[evade]:: 행동으로 부드러운 미소를 거두고 한 걸음 물러서 강하게 반발합니다.",
+            { "반발 2." },
+            "미소를 천천히 지우고 한 걸음 뒤로 물러서며 더 가까이 오지 말라는 뜻을 분명히 한다.",
+            "부드럽게 말한다고 선이 없는 건 아니야.",
+            { resolve = function(context) return { backlash(context, 2) } end }
+        ),
+
+        miryeong_read_the_intent = card(
+            "miryeong_read_the_intent", "의도를 먼저 짚다", "vigilance", {},
+            "::tag[vigilance]:: 행동으로 상대의 의도를 차분히 말로 짚어 은폐를 낮추고 반발을 만듭니다.",
+            { "플레이어가 은폐를 1 잃습니다.", "반발 1." },
+            "상대가 다음 말을 꺼내기 전에 의도를 이미 알아챘다는 듯 조용히 핵심을 짚는다.",
+            "모르는 척할 수는 있어도, 모르는 건 아니야.",
+            { resolve = function(context) return { loseStealth(1), backlash(context, 1) } end }
+        ),
+
+        miryeong_calm_public_rebuke = card(
+            "miryeong_calm_public_rebuke", "차분하게 주변에 알리기", "expose", {},
+            "::tag[expose]:: 행동으로 감정을 높이지 않은 채 주변에도 들리도록 상황을 설명합니다. 의심이나 거절에서 효과가 커집니다.",
+            { "플레이어가 은폐를 2 잃습니다.", "현재 무드가 의심 또는 거절이면 대신 은폐를 4 잃습니다." },
+            "목소리를 높이지 않은 채 가까운 승객도 들을 수 있도록 상황을 또박또박 설명한다.",
+            "소리칠 필요는 없어. 사실만 말해도 충분하니까.",
+            {
+                resolve = function(context)
+                    local amount = (context.mood == "suspicion" or context.mood == "rejection") and 4 or 2
+                    return { loseStealth(amount) }
+                end,
+            }
+        ),
+
+        miryeong_raised_palm = planCard(
+            "miryeong_raised_palm", "말없이 손바닥 세우기", "block",
+            "::tag[block]:: 행동으로 말없이 손바닥을 세워 다음 접근을 기다리는 ::tag[plan]::을 배치합니다.",
+            { "지속 2턴, 충전 1.", "다음 플레이어 카드가 선언되면 냉각 2." },
+            "손바닥을 조용히 들어 보이며 더 이상 가까이 오지 말라는 뜻만 남기고 기다린다.",
+            "설명은 충분했어. 다음에 어떻게 나오는지만 보면 돼.",
+            "상대가 다시 움직이자 말없이 한 걸음 물러서며 시선을 끊고 분위기를 식힌다.",
+            "역시 멈추지 않는구나. 그럼 더 가까워질 이유도 없어.",
+            2, 1,
+            function(context, event) return { cool(context, 2, "plan") } end
+        ),
+
         -- 아그네스: 강한 방어와 단절. 일반 카드는 상대 키워드를 따르고 제거 카드만 절대 강제를 사용한다.
         agnes_cover_with_sleeves = card(
             "agnes_cover_with_sleeves", "수도복 소매로 가리기", "block", {},
@@ -350,6 +567,64 @@ return {
             "십자가를 굳게 쥔 채 더는 어떤 대화도 받아들이지 않겠다고 선언한다.",
             "이제 끝이야. 더는 한마디도 들을 필요 없어.",
             { resolve = function(context) return { loseStealth(2), forceMood("rejection") } end }
+        ),
+
+        agnes_center_in_prayer = card(
+            "agnes_center_in_prayer", "짧게 기도하다", "block", {},
+            "::tag[block]:: 행동으로 짧은 기도를 되뇌며 흔들린 마음을 다잡습니다. 혼란이나 순응에서는 회복량이 커집니다.",
+            { "저항을 2 회복합니다.", "현재 무드가 혼란 또는 순응이면 대신 저항을 4 회복합니다." },
+            "십자가를 손안에 감싸 쥐고 눈을 감은 채 짧은 기도문을 천천히 되뇐다.",
+            "두려움도 욕망도 지나가는 감정일 뿐이야. 내가 선택할 수 있어.",
+            {
+                resolve = function(context)
+                    local amount = (context.mood == "confusion" or context.mood == "compliance") and 4 or 2
+                    return { recoverResistance(amount) }
+                end,
+            }
+        ),
+
+        agnes_lower_eyes = card(
+            "agnes_lower_eyes", "시선을 내리고 호흡 고르기", "evade", {},
+            "::tag[evade]:: 행동으로 시선을 내리고 호흡을 고르게 해 긍정 방향의 압력을 강하게 냉각합니다.",
+            { "냉각 2." },
+            "시선을 바닥으로 내리고 천천히 숨을 들이쉬고 내쉬며 감각을 가라앉힌다.",
+            "느끼는 것과 따르는 것은 달라. 먼저 마음을 고요하게 하자.",
+            { resolve = function(context) return { cool(context, 2) } end }
+        ),
+
+        agnes_firm_rebuke = card(
+            "agnes_firm_rebuke", "단호하게 잘못을 지적하다", "vigilance", {},
+            "::tag[vigilance]:: 행동으로 상대의 행동을 분명히 잘못이라고 말해 강하게 반발합니다.",
+            { "반발 2." },
+            "부드러운 표정을 거두고 상대의 행동이 잘못되었다고 단호하게 말한다.",
+            "친절하게 말하는 것과 잘못을 모른 척하는 것은 다르니까.",
+            { resolve = function(context) return { backlash(context, 2) } end }
+        ),
+
+        agnes_invoke_conscience = card(
+            "agnes_invoke_conscience", "양심에 호소하다", "intimidate", {},
+            "::tag[intimidate]:: 행동으로 상대가 자신의 행동을 직시하도록 차분히 압박합니다. 의심이나 거절에서 효과가 커집니다.",
+            { "플레이어가 은폐를 2 잃습니다.", "현재 무드가 의심 또는 거절이면 대신 은폐를 4 잃습니다." },
+            "분노하기보다 상대의 눈을 바라보며 지금 하는 일을 스스로 어떻게 생각하는지 묻는다.",
+            "부끄러움을 느낄 수 있다면 아직 멈출 수 있어.",
+            {
+                resolve = function(context)
+                    local amount = (context.mood == "suspicion" or context.mood == "rejection") and 4 or 2
+                    return { loseStealth(amount) }
+                end,
+            }
+        ),
+
+        agnes_seek_station_staff = planCard(
+            "agnes_seek_station_staff", "역무원을 찾는 시선", "expose",
+            "::tag[expose]:: 행동으로 역무원이나 도움을 청할 사람을 찾으며 다음 움직임을 기다리는 ::tag[plan]::을 배치합니다.",
+            { "지속 2턴, 충전 1.", "다음 플레이어 카드가 선언되면 은폐를 1 잃고 의심 토큰 1개를 추가합니다." },
+            "주변 표지판과 승강장 쪽을 살피며 도움을 청할 사람의 위치를 확인한다.",
+            "다시 움직이면 혼자 감당하려 하지 말고 바로 도움을 청하자.",
+            "상대가 움직이자 곧바로 주변을 향해 도움을 요청하며 상황을 드러낸다.",
+            "이제 다른 사람도 알아야 해요.",
+            2, 1,
+            function(context, event) return { loseStealth(1, "plan"), addMood("suspicion", 1, "plan") } end
         ),
     },
 }
