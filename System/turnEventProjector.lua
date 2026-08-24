@@ -2086,6 +2086,9 @@
                     if narrationError then
                         return failure({ narrationError })
                     end
+                    if effectChoice ~= nil and effectChoice.actorAction ~= nil then
+                        llmPayload.actorAction = effectChoice.actorAction
+                    end
                     llmPayload.actionTag = card.actionTag
                     emit(llmEvent, "action", llmPayload)
                 end
