@@ -1100,6 +1100,7 @@
                                     if field ~= "id"
                                         and field ~= "label"
                                         and field ~= "description"
+                                        and field ~= "actorAction"
                                         and field ~= "unavailableText"
                                         and field ~= "canSelect"
                                         and field ~= "placesPlan" then
@@ -1120,6 +1121,10 @@
                                     addError(errors, "invalid_effect_choice_description", choicePath .. ".description", "효과 선택지 설명이 필요합니다.")
                                 else
                                     validateTagTokens(choice.description, choicePath .. ".description", registry, errors)
+                                end
+                                if choice.actorAction ~= nil
+                                    and (type(choice.actorAction) ~= "string" or choice.actorAction == "") then
+                                    addError(errors, "invalid_effect_choice_actor_action", choicePath .. ".actorAction", "선택지 행동 묘사는 비어 있지 않은 문자열이어야 합니다.")
                                 end
                                 if choice.unavailableText ~= nil
                                     and (type(choice.unavailableText) ~= "string" or choice.unavailableText == "") then
