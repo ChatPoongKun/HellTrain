@@ -16,8 +16,6 @@ import zipfile
 from pathlib import Path
 
 JPEG_SOI = b"\xff\xd8"
-JPEG_EOI = b"\xff\xd9"
-ZIP_LOCAL = b"PK\x03\x04"
 FOLDER_PREFIX = "\uf000folder:"
 
 RPACK_MAP_B64 = (
@@ -411,28 +409,8 @@ def make_charx(card: dict, module: bytes, members: list[tuple[str, bytes]]) -> b
     return output.getvalue()
 
 
-def jpeg_cover(root: Path, cfg: dict) -> bytes:
-    try:
-        from PIL import Image
-    except ImportError as exc:
-        raise BuildError("Pillow is required") from exc
-    raw = (root / cfg.get("icon", "imgs/game_icon.png")).read_bytes()
-    with Image.open(io.BytesIO(raw)) as image:
-        output = io.BytesIO()
-        image.convert("RGB").save(output, format="JPEG", quality=95)
-        return output.getvalue()
-
-
-def verify(raw: bytes, hybrid: bool) -> None:
-    payload = raw
-    if hybrid:
-        eoi = raw.find(JPEG_EOI)
-        start = raw.find(ZIP_LOCAL, eoi + 2)
-        if not raw.startswith(JPEG_SOI) or eoi < 0 or start < 0:
-            raise BuildError("invalid JPEG+CHARX hybrid")
-        payload = raw[start:]
-
-    with zipfile.ZipFile(io.BytesIO(payload), "r") as zf:
+def verify(raw: bytes) -> None:
+    with zipfile.ZipFile(io.BytesIO(raw), "r") as zf:
         if zf.testzip():
             raise BuildError("corrupt CHARX")
         names = zf.namelist()
@@ -475,25 +453,21 @@ def verify(raw: bytes, hybrid: bool) -> None:
                 raise BuildError(f"missing asset metadata: {meta}")
 
 
-def build(root: Path, metadata_path: Path, output_dir: Path) -> tuple[Path, Path]:
+def build(root: Path, metadata_path: Path, output_dir: Path) -> Path:
     cfg = load_metadata(metadata_path)
     card, module, members = card_payload(root, cfg)
     charx = make_charx(card, module, members)
-    hybrid = jpeg_cover(root, cfg) + charx
-    verify(charx, False)
-    verify(hybrid, True)
+    verify(charx)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     base = cfg.get("output_basename", "HellTrain")
     charx_path = output_dir / f"{base}.charx"
-    jpg_path = output_dir / f"{base}.jpg"
     charx_path.write_bytes(charx)
-    jpg_path.write_bytes(hybrid)
-    return charx_path, jpg_path
+    return charx_path
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build HellTrain RisuAI character cards")
+    parser = argparse.ArgumentParser(description="Build the HellTrain RisuAI character card")
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument("--metadata", "--manifest", dest="metadata", type=Path)
     parser.add_argument("--output", type=Path)
@@ -503,12 +477,11 @@ def main(argv: list[str] | None = None) -> int:
     metadata_path = (args.metadata or root / "build" / "card_metadata.json").resolve()
     output_dir = (args.output or root / "build").resolve()
     try:
-        charx, jpg = build(root, metadata_path, output_dir)
+        charx = build(root, metadata_path, output_dir)
     except (BuildError, RPackError, KeyError, OSError, ValueError, zipfile.BadZipFile) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"built {charx}")
-    print(f"built {jpg}")
     return 0
 
 
