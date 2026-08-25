@@ -698,14 +698,19 @@
 
         validateRegistryCollection(registry.actionTags, "registry.actionTags", errors, true)
         validateRegistryCollection(registry.mechanisms, "registry.mechanisms", errors, false)
+        validateRegistryCollection(registry.ruleTerms, "registry.ruleTerms", errors, false)
         validateRegistryCollection(registry.moods, "registry.moods", errors, false)
         validateRegistryCollection(registry.events, "registry.events", errors, false)
         validateRegistryCollection(registry.effectOps, "registry.effectOps", errors, false)
 
-        if type(registry.actionTags) == "table" and type(registry.mechanisms) == "table" then
-            for id in pairs(registry.actionTags) do
-                if registry.mechanisms[id] then
-                    addError(errors, "registry_id_collision", "registry." .. id, "행동 태그와 메커니즘 ID가 중복됩니다.")
+        local registryIds = {}
+        for _, collectionName in ipairs({ "actionTags", "mechanisms", "ruleTerms" }) do
+            local collection = type(registry[collectionName]) == "table" and registry[collectionName] or {}
+            for id in pairs(collection) do
+                if registryIds[id] then
+                    addError(errors, "registry_id_collision", "registry." .. id, "태그와 규칙 용어 ID가 중복됩니다.")
+                else
+                    registryIds[id] = collectionName
                 end
             end
         end
@@ -734,8 +739,11 @@
             local knownMechanism = type(registry) == "table"
                 and type(registry.mechanisms) == "table"
                 and registry.mechanisms[tagId]
+            local knownRuleTerm = type(registry) == "table"
+                and type(registry.ruleTerms) == "table"
+                and registry.ruleTerms[tagId]
 
-            if not knownAction and not knownMechanism then
+            if not knownAction and not knownMechanism and not knownRuleTerm then
                 addError(errors, "unknown_tag_token", path, "등록되지 않은 태그 토큰입니다: " .. tagId)
             end
         end
@@ -1062,6 +1070,21 @@
                     end
                     if not isFiniteNonNegative(card.base.resistanceDamage) then
                         addError(errors, "invalid_resistance_damage", path .. ".base.resistanceDamage", "기본 저항 피해가 0 이상의 유한한 숫자가 아닙니다.")
+                    end
+                end
+                if card.stealthCostByMood ~= nil then
+                    if card.owner ~= "player" or type(card.stealthCostByMood) ~= "table" then
+                        addError(errors, "invalid_mood_stealth_costs", path .. ".stealthCostByMood", "플레이어 카드의 무드별 은폐 비용은 테이블이어야 합니다.")
+                    else
+                        for moodId, cost in pairs(card.stealthCostByMood) do
+                            if type(registry) ~= "table"
+                                or type(registry.moods) ~= "table"
+                                or registry.moods[moodId] == nil then
+                                addError(errors, "unknown_mood_stealth_cost", path .. ".stealthCostByMood." .. tostring(moodId), "등록되지 않은 무드의 은폐 비용입니다.")
+                            elseif not isFiniteNonNegative(cost) then
+                                addError(errors, "invalid_mood_stealth_cost", path .. ".stealthCostByMood." .. moodId, "무드별 은폐 비용이 0 이상의 유한한 숫자가 아닙니다.")
+                            end
+                        end
                     end
                 end
 

@@ -188,6 +188,16 @@ aria-label="{{dictelement::{{slot::run_reward_card}}::name}} 카드를 전투 �
 </button>
 </div>
 {{/each}}
+{{#each::keep {{dictelement::{{slot::run_reward_card}}::terms}} as run_popover_term}}
+<div id="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_popover_term}}::id}}" class="run-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{slot::run_popover_term}}::label}} 규칙 용어 정보">
+<button type="button" class="run-popover-dismiss" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_popover_term}}::id}}" popovertargetaction="hide">
+<span class="run-popover-kicker">RULE TERM</span>
+<span class="run-popover-title">{{dictelement::{{slot::run_popover_term}}::label}}</span>
+<span class="run-popover-copy">{{dictelement::{{slot::run_popover_term}}::tooltip}}</span>
+<span class="run-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
+{{/each}}
 </div>
 </div>
 {{/each}}

@@ -33,6 +33,11 @@
             and value ~= -math.huge
     end
 
+    local function stealthCostForMood(card, mood)
+        local costs = card.stealthCostByMood
+        return type(costs) == "table" and costs[mood] or card.base.stealthCost
+    end
+
     local function isInteger(value, minimum)
         return isFinite(value)
             and value % 1 == 0
@@ -825,7 +830,7 @@
                 return false, modifierErrors
             end
             local modifiers = modifierReport.modifiers
-            local rawCost = card.base.stealthCost
+            local rawCost = stealthCostForMood(card, working.state.character.mood)
             local rawDamage = card.base.resistanceDamage
             local finalCost = math.max(0, rawCost)
             local finalDamage = math.max(0, rawDamage)

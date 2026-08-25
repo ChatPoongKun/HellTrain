@@ -822,6 +822,16 @@ aria-label="현재 카드를 초기 덱에 추가"
 </button>
 </div>
 {{/each}}
+{{#each::keep {{dictelement::{{slot::setup_offer_card}}::terms}} as setup_popover_term}}
+<div id="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_popover_term}}::id}}" class="draft-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{slot::setup_popover_term}}::label}} 규칙 용어 정보">
+<button type="button" class="draft-popover-dismiss" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_popover_term}}::id}}" popovertargetaction="hide">
+<span class="draft-popover-kicker">RULE TERM</span>
+<span class="draft-popover-title">{{dictelement::{{slot::setup_popover_term}}::label}}</span>
+<span class="draft-popover-copy">{{dictelement::{{slot::setup_popover_term}}::tooltip}}</span>
+<span class="draft-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
+{{/each}}
 </div>
 </div>
 {{/each}}

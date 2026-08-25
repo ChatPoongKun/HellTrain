@@ -267,6 +267,7 @@
             ruleLines = presentation.card.ruleLines,
             actionTag = presentation.card.actionTag,
             mechanisms = presentation.card.mechanisms,
+            terms = presentation.card.terms,
             baseStealthCost = card.base.stealthCost,
             baseResistanceDamage = card.base.resistanceDamage,
             ownedCopies = ownedCopies,
@@ -411,7 +412,7 @@
         if type(value.label) ~= "string" or value.label == "" then
             addError(errors, "invalid_tag_label", path .. ".label", "태그 표시명이 필요합니다.")
         end
-        if value.tagKind ~= "action" and value.tagKind ~= "mechanism" then
+        if value.tagKind ~= "action" and value.tagKind ~= "mechanism" and value.tagKind ~= "term" then
             addError(errors, "invalid_tag_type", path .. ".tagKind", "tagKind가 올바르지 않습니다.")
         elseif expectedTagKind ~= nil and value.tagKind ~= expectedTagKind then
             addError(errors, "tag_role_mismatch", path .. ".tagKind", "이 위치의 태그 종류가 올바르지 않습니다.")
@@ -482,6 +483,22 @@
         end
     end
 
+    local function validateTerms(value, path, errors)
+        local length = getArrayLength(value, path, errors)
+        if length == nil then return end
+        local seen = {}
+        for index = 1, length do
+            local tag = value[index]
+            validateTagView(tag, path .. "[" .. index .. "]", errors, "term")
+            if type(tag) == "table" and type(tag.id) == "string" then
+                if seen[tag.id] then
+                    addError(errors, "duplicate_term", path .. "[" .. index .. "].id", "규칙 용어가 중복되었습니다.")
+                end
+                seen[tag.id] = true
+            end
+        end
+    end
+
     local function validateOfferCard(card, path, expectedSlot, deckCopies, seenCards, errors)
         if type(card) ~= "table" then
             addError(errors, "invalid_offer_card", path, "제안 카드가 테이블이 아닙니다.")
@@ -495,6 +512,7 @@
             ruleLines = true,
             actionTag = true,
             mechanisms = true,
+            terms = true,
             baseStealthCost = true,
             baseResistanceDamage = true,
             ownedCopies = true,
@@ -516,6 +534,7 @@
         validateRuleLines(card.ruleLines, path .. ".ruleLines", errors)
         validateTagView(card.actionTag, path .. ".actionTag", errors, "action")
         validateMechanisms(card.mechanisms, path .. ".mechanisms", errors)
+        validateTerms(card.terms, path .. ".terms", errors)
         if not isFinite(card.baseStealthCost) or card.baseStealthCost < 0 then
             addError(errors, "invalid_stealth_cost", path .. ".baseStealthCost", "기본 은폐 비용은 0 이상의 유한한 숫자여야 합니다.")
         end

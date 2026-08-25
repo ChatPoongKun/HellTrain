@@ -482,6 +482,7 @@
             ruleLines = presentation.card.ruleLines,
             actionTag = presentation.card.actionTag,
             mechanisms = presentation.card.mechanisms,
+            terms = presentation.card.terms,
             baseStealthCost = card.base.stealthCost,
             baseResistanceDamage = card.base.resistanceDamage,
             ownedCopies = ownedCopies,
@@ -641,7 +642,7 @@
         if value.kind ~= "tag" or not isAsciiId(value.id) then
             addError(errors, "invalid_tag_identity", path, "태그 View 식별자가 올바르지 않습니다.")
         end
-        if value.tagKind ~= "action" and value.tagKind ~= "mechanism" then
+        if value.tagKind ~= "action" and value.tagKind ~= "mechanism" and value.tagKind ~= "term" then
             addError(errors, "invalid_tag_kind", path .. ".tagKind", "태그 종류가 올바르지 않습니다.")
         elseif expectedKind ~= nil and value.tagKind ~= expectedKind then
             addError(errors, "tag_kind_mismatch", path .. ".tagKind", "이 위치의 태그 종류가 다릅니다.")
@@ -700,6 +701,7 @@
             ruleLines = true,
             actionTag = true,
             mechanisms = true,
+            terms = true,
             baseStealthCost = true,
             baseResistanceDamage = true,
             ownedCopies = true,
@@ -725,6 +727,20 @@
                         addError(errors, "duplicate_mechanism", path .. ".mechanisms[" .. index .. "]", "메커니즘이 중복되었습니다.")
                     end
                     seen[mechanism.id] = true
+                end
+            end
+        end
+        local termCount = getArrayLength(card.terms, path .. ".terms", errors)
+        if termCount ~= nil then
+            local seen = {}
+            for index = 1, termCount do
+                local term = card.terms[index]
+                validateTagView(term, path .. ".terms[" .. index .. "]", errors, "term")
+                if type(term) == "table" and type(term.id) == "string" then
+                    if seen[term.id] then
+                        addError(errors, "duplicate_term", path .. ".terms[" .. index .. "]", "규칙 용어가 중복되었습니다.")
+                    end
+                    seen[term.id] = true
                 end
             end
         end
