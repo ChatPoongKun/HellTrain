@@ -52,7 +52,7 @@
         for _, value in ipairs(rules) do append(value) end
 
         registry = resolveRegistry(registry)
-        for _, collectionName in ipairs({ "actionTags", "mechanisms" }) do
+        for _, collectionName in ipairs({ "actionTags", "mechanisms", "ruleTerms" }) do
             append("registry." .. collectionName)
             local collection = type(registry) == "table" and registry[collectionName] or nil
             local keys = {}
@@ -123,6 +123,11 @@
             and value == value
             and value ~= math.huge
             and value ~= -math.huge
+    end
+
+    local function stealthCostForMood(card, mood)
+        local costs = card.stealthCostByMood
+        return type(costs) == "table" and costs[mood] or card.base.stealthCost
     end
 
     local function isInteger(value, minimum)
@@ -310,12 +315,17 @@
             and type(registry.mechanisms) == "table"
             and registry.mechanisms[tagId]
             or nil
+        local ruleTerm = type(registry) == "table"
+            and type(registry.ruleTerms) == "table"
+            and registry.ruleTerms[tagId]
+            or nil
 
-        if action and mechanism then
-            addError(errors, "tag_registry_collision", path, "행동 태그와 메커니즘 ID가 충돌합니다: " .. tagId)
+        local matchCount = (action and 1 or 0) + (mechanism and 1 or 0) + (ruleTerm and 1 or 0)
+        if matchCount > 1 then
+            addError(errors, "tag_registry_collision", path, "태그와 규칙 용어 ID가 충돌합니다: " .. tagId)
             return nil
         end
-        local entry = action or mechanism
+        local entry = action or mechanism or ruleTerm
         if not entry then
             addError(errors, "unknown_tag_token", path, "등록되지 않은 태그입니다: " .. tagId)
             return nil
@@ -330,7 +340,7 @@
             kind = "tag",
             id = tagId,
             label = entry.label,
-            tagKind = action and "action" or "mechanism",
+            tagKind = action and "action" or (mechanism and "mechanism" or "term"),
             tooltip = entry.tooltip,
         }
     end
@@ -403,6 +413,30 @@
         end
     end
 
+    local function findNextRuleTerm(source, cursor, registry)
+        registry = resolveRegistry(registry)
+        local ruleTerms = type(registry) == "table" and registry.ruleTerms or nil
+        local nextStart, nextId
+        for id, entry in pairs(type(ruleTerms) == "table" and ruleTerms or {}) do
+            local label = type(entry) == "table" and entry.label or nil
+            if type(label) == "string" and label ~= "" then
+                local searchFrom = cursor
+                while searchFrom <= #source do
+                    local termStart, termEnd = string.find(source, label, searchFrom, true)
+                    if not termStart then break end
+                    if string.find(string.sub(source, termEnd + 1), "^%s+%d") then
+                        if nextStart == nil or termStart < nextStart then
+                            nextStart, nextId = termStart, id
+                        end
+                        break
+                    end
+                    searchFrom = termEnd + 1
+                end
+            end
+        end
+        return nextStart, nextId
+    end
+
     local function tokenizeTags(source, registry, sourcePath)
         local errors = {}
         sourcePath = sourcePath or "$"
@@ -415,31 +449,38 @@
         local cursor = 1
         while cursor <= #source do
             local tokenStart = string.find(source, "::tag[", cursor, true)
-            if not tokenStart then
+            local termStart, termId = findNextRuleTerm(source, cursor, registry)
+            if not tokenStart and not termStart then
                 appendText(segments, string.sub(source, cursor))
                 break
             end
 
-            appendText(segments, string.sub(source, cursor, tokenStart - 1))
-            local idStart = tokenStart + #"::tag["
-            local tokenCloseStart, tokenCloseEnd = string.find(source, "]::", idStart, true)
-            if not tokenCloseStart then
-                addError(errors, "malformed_tag_token", sourcePath, "닫히지 않은 태그 토큰이 있습니다.")
-                return failure(errors)
-            end
+            if termStart and (not tokenStart or termStart < tokenStart) then
+                appendText(segments, string.sub(source, cursor, termStart - 1))
+                local term = lookupTag(registry, termId, sourcePath, errors)
+                if not term then return failure(errors) end
+                table.insert(segments, term)
+                cursor = termStart + #term.label
+            else
+                appendText(segments, string.sub(source, cursor, tokenStart - 1))
+                local idStart = tokenStart + #"::tag["
+                local tokenCloseStart, tokenCloseEnd = string.find(source, "]::", idStart, true)
+                if not tokenCloseStart then
+                    addError(errors, "malformed_tag_token", sourcePath, "닫히지 않은 태그 토큰이 있습니다.")
+                    return failure(errors)
+                end
 
-            local tagId = string.sub(source, idStart, tokenCloseStart - 1)
-            if not isAsciiId(tagId) then
-                addError(errors, "malformed_tag_token", sourcePath, "태그 ID는 소문자 ASCII ID여야 합니다: " .. tagId)
-                return failure(errors)
-            end
+                local tagId = string.sub(source, idStart, tokenCloseStart - 1)
+                if not isAsciiId(tagId) then
+                    addError(errors, "malformed_tag_token", sourcePath, "태그 ID는 소문자 ASCII ID여야 합니다: " .. tagId)
+                    return failure(errors)
+                end
 
-            local tag = lookupTag(registry, tagId, sourcePath, errors)
-            if not tag then
-                return failure(errors)
+                local tag = lookupTag(registry, tagId, sourcePath, errors)
+                if not tag then return failure(errors) end
+                table.insert(segments, tag)
+                cursor = tokenCloseEnd + 1
             end
-            table.insert(segments, tag)
-            cursor = tokenCloseEnd + 1
         end
 
         if #source == 0 then
@@ -628,11 +669,18 @@
             end
         end
 
+        local descriptionSegments = tokenizeForBuild(card.description, registry, path .. ".description", errors)
+        local ruleLines = buildRuleLines(card.rules, registry, path .. ".rules", errors)
+        local terms = {}
+        for _, tag in ipairs(collectRelatedTags({}, descriptionSegments, ruleLines)) do
+            if tag.tagKind == "term" then terms[#terms + 1] = tag end
+        end
+
         return {
             cardId = card.id,
             name = card.name,
-            descriptionSegments = tokenizeForBuild(card.description, registry, path .. ".description", errors),
-            ruleLines = buildRuleLines(card.rules, registry, path .. ".rules", errors),
+            descriptionSegments = descriptionSegments,
+            ruleLines = ruleLines,
             actionTag = actionTag or {
                 kind = "tag",
                 id = "invalid",
@@ -641,6 +689,7 @@
                 tooltip = "태그 정보를 불러오지 못했습니다.",
             },
             mechanisms = mechanisms,
+            terms = terms,
         }
     end
 
@@ -1194,13 +1243,14 @@
             local summary = buildSafeCardSummary(card, data.registry, "$.hand.items[" .. slot .. "]", errors)
             if summary then
                 local baseStealthCost = card.base.stealthCost
+                local finalStealthCost = stealthCostForMood(card, displayState.character.mood)
                 local baseResistanceDamage = card.base.resistanceDamage
                 local playable = true
                 local reasonCode = "none"
                 if locked then
                     playable = false
                     reasonCode = phase == "awaitingOutput" and "awaiting_output" or "battle_ended"
-                elseif displayState.player.stealth <= baseStealthCost then
+                elseif displayState.player.stealth <= finalStealthCost then
                     playable = false
                     reasonCode = "insufficient_stealth"
                 end
@@ -1284,7 +1334,7 @@
                     hasEffectChoices = #effectChoices > 0,
                     selectedEffectChoice = selectedChoice,
                     baseStealthCost = baseStealthCost,
-                    finalStealthCost = baseStealthCost,
+                    finalStealthCost = finalStealthCost,
                     baseResistanceDamage = baseResistanceDamage,
                     finalResistanceDamage = baseResistanceDamage,
                     playable = playable,
@@ -1486,7 +1536,7 @@
         if type(value.label) ~= "string" or value.label == "" then
             addError(errors, "invalid_tag_label", path .. ".label", "태그 표시명이 필요합니다.")
         end
-        if value.tagKind ~= "action" and value.tagKind ~= "mechanism" then
+        if value.tagKind ~= "action" and value.tagKind ~= "mechanism" and value.tagKind ~= "term" then
             addError(errors, "invalid_tag_type", path .. ".tagKind", "tagKind가 올바르지 않습니다.")
         elseif expectedTagKind and value.tagKind ~= expectedTagKind then
             addError(errors, "tag_role_mismatch", path .. ".tagKind", "이 위치의 태그 종류는 " .. expectedTagKind .. "이어야 합니다.")
@@ -1558,6 +1608,7 @@
             ruleLines = true,
             actionTag = true,
             mechanisms = true,
+            terms = true,
         }, path, errors)
         if not isAsciiId(value.cardId) then
             addError(errors, "invalid_card_id", path .. ".cardId", "카드 ID가 올바르지 않습니다.")
@@ -1569,6 +1620,7 @@
         validateRuleLines(value.ruleLines, path .. ".ruleLines", errors)
         validateTagView(value.actionTag, path .. ".actionTag", errors, "action")
         validateTagArray(value.mechanisms, path .. ".mechanisms", errors, "mechanism")
+        validateTagArray(value.terms, path .. ".terms", errors, "term")
     end
 
     local function validateEffectSourceView(value, path, errors)

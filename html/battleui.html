@@ -442,7 +442,7 @@
 {{#each {{tempvar::battle_view_tag_glossary}} glossaryTag}}
 <div id="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-tag-{{dict_element::{{slot::glossaryTag}}::id}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{slot::glossaryTag}}::label}} 태그 정보">
 <button type="button" class="ht-popover-dismiss" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-tag-{{dict_element::{{slot::glossaryTag}}::id}}" popovertargetaction="hide">
-<span class="ht-popover-kicker">{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::action}}}}ACTION TAG{{/if}}{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::mechanism}}}}MECHANISM{{/if}}</span>
+<span class="ht-popover-kicker">{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::action}}}}ACTION TAG{{/if}}{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::mechanism}}}}MECHANISM{{/if}}{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::term}}}}RULE TERM{{/if}}</span>
 <span class="ht-popover-title">{{dict_element::{{slot::glossaryTag}}::label}}</span>
 <span class="ht-popover-copy">{{dict_element::{{slot::glossaryTag}}::tooltip}}</span>
 <span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
