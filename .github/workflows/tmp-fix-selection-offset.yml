@@ -38,15 +38,15 @@ jobs:
 
           old_count = schema.count(old)
           new_count = schema.count(new)
-          if old_count == 2:
+          if old_count == 1:
               schema = schema.replace(old, new)
-          elif old_count == 0 and new_count == 2:
+          elif old_count == 0 and new_count == 1:
               pass
           else:
               raise SystemExit(f'unexpected stateSchema formula counts: old={old_count}, new={new_count}')
 
           schema_path.write_text(schema, encoding='utf-8')
-          if schema.count(new) != 2 or old in schema:
+          if schema.count(new) != 1 or old in schema:
               raise SystemExit('stateSchema weight offset formula replacement verification failed')
           PY
       - name: Regression check mixed-sign candidate scores
