@@ -1154,15 +1154,29 @@
         return writeStored(KEYS.submission, nil)
     end
 
-    local function isExactFiller(message)
+    local function isExactSayNothing(message)
         return type(message) == "table"
             and message.role == "user"
-            and (message.data == SAY_NOTHING or message.data == TURN_SUBMIT_MARKER)
+            and message.data == SAY_NOTHING
+    end
+
+    local function isExactFiller(message)
+        return isExactSayNothing(message)
+            or (type(message) == "table"
+                and message.role == "user"
+                and message.data == TURN_SUBMIT_MARKER)
+    end
+
+    local function isRisuErrorResponse(message)
+        return type(message) == "table"
+            and message.role == "char"
+            and type(message.data) == "string"
+            and string.find(message.data, "```risuerror", 1, true) ~= nil
     end
 
     local function createPlannedChatAnchor(chat)
         local logicalLength = #chat
-        while logicalLength > 0 and isExactFiller(chat[logicalLength]) do
+        while logicalLength > 0 and isExactSayNothing(chat[logicalLength]) do
             logicalLength = logicalLength - 1
         end
         local prefixMessageCount = logicalLength
@@ -1363,7 +1377,7 @@
         while true do
             local last = current[#current]
             if #current <= (minimumLength or 0)
-                or not isExactFiller(last) then
+                or not isExactSayNothing(last) then
                 return current, removedCount, nil
             end
             if type(removeChat) ~= "function" then
@@ -1396,6 +1410,40 @@
             current = after
             removedCount = removedCount + 1
         end
+    end
+
+    local function ensureTurnBoundary(chat)
+        local last = chat[#chat]
+        if type(last) == "table" and last.role == "user" then
+            return chat, false, nil
+        end
+        if type(addChat) ~= "function" then
+            return nil, false, {
+                makeError("chat_write_unavailable", "$.host.addChat", "리롤 경계 메시지를 추가할 addChat 호스트 함수를 찾을 수 없습니다."),
+            }
+        end
+        local ok, addError = pcall(addChat, triggerId, "user", TURN_SUBMIT_MARKER)
+        if not ok then
+            return nil, false, {
+                makeError("turn_boundary_add_failed", "$.chat", "리롤 경계 메시지를 추가하지 못했습니다: " .. tostring(addError)),
+            }
+        end
+        local after, readErrors = readChat()
+        if readErrors then return nil, false, readErrors end
+        if #after ~= #chat + 1 or not isExactFiller(after[#after])
+            or after[#after].data ~= TURN_SUBMIT_MARKER then
+            return nil, false, {
+                makeError("turn_boundary_add_not_persisted", "$.chat", "리롤 경계 메시지 추가가 저장되지 않았습니다."),
+            }
+        end
+        for index = 1, #chat do
+            if not deepEqual(after[index], chat[index]) then
+                return nil, false, {
+                    makeError("turn_boundary_add_mismatch", "$.chat[" .. index .. "]", "리롤 경계 메시지 추가가 앞선 대화를 변경했습니다."),
+                }
+            end
+        end
+        return after, true, nil
     end
 
     local function removeRecoveryResponse(chat, luaIndex, expectedFingerprint)
@@ -2250,7 +2298,7 @@
                 makeError("aftermath_output_blank", "$.chat", "빈 자유행동 응답은 확정할 수 없습니다."),
             }
         end
-        if string.find(response.data, "```risuerror", 1, true) ~= nil then
+        if isRisuErrorResponse(response) then
             return {
                 makeError("aftermath_output_error", "$.chat", "LLM 오류 응답은 자유행동 장면으로 확정할 수 없습니다."),
             }
@@ -4018,9 +4066,8 @@
         end
         local chat, chatErrors = readChat()
         if chatErrors then return failure(chatErrors) end
-        local removedCount
-        chat, removedCount, chatErrors = removeTrailingSayNothing(chat)
-        if chatErrors then return failure(chatErrors) end
+        local removedCount = 0
+        local markerAdded = false
 
         local storedBinding, storedBindingErrors = readStored(KEYS.activeRequest, false)
         if storedBindingErrors then return failure(storedBindingErrors) end
@@ -4059,6 +4106,10 @@
                 )
                 if committedTopologyErrors then return failure(committedTopologyErrors) end
                 if not committedTopology.responsePresent then
+                    if committedTopology.fillerCount > 0 then
+                        chat, removedCount, chatErrors = removeTrailingSayNothing(chat)
+                        if chatErrors then return failure(chatErrors) end
+                    end
                     local retried = retryCommittedOutput(
                         storedBinding,
                         chat,
@@ -4106,6 +4157,9 @@
                 return recoverLockedRequest(storedBinding, chat, staticData, authority)
             end
         end
+
+        chat, removedCount, chatErrors = removeTrailingSayNothing(chat)
+        if chatErrors then return failure(chatErrors) end
 
         local selectedPending
         local sourceName
@@ -4227,6 +4281,9 @@
             local topology, topologyErrors = inspectPreparingTopology(binding, chat)
             if topologyErrors then return failure(topologyErrors) end
         else
+            local boundaryErrors
+            chat, markerAdded, boundaryErrors = ensureTurnBoundary(chat)
+            if boundaryErrors then return failure(boundaryErrors) end
             local chatAnchor, anchorErrors = createPlannedChatAnchor(chat)
             if anchorErrors then return failure(anchorErrors) end
             local bindingErrors
@@ -4292,7 +4349,7 @@
             reused = reused,
             removedSayNothing = removedCount > 0,
             removedSayNothingCount = removedCount,
-            markerAdded = false,
+            markerAdded = markerAdded,
             attemptNumber = binding.attemptNumber,
             recoveredAbandonedRequest = false,
             zeroOutputRetry = false,
@@ -4568,6 +4625,11 @@
             if chatErrors then return failure(chatErrors) end
             local topology, topologyErrors = inspectObservedOutput(binding, chat, false)
             if topologyErrors then return failure(topologyErrors) end
+            if isRisuErrorResponse(chat[topology.responseLuaIndex]) then
+                return failure({
+                    makeError("battle_output_error", "$.chat", "LLM 오류 응답은 전투 턴으로 확정할 수 없습니다."),
+                })
+            end
             if binding.outputObserved == nil then
                 local observedBinding, cloneError = cloneJson(binding, "$.activeRequest")
                 if cloneError then return failure({ cloneError }) end
