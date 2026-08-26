@@ -1754,7 +1754,7 @@
 
         local expectedOffset = nil
         if minimumPoolScore ~= nil then
-            expectedOffset = anyPositivePoolScore and 0 or (1 - minimumPoolScore)
+            expectedOffset = minimumPoolScore <= 0 and (1 - minimumPoolScore) or 0
             if not isSafeInteger(expectedOffset, 0) then
                 addError(errors, "invalid_selection_weight_offset", path .. ".weightOffset", "후보 점수에서 안전한 평행이동 값을 계산할 수 없습니다.")
             elseif selection.weightOffset ~= expectedOffset then
