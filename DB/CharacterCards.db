@@ -129,10 +129,10 @@ return {
         jiyoung_turn_to_corner = card(
             "jiyoung_turn_to_corner", "구석으로 몸을 돌리다", "evade", {},
             "::tag[evade]:: 행동으로 벽과 좌석 쪽으로 몸을 돌려 거리를 벌리고 저항을 회복합니다.",
-            { "저항을 4 회복합니다." },
+            { "저항을 3 회복합니다." },
             "벽과 좌석 쪽으로 몸을 돌려 최대한 거리를 벌린다.",
             "구석으로 피하면 더는 가까이 오기 어렵겠지...",
-            { resolve = function(context) return { recoverResistance(4) } end }
+            { resolve = function(context) return { recoverResistance(3) } end }
         ),
 
         jiyoung_silent_glare = planCard(
@@ -159,12 +159,12 @@ return {
         jiyoung_hug_bag_close = card(
             "jiyoung_hug_bag_close", "가방을 끌어안다", "block", {},
             "::tag[block]:: 행동으로 가방을 품에 꼭 끌어안고 몸을 웅크려 흔들린 마음을 추스릅니다.",
-            { "저항을 2 회복합니다.", "현재 무드가 혼란 또는 순응이면 대신 저항을 4 회복합니다." },
+            { "저항을 2 회복합니다.", "현재 무드가 혼란 또는 순응이면 대신 저항을 3 회복합니다." },
             "가방을 가슴 앞에 꼭 끌어안고 어깨를 움츠린 채 몸을 작게 만든다.",
             "당황하지 말자. 그냥 내 공간만 지키면 돼...",
             {
                 resolve = function(context)
-                    local amount = (context.mood == "confusion" or context.mood == "compliance") and 4 or 2
+                    local amount = (context.mood == "confusion" or context.mood == "compliance") and 3 or 2
                     return { recoverResistance(amount) }
                 end,
             }
@@ -208,7 +208,7 @@ return {
             { "지속 2턴, 충전 1.", "다음 플레이어 카드가 선언되면 은폐를 1 잃고 냉각 2." },
             "휴대전화를 양손으로 꼭 쥔 채 화면을 켜고 상대의 다음 움직임을 살핀다.",
             "또 움직이면... 그땐 정말 누군가에게 보여줄 거야.",
-            "상대가 다시 움직이자 휴대전화를 들어 보이며 몸을 뒤로 빼고 시선을 끊는다.",
+            "상대가 움직이자 휴대전화를 들어 보이며 몸을 뒤로 빼고 시선을 끊는다.",
             "이제 못 본 척하지 않을 거야.",
             2, 1,
             function(context, event) return { loseStealth(1, "plan"), cool(context, 2, "plan") } end
@@ -218,10 +218,10 @@ return {
         seoa_document_bag_guard = card(
             "seoa_document_bag_guard", "서류 가방으로 가로막기", "block", {},
             "::tag[block]:: 행동으로 단단한 서류 가방을 몸 앞에 세워 저항을 회복합니다.",
-            { "저항을 4 회복합니다." },
+            { "저항을 3 회복합니다." },
             "서류 가방을 몸 앞에 비스듬히 세워 빈틈없이 거리를 막는다.",
             "업무도 끝났는데 이런 일에 시간을 낭비할 수는 없어.",
-            { resolve = function(context) return { recoverResistance(4) } end }
+            { resolve = function(context) return { recoverResistance(3) } end }
         ),
 
         seoa_measured_warning = card(
@@ -426,11 +426,11 @@ return {
         -- 서미령: 안정적인 제어. 회복과 냉각으로 시간을 벌고 반발을 차분히 쌓는다.
         miryeong_draw_cardigan_closed = card(
             "miryeong_draw_cardigan_closed", "카디건을 여미다", "block", {},
-            "::tag[block]:: 행동으로 카디건을 차분하게 여미고 몸 앞을 가려 저항을 크게 회복합니다.",
-            { "저항을 5 회복합니다." },
+            "::tag[block]:: 행동으로 카디건을 차분하게 여미고 몸 앞을 가려 저항을 회복합니다.",
+            { "저항을 3 회복합니다." },
             "흐트러진 카디건의 앞섶을 차분히 여미고 팔로 몸 앞을 감싼다.",
             "서두르지 말고, 먼저 몸을 제대로 가리자.",
-            { resolve = function(context) return { recoverResistance(5) } end }
+            { resolve = function(context) return { recoverResistance(3) } end }
         ),
 
         miryeong_gentle_boundary = card(
@@ -546,11 +546,11 @@ return {
 
         agnes_change_carriage = card(
             "agnes_change_carriage", "다른 칸으로 향하기", "evade", {},
-            "::tag[evade]:: 행동으로 다음 객차로 이동하려 출입문 앞에 서서 저항을 크게 회복합니다.",
-            { "저항을 5 회복합니다." },
+            "::tag[evade]:: 행동으로 다음 객차로 이동하려 출입문 앞에 서서 저항을 회복합니다.",
+            { "저항을 3 회복합니다." },
             "십자가를 한 손에 쥐고 다음 객차로 이어지는 출입문 앞으로 빠르게 자리를 옮긴다.",
             "이 자리를 피하는 것이 가장 현명해.",
-            { resolve = function(context) return { recoverResistance(5) } end }
+            { resolve = function(context) return { recoverResistance(3) } end }
         ),
 
         agnes_ask_nearby_passenger = planCard(
@@ -577,12 +577,12 @@ return {
         agnes_center_in_prayer = card(
             "agnes_center_in_prayer", "짧게 기도하다", "block", {},
             "::tag[block]:: 행동으로 짧은 기도를 되뇌며 흔들린 마음을 다잡습니다. 혼란이나 순응에서는 회복량이 커집니다.",
-            { "저항을 2 회복합니다.", "현재 무드가 혼란 또는 순응이면 대신 저항을 4 회복합니다." },
+            { "저항을 2 회복합니다.", "현재 무드가 혼란 또는 순응이면 대신 저항을 3 회복합니다." },
             "십자가를 손안에 감싸 쥐고 눈을 감은 채 짧은 기도문을 천천히 되뇐다.",
             "두려움도 욕망도 지나가는 감정일 뿐이야. 내가 선택할 수 있어.",
             {
                 resolve = function(context)
-                    local amount = (context.mood == "confusion" or context.mood == "compliance") and 4 or 2
+                    local amount = (context.mood == "confusion" or context.mood == "compliance") and 3 or 2
                     return { recoverResistance(amount) }
                 end,
             }
