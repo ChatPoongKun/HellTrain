@@ -417,12 +417,30 @@
                 addError(errors, "battle_history_last_turn_mismatch", "$.turns[" .. count .. "].turnId", "전투 이력의 마지막 턴과 권위 상태의 마지막 확정 턴이 다릅니다.")
             end
             if type(last) == "table" and type(last.finish) == "table" then
-                if type(state.player) == "table" and state.player.stealth ~= last.finish.stealth then
+                local currentStealth = type(state.player) == "table" and state.player.stealth or nil
+                local currentResistance = type(state.character) == "table" and state.character.resistance or nil
+                local currentMood = type(state.character) == "table" and state.character.mood or nil
+                local receipt = state.status == "active" and state.turnStartReceipt or nil
+                local baseline = type(receipt) == "table" and receipt.baseline or nil
+                if isInteger(state.turnNumber, 1)
+                    and count == state.turnNumber - 1
+                    and state.lastCommittedTurnId == last.turnId
+                    and type(receipt) == "table"
+                    and receipt.turnNumber == state.turnNumber
+                    and type(baseline) == "table"
+                    and isFinite(baseline.stealth)
+                    and isFinite(baseline.resistance)
+                    and type(baseline.mood) == "string" then
+                    currentStealth = baseline.stealth
+                    currentResistance = baseline.resistance
+                    currentMood = baseline.mood
+                end
+                if type(state.player) == "table" and currentStealth ~= last.finish.stealth then
                     addError(errors, "battle_history_stealth_mismatch", "$.turns[" .. count .. "].finish.stealth", "마지막 이력의 은폐가 현재 상태와 다릅니다.")
                 end
                 if type(state.character) == "table"
-                    and (state.character.resistance ~= last.finish.resistance
-                        or state.character.mood ~= last.finish.mood) then
+                    and (currentResistance ~= last.finish.resistance
+                        or currentMood ~= last.finish.mood) then
                     addError(errors, "battle_history_character_mismatch", "$.turns[" .. count .. "].finish", "마지막 이력의 저항 또는 무드가 현재 상태와 다릅니다.")
                 end
                 if state.status ~= last.finish.status then
