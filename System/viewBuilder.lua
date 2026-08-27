@@ -1247,6 +1247,40 @@
                 local baseResistanceDamage = card.base.resistanceDamage
                 local playable = true
                 local reasonCode = "none"
+                local cardContext = {
+                    turn = displayState.turnNumber,
+                    phase = "player_selection",
+                    mood = displayState.character.mood,
+                    player = { stealth = displayState.player.stealth },
+                    character = {
+                        resistance = displayState.character.resistance,
+                        moodTokens = displayState.character.moodTokens,
+                        publicActionTag = displayState.characterIntent.publicActionTag,
+                    },
+                    card = {
+                        id = card.id,
+                        instanceId = instance.instanceId,
+                        owner = card.owner,
+                        actionTag = card.actionTag,
+                    },
+                }
+                if not locked and card.canPlay ~= nil then
+                    local canPlayReport, canPlayCallError = callRuntime(
+                        "effectEngine",
+                        "evaluateCanPlay",
+                        data,
+                        card.id,
+                        cardContext
+                    )
+                    if canPlayCallError ~= nil then
+                        table.insert(errors, canPlayCallError)
+                    elseif type(canPlayReport) ~= "table" or canPlayReport.ok ~= true then
+                        appendNestedErrors(errors, "$.hand.items[" .. slot .. "].playable", canPlayReport)
+                    elseif canPlayReport.playable ~= true then
+                        playable = false
+                        reasonCode = canPlayReport.reasonCode or "card_unavailable"
+                    end
+                end
                 if locked then
                     playable = false
                     reasonCode = phase == "awaitingOutput" and "awaiting_output" or "battle_ended"
@@ -1258,30 +1292,13 @@
                 local selectableChoiceCount = 0
                 for choiceIndex, choice in ipairs(type(card.effectChoices) == "table" and card.effectChoices or {}) do
                     local choicePath = "$.hand.items[" .. slot .. "].effectChoices[" .. choiceIndex .. "]"
-                    local choiceContext = {
-                        turn = displayState.turnNumber,
-                        phase = "player_selection",
-                        mood = displayState.character.mood,
-                        player = { stealth = displayState.player.stealth },
-                        character = {
-                            resistance = displayState.character.resistance,
-                            moodTokens = displayState.character.moodTokens,
-                            publicActionTag = displayState.characterIntent.publicActionTag,
-                        },
-                        card = {
-                            id = card.id,
-                            instanceId = instance.instanceId,
-                            owner = card.owner,
-                            actionTag = card.actionTag,
-                        },
-                    }
                     local choiceReport, choiceCallError = callRuntime(
                         "effectEngine",
                         "evaluateEffectChoice",
                         data,
                         card.id,
                         choice.id,
-                        choiceContext
+                        cardContext
                     )
                     local selectable = not locked
                         and choiceCallError == nil

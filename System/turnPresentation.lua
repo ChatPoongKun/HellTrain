@@ -57,6 +57,7 @@
         skip_actions = "남은 행동이 생략되어",
         insufficient_stealth = "은폐가 부족해",
         card_unavailable = "등록한 카드를 사용할 수 없어",
+        requires_negative_mood = "현재 무드가 의심 또는 거절이 아니어서",
     }
 
     local OUTCOME_REASONS = {
@@ -685,9 +686,12 @@
             local keyError = checkAllowedKeys(payload, { side = true, reasonCode = true, count = true }, payloadPath)
             if keyError then return nil, keyError end
             local reason = ACTION_STOP_REASONS[payload.reasonCode]
-            if not isSide(payload.side) or reason == nil or not isInteger(payload.count, 1) then
+            if not isSide(payload.side)
+                or not isAsciiId(payload.reasonCode)
+                or not isInteger(payload.count, 1) then
                 return nil, makeError("invalid_actions_stopped", payloadPath, "행동 중단 공개값이 올바르지 않습니다.")
             end
+            reason = reason or "카드 사용 조건을 만족하지 못해"
             return summary(index, event.type, reason .. " " .. sideLabel(payload.side) .. "의 카드 "
                 .. tostring(payload.count) .. "장을 처리하지 않았습니다."), nil
         elseif event.type == "card_removed" then
