@@ -261,6 +261,24 @@
         if cloneError then
             return nil, { cloneError }
         end
+        local presented, presentationErrors = callModule(
+            "turnPresentation",
+            "build",
+            pendingCopy,
+            staticData
+        )
+        if presentationErrors then
+            return nil, presentationErrors
+        end
+        if type(presented.lastTurn) ~= "table" or presented.lastTurn.available ~= true then
+            return nil, {
+                makeError(
+                    "invalid_public_presentation",
+                    "$.pendingTurn.turnResult.publicResult",
+                    "공개 턴 표시를 생성하지 못했습니다."
+                ),
+            }
+        end
         return pendingCopy, nil
     end
 

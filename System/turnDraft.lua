@@ -1098,6 +1098,21 @@
                 makeError("unknown_card", "$.instanceId", "정적 DB에서 등록 카드를 찾을 수 없습니다."),
             }
         end
+        if targetCard.canPlay ~= nil then
+            local canPlayReport, canPlayError = callModule(
+                "effectEngine",
+                "evaluateCanPlay",
+                validated.staticData,
+                targetCard.id,
+                choiceContext(validated.replay.workingState, targetCard, targetInstance)
+            )
+            if canPlayError then return nil, { canPlayError } end
+            if canPlayReport.playable ~= true then
+                return nil, {
+                    makeError("card_unavailable", "$.instanceId", "현재 상태에서는 이 카드를 사용할 수 없습니다."),
+                }
+            end
+        end
         if type(targetCard.effectChoices) == "table" and choiceId == nil then
             return nil, { makeError("effect_choice_required", "$.choiceId", "이 카드를 등록하려면 효과를 선택해야 합니다.") }
         elseif type(targetCard.effectChoices) ~= "table" and choiceId ~= nil then
