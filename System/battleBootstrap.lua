@@ -535,7 +535,7 @@
         return character, battle, errors, nil
     end
 
-    local function buildJourney(seed, staticData)
+    local function buildJourney(seed, staticData, turnLimit)
         if type(runScript) ~= "function" then
             return nil, {
                 makeError(
@@ -551,7 +551,8 @@
             "subwayJourney",
             "build",
             seed,
-            staticData
+            staticData,
+            turnLimit
         )
         if not ok then
             return nil, {
@@ -564,6 +565,7 @@
         end
         if type(report) ~= "table" or report.ok ~= true
             or not isSafeInteger(report.turnLimit, 1)
+            or report.turnLimit ~= turnLimit
             or type(report.transit) ~= "table" then
             local nestedErrors = copyErrors(report)
             if #nestedErrors == 0 then
@@ -600,7 +602,7 @@
         if planCapacityError then
             return failure({ planCapacityError })
         end
-        local journey, journeyErrors = buildJourney(normalized.seed, staticData)
+        local journey, journeyErrors = buildJourney(normalized.seed, staticData, characterBattle.turnLimit)
         if journeyErrors then
             return failure(journeyErrors)
         end
@@ -740,7 +742,7 @@
         if planCapacityError then
             return failure({ planCapacityError })
         end
-        local journey, journeyErrors = buildJourney(normalized.seed, staticData)
+        local journey, journeyErrors = buildJourney(normalized.seed, staticData, characterBattle.turnLimit)
         if journeyErrors then
             return failure(journeyErrors)
         end

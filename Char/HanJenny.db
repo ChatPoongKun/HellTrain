@@ -43,6 +43,7 @@ return {
 
             battle = {
                 startingResistance = 27,
+                turnLimit = 8,
                 startingMood = "ignore",
                 baseDrawCount = 4,
                 maxHandSize = 5,

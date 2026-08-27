@@ -1467,6 +1467,9 @@
                     if not isFiniteNonNegative(battle.startingResistance) or battle.startingResistance == 0 then
                         addError(errors, "invalid_starting_resistance", path .. ".battle.startingResistance", "시작 저항이 양수의 유한한 숫자가 아닙니다.")
                     end
+                    if not isPositiveInteger(battle.turnLimit) or battle.turnLimit < 7 or battle.turnLimit > 12 then
+                        addError(errors, "invalid_turn_limit", path .. ".battle.turnLimit", "캐릭터 제한 턴은 7 이상 12 이하의 정수여야 합니다.")
+                    end
                     if not isPositiveInteger(battle.baseDrawCount) then
                         addError(errors, "invalid_base_draw_count", path .. ".battle.baseDrawCount", "기본 드로우 수는 1 이상의 정수여야 합니다.")
                     end

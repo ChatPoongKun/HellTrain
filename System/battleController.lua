@@ -2935,7 +2935,8 @@
             "subwayJourney",
             "build",
             spec.seed,
-            staticData
+            staticData,
+            staticData.characters[spec.characterId].battle.turnLimit
         )
         if journeyErrors then
             for _, item in ipairs(journeyErrors) do
