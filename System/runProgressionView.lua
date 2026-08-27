@@ -586,6 +586,7 @@
             occupation = profile.occupation,
             appearanceSummary = appearanceSummary,
             startingResistance = battle.startingResistance,
+            turnLimit = battle.turnLimit,
             startingMood = {
                 id = mood.id,
                 label = mood.label,
@@ -768,6 +769,7 @@
             occupation = true,
             appearanceSummary = true,
             startingResistance = true,
+            turnLimit = true,
             startingMood = true,
             baseDrawCount = true,
             maxHandSize = true,
@@ -787,6 +789,9 @@
         validateString(character.appearanceSummary, path .. ".appearanceSummary", errors)
         if not isFinite(character.startingResistance) or character.startingResistance <= 0 then
             addError(errors, "invalid_starting_resistance", path .. ".startingResistance", "시작 저항은 양수여야 합니다.")
+        end
+        if not isInteger(character.turnLimit, 7, 12) then
+            addError(errors, "invalid_turn_limit", path .. ".turnLimit", "제한 턴은 7 이상 12 이하의 정수여야 합니다.")
         end
         if type(character.startingMood) ~= "table" then
             addError(errors, "invalid_starting_mood", path .. ".startingMood", "시작 무드 View가 필요합니다.")

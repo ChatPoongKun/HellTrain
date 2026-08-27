@@ -170,10 +170,15 @@
         return candidates
     end
 
-    local function build(seed, staticInput)
+    local function build(seed, staticInput, requestedTurnLimit)
         if not isSafeInteger(seed, 0) then
             return failure({
                 makeError("invalid_seed", "$.seed", "여정 생성 seed는 0 이상의 안전 정수여야 합니다."),
+            })
+        end
+        if not isSafeInteger(requestedTurnLimit, MIN_TURNS) or requestedTurnLimit > MAX_TURNS then
+            return failure({
+                makeError("invalid_turn_limit", "$.turnLimit", "제한 턴은 7 이상 12 이하의 정수여야 합니다."),
             })
         end
         local staticData = normalizeStaticData(staticInput)
@@ -190,8 +195,8 @@
         }
         local turnLimit, nextRng, rngError = nextInteger(
             rng,
-            MIN_TURNS,
-            MAX_TURNS,
+            requestedTurnLimit,
+            requestedTurnLimit,
             "$.turnLimit"
         )
         if rngError then
@@ -260,7 +265,7 @@
 
     local arguments = { ... }
     if action == "build" then
-        return build(arguments[1], arguments[2])
+        return build(arguments[1], arguments[2], arguments[3])
     end
     return failure({
         makeError("unknown_action", "$.action", "지원하지 않는 지하철 여정 작업입니다: " .. tostring(action)),

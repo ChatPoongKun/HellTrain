@@ -42,7 +42,8 @@ return {
             },
 
             battle = {
-                startingResistance = 36,
+                startingResistance = 34,
+                turnLimit = 12,
                 startingMood = "suspicion",
                 baseDrawCount = 3,
                 maxHandSize = 5,

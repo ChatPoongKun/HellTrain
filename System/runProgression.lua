@@ -788,18 +788,19 @@
         return values[1], nextRng, nil
     end
 
-    local function buildJourney(seed, staticInput)
+    local function buildJourney(seed, staticInput, turnLimit)
         local report, journeyErrors = callModule(
             "subwayJourney",
             "build",
             seed,
-            staticInput
+            staticInput,
+            turnLimit
         )
         if journeyErrors then
             return nil, journeyErrors
         end
         local errors = {}
-        if not isSafeInteger(report.turnLimit, 1) then
+        if not isSafeInteger(report.turnLimit, 1) or report.turnLimit ~= turnLimit then
             appendError(errors, "invalid_turn_limit", "$.runtime.subwayJourney.turnLimit", "여정 제한 턴이 올바르지 않습니다.")
         end
         local transit = report.transit
@@ -877,7 +878,9 @@
         environmentId,
         staticInput
     )
-        local journey, journeyErrors = buildJourney(seed, staticInput)
+        local staticData = normalizeStaticData(staticInput)
+        local turnLimit = staticData.characters[characterId].battle.turnLimit
+        local journey, journeyErrors = buildJourney(seed, staticInput, turnLimit)
         if journeyErrors then
             return nil, journeyErrors
         end
@@ -895,7 +898,9 @@
     end
 
     local function buildInitialBattleSpec(setup, staticInput)
-        local journey, journeyErrors = buildJourney(setup.battleSpec.seed, staticInput)
+        local staticData = normalizeStaticData(staticInput)
+        local turnLimit = staticData.characters[setup.selectedCharacterId].battle.turnLimit
+        local journey, journeyErrors = buildJourney(setup.battleSpec.seed, staticInput, turnLimit)
         if journeyErrors then
             return nil, journeyErrors
         end
