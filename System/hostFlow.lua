@@ -41,7 +41,7 @@ local APPROACH_REQUEST_ATTEMPTS = 1
 local UI_CONTAINER_OPEN = [[<div class="helltrain-dynamic-ui" aria-label="게임 화면">]]
 local UI_CONTAINER_EMPTY = UI_CONTAINER_OPEN .. "</div>"
 local UI_INTERACTION_MARKER = "<!--HELLTRAIN_BATTLE_INTERACTION_V1-->"
--- 전투 응답 리롤이 직전 턴 경계에서 멈추도록 marker 메시지는 숨겨서 유지한다.
+-- 생성 중 리롤이 직전 턴 경계에서 멈추도록 marker 메시지를 숨긴다. 정상 응답 뒤에는 제거된다.
 local TURN_SUBMIT_MARKER = "@@HELLTRAIN_TURN_SUBMIT_V1@@"
 local TURN_SUBMIT_HIDDEN_MARKUP = [[<style>
 [data-chat-index]:has([data-helltrain-turn-submit]) { display: none !important; }

@@ -1160,11 +1160,14 @@
             and message.data == SAY_NOTHING
     end
 
+    local function isExactTurnSubmitMarker(message)
+        return type(message) == "table"
+            and message.role == "user"
+            and message.data == TURN_SUBMIT_MARKER
+    end
+
     local function isExactFiller(message)
-        return isExactSayNothing(message)
-            or (type(message) == "table"
-                and message.role == "user"
-                and message.data == TURN_SUBMIT_MARKER)
+        return isExactSayNothing(message) or isExactTurnSubmitMarker(message)
     end
 
     local function isRisuErrorResponse(message)
@@ -1174,12 +1177,7 @@
             and string.find(message.data, "```risuerror", 1, true) ~= nil
     end
 
-    local function createPlannedChatAnchor(chat)
-        local logicalLength = #chat
-        while logicalLength > 0 and isExactSayNothing(chat[logicalLength]) do
-            logicalLength = logicalLength - 1
-        end
-        local prefixMessageCount = logicalLength
+    local function createChatAnchor(chat, prefixMessageCount)
         local fingerprint, fingerprintError = fingerprintChatRange(
             chat,
             1,
@@ -1216,6 +1214,14 @@
             }
         end
         return anchor, nil
+    end
+
+    local function createPlannedChatAnchor(chat)
+        local logicalLength = #chat
+        while logicalLength > 0 and isExactSayNothing(chat[logicalLength]) do
+            logicalLength = logicalLength - 1
+        end
+        return createChatAnchor(chat, logicalLength)
     end
 
     local function validateAnchorPrefix(binding, chat)
@@ -1444,6 +1450,58 @@
             end
         end
         return after, true, nil
+    end
+
+    local function removeSuccessfulTurnBoundary(binding, pending, chat)
+        local markerLuaIndex = binding.chatAnchor.prefixMessageCount
+        if markerLuaIndex < 1 or not isExactTurnSubmitMarker(chat[markerLuaIndex]) then
+            return binding, chat, nil
+        end
+        if markerLuaIndex + 1 ~= #chat or type(chat[#chat]) ~= "table" or chat[#chat].role ~= "char" then
+            return nil, nil, {
+                makeError("turn_boundary_cleanup_topology_mismatch", "$.chat", "정상 응답 뒤 리롤 경계 메시지 위치가 올바르지 않습니다."),
+            }
+        end
+        if type(removeChat) ~= "function" then
+            return nil, nil, {
+                makeError("chat_write_unavailable", "$.host.removeChat", "리롤 경계 메시지를 제거할 removeChat 호스트 함수를 찾을 수 없습니다."),
+            }
+        end
+        local ok, removeError = pcall(removeChat, triggerId, markerLuaIndex - 1)
+        if not ok then
+            return nil, nil, {
+                makeError("turn_boundary_remove_failed", "$.chat[" .. markerLuaIndex .. "]", "리롤 경계 메시지를 제거하지 못했습니다: " .. tostring(removeError)),
+            }
+        end
+        local after, readErrors = readChat()
+        if readErrors then return nil, nil, readErrors end
+        if #after ~= #chat - 1 then
+            return nil, nil, {
+                makeError("turn_boundary_remove_not_persisted", "$.chat", "리롤 경계 메시지 제거 뒤 대화 길이가 바뀌지 않았습니다."),
+            }
+        end
+        for index = 1, #after do
+            local previousIndex = index < markerLuaIndex and index or index + 1
+            if not deepEqual(after[index], chat[previousIndex]) then
+                return nil, nil, {
+                    makeError("turn_boundary_remove_mismatch", "$.chat[" .. index .. "]", "리롤 경계 메시지 제거가 다른 대화를 변경했습니다."),
+                }
+            end
+        end
+
+        local anchor, anchorErrors = createChatAnchor(after, markerLuaIndex - 1)
+        if anchorErrors then return nil, nil, anchorErrors end
+        local adjusted, cloneError = cloneJson(binding, "$.activeRequest")
+        if cloneError then return nil, nil, { cloneError } end
+        adjusted.chatAnchor = anchor
+        adjusted.outputObserved.responseIndex = anchor.responseIndex
+        local validationErrors = validateBinding(adjusted, pending)
+        if #validationErrors > 0 then return nil, nil, validationErrors end
+        local _, topologyErrors = inspectObservedOutput(adjusted, after, false)
+        if topologyErrors then return nil, nil, topologyErrors end
+        local writeErrors = writeStored(KEYS.activeRequest, adjusted, true)
+        if writeErrors then return nil, nil, writeErrors end
+        return adjusted, after, nil
     end
 
     local function removeRecoveryResponse(chat, luaIndex, expectedFingerprint)
@@ -4647,6 +4705,13 @@
                 if observedWriteErrors then return failure(observedWriteErrors) end
                 binding = observedBinding
             end
+            local cleanedBinding, _, cleanupErrors = removeSuccessfulTurnBoundary(
+                binding,
+                selectedPending,
+                chat
+            )
+            if cleanupErrors then return failure(cleanupErrors) end
+            binding = cleanedBinding
         end
 
         local committed, commitErrors = callModule(

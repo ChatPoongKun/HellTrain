@@ -47,6 +47,13 @@ safe = deepcopy(previous) + [{"role": "user", "data": MARKER}]
 inlay_error(safe)
 assert risu_reroll(safe) == previous + [{"role": "user", "data": MARKER}]
 
+successful = deepcopy(previous) + [
+    {"role": "user", "data": MARKER},
+    {"role": "char", "data": "turn two", "saying": "hero"},
+]
+successful.pop(-2)
+assert risu_reroll(successful) == previous
+
 prepare = CONTROLLER[CONTROLLER.index("    local function prepareGeneration()") :]
 assert "while logicalLength > 0 and isExactSayNothing" in CONTROLLER
 assert "or not isExactSayNothing(last) then" in CONTROLLER
@@ -60,6 +67,11 @@ assert prepare.index("chat, markerAdded, boundaryErrors = ensureTurnBoundary(cha
     "local chatAnchor, anchorErrors = createPlannedChatAnchor(chat)"
 )
 assert 'makeError("battle_output_error"' in CONTROLLER
+error_check = CONTROLLER.index('makeError("battle_output_error"')
+cleanup_call = CONTROLLER.index("removeSuccessfulTurnBoundary(", error_check)
+assert error_check < cleanup_call
+assert "adjusted.outputObserved.responseIndex = anchor.responseIndex" in CONTROLLER
+assert "uiTargetIndex = committedBinding.chatAnchor.responseIndex" in CONTROLLER
 assert "if data == TURN_SUBMIT_MARKER then" in HOST_FLOW
 
 print("reroll recovery check passed")
