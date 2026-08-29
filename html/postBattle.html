@@ -132,7 +132,7 @@ aria-label="{{dictelement::{{slot::run_reward_card}}::name}} 상세 보기"
 </span>
 <span class="run-card-name">{{dictelement::{{slot::run_reward_card}}::name}}</span>
 <span class="run-tags" aria-label="카드 태그">
-<button type="button" class="run-tag run-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{tempvar::run_reward_type}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{tempvar::run_reward_type}}::label}} 카드 유형 정보 보기">{{dictelement::{{tempvar::run_reward_type}}::label}}</button>
+<button type="button" class="run-tag run-is-type run-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{tempvar::run_reward_type}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{tempvar::run_reward_type}}::label}} 카드 유형 정보 보기">{{dictelement::{{tempvar::run_reward_type}}::label}}</button>
 {{#each::keep {{dictelement::{{slot::run_reward_card}}::roles}} as run_reward_role}}
 <button type="button" class="run-tag run-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_role}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::run_reward_role}}::label}} 역할 정보 보기">{{dictelement::{{slot::run_reward_role}}::label}}</button>
 {{/each}}

@@ -25,7 +25,7 @@
 <span class="ht-card-name">
 <strong>{{dict_element::{{slot::card}}::name}}</strong>
 <span class="ht-card-tags">
-<button type="button" class="ht-tag ht-tip-trigger" popovertarget="htp-{{tempvar::battle_interaction_battle_id}}-{{tempvar::battle_interaction_turn_id}}-tag-{{dict_element::{{dict_element::{{slot::card}}::cardType}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::card}}::cardType}}::label}} 카드 유형 정보 보기">{{dict_element::{{dict_element::{{slot::card}}::cardType}}::label}}</button>
+<button type="button" class="ht-tag ht-tag--type ht-tip-trigger" popovertarget="htp-{{tempvar::battle_interaction_battle_id}}-{{tempvar::battle_interaction_turn_id}}-tag-{{dict_element::{{dict_element::{{slot::card}}::cardType}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{slot::card}}::cardType}}::label}} 카드 유형 정보 보기">{{dict_element::{{dict_element::{{slot::card}}::cardType}}::label}}</button>
 {{#each {{dict_element::{{slot::card}}::roles}} role}}
 <button type="button" class="ht-tag ht-tip-trigger" popovertarget="htp-{{tempvar::battle_interaction_battle_id}}-{{tempvar::battle_interaction_turn_id}}-tag-{{dict_element::{{slot::role}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{slot::role}}::label}} 역할 정보 보기">{{dict_element::{{slot::role}}::label}}</button>
 {{/each}}

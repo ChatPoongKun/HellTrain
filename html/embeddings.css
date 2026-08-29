@@ -1316,6 +1316,11 @@ font-size: 7px;
 font-weight: 800;
 white-space: nowrap;
 }
+.ht-tag--type {
+border-color: rgba(226, 177, 83, .34);
+color: #efc978;
+background: rgba(226, 177, 83, .1);
+}
 .ht-tag--mechanism {
 border-color: rgba(91, 145, 216, .28);
 color: #9ec3ef;
@@ -2463,6 +2468,12 @@ border-radius: 3px;
 background: rgba(216, 82, 82, .07);
 font-size: 7px;
 font-weight: 850;
+}
+
+.run-flow .run-tag.run-is-type {
+color: #efc978;
+border-color: rgba(226, 177, 83, .34);
+background: rgba(226, 177, 83, .1);
 }
 
 .run-flow .run-tag.run-is-mechanism,
