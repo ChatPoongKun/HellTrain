@@ -5,20 +5,26 @@
     local DEFAULT_PLAYER_PLAN_CAPACITY = 1
 
     local PLAYER_CARD_IDS = {
-        "subtle_approach",
-        "accidental_brush",
-        "play_it_cool",
-        "read_the_room",
-        "pin_down",
-        "hypnotic_whisper",
+        "pc_c01_standard",
+        "pc_c03_heavy_damage",
+        "pc_c19_recovery_mood",
+        "pc_c26_choice_control",
+        "pc_c28_chain_standard",
+        "pc_c33_plan_recovery",
     }
 
     local CHARACTER_ID = "yoo_jiyoung"
     local CHARACTER_CARD_IDS = {
-        "close_collar",
-        "quiet_warning",
-        "turn_to_corner",
-        "silent_glare",
+        "jiyoung_close_collar",
+        "jiyoung_quiet_warning",
+        "jiyoung_turn_to_corner",
+        "jiyoung_silent_glare",
+        "jiyoung_timid_call_for_help",
+        "jiyoung_hug_bag_close",
+        "jiyoung_half_step_back",
+        "jiyoung_avoid_eye_contact",
+        "jiyoung_find_courage",
+        "jiyoung_phone_in_hand",
     }
     local function makeError(code, path, message)
         return {
