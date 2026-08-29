@@ -123,7 +123,7 @@ add({
     cost = 1,
     damage = 3,
     rules = { "농락 1." },
-    description = "::tag[pressure]:: ::tag[violation]:: 열차 흔들림을 틈타 등 뒤로 파고들어, 발기한 자지를 엉덩이골 사이에 깊숙이 끼워 넣고 끈적하게 비벼댑니다.",
+    description = "열차 흔들림을 틈타 등 뒤로 파고들어, 발기한 자지를 엉덩이골 사이에 깊숙이 끼워 넣고 끈적하게 비벼댑니다.",
     actorAction = '"사람이 많아서 자꾸 밀착되네요... 닿아도 조금만 참아줘요♥" 귓가에 뜨거운 입김을 훅 불어넣으며, 옷 너머로 단단하게 솟구친 자지를 말랑한 엉덩이골 틈새에 빈틈없이 끼워 넣고 골반을 은밀하게 돌린다.',
     resolve = function(context) return { manipulate(context, 1) } end,
 })
@@ -135,7 +135,7 @@ add({
     roles = { "violation" },
     cost = 0,
     damage = 3,
-    description = "::tag[violation]:: 들키지 않게 팔을 아래로 늘어뜨려, 풍만한 곡선의 말랑한 엉덩이 살결을 손바닥 전체로 감싸 쥐고 깊숙이 주무릅니다.",
+    description = "들키지 않게 팔을 아래로 늘어뜨려, 풍만한 곡선의 말랑한 엉덩이 살결을 손바닥 전체로 감싸 쥐고 깊숙이 주무릅니다.",
     actorAction = "딴청을 피우듯 시선은 허공을 향한 채, 등 뒤로 내린 손으로 보드라운 엉덩이 살결을 한 손 가득 감싸 쥐어 손바닥 안에서 풍만한 곡선이 뭉개지도록 주무른다.",
 })
 
@@ -146,7 +146,7 @@ add({
     roles = { "violation" },
     cost = 1,
     damage = 4,
-    description = "::tag[violation]:: 사각에서 상체를 밀착해, 옷 위로 탐스럽게 부풀어 오른 가슴을 한 손 가득 덥석 감싸 쥐고 부드럽게 주무릅니다.",
+    description = "사각에서 상체를 밀착해, 옷 위로 탐스럽게 부풀어 오른 가슴을 한 손 가득 덥석 감싸 쥐고 부드럽게 주무릅니다.",
     actorAction = "몸을 바짝 겹치며 옷 너머로 풍만하게 솟은 가슴을 덥석 감싸 쥔다. 손바닥 안에서 짓눌리며 뭉개지는 묵직하고 말랑한 감촉을 즐기며 손끝으로 유두 부근을 집요하게 둥글리며 야릇하게 매만진다.",
 })
 
@@ -158,7 +158,7 @@ add({
     cost = 2,
     damage = 3,
     rules = { "농락 2." },
-    description = "::tag[pressure]:: ::tag[violation]:: 귓바퀴를 입술로 핥듯 스치며 노골적인 음담패설을 쏟아붓고, 엉덩이에 자지를 집요하게 문질러 음란하게 길들입니다.",
+    description = "귓바퀴를 입술로 핥듯 스치며 노골적인 음담패설을 쏟아붓고, 엉덩이에 자지를 집요하게 문질러 음란하게 길들입니다.",
     actorAction = '"소리 지르면 다들 당신이 이러고 있는 거 알 텐데... 괜찮아요?♥" 귓불을 입술로 살짝 깨물듯 속삭이고, 팽창한 자지를 엉덩이골에 묵직하게 밀어 올리며 골반을 끈적하게 비벼댄다.',
     resolve = function(context) return { manipulate(context, 2) } end,
 })
@@ -171,7 +171,7 @@ add({
     cost = 1,
     damage = 2,
     rules = { "농락 2." },
-    description = "::tag[pressure]:: ::tag[violation]:: 손가락 끝을 허벅지 안쪽의 가장 여리고 민감한 살결로 미끄러뜨려, 사타구니 바로 밑을 간질이며 쾌락을 주입합니다.",
+    description = "손가락 끝을 허벅지 안쪽의 가장 여리고 민감한 살결로 미끄러뜨려, 사타구니 바로 밑을 간질이며 쾌락을 주입합니다.",
     actorAction = "손끝을 허벅지 안쪽 깊숙한 곳으로 미끄러뜨려 손바닥의 체온으로 보드라운 살결을 쓸어 올린다. 손가락 마디로 사타구니 안쪽의 말랑한 살결을 은근슬쩍 건드리며 오싹한 감각을 일깨운다.",
     resolve = function(context) return { manipulate(context, 2) } end,
 })
@@ -184,7 +184,7 @@ add({
     cost = 1,
     damage = 0,
     rules = { "농락 3." },
-    description = "::tag[pressure]:: 수치심을 마비시키는 저열하고 노골적인 조롱을 귓가에 쏟아부어, 온몸을 음란한 열기로 물들이는 극대 농락 행동입니다.",
+    description = "수치심을 마비시키는 저열하고 노골적인 조롱을 귓가에 쏟아부어, 온몸을 음란한 열기로 물들이는 극대 농락 행동입니다.",
     actorAction = '"몸이 이렇게 솔직하게 달아오르는데... 더 만져달라고 조르는 거 맞죠? 귓가까지 새빨개져서 정말 야하네요♥" 젖어드는 호흡을 귓구멍 안으로 깊숙이 불어넣으며 농염하게 속삭인다.',
     resolve = function(context) return { manipulate(context, 3) } end,
 })
@@ -197,7 +197,7 @@ add({
     cost = 4,
     damage = 3,
     rules = { "농락 3." },
-    description = "::tag[pressure]:: ::tag[violation]:: 온몸의 무게를 실어 틈새 없이 육체를 겹치고, 양손으로 골반과 가슴을 동시에 감싸 쥐어 주무르며 완전히 무너뜨리는 최고위 농락입니다.",
+    description = "온몸의 무게를 실어 틈새 없이 육체를 겹치고, 양손으로 골반과 가슴을 동시에 감싸 쥐어 주무르며 완전히 무너뜨리는 최고위 농락입니다.",
     actorAction = "뒤에서 온몸을 덮치듯 밀착해 단단한 자지를 엉덩이에 깊숙이 파묻고, 양손으로 가느다란 허리와 가슴의 풍만한 곡선을 거칠게 감싸 쥔 채 온몸을 짓누르며 골반을 집요하게 흔들어댄다.",
     resolve = function(context) return { manipulate(context, 3) } end,
 })
@@ -210,7 +210,7 @@ add({
     cost = 1,
     damage = 3,
     rules = { "진정 2." },
-    description = "::tag[pressure]:: ::tag[violation]:: 상냥하게 달래듯 등과 허리를 부드럽게 쓰다듬어 경계심을 녹여내고, 방심한 틈에 엉덩이를 깊숙이 주무릅니다.",
+    description = "상냥하게 달래듯 등과 허리를 부드럽게 쓰다듬어 경계심을 녹여내고, 방심한 틈에 엉덩이를 깊숙이 주무릅니다.",
     actorAction = '"쉬이... 겁먹지 마요, 아프게 안 하니까...♥" 등을 다정하게 쓸어내리며 안심시키는 척하다가, 슬그머니 손을 내려 보드라운 엉덩이 살결을 손바닥 가득 감싸 쥐어 깊숙이 주무른다.',
     resolve = function(context) return { calm(context, 2) } end,
 })
@@ -223,7 +223,7 @@ add({
     cost = 0,
     damage = 3,
     rules = { "농락 1.", "반발 1." },
-    description = "::tag[pressure]:: ::tag[violation]:: 전철의 덜컹거림에 맞춰 손등으로 가랑이 사이의 은밀한 틈새를 스치듯 쓸어 올려 야릇한 반발과 쾌감을 동시에 부릅니다.",
+    description = "전철의 덜컹거림에 맞춰 손등으로 가랑이 사이의 은밀한 틈새를 스치듯 쓸어 올려 야릇한 반발과 쾌감을 동시에 부릅니다.",
     actorAction = "열차가 덜컹 흔들리는 반동을 이용해 손등을 다리 사이 가랑이 틈새에 깊숙이 찔러 넣어 스치듯 밀어 올린다. 손가락 끝으로 은밀한 비순의 윤곽을 살짝 훑고 지나간다.",
     resolve = function(context) return { manipulate(context, 1), backlash(context, 1) } end,
 })
@@ -236,7 +236,7 @@ add({
     cost = 1,
     damage = 4,
     rules = { "농락 1.", "반발 1." },
-    description = "::tag[pressure]:: ::tag[violation]:: 빳빳하게 솟은 자지를 엉덩이골 틈새에 거칠게 끼워 맞추고 골반을 강하게 들이밀어 충격적인 쾌감과 거센 반발을 일으킵니다.",
+    description = "빳빳하게 솟은 자지를 엉덩이골 틈새에 거칠게 끼워 맞추고 골반을 강하게 들이밀어 충격적인 쾌감과 거센 반발을 일으킵니다.",
     actorAction = "옷 너머로 찢어질 듯 팽창한 자지를 엉덩이골 깊숙한 골짜기에 단번에 끼워 넣고, 골반을 앞으로 쿵 들이밀며 단단한 귀두의 윤곽을 말랑한 엉덩이 살결에 거칠게 문질러댄다.",
     resolve = function(context) return { manipulate(context, 1), backlash(context, 1) } end,
 })
@@ -249,7 +249,7 @@ add({
     cost = 0,
     damage = 3,
     rules = { "의심 또는 거절일 때만 사용 가능.", "농락 1." },
-    description = "::tag[pressure]:: ::tag[violation]:: 경계심에 굳어있는 목덜미에 입술을 묻고 몸을 굳힐수록 더 닿는다고 속삭이며, 의심과 거절을 쾌락으로 뒤집습니다.",
+    description = "경계심에 굳어있는 목덜미에 입술을 묻고 몸을 굳힐수록 더 닿는다고 속삭이며, 의심과 거절을 쾌락으로 뒤집습니다.",
     actorAction = '"그렇게 힘을 주고 버티면... 자지가 더 깊숙이 닿는 거 몰라요? 읏, 살결이 이렇게 말랑하게 감겨오니 참기 힘드네♥" 굳어있는 목덜미에 끈적하게 입을 맞추며 가랑이를 지그시 밀착한다.',
     canPlay = function(context) if negative(context.mood) then return true end return false, "requires_negative_mood" end,
     resolve = function(context) return { manipulate(context, 1) } end,
@@ -263,7 +263,7 @@ add({
     cost = 2,
     damage = 3,
     rules = { "농락 1.", "혼란 또는 순응이면 추가 저항 피해 2." },
-    description = "::tag[pressure]:: ::tag[violation]:: 옷자락 틈으로 손을 슬그머니 밀어 넣어, 허리에서 엉덩이로 이어지는 보드라운 맨살을 직접 쓰다듬으며 쾌감을 증폭시킵니다.",
+    description = "옷자락 틈으로 손을 슬그머니 밀어 넣어, 허리에서 엉덩이로 이어지는 보드라운 맨살을 직접 쓰다듬으며 쾌감을 증폭시킵니다.",
     actorAction = "옷자락 틈새로 뜨거운 손을 찔러 넣어 허리와 골반의 보드라운 맨살을 직접 손바닥으로 감싸 쥔다. 매끄러운 살결을 엄지손가락으로 둥글게 어루만지며 손끝을 사타구니 안쪽으로 미끄러뜨린다.",
     resolve = function(context) local result = { manipulate(context, 1) }; if positive(context.mood) then result[#result + 1] = damage(2) end return result end,
 })
@@ -276,7 +276,7 @@ add({
     cost = 1,
     damage = 2,
     rules = { "농락 1.", "혼란 또는 순응이면 추가 저항 피해 2." },
-    description = "::tag[pressure]:: ::tag[violation]:: 양손으로 가녀린 골반을 감싸 쥐고, 엄지손가락으로 사타구니 안쪽을 지그시 문질러 전신에 음란한 전율을 퍼뜨립니다.",
+    description = "양손으로 가녀린 골반을 감싸 쥐고, 엄지손가락으로 사타구니 안쪽을 지그시 문질러 전신에 음란한 전율을 퍼뜨립니다.",
     actorAction = "잘록한 골반을 양손으로 단단히 붙잡아 자신의 발기한 가랑이 쪽으로 바짝 끌어당긴다. 엄지손가락으로 허벅지와 골반이 이어지는 보드라운 안쪽 살결을 지그시 누르며 농염하게 매만진다.",
     resolve = function(context) local result = { manipulate(context, 1) }; if positive(context.mood) then result[#result + 1] = damage(2) end return result end,
 })
@@ -289,7 +289,7 @@ add({
     cost = 1,
     damage = 3,
     rules = { "혼란 또는 순응이면 추가 저항 피해 2." },
-    description = "::tag[violation]:: 허벅지 사이에 한쪽 무릎을 단단히 밀어 넣고, 다리를 벌리게 만들며 가랑이 중심부를 무릎으로 은근히 비벼 올립니다.",
+    description = "허벅지 사이에 한쪽 무릎을 단단히 밀어 넣고, 다리를 벌리게 만들며 가랑이 중심부를 무릎으로 은근히 비벼 올립니다.",
     actorAction = "다리 사이 틈새로 무릎을 비집고 밀어 넣어 가랑이 밑부분을 묵직하게 받쳐 올린다. 체중을 실어 무릎으로 은밀한 사타구니 부위를 지그시 누르며 비벼대어 깊은 쾌감을 강요한다.",
     resolve = function(context) if positive(context.mood) then return { damage(2) } end return {} end,
 })
@@ -302,7 +302,7 @@ add({
     cost = 2,
     damage = 3,
     rules = { "농락 1.", "6턴 이후면 추가 저항 피해 2." },
-    description = "::tag[pressure]:: ::tag[violation]:: \"슬슬 몸도 쾌락에 익숙해졌죠?\"라며 상하체를 거침없이 유린해, 길들여진 육체를 완전히 무너뜨립니다.",
+    description = "\"슬슬 몸도 쾌락에 익숙해졌죠?\"라며 상하체를 거침없이 ::tag[violation]::해, 길들여진 육체를 완전히 무너뜨립니다.",
     actorAction = '"슬슬 몸도 솔직하게 쑤셔오는 모양인데... 더는 못 참겠죠?♥" 한 손으로는 가슴의 풍만한 곡선을 부드럽게 감싸 쥐어 매만지고 다른 한 손으로는 엉덩이를 주무르며, 팽창한 자지를 엉덩이골에 은근슬쩍 끈적하게 문질러댄다.',
     resolve = function(context) local result = { manipulate(context, 1) }; if context.turn >= 6 then result[#result + 1] = damage(2) end return result end,
 })
@@ -315,7 +315,7 @@ add({
     cost = 1,
     damage = 2,
     rules = { "농락 1.", "잔여 저항 18 이하면 추가 저항 피해 2." },
-    description = "::tag[pressure]:: ::tag[violation]:: 저항력이 무너져 내린 틈을 타, 가장 민감하고 야릇한 부위에 손가락 끝을 집중시켜 이성을 완전히 끊어버립니다.",
+    description = "저항력이 무너져 내린 틈을 타, 가장 민감하고 야릇한 부위에 손가락 끝을 집중시켜 이성을 완전히 끊어버립니다.",
     actorAction = "저항이 헐거워진 틈을 놓치지 않고, 가랑이 중앙의 가장 은밀하고 민감한 돌기 부위를 옷 너머로 손끝을 세워 지그시 누른 뒤 자잘하게 튕겨내듯 매만진다.",
     resolve = function(context) local result = { manipulate(context, 1) }; if context.character.resistance <= 18 then result[#result + 1] = damage(2) end return result end,
 })
@@ -328,7 +328,7 @@ add({
     cost = 1,
     damage = 3,
     rules = { "잔여 은폐 5 이하면 추가 저항 피해 2." },
-    description = "::tag[violation]:: 주변의 시선이 코앞까지 다가온 아슬아슬한 스릴 속에서, 보란 듯이 엉덩이를 그러쥐고 가랑이를 비벼대는 대담한 유린 행동입니다.",
+    description = "주변의 시선이 코앞까지 다가온 아슬아슬한 스릴 속에서, 보란 듯이 엉덩이를 그러쥐고 가랑이를 비벼대는 대담한 ::tag[violation]:: 행동입니다.",
     actorAction = "주변 사람들에게 들킬 듯한 아슬아슬한 긴장감 속에서, 오히려 더 거칠게 엉덩이의 풍만한 곡선을 양손으로 감싸 쥐고 발기한 자지를 엉덩이골 사이에 사정없이 짓누르며 뜨거운 쾌락을 깊숙이 끌어올린다.",
     resolve = function(context) if context.player.stealth <= 5 then return { damage(2) } end return {} end,
 })
@@ -341,7 +341,7 @@ add({
     cost = 1,
     damage = 2,
     rules = { "농락 1.", "공개 역할이 대응 또는 회복이면 추가 저항 피해 2." },
-    description = "::tag[pressure]:: ::tag[violation]:: 방어하고 물러서려는 움직임의 반동을 이용해 골반을 단숨에 낚아채고 자지를 더 깊숙이 박아넣는 카운터 유린 행동입니다.",
+    description = "방어하고 물러서려는 움직임의 반동을 이용해 골반을 단숨에 낚아채고 자지를 더 깊숙이 박아넣는 카운터 ::tag[violation]:: 행동입니다.",
     actorAction = "몸을 빼내려는 찰나의 빈틈을 파고들어 허리를 낚아채 제 가랑이 쪽으로 강하게 끌어당긴다. 도망치지 못하도록 골반을 밀착한 채 사타구니 안쪽의 말랑한 살결을 억세게 주무른다.",
     resolve = function(context) local result = { manipulate(context, 1) }; if context.character.publicRole == "response" or context.character.publicRole == "recovery" then result[#result + 1] = damage(2) end return result end,
 })
@@ -358,7 +358,7 @@ add({
     cost = 0,
     damage = 0,
     rules = { "은폐 4 회복.", "농락 1." },
-    description = "::tag[deception]:: ::tag[pressure]:: 밀리는 인파 핑계를 대며 시치미를 떼면서도, 귓가에 야릇한 뜨거운 숨결을 뿜어 농락하고 은폐를 정돈합니다.",
+    description = "밀리는 인파 핑계를 대며 시치미를 떼면서도, 귓가에 야릇한 뜨거운 숨결을 뿜어 농락하고 은폐를 정돈합니다.",
     actorAction = '"죄송합니다, 뒤에서 갑자기 밀려서... 괜찮으세요?♥" 공손하게 사과하는 척 얼굴을 귓가에 바짝 붙이고, 귓구멍에 뜨거운 숨을 후 불어넣으며 태연하게 자세를 바로잡는다.',
     resolve = function(context) return { recoverStealth(4), manipulate(context, 1) } end,
 })
@@ -371,7 +371,7 @@ add({
     cost = 0,
     damage = 1,
     rules = { "은폐 4 회복." },
-    description = "::tag[deception]:: ::tag[violation]:: 시선은 허공을 바라보며 사각에서 엉덩이 밑살을 손끝으로 은밀히 매만져 은폐를 챙기고 피해를 줍니다.",
+    description = "시선은 허공을 바라보며 사각에서 엉덩이 밑살을 손끝으로 은밀히 매만져 은폐를 챙기고 피해를 줍니다.",
     actorAction = "무심한 표정으로 차창 밖을 응시하면서, 등 뒤로 내린 손가락 끝으로 엉덩이 밑살의 말랑한 곡선을 살짝 어루만져 매만지고 재빨리 손을 거둔다.",
     resolve = function() return { recoverStealth(4) } end,
 })
@@ -384,7 +384,7 @@ add({
     cost = 0,
     damage = 0,
     rules = { "은폐 3 회복.", "농락 2." },
-    description = "::tag[deception]:: ::tag[pressure]:: 다른 승객의 등 뒤 사각으로 몸을 교묘히 숨기며, 귓가에 끈적한 음담패설을 속삭여 상대를 음란하게 달아오르게 만듭니다.",
+    description = "다른 승객의 등 뒤 사각으로 몸을 교묘히 숨기며, 귓가에 끈적한 음담패설을 속삭여 상대를 음란하게 달아오르게 만듭니다.",
     actorAction = '승객들의 등 뒤 사각으로 미끄러져 들어가 모습을 감추며, 귓가에 입술을 대고 "아까 닿았던 감촉, 아직도 화끈거리죠?♥"라며 낮고 음란하게 속삭인다.',
     resolve = function(context) return { recoverStealth(3), manipulate(context, 2) } end,
 })
@@ -397,7 +397,7 @@ add({
     cost = 0,
     damage = 0,
     rules = { "은폐 4 회복.", "진정 2." },
-    description = "::tag[deception]:: ::tag[pressure]:: \"죄송합니다\"라며 두 손을 들고 뻔뻔하게 한 걸음 물러서서 상대의 경계심을 완전히 가라앉히고 은폐를 확보합니다.",
+    description = "\"죄송합니다\"라며 두 손을 들고 뻔뻔하게 한 걸음 물러서서 상대의 경계심을 완전히 가라앉히고 은폐를 확보합니다.",
     actorAction = '"어라, 닿았나요? 오해하지 마세요, 흔들려서 그런 거니까요." 양손을 떼어 들며 결백한 척 물러선다. 상대가 경계를 풀고 안도하는 틈을 타 완벽한 사각을 확보한다.',
     resolve = function(context) return { recoverStealth(4), calm(context, 2) } end,
 })
@@ -410,7 +410,7 @@ add({
     cost = 0,
     damage = 0,
     rules = { "은폐 3 회복.", "농락 1.", "의심 또는 거절이면 추가로 은폐 2 회복." },
-    description = "::tag[deception]:: ::tag[pressure]:: 정중한 말투로 사과하며 시치미를 떼어 불리한 무드를 완화하고 대폭 은폐를 회복하는 고급 기만 행동입니다.",
+    description = "정중한 말투로 사과하며 시치미를 떼어 불리한 무드를 완화하고 대폭 은폐를 회복하는 고급 ::tag[deception]:: 행동입니다.",
     actorAction = '"차가 너무 흔들리네요, 불편하셨다면 죄송합니다." 예의 바른 태도로 물러서는 척하며, 등 뒤의 사각을 확보해 다음 손길을 뻗을 완벽한 위치를 잡는다.',
     resolve = function(context) local result = { recoverStealth(3), manipulate(context, 1) }; if negative(context.mood) then result[#result + 1] = recoverStealth(2) end return result end,
 })
@@ -424,7 +424,7 @@ add({
     cost = 0,
     damage = 0,
     rules = { "은폐 2 회복.", "농락 1." },
-    description = "::tag[chain]:: ::tag[deception]:: ::tag[pressure]:: 행동 사이의 찰나에 목덜미에 코끝을 묻고 뜨거운 숨을 길게 내쉬어 야릇한 자극을 남기는 연계 기만 행동입니다.",
+    description = "행동 사이의 찰나에 목덜미에 코끝을 묻고 뜨거운 숨을 길게 내쉬어 야릇한 자극을 남기는 ::tag[chain]:: ::tag[deception]:: 행동입니다.",
     actorAction = "행동이 이어지는 찰나 목덜미 뒤편에 코끝을 바짝 대고 뜨거운 숨을 깊게 들이쉬었다 내뱉는다. 보드라운 살결에 소름이 돋는 것을 느끼며 자연스럽게 몸을 숨긴다.",
     resolve = function(context) return { recoverStealth(2), manipulate(context, 1) } end,
 })
@@ -438,7 +438,7 @@ add({
     cost = 0,
     damage = 1,
     rules = { "은폐 2 회복." },
-    description = "::tag[chain]:: ::tag[deception]:: ::tag[violation]:: 몸을 스쳐 지나가는 척하며 손등으로 엉덩이 살결을 슥 문지르고 지나가는 은밀한 연계 유린 행동입니다.",
+    description = "몸을 스쳐 지나가는 척하며 손등으로 엉덩이 살결을 슥 문지르고 지나가는 은밀한 ::tag[chain]:: ::tag[violation]:: 행동입니다.",
     actorAction = "자세를 고쳐잡는 척 몸을 살짝 비틀면서, 손등으로 엉덩이골의 풍만한 곡선을 슥 쓸어내려 자극을 주고 태연하게 손을 감춘다.",
     resolve = function() return { recoverStealth(2) } end,
 })
@@ -455,7 +455,7 @@ add({
     cost = 0,
     damage = 2,
     rules = { "다음 중 하나를 선택: 농락 1 / 진정 2." },
-    description = "::tag[pressure]:: ::tag[violation]:: 상대를 더 음란하게 자극할지, 상냥하게 달래어 경계심을 풀어낼지 손길의 완급을 선택하는 테크닉입니다.",
+    description = "상대를 더 음란하게 자극할지, 상냥하게 달래어 경계심을 풀어낼지 손길의 완급을 선택하는 테크닉입니다.",
     effectChoices = {
         {
             id = "manipulate_one",
@@ -481,7 +481,7 @@ add({
     cost = 0,
     damage = 2,
     rules = { "다음 중 하나를 선택: 농락 1 / 혼란 토큰 1개 추가." },
-    description = "::tag[pressure]:: ::tag[violation]:: 귓가에 음담패설을 쏟아붓거나 손끝으로 민감한 신경을 지압해 이성을 마비시키는 선택형 유린 행동입니다.",
+    description = "귓가에 음담패설을 쏟아붓거나 손끝으로 민감한 신경을 지압해 이성을 마비시키는 선택형 ::tag[violation]:: 행동입니다.",
     effectChoices = {
         {
             id = "manipulate_one",
@@ -508,7 +508,7 @@ add({
     cost = 1,
     damage = 1,
     rules = { "농락 1." },
-    description = "::tag[chain]:: ::tag[pressure]:: ::tag[violation]:: 열차의 흔들림에 맞춰 자지를 엉덩이골에 계속해서 끈적하게 비벼대는 기본 연계 행동입니다.",
+    description = "열차의 흔들림에 맞춰 자지를 엉덩이골에 계속해서 끈적하게 비벼대는 기본 ::tag[chain]:: 행동입니다.",
     actorAction = "덜컹이는 열차의 리듬에 골반을 맞추어, 팽창한 자지를 엉덩이골 사이에 끼워 넣고 은근슬쩍 앞뒤로 집요하게 비벼댄다.",
     resolve = function(context) return { manipulate(context, 1) } end,
 })
@@ -522,7 +522,7 @@ add({
     cost = 3,
     damage = 3,
     rules = { "농락 1." },
-    description = "::tag[chain]:: ::tag[pressure]:: ::tag[violation]:: 주 행동에 틈을 주지 않고 양손으로 엉덩이를 통째로 감싸 쥐어 가랑이로 당기는 강력한 연계 유린입니다.",
+    description = "주 행동에 틈을 주지 않고 양손으로 엉덩이를 통째로 감싸 쥐어 가랑이로 당기는 강력한 ::tag[chain]:: ::tag[violation]::입니다.",
     actorAction = "순간적으로 몸을 겹치며 양손으로 풍만한 엉덩이 곡선을 가득 감싸 쥔다. 손가락을 말랑한 살결에 깊숙이 파묻으며 자신의 발기한 자지 쪽으로 힘껏 끌어당긴다.",
     resolve = function(context) return { manipulate(context, 1) } end,
 })
@@ -536,7 +536,7 @@ add({
     cost = 1,
     damage = 3,
     rules = { "농락 1.", "반발 2." },
-    description = "::tag[chain]:: ::tag[pressure]:: ::tag[violation]:: 엉덩이와 허벅지 살을 깊숙이 감싸 쥐며 주물러, 강렬한 쾌감과 거센 수치심의 반발을 유발하는 연계 행동입니다.",
+    description = "엉덩이와 허벅지 살을 깊숙이 감싸 쥐며 주물러, 강렬한 쾌감과 거센 수치심의 반발을 유발하는 ::tag[chain]:: 행동입니다.",
     actorAction = "손가락에 힘을 주어 엉덩이의 풍만한 살결을 손바닥 가득 감싸 쥐어 집요하게 주무른다. 옷 너머로 손자국이 남을 만큼 거칠게 움켜쥐며 골반을 강하게 들이받는다.",
     resolve = function(context) return { manipulate(context, 1), backlash(context, 2) } end,
 })
@@ -550,7 +550,7 @@ add({
     cost = 2,
     damage = 1,
     rules = { "선택 단계에 카드를 1장 즉시 뽑음." },
-    description = "::tag[chain]:: ::tag[violation]:: 손끝으로 척추선을 따라 어루만지며, 다음에 쏟아부을 더 음란하고 가학적인 애무를 머릿속에 그리는 연계 행동입니다.",
+    description = "손끝으로 척추선을 따라 어루만지며, 다음에 쏟아부을 더 음란하고 가학적인 애무를 머릿속에 그리는 ::tag[chain]:: 행동입니다.",
     actorAction = "손가락 끝으로 등을 따라 척추선을 살살 쓸어내린다. 손바닥에 닿는 보드라운 살결의 떨림을 음미하며, 다음에는 어디를 어떻게 유린할지 음란한 계획을 떠올린다.",
     selectionPreview = { effects = { { id = "draw_one", op = "draw_cards", target = "player", amount = 1 } } },
 })
@@ -565,7 +565,7 @@ add({
     cost = 1,
     damage = 1,
     rules = { "저항 피해 1.", "이 카드 때문에 발동할 상대 계획을 억제." },
-    description = "::tag[chain]:: ::tag[insight]:: ::tag[violation]:: 상대를 움직이지 못하게 옆구리와 허리를 바짝 감싸 쥐어 저항 계획을 무력화하는 간파 연계 행동입니다.",
+    description = "상대를 움직이지 못하게 옆구리와 허리를 바짝 감싸 쥐어 저항 계획을 무력화하는 ::tag[insight]:: ::tag[chain]:: 행동입니다.",
     actorAction = "상대가 저항하려는 낌새를 눈치채고 재빨리 한 팔로 허리를 감싸 안아 도망가지 못하게 밀착한다. 다른 손으로 옆구리를 지그시 누르며 반항을 사전에 봉쇄한다.",
 })
 
@@ -578,7 +578,7 @@ add({
     cost = 1,
     damage = 0,
     rules = { "배치 시 농락 1.", "지속 3턴, 충전 2.", "혼란 또는 순응 상태의 턴 시작에 은폐 2 회복." },
-    description = "::tag[plan]:: ::tag[deception]:: ::tag[pressure]:: 귓가에 야릇한 기대를 심어두고, 쾌락에 취해 멍해진 틈을 타 은폐를 지속적으로 챙기는 ::tag[plan]:: 카드입니다.",
+    description = "귓가에 야릇한 기대를 심어두고, 쾌락에 취해 멍해진 틈을 타 은폐를 지속적으로 챙기는 ::tag[plan]:: 카드입니다.",
     placedAction = '"몸이 이렇게 뜨거운데... 앞으로 어떻게 될지 기대되죠?♥" 귓가에 은밀한 약속을 속삭이며 골반을 부드럽게 감싸 안는다.',
     triggeredAction = "쾌락에 정신이 팔려 주위를 살피지 못하는 틈을 타, 여유롭게 자세를 정돈하고 완벽한 사각에 숨어든다.",
     resolve = function(context) return { manipulate(context, 1) } end,
@@ -594,7 +594,7 @@ add({
     cost = 1,
     damage = 0,
     rules = { "지속 3턴, 충전 1.", "무시 상태의 턴 시작에 저항 피해 5." },
-    description = "::tag[plan]:: ::tag[violation]:: 무표정으로 애써 버티는 몸의 틈새를 노려, 한순간에 급소를 감싸 쥐어 저항을 박살내는 치명적인 ::tag[plan]:: 카드입니다.",
+    description = "무표정으로 애써 버티는 몸의 틈새를 노려, 한순간에 급소를 감싸 쥐어 저항을 박살내는 치명적인 ::tag[plan]:: 카드입니다.",
     placedAction = "입술을 지그시 깨물고 모른 척 버티는 모습을 내려다보며, 손끝을 가랑이 바로 앞까지 은밀히 가져다 댄다.",
     triggeredAction = "참고 있던 틈을 타 가랑이 중앙의 급소를 한 손으로 틀어쥔다! 비순의 돌기를 손끝으로 지그시 누르며 매만져 비명을 삼키게 만든다.",
     plan = { event = "turn_start", durationTurns = 3, charges = 1, trigger = function(context, event) return event.type == "turn_start" and context.mood == "ignore" end, resolve = function() return { damage(5, "plan") } end },
@@ -609,7 +609,7 @@ add({
     cost = 1,
     damage = 0,
     rules = { "배치 시 농락 1.", "지속 3턴, 충전 2.", "순응에서 플레이어의 유린 카드 해결 뒤 저항 피해 3." },
-    description = "::tag[plan]:: ::tag[pressure]:: ::tag[violation]:: 완전히 굴복한 몸에 손길을 더할 때마다 쾌락이 연쇄적으로 터져 나오도록 각인시키는 ::tag[plan]:: 카드입니다.",
+    description = "완전히 굴복한 몸에 손길을 더할 때마다 쾌락이 연쇄적으로 터져 나오도록 각인시키는 ::tag[plan]:: 카드입니다.",
     placedAction = '"이제 거부하지 말고 손길을 온전히 느껴봐요... 몸이 원하는 대로 해줄 테니까♥" 엉덩이의 풍만한 곡선을 부드럽게 쓰다듬는다.',
     triggeredAction = "유린의 손길이 닿자마자 손끝으로 쾌락의 급소를 연쇄적으로 짓눌러, 전신에 오싹한 쾌락의 전류를 내달리게 만든다.",
     resolve = function(context) return { manipulate(context, 1) } end,
@@ -628,7 +628,7 @@ add({
     cost = 0,
     damage = 3,
     rules = { "농락 1." },
-    description = "::tag[pressure]:: ::tag[violation]:: 아무런 기척도 없이 등 뒤로 스며들어, 단단해진 자지를 엉덩이에 깊숙이 파묻고 손바닥 가득 주무르는 노련한 치한 테크닉입니다.",
+    description = "아무런 기척도 없이 등 뒤로 스며들어, 단단해진 자지를 엉덩이에 깊숙이 파묻고 손바닥 가득 주무르는 노련한 치한 테크닉입니다.",
     actorAction = "한 치의 군더더기 없는 움직임으로 사각에 밀착해, 발기한 자지를 엉덩이골 사이에 깊숙이 찔러 넣고 양손으로 풍만한 엉덩이 살결을 손바닥 가득 감싸 쥐어 주무른다.",
     resolve = function(context) return { manipulate(context, 1) } end,
 })
@@ -641,7 +641,7 @@ add({
     cost = 1,
     damage = 4,
     rules = { "농락 1." },
-    description = "::tag[pressure]:: ::tag[violation]:: 손가락을 하의 틈새로 깊숙이 밀어 넣어, 사타구니 안쪽의 가장 여리고 뜨거운 살결을 손바닥으로 감싸 쥐는 행동입니다.",
+    description = "손가락을 하의 틈새로 깊숙이 밀어 넣어, 사타구니 안쪽의 가장 여리고 뜨거운 살결을 손바닥으로 감싸 쥐는 행동입니다.",
     actorAction = "손을 사타구니 안쪽 가장 깊숙한 곳까지 거침없이 밀어 넣어, 손바닥 전체로 뜨겁고 보드라운 살결을 감싸 쥐며 가랑이 틈새를 지그시 밀어 올린다.",
     resolve = function(context) return { manipulate(context, 1) } end,
 })
@@ -654,7 +654,7 @@ add({
     cost = 1,
     damage = 3,
     rules = { "농락 2." },
-    description = "::tag[pressure]:: ::tag[violation]:: 터질 듯한 자지를 엉덩이골 틈새에 완벽히 끼워 넣고, 은근슬쩍 집요하게 골반을 돌려 단번에 음란하게 타락시킵니다.",
+    description = "터질 듯한 자지를 엉덩이골 틈새에 완벽히 끼워 넣고, 은근슬쩍 집요하게 골반을 돌려 단번에 음란하게 타락시킵니다.",
     actorAction = '"뒤에서 닿는 이 뜨거운 거... 어떤 모양인지 다 느껴지죠?♥" 팽창한 자지를 엉덩이골에 끼워 맞추고, 골반을 묵직하고 끈적하게 돌리며 사정없이 문질러댄다.',
     resolve = function(context) return { manipulate(context, 2) } end,
 })
@@ -667,7 +667,7 @@ add({
     cost = 0,
     damage = 0,
     rules = { "은폐 5 회복.", "농락 1." },
-    description = "::tag[deception]:: ::tag[pressure]:: 인파 속에 완벽히 녹아들어 흔적을 지우면서, 목덜미에 입을 맞추고 농락을 이어가는 최상급 기만 기술입니다.",
+    description = "인파 속에 완벽히 녹아들어 흔적을 지우면서, 목덜미에 입을 맞추고 농락을 이어가는 최상급 ::tag[deception]:: 기술입니다.",
     actorAction = "주변 승객들의 시야에서 완벽히 몸을 숨기며 등 뒤로 밀착한다. 목덜미의 보드라운 살결에 입술을 살포시 대고 뜨거운 숨을 불어넣으며 다음 손길을 준비한다.",
     resolve = function(context) return { recoverStealth(5), manipulate(context, 1) } end,
 })
@@ -680,7 +680,7 @@ add({
     cost = 0,
     damage = 2,
     rules = { "은폐 4 회복." },
-    description = "::tag[deception]:: ::tag[violation]:: 그 누구에게도 들키지 않는 완벽한 사각에서 옷 위로 가슴을 받쳐 올려 부드럽게 매만지며 은폐와 피해를 동시에 거두는 행동입니다.",
+    description = "그 누구에게도 들키지 않는 완벽한 사각에서 옷 위로 가슴을 받쳐 올려 부드럽게 매만지며 은폐와 피해를 동시에 거두는 행동입니다.",
     actorAction = "시선은 태연하게 정면을 향한 채, 사각에서 뻗은 손으로 옷 너머 풍만한 가슴의 말랑한 곡선을 아래에서부터 받쳐 올려 손바닥 가득 부드럽게 주무르고 싹 빠져나온다.",
     resolve = function() return { recoverStealth(4) } end,
 })
@@ -693,7 +693,7 @@ add({
     cost = 1,
     damage = 2,
     rules = { "의심 또는 거절이면 턴 종료 무드를 무시로 강제 변경." },
-    description = "::tag[pressure]:: ::tag[violation]:: \"소리치면 여기서 다 보여줄 뿐이야\"라며 귓가에 위협하듯 속삭여, 거센 저항과 의심을 얼어붙게 만드는 강제 무드 행동입니다.",
+    description = "\"소리치면 여기서 다 보여줄 뿐이야\"라며 귓가에 위협하듯 속삭여, 거센 저항과 의심을 얼어붙게 만드는 강제 무드 행동입니다.",
     actorAction = '"소리 내서 사람들을 부르면... 당신이 어떤 꼴로 당하고 있었는지 다 알게 될 텐데? 얌전히 있는 게 좋을 텐데♥" 귓가에 낮게 읊조리며 허리를 거칠게 낚아챈다.',
     resolve = function(context) if negative(context.mood) then return { forceMood("ignore") } end return {} end,
 })
@@ -706,7 +706,7 @@ add({
     cost = 1,
     damage = 1,
     rules = { "턴 종료 무드를 혼란으로 강제 변경." },
-    description = "::tag[pressure]:: ::tag[violation]:: 가랑이 중심부의 급소를 불시에 손바닥으로 감싸 쥐어, 전신에 오싹한 쾌락의 번개를 떨어뜨려 머릿속을 새하얗게 비우는 행동입니다.",
+    description = "가랑이 중심부의 급소를 불시에 손바닥으로 감싸 쥐어, 전신에 오싹한 쾌락의 번개를 떨어뜨려 머릿속을 새하얗게 비우는 행동입니다.",
     actorAction = "손을 단숨에 다리 사이로 찔러 넣어 옷 너머 은밀한 돌기를 손가락 끝으로 강하게 비틀어 짓누른다! 한순간에 머릿속의 이성을 끊어버리는 찌릿한 쾌감을 강제로 주입한다.",
     resolve = function() return { forceMood("confusion") } end,
 })
@@ -720,7 +720,7 @@ add({
     cost = 5,
     damage = 7,
     rules = { "순응이면 추가 저항 피해 5.", "사용 후 소멸." },
-    description = "::tag[remove]:: ::tag[violation]:: 순응하여 저항을 잃은 몸을 덮치듯 밀착해, 옷 속으로 손을 깊숙이 파묻고 온몸을 끈적하게 유린하는 궁극의 피니셔 카드입니다.",
+    description = "순응하여 저항을 잃은 몸을 덮치듯 밀착해, 옷 속으로 손을 깊숙이 파묻고 온몸을 끈적하게 ::tag[violation]::한 뒤 ::tag[remove]::하는 궁극의 피니셔 카드입니다.",
     actorAction = '"더 이상 참을 필요 없어요... 그대로 녹아내려요♥" 순응해 힘이 풀린 몸을 뒤에서 완전히 덮쳐 안고, 옷 속으로 양손을 찔러 넣어 가슴과 엉덩이의 풍만한 곡선을 손바닥 가득 감싸 쥐고 탐스럽게 주무르며 맹렬하게 유린한다.',
     resolve = function(context) if context.mood == "compliance" then return { damage(5) } end return {} end,
 })
@@ -734,7 +734,7 @@ add({
     cost = 4,
     damage = 6,
     rules = { "혼란이면 추가 저항 피해 2.", "순응이면 추가 저항 피해 5 후 냉각 1.", "이 카드 때문에 발동할 상대 계획을 억제." },
-    description = "::tag[insight]:: ::tag[pressure]:: ::tag[violation]:: 상대의 방어를 완벽히 간파하고 가랑이와 엉덩이에 자지와 손길을 동시에 박아넣어 저항을 산산조각 냅니다.",
+    description = "상대의 방어를 완벽히 ::tag[insight]::하고 가랑이와 엉덩이에 자지와 손길을 동시에 박아넣어 저항을 산산조각 냅니다.",
     actorAction = "상대의 방어 의도를 완벽히 읽고 그 틈새로 파고든다. 단단한 자지를 엉덩이골에 빈틈없이 처박고, 손가락으로 가랑이 중심부를 깊숙이 짓눌러 온몸이 무너지도록 희롱한다.",
     resolve = function(context) if context.mood == "compliance" then return { damage(5), cool(context, 1) } end if context.mood == "confusion" then return { damage(2) } end return {} end,
 })
@@ -748,7 +748,7 @@ add({
     cost = 1,
     damage = 1,
     rules = { "선택 단계에 카드를 1장 즉시 뽑음." },
-    description = "::tag[chain]:: ::tag[violation]:: 살결의 떨림을 손끝으로 매만지며, 다음 순번에 퍼부을 쾌락의 연타를 준비하는 연계 드로우 행동입니다.",
+    description = "살결의 떨림을 손끝으로 매만지며, 다음 순번에 퍼부을 쾌락의 연타를 준비하는 ::tag[chain]:: 드로우 행동입니다.",
     actorAction = "등허리를 손끝으로 둥글게 매만지며 미세하게 떨려오는 보드라운 피부의 감촉을 음미한다. 다음에 퍼부을 더 야하고 잔인한 손길을 머릿속에 장전한다.",
     selectionPreview = { effects = { { id = "draw_one", op = "draw_cards", target = "player", amount = 1 } } },
 })
@@ -761,7 +761,7 @@ add({
     cost = 0,
     damage = 2,
     rules = { "다음 중 하나를 선택: 농락 1 / 순응 토큰 1개 추가." },
-    description = "::tag[pressure]:: ::tag[violation]:: 귓가에 음란한 조롱을 불어넣거나 가랑이를 완전히 밀착해, 스스로 몸을 내맡기도록 조교하는 강력한 선택형 행동입니다.",
+    description = "귓가에 음란한 조롱을 불어넣거나 가랑이를 완전히 밀착해, 스스로 몸을 내맡기도록 조교하는 강력한 선택형 행동입니다.",
     effectChoices = {
         {
             id = "manipulate_one",
@@ -788,7 +788,7 @@ add({
     cost = 3,
     damage = 0,
     rules = { "지속 3턴, 충전 2.", "순응 상태의 턴 시작에 저항 피해 6." },
-    description = "::tag[plan]:: ::tag[violation]:: 순응하여 저항할 수 없게 된 몸을 품에 가두고, 턴이 시작될 때마다 자비 없는 쾌락을 쏟아붓는 극악의 ::tag[plan]:: 카드입니다.",
+    description = "순응하여 저항할 수 없게 된 몸을 품에 가두고, 턴이 시작될 때마다 자비 없는 쾌락을 쏟아붓는 극악의 ::tag[plan]:: 카드입니다.",
     placedAction = '"이제 당신은 내 손길 없이는 버틸 수 없게 될 거예요...♥" 허리를 깊숙이 끌어안고 단단해진 자지를 엉덩이골에 깊게 새겨넣듯 밀착한다.',
     triggeredAction = "순응해 힘없이 기대어오는 몸을 품에 가둔 채, 옷 너머로 가슴과 가랑이를 동시에 집요하게 감싸 쥐어 주무르며 끊임없는 절정의 지옥으로 몰아넣는다.",
     plan = { event = "turn_start", durationTurns = 3, charges = 2, trigger = function(context, event) return event.type == "turn_start" and context.mood == "compliance" end, resolve = function() return { damage(6, "plan") } end },
