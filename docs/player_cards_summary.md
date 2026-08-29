@@ -1,5 +1,7 @@
 # HellTrain 플레이어 카드 역할 및 효과 요약
 
+> 보관 문서: 2026-08-29 카드 역할 개편 이전 요약입니다. 현재 카드 유형·역할·수치는 `DB/PlayerCards.db`가 기준입니다.
+
 > **참조 가이드:** [Card_balancing_guide.md](file:///d:/Risu/함락!%20무한의%20지옥철/Card_balancing_guide.md) (섹션 4 "카드 역할", 섹션 8 "카드풀 분포 목표")  
 > **출처 DB:** [DB/PlayerCards.db](file:///d:/Risu/함락!%20무한의%20지옥철/DB/PlayerCards.db) (총 34종)
 
