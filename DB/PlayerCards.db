@@ -95,7 +95,8 @@ local function add(spec)
             planTriggered = { actorAction = spec.triggeredAction },
         }
     else
-        value.narration = { play = { actorAction = spec.actorAction } }
+        local firstChoice = type(spec.effectChoices) == "table" and spec.effectChoices[1] or nil
+        value.narration = { play = { actorAction = spec.actorAction or (firstChoice and firstChoice.actorAction) } }
     end
 
     if cardType == "plan" and spec.plan ~= nil then
