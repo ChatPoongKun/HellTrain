@@ -496,7 +496,7 @@
         payload.tokensAfter = tokensAfter
 
         local function stealthDelta(moodId, repeated)
-            if moodId == "rejection" then return repeated and -6 or -3 end
+            if moodId == "rejection" then return repeated and -4 or -2 end
             if moodId == "suspicion" then return repeated and -2 or -1 end
             if moodId == "confusion" then return 1 end
             if moodId == "compliance" then return 2 end
