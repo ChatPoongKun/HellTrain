@@ -896,6 +896,11 @@
                 if type(card.name) ~= "string" or card.name == "" then
                     addError(errors, "missing_name", path .. ".name", "카드 이름이 없습니다.")
                 end
+                if card.owner == "player" and card.rarity ~= "common" and card.rarity ~= "rare" then
+                    addError(errors, "invalid_rarity", path .. ".rarity", "플레이어 카드 희귀도는 common 또는 rare여야 합니다.")
+                elseif card.owner == "character" and card.rarity ~= nil then
+                    addError(errors, "unexpected_rarity", path .. ".rarity", "캐릭터 카드에는 희귀도를 사용하지 않습니다.")
+                end
                 if type(card.description) ~= "string" or card.description == "" then
                     addError(errors, "missing_description", path .. ".description", "카드 설명이 없습니다.")
                 end

@@ -200,6 +200,10 @@ transition: border-color .14s ease, background .14s ease, transform .14s ease;
 border-color: var(--draft-line-strong);
 background: #292629;
 }
+.setup-draft .draft-card:has(.draft-rarity) {
+border-color: rgba(192, 137, 229, .5);
+box-shadow: inset 0 0 18px rgba(135, 76, 173, .08);
+}
 .setup-draft .draft-card-action {
 position: absolute;
 z-index: 0;
@@ -258,6 +262,20 @@ color: #aaa39e;
 background: rgba(255, 255, 255, .055);
 font-size: 7px;
 font-weight: 800;
+white-space: nowrap;
+}
+.setup-draft .draft-rarity {
+display: inline-flex;
+align-items: center;
+min-height: 16px;
+margin-left: 3px;
+padding: 1px 5px;
+border: 1px solid rgba(192, 137, 229, .42);
+border-radius: 99px;
+color: #ddb5f5;
+background: rgba(135, 76, 173, .14);
+font-size: 7px;
+font-weight: 900;
 white-space: nowrap;
 }
 .setup-draft .draft-choice-state:checked + .draft-card .draft-copy-count {
@@ -774,7 +792,7 @@ aria-label="카드 상세 보기"
 <label class="draft-card-action" for="setup-draft-card-{{dictelement::{{slot::setup_offer_card}}::slot}}" aria-label="{{dictelement::{{slot::setup_offer_card}}::name}} 카드 상세 보기"></label>
 <span class="draft-card-top">
 <span class="draft-card-heading">
-<span class="draft-copy-count">보유 {{dictelement::{{slot::setup_offer_card}}::ownedCopies}} / 2</span>
+<span class="draft-copy-count">보유 {{dictelement::{{slot::setup_offer_card}}::ownedCopies}} / 2</span>{{#when::keep::{{dictelement::{{slot::setup_offer_card}}::rarity}}::is::rare}}<span class="draft-rarity" aria-label="희귀 카드">희귀</span>{{/when}}
 <strong class="draft-card-title">{{dictelement::{{slot::setup_offer_card}}::name}}</strong>
 <span class="draft-tags" aria-label="카드 태그">
 <button type="button" class="draft-tag is-type draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::setup_offer_type}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{tempvar::setup_offer_type}}::label}} 카드 유형 정보 보기">{{dictelement::{{tempvar::setup_offer_type}}::label}}</button>{{#each::keep {{dictelement::{{slot::setup_offer_card}}::roles}} as setup_offer_role}}<button type="button" class="draft-tag draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_offer_role}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::setup_offer_role}}::label}} 역할 정보 보기">{{dictelement::{{slot::setup_offer_role}}::label}}</button>{{/each}}{{#each::keep {{dictelement::{{slot::setup_offer_card}}::mechanisms}} as setup_offer_mechanism}}<button type="button" class="draft-tag is-mechanism draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_offer_mechanism}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::setup_offer_mechanism}}::label}} 태그 정보 보기">{{dictelement::{{slot::setup_offer_mechanism}}::label}}</button>{{/each}}
