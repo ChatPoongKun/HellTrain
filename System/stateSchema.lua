@@ -476,18 +476,6 @@
             and isPlainTableTree(staticData)
     end
 
-    local function cardHasMechanism(card, mechanismId)
-        if type(card) ~= "table" or type(card.mechanisms) ~= "table" then
-            return false
-        end
-        for _, id in ipairs(card.mechanisms) do
-            if id == mechanismId then
-                return true
-            end
-        end
-        return false
-    end
-
     local function appendNestedErrors(target, prefix, nested)
         if type(nested) ~= "table" or type(nested.errors) ~= "table" then
             addError(target, "validation_failed", prefix, "하위 스키마 검증 결과가 올바르지 않습니다.")
@@ -598,8 +586,8 @@
 
         local cards = type(staticData) == "table" and staticData.cards or nil
         local card = type(cards) == "table" and cards[slot.cardId] or nil
-        if card and not cardHasMechanism(card, "plan") then
-            addError(errors, "plan_mechanism_missing", path .. ".cardId", "계획 슬롯의 카드에 plan 메커니즘이 없습니다.")
+        if card and card.cardType ~= "plan" then
+            addError(errors, "plan_type_mismatch", path .. ".cardId", "계획 슬롯의 카드 유형이 plan이 아닙니다.")
         elseif card then
             local matchedChoice = nil
             for _, choice in ipairs(type(card.effectChoices) == "table" and card.effectChoices or {}) do
@@ -1571,15 +1559,9 @@
                     if referencesValidated and isAsciiId(candidate.cardId) then
                         local card = staticData.cards[candidate.cardId]
                         local expectedCharges = 0
-                        if type(card) == "table"
-                            and type(card.mechanisms) == "table" then
-                            for _, mechanismId in ipairs(card.mechanisms) do
-                                if mechanismId == "plan" then
-                                    local plan = type(card.mechanismData) == "table" and card.mechanismData.plan or nil
-                                    expectedCharges = type(plan) == "table" and plan.charges or nil
-                                    break
-                                end
-                            end
+                        if type(card) == "table" and card.cardType == "plan" then
+                            local plan = type(card.mechanismData) == "table" and card.mechanismData.plan or nil
+                            expectedCharges = type(plan) == "table" and plan.charges or nil
                         end
                         if candidate.planChargesEvaluated ~= expectedCharges then
                             addError(errors, "selection_plan_charges_mismatch", candidatePath .. ".planChargesEvaluated", "평가한 계획 충전 수가 정적 카드 정의와 다릅니다.")
@@ -2528,7 +2510,7 @@
                         addError(errors, "invalid_selected_card", "$.selection.playerCardInstanceIds[" .. index .. "]", "선택 카드는 플레이어 손패에 있어야 합니다.")
                     elseif referencesValidated then
                         local card = staticData.cards[instance.cardId]
-                        if card and not cardHasMechanism(card, "chain") then
+                        if card and card.cardType ~= "chain" then
                             mainActionCount = mainActionCount + 1
                             mainActionIndex = index
                         end
@@ -2572,7 +2554,7 @@
                     else
                         local cards = type(staticData) == "table" and staticData.cards or nil
                         local card = type(cards) == "table" and cards[instance.cardId] or nil
-                        if card and not cardHasMechanism(card, "chain") then
+                        if card and card.cardType ~= "chain" then
                             table.insert(mainCards, card)
                             mainCardIndex = index
                         end

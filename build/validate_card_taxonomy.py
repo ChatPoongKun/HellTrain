@@ -14,6 +14,40 @@ CHARACTER_ROLES = {"response", "exposure", "recovery"}
 SPECIALS = {"remove", "insight"}
 
 
+def validate_runtime_type_contract(errors: list[str]) -> None:
+    stale_patterns = {
+        "plan/chain mechanism helper call": re.compile(
+            r'\b(?:cardHasMechanism|hasMechanism)\s*\([^)]*["\'](?:plan|chain)["\']',
+            re.S,
+        ),
+        "plan/chain mechanism comparison": re.compile(
+            r'\b(?:mechanism|mechanismId|currentId)\s*==\s*["\'](?:plan|chain)["\']'
+        ),
+    }
+    for path in (ROOT / "System").glob("*.lua"):
+        text = path.read_text(encoding="utf-8")
+        for label, pattern in stale_patterns.items():
+            if pattern.search(text):
+                errors.append(f"{path.relative_to(ROOT)}: stale {label}")
+
+    required_checks = {
+        "System/stateSchema.lua": {
+            'card.cardType ~= "plan"': 1,
+            'card.cardType == "plan"': 1,
+            'card.cardType ~= "chain"': 2,
+        },
+        "System/viewBuilder.lua": {'item.cardType.id == "chain"': 1},
+    }
+    for relative_path, snippets in required_checks.items():
+        text = (ROOT / relative_path).read_text(encoding="utf-8")
+        for snippet, minimum in snippets.items():
+            count = text.count(snippet)
+            if count < minimum:
+                errors.append(
+                    f"{relative_path}: expected at least {minimum} cardType checks for {snippet}, found {count}"
+                )
+
+
 def card_blocks(path: Path, id_pattern: str) -> list[tuple[str, str, str]]:
     text = path.read_text(encoding="utf-8")
     starts = list(re.finditer(rf"(?m)^\s+({id_pattern})\s*=\s*(card|planCard)\(", text))
@@ -87,6 +121,7 @@ def response_strength(block: str) -> int | None:
 
 def main() -> int:
     errors: list[str] = []
+    validate_runtime_type_contract(errors)
     player = card_blocks(ROOT / "DB" / "PlayerCards.db", r"p\d+_[a-z0-9_]+")
     character = card_blocks(ROOT / "DB" / "CharacterCards.db", r"[a-z][a-z0-9_]+")
     if len(player) != 34 or len(character) != 50:

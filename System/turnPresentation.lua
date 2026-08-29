@@ -275,15 +275,6 @@
         return definition, nil
     end
 
-    local function hasMechanism(card, mechanismId)
-        local count = getArrayLength(type(card) == "table" and card.mechanisms or nil)
-        if count == nil then return false end
-        for index = 1, count do
-            if card.mechanisms[index] == mechanismId then return true end
-        end
-        return false
-    end
-
     local function lookupCardName(staticData, cardId, owner, path, requirePlan)
         local card = staticData.cards[cardId]
         if type(cardId) ~= "string"

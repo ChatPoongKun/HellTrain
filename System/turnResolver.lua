@@ -707,7 +707,7 @@
                 return false, {
                     makeError(
                         "unsupported_mechanism_combination",
-                        "$.staticData.cards." .. card.id .. ".mechanisms",
+                        "$.staticData.cards." .. card.id,
                         "plan과 remove의 동시 완료 영역은 아직 정의되지 않았습니다."
                     ),
                 }

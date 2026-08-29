@@ -1,6 +1,6 @@
 -- RisuAI host entrypoint. Runtime and host orchestration are loaded lazily
 -- because lore access requires the current event triggerId.
-RUNTIME_BUNDLE_REVISION = "runtime-bundle-card-role-v1-20260829"
+RUNTIME_BUNDLE_REVISION = "runtime-bundle-card-type-validation-v1-20260829"
 
 local hostCompatHandler = nil
 local runtimeHandler = nil

@@ -152,13 +152,6 @@
         return report, nil
     end
 
-    local function hasMechanism(card, mechanismId)
-        for _, currentId in ipairs(type(card) == "table" and type(card.mechanisms) == "table" and card.mechanisms or {}) do
-            if currentId == mechanismId then return true end
-        end
-        return false
-    end
-
     local function countZone(state, owner, zone)
         local count = 0
         for _, instance in ipairs(type(state.cardInstances) == "table" and state.cardInstances or {}) do
@@ -558,7 +551,7 @@
                 return failure({ makeError("invalid_character_hand_card", "$.state.cardInstances", "캐릭터 손패의 카드 정의가 올바르지 않습니다: " .. tostring(instance.cardId)) })
             end
             if card.cardType == "chain" then
-                return failure({ makeError("unsupported_character_chain_selection", "$.staticData.cards." .. card.id .. ".mechanisms", "캐릭터 연계 카드 선택 순서와 장수 정책은 아직 지원하지 않습니다.") })
+                return failure({ makeError("unsupported_character_chain_selection", "$.staticData.cards." .. card.id .. ".cardType", "캐릭터 연계 카드 선택 순서와 장수 정책은 아직 지원하지 않습니다.") })
             end
             local candidate, candidateErrors = scoreCandidate(state, staticData, card, instance)
             if candidateErrors then return failure(candidateErrors) end
