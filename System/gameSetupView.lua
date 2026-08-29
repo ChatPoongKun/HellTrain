@@ -263,6 +263,7 @@
             slot = slot,
             cardId = presentation.card.cardId,
             name = presentation.card.name,
+            rarity = card.rarity,
             descriptionSegments = presentation.card.descriptionSegments,
             ruleLines = presentation.card.ruleLines,
             cardType = presentation.card.cardType,
@@ -510,6 +511,7 @@
             slot = true,
             cardId = true,
             name = true,
+            rarity = true,
             descriptionSegments = true,
             ruleLines = true,
             cardType = true,
@@ -532,6 +534,9 @@
         end
         if type(card.name) ~= "string" or card.name == "" then
             addError(errors, "invalid_card_name", path .. ".name", "카드 이름이 필요합니다.")
+        end
+        if card.rarity ~= "common" and card.rarity ~= "rare" then
+            addError(errors, "invalid_card_rarity", path .. ".rarity", "카드 희귀도는 common 또는 rare여야 합니다.")
         end
         validateSegments(card.descriptionSegments, path .. ".descriptionSegments", errors)
         validateRuleLines(card.ruleLines, path .. ".ruleLines", errors)

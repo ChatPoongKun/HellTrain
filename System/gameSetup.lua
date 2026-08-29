@@ -5,6 +5,8 @@
     local OFFER_SIZE = 3
     local MAX_COPIES = 2
     local MINIMUM_POOL_SIZE = 7
+    local COMMON_WEIGHT = 9
+    local RARE_WEIGHT = 3
     local CHARACTER_OFFER_SIZE = 3
     local MINIMUM_CHARACTER_POOL_SIZE = 3
     local BATTLE_SEED_MODULUS = 2147483646
@@ -297,7 +299,8 @@
             return nil, errors
         end
 
-        local pool = {}
+        local cardIds = {}
+        local weights = {}
         for cardId, card in pairs(cards) do
             local cardPath = pathForKey("$.staticData.cards", cardId)
             if type(cardId) ~= "string" then
@@ -307,13 +310,16 @@
             elseif rawget(card, "owner") == "player" then
                 if not isAsciiId(cardId) then
                     appendError(errors, "invalid_player_card_id", cardPath, "플레이어 카드 키는 ASCII cardId여야 합니다.")
+                elseif card.rarity ~= "common" and card.rarity ~= "rare" then
+                    appendError(errors, "invalid_player_card_rarity", cardPath .. ".rarity", "플레이어 카드 희귀도는 common 또는 rare여야 합니다.")
                 else
-                    pool[#pool + 1] = cardId
+                    cardIds[#cardIds + 1] = cardId
+                    weights[cardId] = card.rarity == "rare" and RARE_WEIGHT or COMMON_WEIGHT
                 end
             end
         end
-        table.sort(pool)
-        if #pool < MINIMUM_POOL_SIZE then
+        table.sort(cardIds)
+        if #cardIds < MINIMUM_POOL_SIZE then
             appendError(
                 errors,
                 "insufficient_player_card_pool",
@@ -324,7 +330,7 @@
         if #errors > 0 then
             return nil, errors
         end
-        return pool, nil
+        return { cardIds = cardIds, weights = weights }, nil
     end
 
     local function buildCharacterPool(staticInput)
@@ -545,7 +551,7 @@
 
     local function generateOffer(setupId, round, rng, selectedCardIds, counts, pool)
         local eligible = {}
-        for _, cardId in ipairs(pool) do
+        for _, cardId in ipairs(pool.cardIds) do
             if (counts[cardId] or 0) < MAX_COPIES then
                 eligible[#eligible + 1] = cardId
             end
@@ -556,22 +562,24 @@
             }
         end
 
-        local ranges = {}
-        for pick = 1, OFFER_SIZE do
-            ranges[pick] = {
-                minimum = 1,
-                maximum = #eligible - pick + 1,
-            }
-        end
-        local selectedIndices, currentRng, rngErrors = callNextIntegers(rng, ranges)
-        if rngErrors then
-            return nil, nil, rngErrors
-        end
         local offered = {}
+        local currentRng = rng
         for pick = 1, OFFER_SIZE do
-            local selectedIndex = selectedIndices[pick]
+            local totalWeight = 0
+            for _, cardId in ipairs(eligible) do totalWeight = totalWeight + pool.weights[cardId] end
+            local values, nextRng, rngErrors = callNextIntegers(currentRng, {
+                { minimum = 1, maximum = totalWeight },
+            })
+            if rngErrors then return nil, nil, rngErrors end
+            local selectedIndex = 1
+            local cumulative = pool.weights[eligible[1]]
+            while values[1] > cumulative do
+                selectedIndex = selectedIndex + 1
+                cumulative = cumulative + pool.weights[eligible[selectedIndex]]
+            end
             offered[pick] = eligible[selectedIndex]
             table.remove(eligible, selectedIndex)
+            currentRng = nextRng
         end
         return {
             round = round,
@@ -814,7 +822,7 @@
 
         local selectedLength = denseArrayLength(state.selectedCardIds, "$.state.selectedCardIds", errors)
         local poolSet = {}
-        for _, cardId in ipairs(pool) do
+        for _, cardId in ipairs(pool.cardIds) do
             poolSet[cardId] = true
         end
         if selectedLength ~= nil then
