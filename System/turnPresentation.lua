@@ -38,7 +38,6 @@
         plan = "cards",
         trait = "traits",
         perk = "perks",
-        environment = "environments",
     }
 
     local SYSTEM_EFFECT_SOURCES = {
@@ -202,11 +201,10 @@
     local function hasCompleteStaticData(staticData)
         return type(staticData) == "table"
             and type(staticData.registry) == "table"
-            and type(staticData.registry.actionTags) == "table"
+            and type(staticData.registry.roles) == "table"
             and type(staticData.registry.moods) == "table"
             and type(staticData.cards) == "table"
             and type(staticData.traits) == "table"
-            and type(staticData.environments) == "table"
             and type(staticData.subwayLines) == "table"
             and type(staticData.characters) == "table"
     end
@@ -222,17 +220,46 @@
         return tostring(value)
     end
 
-    local function lookupActionLabel(staticData, actionTag, owner, path)
-        local definition = staticData.registry.actionTags[actionTag]
-        if type(actionTag) ~= "string"
+    local function lookupRoleLabel(staticData, role, owner, path)
+        local definition = staticData.registry.roles[role]
+        if type(role) ~= "string"
             or type(definition) ~= "table"
-            or definition.id ~= actionTag
+            or definition.id ~= role
             or definition.owner ~= owner
             or type(definition.label) ~= "string"
             or definition.label == "" then
-            return nil, makeError("unknown_action_tag", path, "공개 행동 태그 라벨을 확인할 수 없습니다.")
+            return nil, makeError("unknown_role", path, "공개 역할 태그 라벨을 확인할 수 없습니다.")
         end
         return definition.label, nil
+    end
+
+    local function lookupRoleLabels(staticData, roles, owner, path)
+        local count = getArrayLength(roles)
+        if count == nil or count < 1 or (owner == "character" and count ~= 1) or count > 2 then
+            return nil, makeError("invalid_roles", path, "공개 역할 태그 목록이 올바르지 않습니다.")
+        end
+        local labels = {}
+        local seen = {}
+        for index = 1, count do
+            local role = roles[index]
+            if seen[role] then
+                return nil, makeError("duplicate_role", path .. "[" .. index .. "]", "역할 태그가 중복되었습니다.")
+            end
+            local label, roleError = lookupRoleLabel(staticData, role, owner, path .. "[" .. index .. "]")
+            if roleError then return nil, roleError end
+            seen[role] = true
+            labels[index] = label
+        end
+        return labels, nil
+    end
+
+    local function rolesEqual(left, right)
+        local count = getArrayLength(left)
+        if count == nil or count ~= getArrayLength(right) then return false end
+        for index = 1, count do
+            if left[index] ~= right[index] then return false end
+        end
+        return true
     end
 
     local function lookupMood(staticData, moodId, path)
@@ -265,7 +292,7 @@
             or card.owner ~= owner
             or type(card.name) ~= "string"
             or card.name == ""
-            or (requirePlan == true and not hasMechanism(card, "plan")) then
+            or (requirePlan == true and card.cardType ~= "plan") then
             return nil, nil, makeError("unknown_public_card", path, "공개할 카드 라벨을 확인할 수 없습니다.")
         end
         return card.name, card, nil
@@ -309,18 +336,12 @@
             return nil, makeError("unknown_effect_source", path, "효과 원인의 공개 정보를 확인할 수 없습니다.")
         end
 
-        if source.kind == "environment" then
-            if source.side ~= nil then
-                return nil, makeError("invalid_effect_source_side", path .. ".side", "환경 효과 원인에는 진영이 없어야 합니다.")
-            end
-        else
-            local owner = definition.owner
-            if source.kind == "perk" and owner == nil then owner = "player" end
-            if not isSide(source.side) or owner ~= source.side then
-                return nil, makeError("invalid_effect_source_side", path .. ".side", "효과 원인과 진영이 일치하지 않습니다.")
-            end
+        local owner = definition.owner
+        if source.kind == "perk" and owner == nil then owner = "player" end
+        if not isSide(source.side) or owner ~= source.side then
+            return nil, makeError("invalid_effect_source_side", path .. ".side", "효과 원인과 진영이 일치하지 않습니다.")
         end
-        if source.kind == "plan" and not hasMechanism(definition, "plan") then
+        if source.kind == "plan" and definition.cardType ~= "plan" then
             return nil, makeError("invalid_plan_source", path, "계획 효과 원인이 계획 카드가 아닙니다.")
         end
         if type(definition.name) ~= "string" or definition.name == ""
@@ -341,7 +362,10 @@
         end
         local tags = {}
         if source.kind == "card" or source.kind == "plan" then
-            tags[1] = definition.actionTag
+            tags[1] = definition.cardType
+            for _, role in ipairs(definition.roles or {}) do
+                tags[#tags + 1] = role
+            end
             for _, mechanismId in ipairs(definition.mechanisms or {}) do
                 tags[#tags + 1] = mechanismId
             end
@@ -547,24 +571,24 @@
             return summary(index, event.type, "플레이어가 턴 시작에 카드 " .. tostring(payload.drawnCount)
                 .. "장을 뽑았습니다. (요청 " .. tostring(payload.requested) .. "장)"), nil
         elseif event.type == "character_intent" then
-            local allowed = { selected = true, actionTag = true }
+            local allowed = { selected = true, role = true }
             local keyError = checkAllowedKeys(payload, allowed, payloadPath)
             if keyError then return nil, keyError end
             if type(payload.selected) ~= "boolean"
-                or (payload.selected == false and payload.actionTag ~= nil)
-                or (payload.selected == true and payload.actionTag == nil) then
+                or (payload.selected == false and payload.role ~= nil)
+                or (payload.selected == true and payload.role == nil) then
                 return nil, makeError("invalid_character_intent", payloadPath, "캐릭터 의도 공개값이 올바르지 않습니다.")
             end
             if payload.selected == false then
                 return summary(index, event.type, "상대는 이번 턴에 카드 행동을 준비하지 못했습니다."), nil
             end
-            local label, labelError = lookupActionLabel(staticData, payload.actionTag, "character", payloadPath .. ".actionTag")
+            local label, labelError = lookupRoleLabel(staticData, payload.role, "character", payloadPath .. ".role")
             if labelError then return nil, labelError end
             return summary(index, event.type, "상대는 " .. label .. " 행동을 준비했습니다."), nil
         elseif event.type == "card_declared" then
             local keyError = checkAllowedKeys(payload, {
                 side = true,
-                actionTag = true,
+                roles = true,
                 stealthCost = true,
                 cardId = true,
                 effectChoiceId = true,
@@ -573,21 +597,22 @@
             if not isSide(payload.side) or not isFinite(payload.stealthCost) or payload.stealthCost < 0 then
                 return nil, makeError("invalid_card_declaration", payloadPath, "카드 선언 표시값이 올바르지 않습니다.")
             end
-            local tagLabel, tagError = lookupActionLabel(staticData, payload.actionTag, payload.side, payloadPath .. ".actionTag")
-            if tagError then return nil, tagError end
+            local roleLabels, roleError = lookupRoleLabels(staticData, payload.roles, payload.side, payloadPath .. ".roles")
+            if roleError then return nil, roleError end
+            local roleText = table.concat(roleLabels, "·")
             if payload.side == "character" then
                 if payload.cardId ~= nil or payload.stealthCost ~= 0 then
                     return nil, makeError("character_card_identity_exposed", payloadPath, "캐릭터 일반 카드의 정체를 공개할 수 없습니다.")
                 end
-                return summary(index, event.type, "상대가 " .. tagLabel .. " 행동을 실행했습니다."), nil
+                return summary(index, event.type, "상대가 " .. roleText .. " 역할의 카드를 실행했습니다."), nil
             end
             if payload.cardId == nil then
                 return nil, makeError("missing_player_card_identity", payloadPath .. ".cardId", "플레이어 카드 표시명이 필요합니다.")
             end
             local cardName, card, cardError = lookupCardName(staticData, payload.cardId, "player", payloadPath .. ".cardId", false)
             if cardError then return nil, cardError end
-            if card.actionTag ~= payload.actionTag then
-                return nil, makeError("card_action_mismatch", payloadPath .. ".actionTag", "카드와 공개 행동 태그가 다릅니다.")
+            if not rolesEqual(card.roles, payload.roles) then
+                return nil, makeError("card_role_mismatch", payloadPath .. ".roles", "카드와 공개 역할 태그가 다릅니다.")
             end
             local choiceLabel = nil
             if type(card.effectChoices) == "table" then
@@ -600,7 +625,7 @@
             elseif payload.effectChoiceId ~= nil then
                 return nil, makeError("unexpected_effect_choice", payloadPath .. ".effectChoiceId", "일반 카드에 효과 선택값이 있습니다.")
             end
-            return summary(index, event.type, "플레이어가 ‘" .. cardName .. "’(" .. tagLabel
+            return summary(index, event.type, "플레이어가 ‘" .. cardName .. "’(" .. roleText
                 .. ")을(를) 사용했습니다."
                 .. (choiceLabel and (" 선택 효과: " .. choiceLabel .. ".") or "")
                 .. " 은폐 비용 " .. numberText(payload.stealthCost) .. "."), nil

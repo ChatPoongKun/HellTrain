@@ -33,15 +33,19 @@
             local text = tostring(value or "")
             parts[#parts + 1] = tostring(#text) .. ":" .. text
         end
-        append("presentation-v2")
+        append("presentation-v3")
         append("card.id")
         append(type(card) == "table" and card.id)
         append("card.name")
         append(type(card) == "table" and card.name)
         append("card.description")
         append(type(card) == "table" and card.description)
-        append("card.actionTag")
-        append(type(card) == "table" and card.actionTag)
+        append("card.cardType")
+        append(type(card) == "table" and card.cardType)
+        local roles = type(card) == "table" and type(card.roles) == "table" and card.roles or {}
+        append("card.roles")
+        append(#roles)
+        for _, value in ipairs(roles) do append(value) end
         local mechanisms = type(card) == "table" and type(card.mechanisms) == "table" and card.mechanisms or {}
         append("card.mechanisms")
         append(#mechanisms)
@@ -52,7 +56,7 @@
         for _, value in ipairs(rules) do append(value) end
 
         registry = resolveRegistry(registry)
-        for _, collectionName in ipairs({ "actionTags", "mechanisms", "ruleTerms" }) do
+        for _, collectionName in ipairs({ "cardTypes", "roles", "mechanisms", "ruleTerms" }) do
             append("registry." .. collectionName)
             local collection = type(registry) == "table" and registry[collectionName] or nil
             local keys = {}
@@ -307,9 +311,13 @@
 
     local function lookupTag(registry, tagId, path, errors)
         registry = resolveRegistry(registry)
-        local action = type(registry) == "table"
-            and type(registry.actionTags) == "table"
-            and registry.actionTags[tagId]
+        local cardType = type(registry) == "table"
+            and type(registry.cardTypes) == "table"
+            and registry.cardTypes[tagId]
+            or nil
+        local role = type(registry) == "table"
+            and type(registry.roles) == "table"
+            and registry.roles[tagId]
             or nil
         local mechanism = type(registry) == "table"
             and type(registry.mechanisms) == "table"
@@ -320,12 +328,12 @@
             and registry.ruleTerms[tagId]
             or nil
 
-        local matchCount = (action and 1 or 0) + (mechanism and 1 or 0) + (ruleTerm and 1 or 0)
+        local matchCount = (cardType and 1 or 0) + (role and 1 or 0) + (mechanism and 1 or 0) + (ruleTerm and 1 or 0)
         if matchCount > 1 then
             addError(errors, "tag_registry_collision", path, "태그와 규칙 용어 ID가 충돌합니다: " .. tagId)
             return nil
         end
-        local entry = action or mechanism or ruleTerm
+        local entry = cardType or role or mechanism or ruleTerm
         if not entry then
             addError(errors, "unknown_tag_token", path, "등록되지 않은 태그입니다: " .. tagId)
             return nil
@@ -340,7 +348,7 @@
             kind = "tag",
             id = tagId,
             label = entry.label,
-            tagKind = action and "action" or (mechanism and "mechanism" or "term"),
+            tagKind = cardType and "type" or (role and "role" or (mechanism and "mechanism" or "term")),
             tooltip = entry.tooltip,
         }
     end
@@ -372,11 +380,14 @@
             end
         end
 
-        if type(publicAction) == "table" and publicAction.status == "tagRevealed" then
-            appendTag(publicAction.tag)
+        if type(publicAction) == "table" and publicAction.status == "roleRevealed" then
+            appendTag(publicAction.role)
         end
         for _, item in ipairs(type(handItems) == "table" and handItems or {}) do
-            appendTag(item.actionTag)
+            appendTag(item.cardType)
+            for _, role in ipairs(type(item.roles) == "table" and item.roles or {}) do
+                appendTag(role)
+            end
             for _, mechanism in ipairs(type(item.mechanisms) == "table" and item.mechanisms or {}) do
                 appendTag(mechanism)
             end
@@ -517,7 +528,6 @@
         plan = "계획",
         trait = "특징",
         perk = "퍽",
-        environment = "환경",
         system = "상태 효과",
     }
 
@@ -660,7 +670,12 @@
             return nil
         end
 
-        local actionTag = lookupTag(registry, card.actionTag, path .. ".actionTag", errors)
+        local cardType = lookupTag(registry, card.cardType, path .. ".cardType", errors)
+        local roles = {}
+        for index, roleId in ipairs(card.roles or {}) do
+            local tag = lookupTag(registry, roleId, path .. ".roles[" .. index .. "]", errors)
+            if tag then table.insert(roles, tag) end
+        end
         local mechanisms = {}
         for index, mechanismId in ipairs(card.mechanisms or {}) do
             local tag = lookupTag(registry, mechanismId, path .. ".mechanisms[" .. index .. "]", errors)
@@ -681,13 +696,14 @@
             name = card.name,
             descriptionSegments = descriptionSegments,
             ruleLines = ruleLines,
-            actionTag = actionTag or {
+            cardType = cardType or {
                 kind = "tag",
                 id = "invalid",
                 label = "오류",
-                tagKind = "action",
+                tagKind = "type",
                 tooltip = "태그 정보를 불러오지 못했습니다.",
             },
+            roles = roles,
             mechanisms = mechanisms,
             terms = terms,
         }
@@ -943,7 +959,6 @@
             or type(data.registry) ~= "table"
             or type(data.cards) ~= "table"
             or type(data.traits) ~= "table"
-            or type(data.environments) ~= "table"
             or type(data.subwayLines) ~= "table"
             or type(data.characters) ~= "table" then
             addError(errors, "missing_static_data", "$", "battleView 생성에는 검증된 전체 정적 데이터가 필요합니다.")
@@ -1143,7 +1158,6 @@
 
         local lastTurn = nil
         local characterDefinition = nil
-        local environment = nil
         if interactionOnly ~= true then
             lastTurn = { available = false }
             if lastCommittedInput ~= nil then
@@ -1194,9 +1208,8 @@
             end
 
             characterDefinition = data.characters[displayState.character.characterId]
-            environment = data.environments[displayState.environmentId]
-            if type(characterDefinition) ~= "table" or type(environment) ~= "table" then
-                addError(errors, "missing_static_reference", "$", "캐릭터 또는 환경 정의를 찾을 수 없습니다.")
+            if type(characterDefinition) ~= "table" then
+                addError(errors, "missing_static_reference", "$", "캐릭터 정의를 찾을 수 없습니다.")
                 return failure(errors)
             end
         end
@@ -1255,13 +1268,13 @@
                     character = {
                         resistance = displayState.character.resistance,
                         moodTokens = displayState.character.moodTokens,
-                        publicActionTag = displayState.characterIntent.publicActionTag,
+                        publicRole = displayState.characterIntent.publicRole,
                     },
                     card = {
                         id = card.id,
                         instanceId = instance.instanceId,
                         owner = card.owner,
-                        actionTag = card.actionTag,
+                        roles = card.roles,
                     },
                 }
                 if not locked and card.canPlay ~= nil then
@@ -1345,7 +1358,8 @@
                     name = summary.name,
                     descriptionSegments = summary.descriptionSegments,
                     ruleLines = summary.ruleLines,
-                    actionTag = summary.actionTag,
+                    cardType = summary.cardType,
+                    roles = summary.roles,
                     mechanisms = summary.mechanisms,
                     effectChoices = effectChoices,
                     hasEffectChoices = #effectChoices > 0,
@@ -1368,7 +1382,7 @@
         for index, instanceId in ipairs(selectedIds) do
             local instance = findInstance(displayState.cardInstances, instanceId)
             local card = instance and data.cards[instance.cardId] or nil
-            if card and not hasMechanism(card, "chain") then
+            if card and card.cardType ~= "chain" then
                 mainActionCount = mainActionCount + 1
                 mainActionIndex = index
             end
@@ -1434,12 +1448,12 @@
         end
 
         local publicAction = { status = "none" }
-        if displayState.characterIntent.publicActionTag ~= nil then
-            local tag = lookupTag(data.registry, displayState.characterIntent.publicActionTag, "$.character.publicAction.tag", errors)
-            if tag then
+        if displayState.characterIntent.publicRole ~= nil then
+            local role = lookupTag(data.registry, displayState.characterIntent.publicRole, "$.character.publicAction.role", errors)
+            if role then
                 publicAction = {
-                    status = "tagRevealed",
-                    tag = tag,
+                    status = "roleRevealed",
+                    role = role,
                 }
             end
         end
@@ -1468,11 +1482,10 @@
             locked = locked,
             tagGlossary = buildTagGlossary(publicAction, handItems),
             subway = subwayView,
-            environment = {
-                id = environment.id,
-                name = environment.name,
-                description = environment.description,
-                ruleLines = buildRuleLines(environment.rules, data.registry, "$.environment.rules", errors),
+            scene = {
+                weekday = displayState.sceneContext.weekday,
+                time = displayState.sceneContext.time,
+                weather = displayState.sceneContext.weather,
             },
             player = {
                 stealth = displayState.player.stealth,
@@ -1553,7 +1566,7 @@
         if type(value.label) ~= "string" or value.label == "" then
             addError(errors, "invalid_tag_label", path .. ".label", "태그 표시명이 필요합니다.")
         end
-        if value.tagKind ~= "action" and value.tagKind ~= "mechanism" and value.tagKind ~= "term" then
+        if value.tagKind ~= "type" and value.tagKind ~= "role" and value.tagKind ~= "mechanism" and value.tagKind ~= "term" then
             addError(errors, "invalid_tag_type", path .. ".tagKind", "tagKind가 올바르지 않습니다.")
         elseif expectedTagKind and value.tagKind ~= expectedTagKind then
             addError(errors, "tag_role_mismatch", path .. ".tagKind", "이 위치의 태그 종류는 " .. expectedTagKind .. "이어야 합니다.")
@@ -1623,7 +1636,8 @@
             name = true,
             descriptionSegments = true,
             ruleLines = true,
-            actionTag = true,
+            cardType = true,
+            roles = true,
             mechanisms = true,
             terms = true,
         }, path, errors)
@@ -1635,7 +1649,8 @@
         end
         validateSegments(value.descriptionSegments, path .. ".descriptionSegments", errors)
         validateRuleLines(value.ruleLines, path .. ".ruleLines", errors)
-        validateTagView(value.actionTag, path .. ".actionTag", errors, "action")
+        validateTagView(value.cardType, path .. ".cardType", errors, "type")
+        validateTagArray(value.roles, path .. ".roles", errors, "role")
         validateTagArray(value.mechanisms, path .. ".mechanisms", errors, "mechanism")
         validateTagArray(value.terms, path .. ".terms", errors, "term")
     end
@@ -1801,7 +1816,8 @@
             name = true,
             descriptionSegments = true,
             ruleLines = true,
-            actionTag = true,
+            cardType = true,
+            roles = true,
             mechanisms = true,
             effectChoices = true,
             hasEffectChoices = true,
@@ -1832,7 +1848,8 @@
         end
         validateSegments(value.descriptionSegments, path .. ".descriptionSegments", errors)
         validateRuleLines(value.ruleLines, path .. ".ruleLines", errors)
-        validateTagView(value.actionTag, path .. ".actionTag", errors, "action")
+        validateTagView(value.cardType, path .. ".cardType", errors, "type")
+        validateTagArray(value.roles, path .. ".roles", errors, "role")
         validateTagArray(value.mechanisms, path .. ".mechanisms", errors, "mechanism")
         local choiceCount = getArrayLength(value.effectChoices, path .. ".effectChoices", errors)
         local choiceIds = {}
@@ -2099,7 +2116,7 @@
             interactionToken = true,
             tagGlossary = true,
             subway = true,
-            environment = true,
+            scene = true,
             player = true,
             character = true,
             hand = true,
@@ -2156,14 +2173,15 @@
 
         validateSubwayView(view.subway, "$.subway", errors)
 
-        if type(view.environment) ~= "table" then
-            addError(errors, "invalid_environment", "$.environment", "environment가 테이블이 아닙니다.")
+        if type(view.scene) ~= "table" then
+            addError(errors, "invalid_scene", "$.scene", "전투 배경 View가 테이블이 아닙니다.")
         else
-            checkAllowedKeys(view.environment, { id = true, name = true, description = true, ruleLines = true }, "$.environment", errors)
-            if not isAsciiId(view.environment.id) or type(view.environment.name) ~= "string" or type(view.environment.description) ~= "string" then
-                addError(errors, "invalid_environment_value", "$.environment", "환경 표시 값이 올바르지 않습니다.")
+            checkAllowedKeys(view.scene, { weekday = true, time = true, weather = true }, "$.scene", errors)
+            for _, field in ipairs({ "weekday", "time", "weather" }) do
+                if type(view.scene[field]) ~= "string" or view.scene[field] == "" then
+                    addError(errors, "invalid_scene_value", "$.scene." .. field, "전투 배경 표시값이 올바르지 않습니다.")
+                end
             end
-            validateRuleLines(view.environment.ruleLines, "$.environment.ruleLines", errors)
         end
 
         if type(view.player) ~= "table" then
@@ -2238,9 +2256,9 @@
                 addError(errors, "invalid_public_action", "$.character.publicAction", "공개 행동 View가 테이블이 아닙니다.")
             elseif publicAction.status == "none" then
                 checkAllowedKeys(publicAction, { status = true }, "$.character.publicAction", errors)
-            elseif publicAction.status == "tagRevealed" then
-                checkAllowedKeys(publicAction, { status = true, tag = true }, "$.character.publicAction", errors)
-                validateTagView(publicAction.tag, "$.character.publicAction.tag", errors, "action")
+            elseif publicAction.status == "roleRevealed" then
+                checkAllowedKeys(publicAction, { status = true, role = true }, "$.character.publicAction", errors)
+                validateTagView(publicAction.role, "$.character.publicAction.role", errors, "role")
             else
                 addError(errors, "invalid_public_action_status", "$.character.publicAction.status", "공개 행동 상태가 올바르지 않습니다.")
             end

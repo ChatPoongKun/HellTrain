@@ -205,7 +205,7 @@
             characterHand[index] = {
                 instanceId = instance.instanceId,
                 cardId = instance.cardId,
-                actionTag = type(card) == "table" and card.actionTag or nil,
+                role = type(card) == "table" and card.roles[1] or nil,
                 handPosition = instance.position,
             }
         end
@@ -232,11 +232,11 @@
             character = {
                 resistance = state.character.resistance,
                 moodTokens = moodTokenSnapshot(state, staticData),
-                publicActionTag = nil,
+                publicRole = nil,
             },
         }
         if card ~= nil and instance ~= nil then
-            context.card = { id = card.id, instanceId = instance.instanceId, owner = card.owner, actionTag = card.actionTag }
+            context.card = { id = card.id, instanceId = instance.instanceId, owner = card.owner, roles = card.roles }
         end
         if plan ~= nil then
             context.plan = {
@@ -399,7 +399,7 @@
         moodScore = moodScore + immediateMoodScore
 
         local planChargesEvaluated = 0
-        if hasMechanism(card, "plan") then
+        if card.cardType == "plan" then
             local plan = type(card.mechanismData) == "table" and card.mechanismData.plan or nil
             local assumption = type(plan) == "table" and plan.selectionAssumption or nil
             local event = type(assumption) == "table" and assumption.event or nil
@@ -446,7 +446,7 @@
         return {
             instanceId = instance.instanceId,
             cardId = card.id,
-            actionTag = card.actionTag,
+            role = card.roles[1],
             handPosition = instance.position,
             score = score,
             projectedPlayerStealth = projectedStealth,
@@ -506,7 +506,7 @@
         for index, handEntry in ipairs(context.characterHand) do
             local candidate = receipt.candidates[index]
             local card = type(staticData.cards) == "table" and staticData.cards[handEntry.cardId] or nil
-            if type(card) ~= "table" or card.owner ~= "character" or card.actionTag ~= handEntry.actionTag then
+            if type(card) ~= "table" or card.owner ~= "character" or card.roles[1] ~= handEntry.role then
                 return failure({ makeError("selection_hand_static_mismatch", "$.receipt.selectionContext.characterHand[" .. index .. "]", "선택 시점 손패가 정적 캐릭터 카드와 일치하지 않습니다.") })
             end
             local instance = {
@@ -520,7 +520,7 @@
             if replayErrors then return failure(replayErrors) end
             if candidate.instanceId ~= expected.instanceId
                 or candidate.cardId ~= expected.cardId
-                or candidate.actionTag ~= expected.actionTag
+                or candidate.role ~= expected.role
                 or candidate.handPosition ~= expected.handPosition
                 or candidate.score ~= expected.score
                 or candidate.moodScore ~= expected.moodScore
@@ -545,7 +545,7 @@
         if type(state.characterIntent) ~= "table"
             or type(state.characterIntent.cardInstanceIds) ~= "table"
             or #state.characterIntent.cardInstanceIds > 0
-            or state.characterIntent.publicActionTag ~= nil then
+            or state.characterIntent.publicRole ~= nil then
             return failure({ makeError("character_intent_already_selected", "$.state.characterIntent", "이미 캐릭터 의도가 있는 상태를 다시 선택할 수 없습니다.") })
         end
 
@@ -557,7 +557,7 @@
             if type(card) ~= "table" or card.owner ~= "character" then
                 return failure({ makeError("invalid_character_hand_card", "$.state.cardInstances", "캐릭터 손패의 카드 정의가 올바르지 않습니다: " .. tostring(instance.cardId)) })
             end
-            if hasMechanism(card, "chain") then
+            if card.cardType == "chain" then
                 return failure({ makeError("unsupported_character_chain_selection", "$.staticData.cards." .. card.id .. ".mechanisms", "캐릭터 연계 카드 선택 순서와 장수 정책은 아직 지원하지 않습니다.") })
             end
             local candidate, candidateErrors = scoreCandidate(state, staticData, card, instance)
@@ -647,10 +647,10 @@
             receipt.draw = { kind = "weighted", totalWeight = totalWeight, roll = roll }
         end
 
-        nextState.characterIntent = { cardInstanceIds = { selected.instanceId }, publicActionTag = selected.actionTag }
+        nextState.characterIntent = { cardInstanceIds = { selected.instanceId }, publicRole = selected.role }
         receipt.selectedInstanceId = selected.instanceId
         receipt.selectedCardId = selected.cardId
-        receipt.publicActionTag = selected.actionTag
+        receipt.publicRole = selected.role
         local rngAfter, rngAfterError = cloneData(nextState.rng, "$.state.rng")
         if rngAfterError then return failure({ rngAfterError }) end
         receipt.rngAfter = rngAfter

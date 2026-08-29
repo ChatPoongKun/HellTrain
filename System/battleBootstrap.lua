@@ -20,8 +20,6 @@
         "turn_to_corner",
         "silent_glare",
     }
-    local ENVIRONMENT_ID = "uncrowded"
-
     local function makeError(code, path, message)
         return {
             code = code,
@@ -287,7 +285,6 @@
             seed = true,
             playerCardIds = true,
             characterId = true,
-            environmentId = true,
         }
         for key in pairs(spec) do
             if type(key) ~= "string" or not allowed[key] then
@@ -352,13 +349,6 @@
                 "캐릭터 ID는 lower_snake_case ASCII ID여야 합니다."
             )
         end
-        if not isAsciiId(spec.environmentId) then
-            errors[#errors + 1] = makeError(
-                "invalid_environment_id",
-                "$.environmentId",
-                "환경 ID는 lower_snake_case ASCII ID여야 합니다."
-            )
-        end
         if #errors > 0 then
             return nil, errors
         end
@@ -367,7 +357,6 @@
             seed = spec.seed,
             playerCardIds = copyArray(spec.playerCardIds),
             characterId = spec.characterId,
-            environmentId = spec.environmentId,
         }, nil
     end
 
@@ -522,16 +511,6 @@
             )
         end
 
-        local environments = staticData.environments
-        local environment = type(environments) == "table" and environments[spec.environmentId] or nil
-        if type(environment) ~= "table" then
-            errors[#errors + 1] = makeError(
-                "unknown_environment",
-                "$.environmentId",
-                "정적 DB에서 환경을 찾을 수 없습니다."
-            )
-        end
-
         return character, battle, errors, nil
     end
 
@@ -566,7 +545,8 @@
         if type(report) ~= "table" or report.ok ~= true
             or not isSafeInteger(report.turnLimit, 1)
             or report.turnLimit ~= turnLimit
-            or type(report.transit) ~= "table" then
+            or type(report.transit) ~= "table"
+            or type(report.sceneContext) ~= "table" then
             local nestedErrors = copyErrors(report)
             if #nestedErrors == 0 then
                 nestedErrors[1] = makeError(
@@ -580,6 +560,7 @@
         return {
             turnLimit = report.turnLimit,
             transit = report.transit,
+            sceneContext = report.sceneContext,
         }, nil
     end
 
@@ -618,8 +599,8 @@
             status = "active",
             turnNumber = 1,
             turnLimit = journey.turnLimit,
-            environmentId = ENVIRONMENT_ID,
             transit = journey.transit,
+            sceneContext = journey.sceneContext,
             rng = {
                 seed = normalized.seed,
                 cursor = 0,
@@ -758,8 +739,8 @@
             status = "active",
             turnNumber = 1,
             turnLimit = journey.turnLimit,
-            environmentId = normalized.environmentId,
             transit = journey.transit,
+            sceneContext = journey.sceneContext,
             rng = {
                 seed = normalized.seed,
                 cursor = 0,

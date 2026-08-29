@@ -589,21 +589,26 @@ font-weight: 800;
 line-height: 1;
 white-space: nowrap;
 }
-.ht-top-environment {
-display: inline-flex;
-align-items: center;
-min-height: 23px;
+.ht-scene-context {
+min-width: 0;
 margin-left: auto;
-padding: 3px 7px;
-color: #c9c2bc;
-background: rgba(255, 255, 255, .045);
-border: 1px solid var(--line);
-border-radius: 999px;
-font-size: 9px;
-font-weight: 700;
-line-height: 1.25;
 text-align: right;
 word-break: keep-all;
+}
+.ht-scene-context strong,
+.ht-scene-context span {
+display: block;
+}
+.ht-scene-context strong {
+color: #eee8e2;
+font-size: 9px;
+line-height: 1.25;
+}
+.ht-scene-context span {
+margin-top: 3px;
+color: var(--muted);
+font-size: 7px;
+font-weight: 700;
 }
 .ht-route {
 --route-color: #777;
@@ -1157,32 +1162,6 @@ white-space: nowrap;
 .ht-mood.is-current .ht-mood-name {
 color: #fff;
 }
-.ht-subrow {
-display: block;
-margin-top: 7px;
-}
-.ht-env-card {
-width: 100%;
-min-width: 0;
-padding: 6px 8px;
-border-left: 2px solid #676269;
-border-radius: 3px 7px 7px 3px;
-background: rgba(255, 255, 255, .035);
-text-align: left;
-}
-.ht-env-name {
-display: block;
-font-size: 9px;
-font-weight: 800;
-}
-.ht-env-desc {
-display: block;
-margin-top: 2px;
-color: var(--muted);
-font-size: 8px;
-line-height: 1.45;
-word-break: keep-all;
-}
 .ht-hand {
 margin-top: 8px;
 }
@@ -1624,7 +1603,6 @@ rgba(18, 16, 21, .96);
 text-align: center;
 }
 .ht-battle.is-aftermath .ht-layout,
-.ht-battle.is-aftermath .ht-subrow,
 .ht-battle.is-aftermath .ht-hand,
 .ht-battle.is-aftermath .ht-footer,
 .ht-battle.is-aftermath .ht-log {
@@ -1708,11 +1686,8 @@ padding: 7px 9px;
 .ht-title {
 font-size: 11px;
 }
-.ht-top-environment {
-max-width: 46%;
-padding-right: 6px;
-padding-left: 6px;
-white-space: normal;
+.ht-scene-context strong {
+font-size: 8px;
 }
 .ht-route {
 padding-right: 7px;
@@ -1814,9 +1789,11 @@ padding-left: 10px;
 .ht-brand-copy .ht-kicker {
 display: none;
 }
-.ht-top-environment {
-max-width: 44%;
-font-size: 8px;
+.ht-scene-context {
+max-width: 50%;
+}
+.ht-scene-context strong {
+white-space: normal;
 }
 .ht-route-line strong {
 font-size: 9px;
@@ -2245,16 +2222,10 @@ color: var(--run-dim);
 font-size: 9px;
 }
 
-.run-flow .run-environment {
+.run-flow .run-operator {
 color: var(--run-muted);
 font-size: 8px;
 text-align: right;
-}
-
-.run-flow .run-environment strong {
-display: block;
-color: var(--run-text);
-font-size: 9px;
 }
 
 .run-flow .run-battle-log {
@@ -2854,7 +2825,7 @@ min-height: 72px;
 grid-template-columns: 1fr;
 }
 
-.run-flow .run-environment {
+.run-flow .run-operator {
 text-align: left;
 }
 

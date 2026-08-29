@@ -4,7 +4,6 @@
         plan = 1,
         trait = 2,
         perk = 3,
-        environment = 4,
     }
 
     local function makeError(code, path, message)
@@ -256,7 +255,7 @@
                     id = true,
                     instanceId = true,
                     owner = true,
-                    actionTag = true,
+                    roles = true,
                     effectChoiceId = true,
                 }
                 for key in pairs(value) do
@@ -289,11 +288,11 @@
                         "현재 카드 소유자는 player 또는 character여야 합니다."
                     )
                 end
-                if value.actionTag ~= nil and (type(value.actionTag) ~= "string" or value.actionTag == "") then
+                if not isDenseArray(value.roles) or #value.roles < 1 then
                     errors[#errors + 1] = makeError(
-                        "invalid_current_action_tag",
-                        "$.options.currentCard.actionTag",
-                        "현재 카드 행동 태그가 올바르지 않습니다."
+                        "invalid_current_roles",
+                        "$.options.currentCard.roles",
+                        "현재 카드 역할이 올바르지 않습니다."
                     )
                 end
                 if value.effectChoiceId ~= nil
@@ -305,7 +304,7 @@
                     id = value.id,
                     instanceId = value.instanceId,
                     owner = value.owner,
-                    actionTag = value.actionTag,
+                    roles = value.roles,
                     effectChoiceId = value.effectChoiceId,
                 }
             end
@@ -330,8 +329,7 @@
             or type(staticData.registry) ~= "table"
             or type(staticData.registry.events) ~= "table"
             or type(staticData.cards) ~= "table"
-            or type(staticData.traits) ~= "table"
-            or type(staticData.environments) ~= "table" then
+            or type(staticData.traits) ~= "table" then
             errors[#errors + 1] = makeError(
                 "invalid_static_data",
                 "$.staticData",
@@ -429,7 +427,7 @@
             character = {
                 resistance = state.character.resistance,
                 moodTokens = state.character.moodTokens,
-                publicActionTag = intent.publicActionTag,
+                publicRole = intent.publicRole,
             },
         }
         if options.currentCard ~= nil then
@@ -437,7 +435,7 @@
                 id = options.currentCard.id,
                 instanceId = options.currentCard.instanceId,
                 owner = options.currentCard.owner,
-                actionTag = options.currentCard.actionTag,
+                roles = options.currentCard.roles,
             }
             if options.currentCard.effectChoiceId ~= nil then
                 context.effectChoiceId = options.currentCard.effectChoiceId
@@ -676,38 +674,6 @@
                         return nil, addErrors
                     end
                 end
-            end
-        end
-
-        local environment = staticData.environments[snapshot.environmentId]
-        if type(environment) ~= "table" then
-            return nil, {
-                makeError("unknown_environment", "$.working.state.environmentId", "환경을 찾을 수 없습니다."),
-            }
-        end
-        if type(environment.id) ~= "string" or environment.id == "" then
-            return nil, {
-                makeError("invalid_environment", "$.staticData.environments", "환경 ID가 올바르지 않습니다."),
-            }
-        end
-        local environmentPath = "$.staticData.environments." .. environment.id .. ".triggers"
-        if not isDenseArray(environment.triggers) then
-            return nil, {
-                makeError("invalid_triggers", environmentPath, "환경 트리거가 배열이 아닙니다."),
-            }
-        end
-        for index, spec in ipairs(environment.triggers) do
-            local added, addErrors = addCandidate(
-                "environment",
-                environment.id,
-                nil,
-                index,
-                spec,
-                nil,
-                environmentPath .. "[" .. index .. "]"
-            )
-            if not added then
-                return nil, addErrors
             end
         end
 

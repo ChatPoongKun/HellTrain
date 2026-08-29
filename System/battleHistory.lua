@@ -196,8 +196,21 @@
         if not isRuntimeId(record.instanceId) then
             addError(errors, "invalid_history_instance_id", path .. ".instanceId", "카드 이력 인스턴스 ID가 올바르지 않습니다.")
         end
-        if not isAsciiId(record.actionTag) then
-            addError(errors, "invalid_history_action_tag", path .. ".actionTag", "카드 이력 행동 태그가 올바르지 않습니다.")
+        if not isDenseArray(record.roles) or #record.roles < 1 or #record.roles > 2 or (side == "character" and #record.roles ~= 1) then
+            addError(errors, "invalid_history_roles", path .. ".roles", "카드 이력 역할 태그 목록이 올바르지 않습니다.")
+        else
+            local seenRoles = {}
+            for roleIndex, role in ipairs(record.roles) do
+                local definition = type(staticData) == "table"
+                    and type(staticData.registry) == "table"
+                    and type(staticData.registry.roles) == "table"
+                    and staticData.registry.roles[role]
+                    or nil
+                if not isAsciiId(role) or seenRoles[role] or (definition ~= nil and definition.owner ~= side) then
+                    addError(errors, "invalid_history_role", path .. ".roles[" .. roleIndex .. "]", "카드 이력 역할 태그가 올바르지 않습니다.")
+                end
+                seenRoles[role] = true
+            end
         end
         for _, field in ipairs({ "selected", "declared", "resolved" }) do
             if type(record[field]) ~= "boolean" then
@@ -229,27 +242,27 @@
                 addError(errors, "unknown_history_card", path .. ".cardId", "카드 이력의 정적 카드 정의를 찾을 수 없습니다.")
             elseif card.owner ~= side then
                 addError(errors, "history_card_owner_mismatch", path .. ".cardId", "카드 이력 진영과 정적 카드 소유자가 다릅니다.")
-            elseif card.actionTag ~= record.actionTag then
-                addError(errors, "history_card_tag_mismatch", path .. ".actionTag", "카드 이력 행동 태그와 정적 카드 정의가 다릅니다.")
+            elseif not dataEqual(card.roles, record.roles) then
+                addError(errors, "history_card_role_mismatch", path .. ".roles", "카드 이력 역할 태그와 정적 카드 정의가 다릅니다.")
             end
         end
     end
 
-    local function validateTagCounts(value, path, errors, staticData)
+    local function validateRoleCounts(value, path, errors, staticData)
         if type(value) ~= "table" or getmetatable(value) ~= nil then
-            addError(errors, "invalid_history_tag_counts", path, "행동 태그 집계가 일반 객체가 아닙니다.")
+            addError(errors, "invalid_history_role_counts", path, "역할 태그 집계가 일반 객체가 아닙니다.")
             return
         end
-        for tagId, count in pairs(value) do
-            if not isAsciiId(tagId) then
-                addError(errors, "invalid_history_action_tag", path, "집계 행동 태그 ID가 올바르지 않습니다.")
+        for roleId, count in pairs(value) do
+            if not isAsciiId(roleId) then
+                addError(errors, "invalid_history_role", path, "집계 역할 태그 ID가 올바르지 않습니다.")
             elseif not isInteger(count, 0) then
-                addError(errors, "invalid_history_tag_count", path .. "." .. tostring(tagId), "행동 태그 횟수는 0 이상의 정수여야 합니다.")
+                addError(errors, "invalid_history_role_count", path .. "." .. tostring(roleId), "역할 태그 횟수는 0 이상의 정수여야 합니다.")
             elseif type(staticData) == "table"
                 and type(staticData.registry) == "table"
-                and type(staticData.registry.actionTags) == "table"
-                and staticData.registry.actionTags[tagId] == nil then
-                addError(errors, "unknown_history_action_tag", path .. "." .. tagId, "집계 행동 태그를 정적 레지스트리에서 찾을 수 없습니다.")
+                and type(staticData.registry.roles) == "table"
+                and staticData.registry.roles[roleId] == nil then
+                addError(errors, "unknown_history_role", path .. "." .. roleId, "집계 역할 태그를 정적 레지스트리에서 찾을 수 없습니다.")
             end
         end
     end
@@ -269,7 +282,9 @@
         local counts = {}
         for _, card in ipairs(cards or {}) do
             if card[field] == true then
-                counts[card.actionTag] = (counts[card.actionTag] or 0) + 1
+                for _, role in ipairs(card.roles or {}) do
+                    counts[role] = (counts[role] or 0) + 1
+                end
             end
         end
         return counts
@@ -334,22 +349,22 @@
             end
         end
 
-        if type(entry.tagCounts) ~= "table" then
-            addError(errors, "invalid_history_tag_counts", path .. ".tagCounts", "턴 행동 태그 집계가 객체가 아닙니다.")
+        if type(entry.roleCounts) ~= "table" then
+            addError(errors, "invalid_history_role_counts", path .. ".roleCounts", "턴 역할 태그 집계가 객체가 아닙니다.")
         else
             for _, side in ipairs({ "player", "character" }) do
-                local sideCounts = entry.tagCounts[side]
+                local sideCounts = entry.roleCounts[side]
                 if type(sideCounts) ~= "table" then
-                    addError(errors, "invalid_history_tag_counts", path .. ".tagCounts." .. side, "진영별 행동 태그 집계가 객체가 아닙니다.")
+                    addError(errors, "invalid_history_role_counts", path .. ".roleCounts." .. side, "진영별 역할 태그 집계가 객체가 아닙니다.")
                 else
-                    validateTagCounts(sideCounts.declared, path .. ".tagCounts." .. side .. ".declared", errors, staticData)
-                    validateTagCounts(sideCounts.resolved, path .. ".tagCounts." .. side .. ".resolved", errors, staticData)
+                    validateRoleCounts(sideCounts.declared, path .. ".roleCounts." .. side .. ".declared", errors, staticData)
+                    validateRoleCounts(sideCounts.resolved, path .. ".roleCounts." .. side .. ".resolved", errors, staticData)
                     if type(entry.cards) == "table" and isDenseArray(entry.cards[side]) then
                         if not dataEqual(sideCounts.declared, countCards(entry.cards[side], "declared")) then
-                            addError(errors, "history_declared_count_mismatch", path .. ".tagCounts." .. side .. ".declared", "선언 태그 집계가 카드 이력과 다릅니다.")
+                            addError(errors, "history_declared_count_mismatch", path .. ".roleCounts." .. side .. ".declared", "선언 역할 집계가 카드 이력과 다릅니다.")
                         end
                         if not dataEqual(sideCounts.resolved, countCards(entry.cards[side], "resolved")) then
-                            addError(errors, "history_resolved_count_mismatch", path .. ".tagCounts." .. side .. ".resolved", "해결 태그 집계가 카드 이력과 다릅니다.")
+                            addError(errors, "history_resolved_count_mismatch", path .. ".roleCounts." .. side .. ".resolved", "해결 역할 집계가 카드 이력과 다릅니다.")
                         end
                     end
                 end
@@ -490,13 +505,15 @@
                 and type(staticData.cards) == "table"
                 and staticData.cards[cardId]
                 or nil
-            if type(card) ~= "table" or card.owner ~= side or not isAsciiId(card.actionTag) then
+            if type(card) ~= "table" or card.owner ~= side or not isDenseArray(card.roles) then
                 return nil
             end
+            local roles = {}
+            for index, role in ipairs(card.roles) do roles[index] = role end
             local record = {
                 cardId = cardId,
                 instanceId = instanceId,
-                actionTag = card.actionTag,
+                roles = roles,
                 selected = selected[side][instanceId] == true,
                 declared = false,
                 resolved = false,
@@ -585,7 +602,7 @@
             finish = finishCopy,
             mood = moodCopy,
             cards = cards,
-            tagCounts = {
+            roleCounts = {
                 player = {
                     declared = countCards(cards.player, "declared"),
                     resolved = countCards(cards.player, "resolved"),
@@ -650,10 +667,12 @@
     end
 
     local function cardContextRecord(record)
+        local roles = {}
+        for index, role in ipairs(record.roles) do roles[index] = role end
         return {
             cardId = record.cardId,
             instanceId = record.instanceId,
-            actionTag = record.actionTag,
+            roles = roles,
             selected = record.selected,
             declared = record.declared,
             resolved = record.resolved,
@@ -690,8 +709,8 @@
             },
             playerCards = {},
             characterCards = {},
-            playerActionTags = {},
-            characterActionTags = {},
+            playerRoles = {},
+            characterRoles = {},
         }
         if entry.mood.targetMood ~= nil then value.mood.targetMood = entry.mood.targetMood end
         if type(entry.mood.tiedMoods) == "table" then
@@ -702,10 +721,12 @@
         end
         for _, side in ipairs({ "player", "character" }) do
             local outputCards = side == "player" and value.playerCards or value.characterCards
-            local outputTags = side == "player" and value.playerActionTags or value.characterActionTags
+            local outputRoles = side == "player" and value.playerRoles or value.characterRoles
             for _, record in ipairs(entry.cards[side]) do
                 outputCards[#outputCards + 1] = cardContextRecord(record)
-                if record.resolved then outputTags[#outputTags + 1] = record.actionTag end
+                if record.resolved then
+                    for _, role in ipairs(record.roles) do outputRoles[#outputRoles + 1] = role end
+                end
             end
         end
         return value
@@ -722,23 +743,23 @@
             turns = {},
             windows = {},
             player = {
-                declaredTagCounts = {},
-                resolvedTagCounts = {},
+                declaredRoleCounts = {},
+                resolvedRoleCounts = {},
             },
             character = {
-                declaredTagCounts = {},
-                resolvedTagCounts = {},
+                declaredRoleCounts = {},
+                resolvedRoleCounts = {},
             },
         }
 
         for index, entry in ipairs(turns) do
             context.turns[index] = turnContext(entry)
             for _, side in ipairs({ "player", "character" }) do
-                addCounts(context[side].declaredTagCounts, entry.tagCounts[side].declared)
-                addCounts(context[side].resolvedTagCounts, entry.tagCounts[side].resolved)
+                addCounts(context[side].declaredRoleCounts, entry.roleCounts[side].declared)
+                addCounts(context[side].resolvedRoleCounts, entry.roleCounts[side].resolved)
                 for _, card in ipairs(entry.cards[side]) do
-                    if card.declared then context[side].lastDeclaredActionTag = card.actionTag end
-                    if card.resolved then context[side].lastResolvedActionTag = card.actionTag end
+                    if card.declared then context[side].lastDeclaredRoles = cardContextRecord(card).roles end
+                    if card.resolved then context[side].lastResolvedRoles = cardContextRecord(card).roles end
                 end
             end
         end
@@ -751,15 +772,15 @@
             local windowValue = {
                 requestedTurns = window,
                 availableTurns = availableTurns,
-                player = { declaredTagCounts = {}, resolvedTagCounts = {} },
-                character = { declaredTagCounts = {}, resolvedTagCounts = {} },
+                player = { declaredRoleCounts = {}, resolvedRoleCounts = {} },
+                character = { declaredRoleCounts = {}, resolvedRoleCounts = {} },
             }
             local first = math.max(1, #turns - window + 1)
             for index = first, #turns do
                 local entry = turns[index]
                 for _, side in ipairs({ "player", "character" }) do
-                    addCounts(windowValue[side].declaredTagCounts, entry.tagCounts[side].declared)
-                    addCounts(windowValue[side].resolvedTagCounts, entry.tagCounts[side].resolved)
+                    addCounts(windowValue[side].declaredRoleCounts, entry.roleCounts[side].declared)
+                    addCounts(windowValue[side].resolvedRoleCounts, entry.roleCounts[side].resolved)
                 end
             end
             context.windows[window] = windowValue
@@ -793,8 +814,8 @@
                     for _, side in ipairs({ "player", "character" }) do
                         local sideValue = current[side]
                         if type(sideValue) ~= "table"
-                            or type(sideValue.declaredTagCounts) ~= "table"
-                            or type(sideValue.resolvedTagCounts) ~= "table" then
+                            or type(sideValue.declaredRoleCounts) ~= "table"
+                            or type(sideValue.resolvedRoleCounts) ~= "table" then
                             addError(errors, "invalid_history_window_side", "$.windows[" .. window .. "]." .. side, "기간 창의 진영별 태그 집계가 올바르지 않습니다.")
                         end
                     end
@@ -803,8 +824,8 @@
         end
         for _, side in ipairs({ "player", "character" }) do
             if type(value[side]) ~= "table"
-                or type(value[side].declaredTagCounts) ~= "table"
-                or type(value[side].resolvedTagCounts) ~= "table" then
+                or type(value[side].declaredRoleCounts) ~= "table"
+                or type(value[side].resolvedRoleCounts) ~= "table" then
                 addError(errors, "invalid_history_context_side", "$." .. side, "진영별 이력 집계가 올바르지 않습니다.")
             end
         end
@@ -835,13 +856,19 @@
         return type(card) == "table" and card.name or tostring(cardId)
     end
 
-    local function tagLabel(staticData, tagId)
-        local tag = type(staticData) == "table"
+    local function roleLabel(staticData, roleId)
+        local role = type(staticData) == "table"
             and type(staticData.registry) == "table"
-            and type(staticData.registry.actionTags) == "table"
-            and staticData.registry.actionTags[tagId]
+            and type(staticData.registry.roles) == "table"
+            and staticData.registry.roles[roleId]
             or nil
-        return type(tag) == "table" and tag.label or tostring(tagId)
+        return type(role) == "table" and role.label or tostring(roleId)
+    end
+
+    local function roleLabels(staticData, roles)
+        local labels = {}
+        for index, roleId in ipairs(roles or {}) do labels[index] = roleLabel(staticData, roleId) end
+        return table.concat(labels, "·")
     end
 
     local EFFECT_TEXT = {
@@ -968,8 +995,8 @@
                 local text = nil
                 if eventType == "card_declared" and type(payload) == "table" and isAsciiId(payload.cardId) then
                     text = "플레이어 카드 「" .. cardName(staticData, payload.cardId) .. "」 선언"
-                elseif eventType == "character_intent" and type(payload) == "table" and isAsciiId(payload.actionTag) then
-                    text = "상대 예고 행동 — " .. tagLabel(staticData, payload.actionTag)
+                elseif eventType == "character_intent" and type(payload) == "table" and isAsciiId(payload.role) then
+                    text = "상대 예고 역할 — " .. roleLabel(staticData, payload.role)
                 elseif eventType == "effect_applied" and type(payload) == "table" then
                     local effectLabel = EFFECT_TEXT[payload.op]
                     if effectLabel and isFinite(payload.amount) then
@@ -1014,7 +1041,7 @@
                         card.resolutionSequence or 9000,
                         "player_card_resolved",
                         "플레이어 해결 — 「" .. cardName(staticData, card.cardId)
-                            .. "」 · " .. tagLabel(staticData, card.actionTag)
+                            .. "」 · " .. roleLabels(staticData, card.roles)
                     )
                 end
             end
@@ -1024,7 +1051,7 @@
                         entry.turnNumber,
                         card.resolutionSequence or 9100,
                         "character_card_resolved",
-                        "상대 행동 해결 — " .. tagLabel(staticData, card.actionTag)
+                        "상대 행동 해결 — " .. roleLabels(staticData, card.roles)
                     )
                 end
             end

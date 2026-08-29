@@ -265,7 +265,8 @@
             name = presentation.card.name,
             descriptionSegments = presentation.card.descriptionSegments,
             ruleLines = presentation.card.ruleLines,
-            actionTag = presentation.card.actionTag,
+            cardType = presentation.card.cardType,
+            roles = presentation.card.roles,
             mechanisms = presentation.card.mechanisms,
             terms = presentation.card.terms,
             baseStealthCost = card.base.stealthCost,
@@ -413,7 +414,7 @@
         if type(value.label) ~= "string" or value.label == "" then
             addError(errors, "invalid_tag_label", path .. ".label", "태그 표시명이 필요합니다.")
         end
-        if value.tagKind ~= "action" and value.tagKind ~= "mechanism" and value.tagKind ~= "term" then
+        if value.tagKind ~= "type" and value.tagKind ~= "role" and value.tagKind ~= "mechanism" and value.tagKind ~= "term" then
             addError(errors, "invalid_tag_type", path .. ".tagKind", "tagKind가 올바르지 않습니다.")
         elseif expectedTagKind ~= nil and value.tagKind ~= expectedTagKind then
             addError(errors, "tag_role_mismatch", path .. ".tagKind", "이 위치의 태그 종류가 올바르지 않습니다.")
@@ -511,7 +512,8 @@
             name = true,
             descriptionSegments = true,
             ruleLines = true,
-            actionTag = true,
+            cardType = true,
+            roles = true,
             mechanisms = true,
             terms = true,
             baseStealthCost = true,
@@ -533,7 +535,16 @@
         end
         validateSegments(card.descriptionSegments, path .. ".descriptionSegments", errors)
         validateRuleLines(card.ruleLines, path .. ".ruleLines", errors)
-        validateTagView(card.actionTag, path .. ".actionTag", errors, "action")
+        validateTagView(card.cardType, path .. ".cardType", errors, "type")
+        local roleCount = getArrayLength(card.roles, path .. ".roles", errors)
+        if roleCount ~= nil then
+            if roleCount < 1 or roleCount > 2 then
+                addError(errors, "invalid_card_roles", path .. ".roles", "플레이어 카드는 역할 태그를 하나 또는 둘 가져야 합니다.")
+            end
+            for index = 1, roleCount do
+                validateTagView(card.roles[index], path .. ".roles[" .. index .. "]", errors, "role")
+            end
+        end
         validateMechanisms(card.mechanisms, path .. ".mechanisms", errors)
         validateTerms(card.terms, path .. ".terms", errors)
         if not isFinite(card.baseStealthCost) or card.baseStealthCost < 0 then
@@ -893,7 +904,8 @@
             or type(data.characters) ~= "table"
             or type(data.traits) ~= "table"
             or type(data.registry) ~= "table"
-            or type(data.registry.actionTags) ~= "table"
+            or type(data.registry.cardTypes) ~= "table"
+            or type(data.registry.roles) ~= "table"
             or type(data.registry.mechanisms) ~= "table"
             or type(data.registry.moods) ~= "table" then
             addError(errors, "missing_static_data", "$.staticData", "gameSetupView 생성에는 검증된 카드·캐릭터·태그·무드 데이터가 필요합니다.")

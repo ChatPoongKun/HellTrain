@@ -672,13 +672,13 @@
             character = {
                 resistance = state.character.resistance,
                 moodTokens = tokens,
-                publicActionTag = state.characterIntent.publicActionTag,
+                publicRole = state.characterIntent.publicRole,
             },
             card = {
                 id = card.id,
                 instanceId = instance.instanceId,
                 owner = card.owner,
-                actionTag = card.actionTag,
+                roles = card.roles,
             },
         }
     end
@@ -759,7 +759,7 @@
                     return nil, { makeError("unexpected_effect_choice", "$.draft.effectChoiceByInstanceId." .. instanceId, "효과 선택지가 없는 카드에 선택값이 있습니다.") }
                 end
                 table.insert(keptIds, instanceId)
-                if not hasMechanism(card, "chain") then
+                if card.cardType ~= "chain" then
                     mainActionCount = mainActionCount + 1
                     mainActionIndex = #keptIds
                     if mainActionCount > 1 then
@@ -1142,14 +1142,14 @@
                     local sourceInstance = findInstance(validated.state, currentId)
                     currentCard = sourceInstance and validated.staticData.cards[sourceInstance.cardId] or nil
                 end
-                if currentCard and hasMechanism(currentCard, "chain") then
+                if currentCard and currentCard.cardType == "chain" then
                     table.insert(chainIds, currentId)
                 else
                     mainId = currentId
                 end
             end
 
-            if hasMechanism(targetCard, "chain") then
+            if targetCard.cardType == "chain" then
                 appendAll(nextIds, chainIds)
                 table.insert(nextIds, instanceId)
                 if mainId then

@@ -459,7 +459,7 @@
         if type(authorityState.characterIntent) ~= "table"
             or not isDenseArray(authorityState.characterIntent.cardInstanceIds)
             or #authorityState.characterIntent.cardInstanceIds > 0
-            or authorityState.characterIntent.publicActionTag ~= nil then
+            or authorityState.characterIntent.publicRole ~= nil then
             return failure({
                 makeError(
                     "character_intent_not_empty",
@@ -872,9 +872,9 @@
         if selectedInstanceId == nil then
             if not isDenseArray(selectionIntent.cardInstanceIds)
                 or #selectionIntent.cardInstanceIds ~= 0
-                or selectionIntent.publicActionTag ~= nil
+                or selectionIntent.publicRole ~= nil
                 or selectionReceipt.selectedCardId ~= nil
-                or selectionReceipt.publicActionTag ~= nil
+                or selectionReceipt.publicRole ~= nil
                 or type(selectionReceipt.draw) ~= "table"
                 or selectionReceipt.draw.kind ~= "pass" then
                 return failure({
@@ -888,7 +888,7 @@
         elseif not isDenseArray(selectionIntent.cardInstanceIds)
             or #selectionIntent.cardInstanceIds ~= 1
             or selectionIntent.cardInstanceIds[1] ~= selectedInstanceId
-            or selectionIntent.publicActionTag ~= selectionReceipt.publicActionTag then
+            or selectionIntent.publicRole ~= selectionReceipt.publicRole then
             return failure({
                 makeError(
                     "character_selection_selected_mismatch",
@@ -918,30 +918,30 @@
             local card = staticData.cards[selectedInstance.cardId]
             if type(card) ~= "table"
                 or card.id ~= selectionReceipt.selectedCardId
-                or card.actionTag ~= selectionReceipt.publicActionTag then
+                or card.roles[1] ~= selectionReceipt.publicRole then
                 return failure({
                     makeError(
-                        "selected_action_tag_mismatch",
-                        "$.characterSelection.publicActionTag",
-                        "선택 카드와 공개 행동 태그가 일치하지 않습니다."
+                        "selected_role_mismatch",
+                        "$.characterSelection.publicRole",
+                        "선택 카드와 공개 역할이 일치하지 않습니다."
                     ),
                 })
             end
             local revealEvent = appendEvent(
-                "action_tag_revealed",
+                "role_revealed",
                 source("system", "character_selector", "character"),
                 {
-                    actionTag = card.actionTag,
+                    role = card.roles[1],
                 },
                 "character",
                 { kind = "turn_rule" }
             )
             local revealInput = {
-                type = "action_tag_revealed",
+                type = "role_revealed",
                 side = "character",
                 cardId = card.id,
                 cardInstanceId = selectedInstance.instanceId,
-                actionTag = card.actionTag,
+                role = card.roles[1],
             }
             local revealPipeline, revealPipelineErrors = callModule(
                 "triggerPipeline",
@@ -955,7 +955,7 @@
                         id = card.id,
                         instanceId = selectedInstance.instanceId,
                         owner = "character",
-                        actionTag = card.actionTag,
+                        roles = card.roles,
                     },
                 }
             )
@@ -977,7 +977,7 @@
                     makeError(
                         "turn_start_outcome_policy_pending",
                         "$.state.status",
-                        "행동 태그 공개 효과만으로 승패가 정해질 때의 세션 종료 연결 정책은 아직 지원하지 않습니다."
+                        "역할 공개 효과만으로 승패가 정해질 때의 세션 종료 연결 정책은 아직 지원하지 않습니다."
                     ),
                 })
             end

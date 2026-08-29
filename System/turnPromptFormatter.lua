@@ -131,12 +131,26 @@
         return staticData
     end
 
-    local function actionTagMatches(staticData, actionTag, actor)
-        local tags = type(staticData.registry) == "table" and staticData.registry.actionTags or nil
-        local definition = type(tags) == "table" and tags[actionTag] or nil
+    local function roleMatches(staticData, role, actor)
+        local roles = type(staticData.registry) == "table" and staticData.registry.roles or nil
+        local definition = type(roles) == "table" and roles[role] or nil
         return type(definition) == "table"
-            and definition.id == actionTag
+            and definition.id == role
             and definition.owner == actor
+    end
+
+    local function rolesMatch(staticData, roles, actor, expected)
+        if not isDenseArray(roles) or #roles < 1 or #roles > 2 or (actor == "character" and #roles ~= 1) then
+            return false
+        end
+        if expected ~= nil and (not isDenseArray(expected) or #expected ~= #roles) then return false end
+        local seen = {}
+        for index, role in ipairs(roles) do
+            if seen[role] or not roleMatches(staticData, role, actor) then return false end
+            if expected ~= nil and expected[index] ~= role then return false end
+            seen[role] = true
+        end
+        return true
     end
 
     local function hasMechanism(card, mechanismId)
@@ -150,11 +164,11 @@
 
     local function narrationMatches(staticData, payload, narrationKey, planRequired)
         for _, card in pairs(type(staticData.cards) == "table" and staticData.cards or {}) do
-            local isPlan = hasMechanism(card, "plan")
+            local isPlan = card.cardType == "plan"
             if type(card) == "table"
                 and card.owner == payload.actor
                 and (planRequired == true) == isPlan
-                and (payload.actionTag == nil or card.actionTag == payload.actionTag) then
+                and (payload.roles == nil or rolesMatch(staticData, payload.roles, payload.actor, card.roles)) then
                 local entry = type(card.narration) == "table" and card.narration[narrationKey] or nil
                 if type(entry) == "table"
                     and entry.actorAction == payload.actorAction
@@ -174,7 +188,7 @@
 
     local function knownPlanWithoutNarration(staticData, actor, narrationKey)
         for _, card in pairs(type(staticData.cards) == "table" and staticData.cards or {}) do
-            if type(card) == "table" and card.owner == actor and hasMechanism(card, "plan") then
+            if type(card) == "table" and card.owner == actor and card.cardType == "plan" then
                 local entry = type(card.narration) == "table" and card.narration[narrationKey] or nil
                 if entry == nil then
                     return true
@@ -321,20 +335,20 @@
             end
             return { turnNumber = payload.turnNumber }, nil
         elseif eventType == "character_intent" then
-            local keyError = checkAllowedKeys(payload, { selected = true, actionTag = true }, path)
+            local keyError = checkAllowedKeys(payload, { selected = true, role = true }, path)
             if keyError then return nil, keyError end
             if type(payload.selected) ~= "boolean" then
                 return nil, makeError("invalid_character_intent", path, "캐릭터 의도 선택 여부가 올바르지 않습니다.")
             end
-            local expectedTag = pending.beforeState.characterIntent.publicActionTag
+            local expectedRole = pending.beforeState.characterIntent.publicRole
             if payload.selected == true then
-                if not actionTagMatches(staticData, payload.actionTag, "character") or payload.actionTag ~= expectedTag then
-                    return nil, makeError("character_intent_mismatch", path, "캐릭터 공개 행동 태그가 권위 상태와 다릅니다.")
+                if not roleMatches(staticData, payload.role, "character") or payload.role ~= expectedRole then
+                    return nil, makeError("character_intent_mismatch", path, "캐릭터 공개 역할 태그가 권위 상태와 다릅니다.")
                 end
-                return { selected = true, actionTag = payload.actionTag }, nil
+                return { selected = true, role = payload.role }, nil
             end
-            if payload.actionTag ~= nil or expectedTag ~= nil then
-                return nil, makeError("character_intent_mismatch", path, "선택하지 않은 캐릭터 의도에 행동 태그가 있습니다.")
+            if payload.role ~= nil or expectedRole ~= nil then
+                return nil, makeError("character_intent_mismatch", path, "선택하지 않은 캐릭터 의도에 역할 태그가 있습니다.")
             end
             return { selected = false }, nil
         elseif eventType == "effect_applied" then
@@ -344,7 +358,7 @@
                 actor = true,
                 action = true,
                 identityKnown = true,
-                actionTag = true,
+                roles = true,
                 actorAction = true,
                 actorThought = true,
             }, path)
@@ -352,7 +366,7 @@
             if not isSide(payload.actor)
                 or payload.action ~= "played"
                 or payload.identityKnown ~= true
-                or not actionTagMatches(staticData, payload.actionTag, payload.actor)
+                or not rolesMatch(staticData, payload.roles, payload.actor)
                 or type(payload.actorAction) ~= "string"
                 or payload.actorAction == ""
                 or (payload.actor == "player" and payload.actorThought ~= nil)
@@ -364,7 +378,7 @@
                 actor = payload.actor,
                 action = "played",
                 identityKnown = true,
-                actionTag = payload.actionTag,
+                roles = payload.roles,
                 actorAction = payload.actorAction,
             }
             if payload.actorThought ~= nil then safe.actorThought = payload.actorThought end
@@ -621,7 +635,6 @@
             or type(staticData.registry) ~= "table"
             or type(staticData.cards) ~= "table"
             or type(staticData.traits) ~= "table"
-            or type(staticData.environments) ~= "table"
             or type(staticData.characters) ~= "table" then
             return failure({ makeError("invalid_static_data", "$.staticData", "전체 정적 데이터가 필요합니다.") })
         end
@@ -662,6 +675,10 @@
         local instructions = {
             "[전투 사건 전달]",
             "기존 프리셋의 문체, 시점, 인물 표현과 응답 형식을 그대로 유지하십시오.",
+            "현재 장면은 " .. pending.beforeState.sceneContext.weekday .. " "
+                .. pending.beforeState.sceneContext.time .. "이며 날씨는 "
+                .. pending.beforeState.sceneContext.weather
+                .. "입니다. 열차의 혼잡도, 승객의 분위기, 복장과 우산 같은 배경에 자연스럽게 반영하되 게임 효과나 수치 규칙으로 해석하지 마십시오.",
             "아래 JSON은 이번 응답에 반영해야 하는, 이미 확정된 시간순 사건입니다.",
             "사건의 순서, 행동 주체, 수치 변화, 무드와 승패를 바꾸거나 다시 판정하지 마십시오.",
             "actorAction은 장면 속 실제 행동으로 자연스럽게 반영하고, actorThought가 있을 때만 캐릭터의 내면에 반영하십시오.",
