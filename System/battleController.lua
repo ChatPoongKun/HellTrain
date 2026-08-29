@@ -1907,7 +1907,6 @@
             seed = battleSpec.seed,
             playerCardIds = playerCardIds,
             characterId = validated.state.selectedCharacterId,
-            environmentId = battleSpec.environmentId,
         }, nil
     end
 
@@ -1923,8 +1922,7 @@
             or type(setupState.battleSpec) ~= "table"
             or getmetatable(setupState.battleSpec) ~= nil
             or not isRuntimeId(setupState.battleSpec.battleId)
-            or not isInteger(setupState.battleSpec.seed, 1)
-            or type(setupState.battleSpec.environmentId) ~= "string" then
+            or not isInteger(setupState.battleSpec.seed, 1) then
             return nil, nil, {
                 makeError(
                     "invalid_canonical_setup_contract",
@@ -1938,7 +1936,6 @@
             seed = setupState.battleSpec.seed,
             playerCardIds = setupState.selectedCardIds,
             characterId = setupState.selectedCharacterId,
-            environmentId = setupState.battleSpec.environmentId,
         }, nil
     end
 
@@ -2121,7 +2118,6 @@
             turnLimit = authority.turnLimit,
             finalStealth = authority.player.stealth,
             finalResistance = authority.character.resistance,
-            environmentId = authority.environmentId,
             transit = transitCopy,
         }, nil
     end
@@ -2131,6 +2127,10 @@
         local lines = {
             "[함락 후 자유행동]",
             "전투 승리는 이미 확정되었다. 카드, 저항, 은폐, 무드, 전투 판정이나 보상을 언급하지 마라.",
+            "현재 장면은 " .. authority.sceneContext.weekday .. " "
+                .. authority.sceneContext.time .. "이며 날씨는 "
+                .. authority.sceneContext.weather
+                .. "이다. 열차의 혼잡도, 승객의 분위기, 복장과 우산 같은 배경에 자연스럽게 반영하되 게임 효과나 수치 규칙으로 해석하지 마라.",
             "사용자가 방금 입력한 행위를 그대로 존중하여 캐릭터의 반응과 열차 안의 장면을 자연스럽게 이어서 묘사하라.",
             "사용자가 입력하지 않은 추가 행동, 대사, 생각을 플레이어에게 부여하지 마라.",
         }
@@ -2986,9 +2986,6 @@
         if type(authority.rng) ~= "table" or authority.rng.seed ~= spec.seed then
             conflict("$.state.authority.rng.seed", "기존 전투의 RNG seed가 setup 전투 사양과 다릅니다.")
         end
-        if authority.environmentId ~= spec.environmentId then
-            conflict("$.state.authority.environmentId", "기존 전투의 환경이 setup 전투 사양과 다릅니다.")
-        end
         local journey, journeyErrors = callModule(
             "subwayJourney",
             "build",
@@ -3002,8 +2999,9 @@
             end
         elseif type(journey) ~= "table"
             or authority.turnLimit ~= journey.turnLimit
-            or not deepEqual(authority.transit, journey.transit) then
-            conflict("$.state.authority.transit", "기존 전투의 제한 턴 또는 지하철 여정이 setup seed에서 결정한 값과 다릅니다.")
+            or not deepEqual(authority.transit, journey.transit)
+            or not deepEqual(authority.sceneContext, journey.sceneContext) then
+            conflict("$.state.authority", "기존 전투의 제한 턴, 지하철 여정 또는 배경 정보가 setup seed에서 결정한 값과 다릅니다.")
         end
         if type(authority.character) ~= "table"
             or authority.character.characterId ~= spec.characterId then
@@ -3223,7 +3221,6 @@
             seed = battleSpec.seed,
             playerCardIds = deckCopy,
             characterId = battleSpec.characterId,
-            environmentId = battleSpec.environmentId,
         }, nil
     end
 
@@ -3243,8 +3240,7 @@
             or not isRuntimeId(battleSpec.battleId)
             or not isInteger(battleSpec.seed, 1)
             or type(battleSpec.playerCardIds) ~= "table"
-            or type(battleSpec.characterId) ~= "string"
-            or type(battleSpec.environmentId) ~= "string" then
+            or type(battleSpec.characterId) ~= "string" then
             return nil, nil, nil, {
                 makeError(
                     "invalid_canonical_run_contract",
@@ -3258,7 +3254,6 @@
             seed = battleSpec.seed,
             playerCardIds = battleSpec.playerCardIds,
             characterId = battleSpec.characterId,
-            environmentId = battleSpec.environmentId,
         }, nil
     end
 
@@ -3280,7 +3275,6 @@
             and summary.turnLimit == session.turnLimit
             and summary.finalStealth == session.finalStealth
             and summary.finalResistance == session.finalResistance
-            and summary.environmentId == session.environmentId
             and deepEqual(summary.transit, session.transit)
     end
 
@@ -3300,7 +3294,6 @@
             or authority.turnLimit ~= session.turnLimit
             or authority.player.stealth ~= session.finalStealth
             or authority.character.resistance ~= session.finalResistance
-            or authority.environmentId ~= session.environmentId
             or not deepEqual(authority.transit, session.transit) then
             return {
                 makeError(

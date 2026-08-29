@@ -27,6 +27,19 @@
         plan = true,
     }
 
+    local VALID_SCENE_WEEKDAYS = {
+        ["월요일"] = true, ["화요일"] = true, ["수요일"] = true, ["목요일"] = true,
+        ["금요일"] = true, ["토요일"] = true, ["일요일"] = true,
+    }
+    local VALID_SCENE_TIMES = {
+        ["아침 출근시간"] = true, ["저녁 퇴근시간"] = true,
+        ["아침 시간"] = true, ["저녁 시간"] = true,
+        ["한낮"] = true, ["심야열차"] = true,
+    }
+    local VALID_SCENE_WEATHERS = {
+        ["맑음"] = true, ["흐림"] = true, ["가벼운 비"] = true, ["거센 비"] = true,
+    }
+
     local function addError(errors, code, path, message)
         table.insert(errors, {
             code = code,
@@ -458,7 +471,6 @@
             and type(rawget(staticData, "registry")) == "table"
             and type(rawget(staticData, "cards")) == "table"
             and type(rawget(staticData, "traits")) == "table"
-            and type(rawget(staticData, "environments")) == "table"
             and type(rawget(staticData, "subwayLines")) == "table"
             and type(rawget(staticData, "characters")) == "table"
             and isPlainTableTree(staticData)
@@ -1103,7 +1115,7 @@
                     checkAllowedKeys(entry, {
                         instanceId = true,
                         cardId = true,
-                        actionTag = true,
+                        role = true,
                         handPosition = true,
                     }, entryPath, errors)
                     if not isRuntimeId(entry.instanceId) then
@@ -1116,8 +1128,8 @@
                     if not isAsciiId(entry.cardId) then
                         addError(errors, "invalid_card_id", entryPath .. ".cardId", "선택 시점 손패 카드 ID가 올바르지 않습니다.")
                     end
-                    if not isAsciiId(entry.actionTag) then
-                        addError(errors, "invalid_action_tag", entryPath .. ".actionTag", "선택 시점 손패 행동 태그가 올바르지 않습니다.")
+                    if not isAsciiId(entry.role) then
+                        addError(errors, "invalid_role", entryPath .. ".role", "선택 시점 손패 역할이 올바르지 않습니다.")
                     end
                     if entry.handPosition ~= index then
                         addError(errors, "invalid_hand_position", entryPath .. ".handPosition", "선택 시점 캐릭터 손패 위치는 안정 순서의 1부터 연속되어야 합니다.")
@@ -1136,7 +1148,7 @@
         checkAllowedKeys(candidate, {
             instanceId = true,
             cardId = true,
-            actionTag = true,
+            role = true,
             handPosition = true,
             score = true,
             projectedPlayerStealth = true,
@@ -1153,8 +1165,8 @@
         if not isAsciiId(candidate.cardId) then
             addError(errors, "invalid_card_id", path .. ".cardId", "후보 카드 ID가 올바르지 않습니다.")
         end
-        if not isAsciiId(candidate.actionTag) then
-            addError(errors, "invalid_action_tag", path .. ".actionTag", "후보 행동 태그가 올바르지 않습니다.")
+        if not isAsciiId(candidate.role) then
+            addError(errors, "invalid_role", path .. ".role", "후보 역할이 올바르지 않습니다.")
         end
         if not isInteger(candidate.handPosition, 1) then
             addError(errors, "invalid_hand_position", path .. ".handPosition", "후보 손패 위치는 1 이상의 정수여야 합니다.")
@@ -1251,7 +1263,7 @@
     local function buildExpectedSelectionContext(state, events, staticData)
         local revealEventIds = {}
         for _, event in ipairs(type(events) == "table" and events or {}) do
-            if type(event) == "table" and event.type == "action_tag_revealed" and isRuntimeId(event.eventId) then
+            if type(event) == "table" and event.type == "role_revealed" and isRuntimeId(event.eventId) then
                 revealEventIds[event.eventId] = true
             end
         end
@@ -1337,7 +1349,7 @@
             characterHand[index] = {
                 instanceId = instance.instanceId,
                 cardId = instance.cardId,
-                actionTag = type(card) == "table" and card.actionTag or nil,
+                role = type(card) == "table" and card.roles[1] or nil,
                 handPosition = instance.position,
             }
         end
@@ -1393,7 +1405,7 @@
             if type(actual) ~= "table"
                 or actual.instanceId ~= expected.instanceId
                 or actual.cardId ~= expected.cardId
-                or actual.actionTag ~= expected.actionTag
+                or actual.role ~= expected.role
                 or actual.handPosition ~= expected.handPosition then
                 return false
             end
@@ -1436,7 +1448,7 @@
             draw = true,
             selectedInstanceId = true,
             selectedCardId = true,
-            publicActionTag = true,
+            publicRole = true,
         }, path, errors)
 
         if selection.schemaVersion ~= SCHEMA_VERSION then
@@ -1482,7 +1494,7 @@
                     errors,
                     "selection_context_state_mismatch",
                     contextPath,
-                    "선택 시점 컨텍스트가 현재 상태와 행동 태그 공개 이후 효과를 역산한 결과와 다릅니다."
+                    "선택 시점 컨텍스트가 현재 상태와 역할 공개 이후 효과를 역산한 결과와 다릅니다."
                 )
             end
         end
@@ -1525,9 +1537,9 @@
                 if type(candidate) == "table" and type(handEntry) == "table" then
                     if candidate.instanceId ~= handEntry.instanceId
                         or candidate.cardId ~= handEntry.cardId
-                        or candidate.actionTag ~= handEntry.actionTag
+                        or candidate.role ~= handEntry.role
                         or candidate.handPosition ~= handEntry.handPosition then
-                        addError(errors, "selection_candidate_hand_mismatch", candidatePath, "후보의 순서·인스턴스·카드·행동 태그·위치가 선택 시점 손패와 다릅니다.")
+                        addError(errors, "selection_candidate_hand_mismatch", candidatePath, "후보의 순서·인스턴스·카드·역할·위치가 선택 시점 손패와 다릅니다.")
                     end
                     local totals = candidate.totals
                     if type(totals) == "table"
@@ -1644,7 +1656,7 @@
         local selected = selection.selectedInstanceId ~= nil
         if not selected then
             if selection.selectedCardId ~= nil
-                or selection.publicActionTag ~= nil
+                or selection.publicRole ~= nil
                 or selection.weightOffset ~= nil then
                 addError(errors, "selection_pass_field_conflict", path, "패스 영수증에는 선택 카드 필드를 둘 수 없습니다.")
             end
@@ -1663,7 +1675,7 @@
             if beforeValid and afterValid and not rngEqual(selection.rngBefore, selection.rngAfter) then
                 addError(errors, "selection_pass_consumed_rng", path .. ".rngAfter", "패스는 RNG를 소비할 수 없습니다.")
             end
-            if type(intentIds) ~= "table" or #intentIds ~= 0 or (type(intent) == "table" and intent.publicActionTag ~= nil) then
+            if type(intentIds) ~= "table" or #intentIds ~= 0 or (type(intent) == "table" and intent.publicRole ~= nil) then
                 addError(errors, "character_selection_intent_mismatch", "$.characterIntent", "패스 영수증과 현재 characterIntent가 다릅니다.")
             end
             return
@@ -1675,8 +1687,8 @@
         if not isAsciiId(selection.selectedCardId) then
             addError(errors, "invalid_card_id", path .. ".selectedCardId", "선택한 카드 ID가 올바르지 않습니다.")
         end
-        if not isAsciiId(selection.publicActionTag) then
-            addError(errors, "invalid_action_tag", path .. ".publicActionTag", "선택한 공개 행동 태그가 올바르지 않습니다.")
+        if not isAsciiId(selection.publicRole) then
+            addError(errors, "invalid_role", path .. ".publicRole", "선택한 공개 역할이 올바르지 않습니다.")
         end
         if not isSafeInteger(selection.weightOffset, 0) then
             addError(errors, "invalid_selection_weight_offset", path .. ".weightOffset", "점수 가중치 평행이동 값은 0 이상의 안전한 정수여야 합니다.")
@@ -1699,8 +1711,8 @@
             if selectedCandidate.cardId ~= selection.selectedCardId then
                 addError(errors, "selected_card_mismatch", path .. ".selectedCardId", "선택 카드 ID가 후보와 다릅니다.")
             end
-            if selectedCandidate.actionTag ~= selection.publicActionTag then
-                addError(errors, "selected_action_tag_mismatch", path .. ".publicActionTag", "선택 행동 태그가 후보와 다릅니다.")
+            if selectedCandidate.role ~= selection.publicRole then
+                addError(errors, "selected_role_mismatch", path .. ".publicRole", "선택 역할이 후보와 다릅니다.")
             end
         end
 
@@ -1857,7 +1869,7 @@
             or #intentIds ~= 1
             or intentIds[1] ~= selection.selectedInstanceId
             or type(intent) ~= "table"
-            or intent.publicActionTag ~= selection.publicActionTag then
+            or intent.publicRole ~= selection.publicRole then
             addError(errors, "character_selection_intent_mismatch", "$.characterIntent", "선택 영수증과 현재 characterIntent가 다릅니다.")
         end
 
@@ -1872,8 +1884,8 @@
             local card = staticData.cards[selection.selectedCardId]
             if type(card) ~= "table"
                 or card.owner ~= "character"
-                or card.actionTag ~= selection.publicActionTag then
-                addError(errors, "selected_static_card_mismatch", path .. ".selectedCardId", "선택 카드와 정적 카드 행동 태그가 일치하지 않습니다.")
+                or card.roles[1] ~= selection.publicRole then
+                addError(errors, "selected_static_card_mismatch", path .. ".selectedCardId", "선택 카드와 정적 카드 역할이 일치하지 않습니다.")
             end
         end
     end
@@ -2112,6 +2124,39 @@
         return true
     end
 
+    local function sceneContextEqual(left, right)
+        return type(left) == "table"
+            and type(right) == "table"
+            and left.weekday == right.weekday
+            and left.time == right.time
+            and left.weather == right.weather
+    end
+
+    local function validateSceneContext(sceneContext, errors)
+        local path = "$.sceneContext"
+        if type(sceneContext) ~= "table" then
+            addError(errors, "invalid_scene_context", path, "전투 배경 정보가 테이블이 아닙니다.")
+            return
+        end
+        checkAllowedKeys(sceneContext, { weekday = true, time = true, weather = true }, path, errors)
+        if VALID_SCENE_WEEKDAYS[sceneContext.weekday] ~= true then
+            addError(errors, "invalid_scene_weekday", path .. ".weekday", "전투 배경 요일이 올바르지 않습니다.")
+        end
+        if VALID_SCENE_TIMES[sceneContext.time] ~= true then
+            addError(errors, "invalid_scene_time", path .. ".time", "전투 배경 시간대가 올바르지 않습니다.")
+        end
+        if VALID_SCENE_WEATHERS[sceneContext.weather] ~= true then
+            addError(errors, "invalid_scene_weather", path .. ".weather", "전투 배경 날씨가 올바르지 않습니다.")
+        end
+        local weekdayIsWeekend = sceneContext.weekday == "토요일" or sceneContext.weekday == "일요일"
+        local timeIsWeekend = sceneContext.time == "아침 시간" or sceneContext.time == "저녁 시간"
+        if weekdayIsWeekend ~= timeIsWeekend
+            and sceneContext.time ~= "한낮"
+            and sceneContext.time ~= "심야열차" then
+            addError(errors, "scene_schedule_mismatch", path .. ".time", "요일과 시간대 구분이 서로 맞지 않습니다.")
+        end
+    end
+
     local function validateTransit(transit, turnLimit, staticData, errors)
         local path = "$.transit"
         if type(transit) ~= "table" then
@@ -2201,8 +2246,8 @@
             status = true,
             turnNumber = true,
             turnLimit = true,
-            environmentId = true,
             transit = true,
+            sceneContext = true,
             lastCommittedTurnId = true,
             rng = true,
             player = true,
@@ -2234,10 +2279,8 @@
         elseif isInteger(state.turnNumber, 1) and state.turnNumber > state.turnLimit then
             addError(errors, "turn_over_limit", "$.turnNumber", "현재 턴이 제한 턴을 초과했습니다.")
         end
-        if not isAsciiId(state.environmentId) then
-            addError(errors, "invalid_environment_id", "$.environmentId", "환경 ID가 올바르지 않습니다.")
-        end
         validateTransit(state.transit, state.turnLimit, staticData, errors)
+        validateSceneContext(state.sceneContext, errors)
         if state.lastCommittedTurnId ~= nil and not isRuntimeId(state.lastCommittedTurnId) then
             addError(errors, "invalid_turn_id", "$.lastCommittedTurnId", "마지막 확정 턴 ID가 올바르지 않습니다.")
         end
@@ -2504,7 +2547,7 @@
         else
             checkAllowedKeys(state.characterIntent, {
                 cardInstanceIds = true,
-                publicActionTag = true,
+                publicRole = true,
             }, "$.characterIntent", errors)
             validateIdArray(state.characterIntent.cardInstanceIds, "$.characterIntent.cardInstanceIds", errors, isRuntimeId)
 
@@ -2512,11 +2555,11 @@
                 and #state.characterIntent.cardInstanceIds
                 or 0
             if intentCount == 0 then
-                if state.characterIntent.publicActionTag ~= nil then
-                    addError(errors, "orphan_public_action", "$.characterIntent.publicActionTag", "선택 카드가 없으면 공개 행동 태그도 없어야 합니다.")
+                if state.characterIntent.publicRole ~= nil then
+                    addError(errors, "orphan_public_role", "$.characterIntent.publicRole", "선택 카드가 없으면 공개 역할도 없어야 합니다.")
                 end
-            elseif not isAsciiId(state.characterIntent.publicActionTag) then
-                addError(errors, "missing_public_action", "$.characterIntent.publicActionTag", "캐릭터 선택의 공개 행동 태그가 필요합니다.")
+            elseif not isAsciiId(state.characterIntent.publicRole) then
+                addError(errors, "missing_public_role", "$.characterIntent.publicRole", "캐릭터 선택의 공개 역할이 필요합니다.")
             end
 
             local mainCards = {}
@@ -2542,27 +2585,24 @@
                     addError(errors, "invalid_character_main_action", "$.characterIntent.cardInstanceIds", "캐릭터 선택에는 주 행동 카드가 정확히 하나 있어야 합니다.")
                 elseif mainCardIndex ~= intentCount then
                     addError(errors, "character_main_action_not_last", "$.characterIntent.cardInstanceIds", "캐릭터 연계 카드는 주 행동보다 앞에 있어야 합니다.")
-                elseif mainCards[1].actionTag ~= state.characterIntent.publicActionTag then
-                    addError(errors, "public_action_mismatch", "$.characterIntent.publicActionTag", "공개 행동 태그가 실제 주 행동과 다릅니다.")
+                elseif mainCards[1].roles[1] ~= state.characterIntent.publicRole then
+                    addError(errors, "public_role_mismatch", "$.characterIntent.publicRole", "공개 역할이 실제 주 행동과 다릅니다.")
                 end
             end
 
             local registry = type(staticData) == "table" and staticData.registry or nil
-            local actionTags = type(registry) == "table" and registry.actionTags or nil
-            local publicAction = type(actionTags) == "table" and actionTags[state.characterIntent.publicActionTag] or nil
-            if state.characterIntent.publicActionTag ~= nil and type(actionTags) == "table" then
-                if not publicAction then
-                    addError(errors, "unknown_public_action", "$.characterIntent.publicActionTag", "등록되지 않은 행동 태그입니다.")
-                elseif publicAction.owner ~= "character" then
-                    addError(errors, "public_action_owner_mismatch", "$.characterIntent.publicActionTag", "캐릭터 행동 태그가 아닙니다.")
+            local roles = type(registry) == "table" and registry.roles or nil
+            local publicRole = type(roles) == "table" and roles[state.characterIntent.publicRole] or nil
+            if state.characterIntent.publicRole ~= nil and type(roles) == "table" then
+                if not publicRole then
+                    addError(errors, "unknown_public_role", "$.characterIntent.publicRole", "등록되지 않은 역할입니다.")
+                elseif publicRole.owner ~= "character" then
+                    addError(errors, "public_role_owner_mismatch", "$.characterIntent.publicRole", "캐릭터 역할이 아닙니다.")
                 end
             end
         end
 
         if type(staticData) == "table" then
-            if type(staticData.environments) == "table" and not staticData.environments[state.environmentId] then
-                addError(errors, "unknown_environment", "$.environmentId", "정적 DB에서 환경을 찾을 수 없습니다.")
-            end
             if type(state.character) == "table" then
                 if type(staticData.characters) == "table" and not staticData.characters[state.character.characterId] then
                     addError(errors, "unknown_character", "$.character.characterId", "정적 DB에서 캐릭터를 찾을 수 없습니다.")
@@ -3085,8 +3125,8 @@
             if type(afterIntentIds) ~= "table" or #afterIntentIds ~= 0 then
                 addError(errors, "pending_after_character_intent_not_empty", "$.afterState.characterIntent.cardInstanceIds", "해결된 afterState에는 캐릭터 선택을 남길 수 없습니다.")
             end
-            if type(afterIntent) == "table" and afterIntent.publicActionTag ~= nil then
-                addError(errors, "pending_after_public_action_present", "$.afterState.characterIntent.publicActionTag", "해결된 afterState에는 공개 행동 태그를 남길 수 없습니다.")
+            if type(afterIntent) == "table" and afterIntent.publicRole ~= nil then
+                addError(errors, "pending_after_public_role_present", "$.afterState.characterIntent.publicRole", "해결된 afterState에는 공개 역할을 남길 수 없습니다.")
             end
             if isInteger(pending.beforeState.turnNumber, 1)
                 and isInteger(pending.afterState.turnNumber, 1)
@@ -3100,8 +3140,8 @@
             if pending.afterState.turnLimit ~= pending.beforeState.turnLimit then
                 addError(errors, "turn_limit_changed", "$.afterState.turnLimit", "한 턴 판정 중 제한 턴을 바꿀 수 없습니다.")
             end
-            if pending.afterState.environmentId ~= pending.beforeState.environmentId then
-                addError(errors, "environment_changed", "$.afterState.environmentId", "한 턴 판정 중 환경을 바꿀 수 없습니다.")
+            if not sceneContextEqual(pending.afterState.sceneContext, pending.beforeState.sceneContext) then
+                addError(errors, "scene_context_changed", "$.afterState.sceneContext", "한 턴 판정 중 배경 정보를 바꿀 수 없습니다.")
             end
             if not transitEqual(pending.afterState.transit, pending.beforeState.transit) then
                 addError(errors, "transit_changed", "$.afterState.transit", "한 턴 판정 중 지하철 이동 구간을 바꿀 수 없습니다.")

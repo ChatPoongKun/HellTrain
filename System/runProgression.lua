@@ -875,7 +875,6 @@
         seed,
         characterId,
         deck,
-        environmentId,
         staticInput
     )
         local staticData = normalizeStaticData(staticInput)
@@ -890,7 +889,6 @@
             playerCardIds = copyArray(deck),
             characterId = characterId,
             perkIds = {},
-            environmentId = environmentId,
             turnLimit = journey.turnLimit,
             lineId = journey.transit.lineId,
             stationIds = copyArray(journey.transit.stationIds),
@@ -910,7 +908,6 @@
             playerCardIds = copyArray(setup.selectedCardIds),
             characterId = setup.selectedCharacterId,
             perkIds = {},
-            environmentId = setup.battleSpec.environmentId,
             turnLimit = journey.turnLimit,
             lineId = journey.transit.lineId,
             stationIds = copyArray(journey.transit.stationIds),
@@ -944,7 +941,6 @@
             turnLimit = true,
             finalStealth = true,
             finalResistance = true,
-            environmentId = true,
             transit = true,
         }, path, errors)
 
@@ -977,12 +973,6 @@
         if not isFinite(summary.finalResistance) then
             appendError(errors, "invalid_final_resistance", path .. ".finalResistance", "최종 저항은 유한한 숫자여야 합니다.")
         end
-        if not isAsciiId(summary.environmentId)
-            or type(staticData.environments) ~= "table"
-            or type(staticData.environments[summary.environmentId]) ~= "table" then
-            appendError(errors, "unknown_environment", path .. ".environmentId", "summary 환경을 정적 데이터에서 찾을 수 없습니다.")
-        end
-
         local transit = summary.transit
         if type(transit) ~= "table" or getmetatable(transit) ~= nil then
             appendError(errors, "invalid_transit", path .. ".transit", "summary transit은 일반 객체여야 합니다.")
@@ -1103,7 +1093,6 @@
         local comparisons = {
             { field = "battleId", expected = battleSpec.battleId },
             { field = "characterId", expected = battleSpec.characterId },
-            { field = "environmentId", expected = battleSpec.environmentId },
             { field = "turnLimit", expected = battleSpec.turnLimit },
         }
         for _, comparison in ipairs(comparisons) do
@@ -1215,7 +1204,6 @@
         "turnLimit",
         "finalStealth",
         "finalResistance",
-        "environmentId",
         "transit",
     }
 
@@ -1353,7 +1341,6 @@
                     turnLimit = true,
                     finalStealth = true,
                     finalResistance = true,
-                    environmentId = true,
                     transit = true,
                     rewardChoice = true,
                     nextCharacterId = true,
@@ -1542,7 +1529,6 @@
                 battleSeed,
                 inputRecord.nextCharacterId,
                 deck,
-                currentSpec.environmentId,
                 staticInput
             )
             if specErrors then

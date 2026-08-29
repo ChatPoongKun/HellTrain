@@ -174,7 +174,7 @@
             })
         end
         checkAllowedKeys(policy, { effects = true }, "$.card.selectionPreview", errors)
-        if card.owner ~= "player" or not hasMechanism(card, "chain") then
+        if card.owner ~= "player" or card.cardType ~= "chain" then
             table.insert(errors, makeError(
                 "preview_requires_player_chain",
                 "$.card.selectionPreview",

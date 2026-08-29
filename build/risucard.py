@@ -56,7 +56,7 @@ GROUPS = (
 )
 ORDER = {
     "DB": [
-        "CharacterCards.db", "CharTraits.db", "Environments.db",
+        "CharacterCards.db", "CharTraits.db",
         "GameRegistry.db", "PlayerCards.db", "TokyoSubwayLines.db",
     ],
     "Chars": [

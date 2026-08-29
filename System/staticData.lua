@@ -7,7 +7,6 @@
         "PlayerCards.db",
         "CharacterCards.db",
         "CharTraits.db",
-        "Environments.db",
         "TokyoSubwayLines.db",
         "CharacterList.db",
     }
@@ -54,7 +53,7 @@
             "lore", "status", "entryCount", "error", "entryIndex",
             "schemaVersion", "kindType", "kind", "code", "path", "message",
             "expectedKind", "actualKindType", "actualKind", "errorCount",
-            "cards", "traits", "environments", "subwayLines", "characters",
+            "cards", "traits", "subwayLines", "characters",
         }
         for _, key in ipairs(fieldOrder) do
             local value = type(fields) == "table" and fields[key] or nil
@@ -278,11 +277,6 @@
             collection = "traits",
             lores = { "CharTraits.db" },
         },
-        environments = {
-            kind = "environmentDatabase",
-            collection = "environments",
-            lores = { "Environments.db" },
-        },
         subwayLines = {
             kind = "subwayLineDatabase",
             collection = "subwayLines",
@@ -299,7 +293,6 @@
         ["PlayerCards.db"] = true,
         ["CharacterCards.db"] = true,
         ["CharTraits.db"] = true,
-        ["Environments.db"] = true,
         ["TokyoSubwayLines.db"] = true,
         ["CharacterList.db"] = true,
     }
@@ -685,7 +678,7 @@
             if type(entry) ~= "table" or entry.id ~= key then
                 addError(errors, "id_mismatch", entryPath, "레지스트리 키와 내부 ID가 다릅니다.")
             elseif ownerRequired and entry.owner ~= "player" and entry.owner ~= "character" then
-                addError(errors, "invalid_owner", entryPath .. ".owner", "행동 태그 소유자가 올바르지 않습니다.")
+                addError(errors, "invalid_owner", entryPath .. ".owner", "역할 소유자가 올바르지 않습니다.")
             end
         end
     end
@@ -696,7 +689,8 @@
             return
         end
 
-        validateRegistryCollection(registry.actionTags, "registry.actionTags", errors, true)
+        validateRegistryCollection(registry.cardTypes, "registry.cardTypes", errors, false)
+        validateRegistryCollection(registry.roles, "registry.roles", errors, true)
         validateRegistryCollection(registry.mechanisms, "registry.mechanisms", errors, false)
         validateRegistryCollection(registry.ruleTerms, "registry.ruleTerms", errors, false)
         validateRegistryCollection(registry.moods, "registry.moods", errors, false)
@@ -704,7 +698,7 @@
         validateRegistryCollection(registry.effectOps, "registry.effectOps", errors, false)
 
         local registryIds = {}
-        for _, collectionName in ipairs({ "actionTags", "mechanisms", "ruleTerms" }) do
+        for _, collectionName in ipairs({ "cardTypes", "roles", "mechanisms", "ruleTerms" }) do
             local collection = type(registry[collectionName]) == "table" and registry[collectionName] or {}
             for id in pairs(collection) do
                 if registryIds[id] then
@@ -733,9 +727,12 @@
         end
 
         for tagId in string.gmatch(text, "::tag%[([a-z][a-z0-9_]*)%]::") do
-            local knownAction = type(registry) == "table"
-                and type(registry.actionTags) == "table"
-                and registry.actionTags[tagId]
+            local knownCardType = type(registry) == "table"
+                and type(registry.cardTypes) == "table"
+                and registry.cardTypes[tagId]
+            local knownRole = type(registry) == "table"
+                and type(registry.roles) == "table"
+                and registry.roles[tagId]
             local knownMechanism = type(registry) == "table"
                 and type(registry.mechanisms) == "table"
                 and registry.mechanisms[tagId]
@@ -743,7 +740,7 @@
                 and type(registry.ruleTerms) == "table"
                 and registry.ruleTerms[tagId]
 
-            if not knownAction and not knownMechanism and not knownRuleTerm then
+            if not knownCardType and not knownRole and not knownMechanism and not knownRuleTerm then
                 addError(errors, "unknown_tag_token", path, "등록되지 않은 태그 토큰입니다: " .. tagId)
             end
         end
@@ -822,12 +819,12 @@
             addError(errors, "invalid_plan_selection_event", eventPath, "계획 선택 가정 사건이 테이블이 아닙니다.")
         else
             for field in pairs(event) do
-                if field ~= "type" and field ~= "side" then
+                if field ~= "type" and field ~= "side" and field ~= "roles" then
                     addError(
                         errors,
                         "unexpected_plan_selection_event_field",
                         eventPath .. "." .. tostring(field),
-                        "계획 선택 가정 사건에는 type과 side만 사용할 수 있습니다."
+                        "계획 선택 가정 사건에는 type, side와 roles만 사용할 수 있습니다."
                     )
                 end
             end
@@ -839,6 +836,21 @@
             end
             if event.side ~= "player" and event.side ~= "character" then
                 addError(errors, "invalid_plan_selection_side", eventPath .. ".side", "계획 선택 가정 진영이 올바르지 않습니다.")
+            end
+            if not isArray(event.roles) then
+                addError(errors, "invalid_plan_selection_roles", eventPath .. ".roles", "계획 선택 가정 역할은 배열이어야 합니다.")
+            else
+                local seenRoles = {}
+                for index, roleId in ipairs(event.roles) do
+                    local role = type(registry) == "table"
+                        and type(registry.roles) == "table"
+                        and registry.roles[roleId]
+                        or nil
+                    if type(role) ~= "table" or role.owner ~= event.side or seenRoles[roleId] then
+                        addError(errors, "invalid_plan_selection_role", eventPath .. ".roles[" .. index .. "]", "계획 선택 가정 역할이 진영과 맞지 않거나 중복되었습니다.")
+                    end
+                    seenRoles[roleId] = true
+                end
             end
         end
 
@@ -889,17 +901,38 @@
                 end
                 validateTagTokens(card.description, path .. ".description", registry, errors)
 
-                local action = type(registry) == "table"
-                    and type(registry.actionTags) == "table"
-                    and registry.actionTags[card.actionTag]
+                local cardType = type(registry) == "table"
+                    and type(registry.cardTypes) == "table"
+                    and registry.cardTypes[card.cardType]
                     or nil
-                if not action then
-                    addError(errors, "unknown_action_tag", path .. ".actionTag", "등록되지 않은 행동 태그입니다.")
-                elseif action.owner ~= card.owner then
-                    addError(errors, "action_owner_mismatch", path .. ".actionTag", "행동 태그 소유자와 카드 소유자가 다릅니다.")
+                if not cardType then
+                    addError(errors, "unknown_card_type", path .. ".cardType", "등록되지 않은 카드 유형입니다.")
                 end
-                if not hasTagToken(card.description, card.actionTag) then
-                    addError(errors, "missing_action_token", path .. ".description", "설명에 자신의 행동 태그 토큰이 없습니다.")
+
+                if not isArray(card.roles) then
+                    addError(errors, "invalid_roles", path .. ".roles", "카드 역할이 배열이 아닙니다.")
+                else
+                    local maximum = card.owner == "player" and 2 or 1
+                    if #card.roles < 1 or #card.roles > maximum then
+                        addError(errors, "invalid_role_count", path .. ".roles", "카드 역할 수가 소유자 규칙과 맞지 않습니다.")
+                    end
+                    local seenRoles = {}
+                    for index, roleId in ipairs(card.roles) do
+                        local rolePath = path .. ".roles[" .. index .. "]"
+                        local role = type(registry) == "table"
+                            and type(registry.roles) == "table"
+                            and registry.roles[roleId]
+                            or nil
+                        if not role then
+                            addError(errors, "unknown_role", rolePath, "등록되지 않은 카드 역할입니다.")
+                        elseif role.owner ~= card.owner then
+                            addError(errors, "role_owner_mismatch", rolePath, "카드 역할 소유자와 카드 소유자가 다릅니다.")
+                        end
+                        if seenRoles[roleId] then
+                            addError(errors, "duplicate_role", rolePath, "같은 카드 역할이 중복되었습니다.")
+                        end
+                        seenRoles[roleId] = true
+                    end
                 end
 
                 if not isArray(card.mechanisms) then
@@ -924,13 +957,13 @@
 
                     if type(card.mechanismData) == "table" then
                         for mechanismId in pairs(card.mechanismData) do
-                            if not seenMechanisms[mechanismId] then
+                            if mechanismId ~= "plan" or card.cardType ~= "plan" then
                                 addError(errors, "orphan_mechanism_data", path .. ".mechanismData." .. tostring(mechanismId), "보유하지 않은 메커니즘의 설정입니다.")
                             end
                         end
                     end
 
-                    local hasPlan = seenMechanisms.plan == true
+                    local hasPlan = card.cardType == "plan"
                     local plan = type(card.mechanismData) == "table" and card.mechanismData.plan or nil
                     if hasPlan then
                         if type(plan) ~= "table" then
@@ -986,7 +1019,7 @@
                     local selectionPreview = card.selectionPreview
                     if selectionPreview ~= nil then
                         local previewPath = path .. ".selectionPreview"
-                        if card.owner ~= "player" or not seenMechanisms.chain then
+                        if card.owner ~= "player" or card.cardType ~= "chain" then
                             addError(errors, "preview_requires_player_chain", previewPath, "선택 단계 효과는 플레이어 연계 카드에만 선언할 수 있습니다.")
                         end
                         if card.resolve ~= nil then
@@ -1159,8 +1192,8 @@
                                 if choice.placesPlan ~= nil then
                                     if type(choice.placesPlan) ~= "boolean" then
                                         addError(errors, "invalid_effect_choice_plan_flag", choicePath .. ".placesPlan", "계획 배치 여부는 불리언이어야 합니다.")
-                                    elseif not hasMechanism(card, "plan") then
-                                        addError(errors, "effect_choice_plan_without_mechanism", choicePath .. ".placesPlan", "계획 메커니즘이 없는 카드에는 계획 배치 선택을 선언할 수 없습니다.")
+                                    elseif card.cardType ~= "plan" then
+                                        addError(errors, "effect_choice_plan_without_type", choicePath .. ".placesPlan", "계획 카드가 아닌 카드에는 계획 배치 선택을 선언할 수 없습니다.")
                                     end
                                 end
                             end
@@ -1267,52 +1300,6 @@
                                         "planCapacity 특징 보정량은 유한한 정수여야 합니다."
                                     )
                                 end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    local function validateEnvironments(environments, registry, errors)
-        if type(environments) ~= "table" then
-            addError(errors, "missing_environments", "environments", "환경 컬렉션이 없습니다.")
-            return
-        end
-
-        for key, environment in pairs(environments) do
-            local path = "environments." .. tostring(key)
-            if not isAsciiId(key) or type(environment) ~= "table" or environment.id ~= key then
-                addError(errors, "invalid_environment_id", path, "환경 키와 내부 ID가 올바르지 않습니다.")
-            else
-                if type(environment.name) ~= "string" or environment.name == "" then
-                    addError(errors, "missing_name", path .. ".name", "환경 이름이 없습니다.")
-                end
-                if type(environment.description) ~= "string" or environment.description == "" then
-                    addError(errors, "missing_description", path .. ".description", "환경 설명이 없습니다.")
-                end
-                if not isArray(environment.rules) or #environment.rules == 0 then
-                    addError(errors, "invalid_rules", path .. ".rules", "환경 규칙 문장이 비어 있습니다.")
-                end
-                if not isArray(environment.triggers) or #environment.triggers == 0 then
-                    addError(errors, "invalid_triggers", path .. ".triggers", "환경 트리거가 비어 있습니다.")
-                else
-                    for index, trigger in ipairs(environment.triggers) do
-                        local triggerPath = path .. ".triggers[" .. index .. "]"
-                        if type(trigger) ~= "table" then
-                            addError(errors, "invalid_trigger", triggerPath, "환경 트리거가 테이블이 아닙니다.")
-                        else
-                            if type(registry) ~= "table"
-                                or type(registry.events) ~= "table"
-                                or not registry.events[trigger.event] then
-                                addError(errors, "unknown_event", triggerPath .. ".event", "등록되지 않은 사건입니다.")
-                            end
-                            if trigger.side ~= "player" and trigger.side ~= "character" then
-                                addError(errors, "invalid_side", triggerPath .. ".side", "트리거 진영이 올바르지 않습니다.")
-                            end
-                            if type(trigger.resolve) ~= "function" then
-                                addError(errors, "invalid_resolve", triggerPath .. ".resolve", "환경 효과가 함수가 아닙니다.")
                             end
                         end
                     end
@@ -1566,7 +1553,6 @@
         local registry = loadSingleModule(SOURCES.registry, errors, captured)
         local cards = loadMergedCollection(SOURCES.cards, errors, captured)
         local traits = loadMergedCollection(SOURCES.traits, errors, captured)
-        local environments = loadMergedCollection(SOURCES.environments, errors, captured)
         local subwayLines = loadMergedCollection(SOURCES.subwayLines, errors, captured)
         local characterList = discoveredCharacterList
         if characterList == nil then
@@ -1578,7 +1564,6 @@
         validateRegistry(registry, errors)
         validateCards(cards, registry, errors)
         validateTraits(traits, errors)
-        validateEnvironments(environments, registry, errors)
         validateSubwayLines(subwayLines, errors)
         validateCharacters(characters, cards, traits, registry, errors)
 
@@ -1589,7 +1574,6 @@
             counts = {
                 cards = countEntries(cards),
                 traits = countEntries(traits),
-                environments = countEntries(environments),
                 subwayLines = countEntries(subwayLines),
                 characters = countEntries(characters),
             },
@@ -1597,7 +1581,6 @@
                 registry = registry,
                 cards = cards,
                 traits = traits,
-                environments = environments,
                 subwayLines = subwayLines,
                 characters = characters,
             } or nil,
@@ -1666,7 +1649,6 @@
             errorCount = #report.errors,
             cards = report.counts.cards,
             traits = report.counts.traits,
-            environments = report.counts.environments,
             subwayLines = report.counts.subwayLines,
             characters = report.counts.characters,
         })

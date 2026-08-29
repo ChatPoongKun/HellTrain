@@ -5,7 +5,12 @@
     local MAX_TURNS = 12
     local SEED_MODULUS = 2147483646
     local ROUTE_DOMAIN_OFFSET = 130363
+    local SCENE_DOMAIN_OFFSET = 425033
     local MAX_SAFE_INTEGER = 9007199254740991
+    local WEEKDAYS = { "월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일" }
+    local WEEKDAY_TIMES = { "아침 출근시간", "한낮", "저녁 퇴근시간", "심야열차" }
+    local WEEKEND_TIMES = { "아침 시간", "한낮", "저녁 시간", "심야열차" }
+    local WEATHER_POOL = { "맑음", "맑음", "맑음", "흐림", "흐림", "가벼운 비", "가벼운 비", "거센 비" }
 
     local function makeError(code, path, message)
         return {
@@ -52,6 +57,11 @@
     local function deriveRouteSeed(seed)
         local normalized = seed % SEED_MODULUS
         return ((normalized + ROUTE_DOMAIN_OFFSET) % SEED_MODULUS) + 1
+    end
+
+    local function deriveSceneSeed(seed)
+        local normalized = seed % SEED_MODULUS
+        return ((normalized + SCENE_DOMAIN_OFFSET) % SEED_MODULUS) + 1
     end
 
     local function sortedKeys(collection)
@@ -170,6 +180,29 @@
         return candidates
     end
 
+    local function buildSceneContext(seed)
+        local rng = { seed = deriveSceneSeed(seed), cursor = 0 }
+        local weekdayIndex, nextRng, rngError
+        repeat
+            weekdayIndex, nextRng, rngError = nextInteger(rng, 1, 8, "$.sceneContext.weekday")
+            if rngError then return nil, rngError end
+            rng = nextRng
+        until weekdayIndex <= #WEEKDAYS
+        local times = weekdayIndex <= 5 and WEEKDAY_TIMES or WEEKEND_TIMES
+        local timeIndex
+        timeIndex, nextRng, rngError = nextInteger(rng, 1, #times, "$.sceneContext.time")
+        if rngError then return nil, rngError end
+        rng = nextRng
+        local weatherIndex
+        weatherIndex, _, rngError = nextInteger(rng, 1, #WEATHER_POOL, "$.sceneContext.weather")
+        if rngError then return nil, rngError end
+        return {
+            weekday = WEEKDAYS[weekdayIndex],
+            time = times[timeIndex],
+            weather = WEATHER_POOL[weatherIndex],
+        }, nil
+    end
+
     local function build(seed, staticInput, requestedTurnLimit)
         if not isSafeInteger(seed, 0) then
             return failure({
@@ -245,9 +278,14 @@
         end
         rng = nextRng
         local selected = selectedLine.candidates[candidateIndex]
+        local sceneContext, sceneError = buildSceneContext(seed)
+        if sceneError then
+            return failure({ sceneError })
+        end
 
         return success({
             turnLimit = turnLimit,
+            sceneContext = sceneContext,
             transit = {
                 algorithm = ALGORITHM,
                 lineId = selectedLine.lineId,

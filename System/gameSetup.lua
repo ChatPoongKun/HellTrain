@@ -9,7 +9,6 @@
     local MINIMUM_CHARACTER_POOL_SIZE = 3
     local BATTLE_SEED_MODULUS = 2147483646
     local BATTLE_SEED_DOMAIN_OFFSET = 104729
-    local DEFAULT_ENVIRONMENT_ID = "uncrowded"
     local MAX_SAFE_INTEGER = 9007199254740991
 
     local function makeError(code, path, message)
@@ -541,7 +540,6 @@
         return {
             battleId = "battle-" .. setupId,
             seed = deriveBattleSeed(setupSeed),
-            environmentId = DEFAULT_ENVIRONMENT_ID,
         }
     end
 
@@ -956,16 +954,12 @@
                 checkAllowedKeys(state.battleSpec, {
                     battleId = true,
                     seed = true,
-                    environmentId = true,
                 }, "$.state.battleSpec", errors)
                 if not isRuntimeId(state.battleSpec.battleId) then
                     appendError(errors, "invalid_battle_id", "$.state.battleSpec.battleId", "battleId는 ASCII 런타임 ID여야 합니다.")
                 end
                 if not isSafeInteger(state.battleSpec.seed, 1) or state.battleSpec.seed > BATTLE_SEED_MODULUS then
                     appendError(errors, "invalid_battle_seed", "$.state.battleSpec.seed", "전투 seed는 1부터 2147483646 사이의 정수여야 합니다.")
-                end
-                if state.battleSpec.environmentId ~= DEFAULT_ENVIRONMENT_ID then
-                    appendError(errors, "invalid_battle_environment", "$.state.battleSpec.environmentId", "초기 환경은 uncrowded여야 합니다.")
                 end
             end
         end

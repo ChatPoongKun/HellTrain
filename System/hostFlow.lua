@@ -351,7 +351,6 @@ local function pastApproachEncounters(triggerId, report, characterId)
                 turnLimit = session.turnLimit,
                 finalStealth = session.finalStealth,
                 finalResistance = session.finalResistance,
-                environmentId = session.environmentId,
                 transit = session.transit,
             }
         end

@@ -3,11 +3,11 @@
 {{settempvar::battle_view_battle_id::{{dictelement::{{tempvar::battle_view}}::battleId}}}}
 {{settempvar::battle_view_battle_log::{{dictelement::{{tempvar::battle_view}}::battleLog}}}}
 {{settempvar::battle_view_character::{{dictelement::{{tempvar::battle_view}}::character}}}}
-{{settempvar::battle_view_environment::{{dictelement::{{tempvar::battle_view}}::environment}}}}
 {{settempvar::battle_view_last_turn::{{dictelement::{{tempvar::battle_view}}::lastTurn}}}}
 {{settempvar::battle_view_outcome::{{dictelement::{{tempvar::battle_view}}::outcome}}}}
 {{settempvar::battle_view_phase::{{dictelement::{{tempvar::battle_view}}::phase}}}}
 {{settempvar::battle_view_player::{{dictelement::{{tempvar::battle_view}}::player}}}}
+{{settempvar::battle_view_scene::{{dictelement::{{tempvar::battle_view}}::scene}}}}
 {{settempvar::battle_view_subway::{{dictelement::{{tempvar::battle_view}}::subway}}}}
 {{settempvar::battle_view_tag_glossary::{{dictelement::{{tempvar::battle_view}}::tagGlossary}}}}
 {{settempvar::battle_view_turn_id::{{dictelement::{{tempvar::battle_view}}::turnId}}}}
@@ -20,19 +20,11 @@
 <div class="ht-title">함락! 무한의 지옥철</div>
 </div>
 </div>
-<button type="button" class="ht-top-environment ht-tip-trigger" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-environment" aria-haspopup="dialog" aria-label="{{dict_element::{{tempvar::battle_view_environment}}::name}} 환경 정보 보기">
-{{dict_element::{{tempvar::battle_view_environment}}::name}}
-</button>
-</header>
-
-<div id="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-environment" class="ht-popover" popover="auto" role="dialog" aria-label="환경 정보">
-<button type="button" class="ht-popover-dismiss" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-environment" popovertargetaction="hide">
-<span class="ht-popover-kicker">ENVIRONMENT</span>
-<span class="ht-popover-title">{{dict_element::{{tempvar::battle_view_environment}}::name}}</span>
-<span class="ht-popover-copy">{{dict_element::{{tempvar::battle_view_environment}}::description}}</span>
-<span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
+<div class="ht-scene-context" aria-label="{{dict_element::{{tempvar::battle_view_scene}}::weekday}} {{dict_element::{{tempvar::battle_view_scene}}::time}}, 날씨 {{dict_element::{{tempvar::battle_view_scene}}::weather}}">
+<strong>{{dict_element::{{tempvar::battle_view_scene}}::weekday}} · {{dict_element::{{tempvar::battle_view_scene}}::time}}</strong>
+<span>날씨 · {{dict_element::{{tempvar::battle_view_scene}}::weather}}</span>
 </div>
+</header>
 
 <section class="ht-route" style="--route-color: {{dict_element::{{tempvar::battle_view_subway}}::lineColor}}" aria-label="현재 지하철 이동 경로">
 <div class="ht-route-head">
@@ -140,10 +132,10 @@
 <div class="ht-encounter-head">
 <h3>교전 현황</h3>
 <div class="ht-intent">
-<span>예고 행동</span>
+<span>예고 역할</span>
 <i class="ht-intent-dot" aria-hidden="true"></i>
-{{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::status}}::tagRevealed}}}}
-<button type="button" class="ht-intent-trigger ht-tip-trigger" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-tag-{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::tag}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::tag}}::label}} 태그 정보 보기">{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::tag}}::label}}</button>
+{{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::status}}::roleRevealed}}}}
+<button type="button" class="ht-intent-trigger ht-tip-trigger" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-tag-{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::role}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::role}}::label}} 역할 정보 보기">{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::role}}::label}}</button>
 {{/if}}
 {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::status}}::none}}}}
 <strong>행동 없음</strong>
@@ -355,13 +347,6 @@
 </div>
 </section>
 
-<div class="ht-subrow">
-<button type="button" class="ht-env-card ht-tip-trigger" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-environment" aria-haspopup="dialog" aria-label="{{dict_element::{{tempvar::battle_view_environment}}::name}} 환경 정보 보기">
-<span class="ht-env-name">환경 · {{dict_element::{{tempvar::battle_view_environment}}::name}}</span>
-<span class="ht-env-desc">{{dict_element::{{tempvar::battle_view_environment}}::description}}</span>
-</button>
-</div>
-
 <!--HELLTRAIN_BATTLE_INTERACTION_V1-->
 {{#if {{equal::{{dict_element::{{tempvar::battle_view_last_turn}}::available}}::true}}}}
 <details class="ht-log">
@@ -442,7 +427,7 @@
 {{#each {{tempvar::battle_view_tag_glossary}} glossaryTag}}
 <div id="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-tag-{{dict_element::{{slot::glossaryTag}}::id}}" class="ht-popover" popover="auto" role="dialog" aria-label="{{dict_element::{{slot::glossaryTag}}::label}} 태그 정보">
 <button type="button" class="ht-popover-dismiss" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-tag-{{dict_element::{{slot::glossaryTag}}::id}}" popovertargetaction="hide">
-<span class="ht-popover-kicker">{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::action}}}}ACTION TAG{{/if}}{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::mechanism}}}}MECHANISM{{/if}}{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::term}}}}RULE TERM{{/if}}</span>
+<span class="ht-popover-kicker">{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::type}}}}CARD TYPE{{/if}}{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::role}}}}ROLE{{/if}}{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::mechanism}}}}MECHANISM{{/if}}{{#if {{equal::{{dict_element::{{slot::glossaryTag}}::tagKind}}::term}}}}RULE TERM{{/if}}</span>
 <span class="ht-popover-title">{{dict_element::{{slot::glossaryTag}}::label}}</span>
 <span class="ht-popover-copy">{{dict_element::{{slot::glossaryTag}}::tooltip}}</span>
 <span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>

@@ -232,7 +232,7 @@
             character = {
                 resistance = state.character.resistance,
                 moodTokens = state.character.moodTokens,
-                publicActionTag = state.characterIntent.publicActionTag,
+                publicRole = state.characterIntent.publicRole,
             },
         }
         if card ~= nil and instance ~= nil then
@@ -240,7 +240,7 @@
                 id = card.id,
                 instanceId = instance.instanceId,
                 owner = card.owner,
-                actionTag = card.actionTag,
+                roles = card.roles,
             }
         end
         if plan ~= nil then
@@ -516,7 +516,7 @@
                     id = currentCard.id,
                     instanceId = currentInstance.instanceId,
                     owner = currentCard.owner,
-                    actionTag = currentCard.actionTag,
+                    roles = currentCard.roles,
                 }
                 if inputEvent.effectChoiceId ~= nil then
                     pipelineOptions.currentCard.effectChoiceId = inputEvent.effectChoiceId
@@ -701,7 +701,7 @@
         end
 
         local function finishCardZone(card, instance, phase, resolutionId, effectChoiceId)
-            local isPlan = hasMechanism(card, "plan")
+            local isPlan = card.cardType == "plan"
             local isRemove = hasMechanism(card, "remove")
             if isPlan and isRemove then
                 return false, {
@@ -955,7 +955,7 @@
                 side = expectedSide,
                 cardId = card.id,
                 cardInstanceId = instance.instanceId,
-                actionTag = card.actionTag,
+                roles = card.roles,
                 resolutionId = resolutionId,
                 effectChoiceId = effectChoiceId,
             }
@@ -1058,7 +1058,7 @@
                 side = expectedSide,
                 cardId = card.id,
                 cardInstanceId = instance.instanceId,
-                actionTag = card.actionTag,
+                roles = card.roles,
                 resolutionId = resolutionId,
                 effectChoiceId = effectChoiceId,
             }

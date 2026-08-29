@@ -756,7 +756,7 @@ animation-iteration-count: 1 !important;
 <input class="draft-none" type="radio" name="setup-draft-choice" id="setup-draft-none" checked aria-hidden="true">
 <div class="draft-offers" role="list" aria-label="제안된 카드 세 장">
 {{#each::keep {{dictelement::{{tempvar::setup_draft_offer}}::cards}} as setup_offer_card}}
-{{settempvar::setup_offer_action::{{dictelement::{{slot::setup_offer_card}}::actionTag}}}}
+{{settempvar::setup_offer_type::{{dictelement::{{slot::setup_offer_card}}::cardType}}}}
 <div class="draft-slot" role="listitem">
 <input
 class="draft-choice-state"
@@ -772,7 +772,7 @@ aria-label="카드 상세 보기"
 <span class="draft-copy-count">보유 {{dictelement::{{slot::setup_offer_card}}::ownedCopies}} / 2</span>
 <strong class="draft-card-title">{{dictelement::{{slot::setup_offer_card}}::name}}</strong>
 <span class="draft-tags" aria-label="카드 태그">
-<button type="button" class="draft-tag draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::setup_offer_action}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{tempvar::setup_offer_action}}::label}} 태그 정보 보기">{{dictelement::{{tempvar::setup_offer_action}}::label}}</button>{{#each::keep {{dictelement::{{slot::setup_offer_card}}::mechanisms}} as setup_offer_mechanism}}<button type="button" class="draft-tag is-mechanism draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_offer_mechanism}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::setup_offer_mechanism}}::label}} 태그 정보 보기">{{dictelement::{{slot::setup_offer_mechanism}}::label}}</button>{{/each}}
+<button type="button" class="draft-tag draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::setup_offer_type}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{tempvar::setup_offer_type}}::label}} 카드 유형 정보 보기">{{dictelement::{{tempvar::setup_offer_type}}::label}}</button>{{#each::keep {{dictelement::{{slot::setup_offer_card}}::roles}} as setup_offer_role}}<button type="button" class="draft-tag draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_offer_role}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::setup_offer_role}}::label}} 역할 정보 보기">{{dictelement::{{slot::setup_offer_role}}::label}}</button>{{/each}}{{#each::keep {{dictelement::{{slot::setup_offer_card}}::mechanisms}} as setup_offer_mechanism}}<button type="button" class="draft-tag is-mechanism draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_offer_mechanism}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::setup_offer_mechanism}}::label}} 태그 정보 보기">{{dictelement::{{slot::setup_offer_mechanism}}::label}}</button>{{/each}}
 </span>
 </span>
 <span class="draft-stats">
@@ -804,14 +804,24 @@ aria-label="현재 카드를 초기 덱에 추가"
 >이 카드를 초기 덱에 추가</button>
 
 <div class="draft-popover-bank">
-<div id="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::setup_offer_action}}::id}}" class="draft-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{tempvar::setup_offer_action}}::label}} 태그 정보">
-<button type="button" class="draft-popover-dismiss" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::setup_offer_action}}::id}}" popovertargetaction="hide">
-<span class="draft-popover-kicker">ACTION TAG</span>
-<span class="draft-popover-title">{{dictelement::{{tempvar::setup_offer_action}}::label}}</span>
-<span class="draft-popover-copy">{{dictelement::{{tempvar::setup_offer_action}}::tooltip}}</span>
+<div id="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::setup_offer_type}}::id}}" class="draft-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{tempvar::setup_offer_type}}::label}} 카드 유형 정보">
+<button type="button" class="draft-popover-dismiss" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::setup_offer_type}}::id}}" popovertargetaction="hide">
+<span class="draft-popover-kicker">CARD TYPE</span>
+<span class="draft-popover-title">{{dictelement::{{tempvar::setup_offer_type}}::label}}</span>
+<span class="draft-popover-copy">{{dictelement::{{tempvar::setup_offer_type}}::tooltip}}</span>
 <span class="draft-popover-close-hint">어디든 누르면 닫힙니다</span>
 </button>
 </div>
+{{#each::keep {{dictelement::{{slot::setup_offer_card}}::roles}} as setup_popover_role}}
+<div id="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_popover_role}}::id}}" class="draft-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{slot::setup_popover_role}}::label}} 역할 정보">
+<button type="button" class="draft-popover-dismiss" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_popover_role}}::id}}" popovertargetaction="hide">
+<span class="draft-popover-kicker">ROLE</span>
+<span class="draft-popover-title">{{dictelement::{{slot::setup_popover_role}}::label}}</span>
+<span class="draft-popover-copy">{{dictelement::{{slot::setup_popover_role}}::tooltip}}</span>
+<span class="draft-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
+{{/each}}
 {{#each::keep {{dictelement::{{slot::setup_offer_card}}::mechanisms}} as setup_popover_mechanism}}
 <div id="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_popover_mechanism}}::id}}" class="draft-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{slot::setup_popover_mechanism}}::label}} 태그 정보">
 <button type="button" class="draft-popover-dismiss" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_popover_mechanism}}::id}}" popovertargetaction="hide">

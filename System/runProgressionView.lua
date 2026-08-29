@@ -344,12 +344,12 @@
         if type(staticData) ~= "table"
             or getmetatable(staticData) ~= nil
             or type(staticData.registry) ~= "table"
-            or type(staticData.registry.actionTags) ~= "table"
+            or type(staticData.registry.cardTypes) ~= "table"
+            or type(staticData.registry.roles) ~= "table"
             or type(staticData.registry.mechanisms) ~= "table"
             or type(staticData.registry.moods) ~= "table"
             or type(staticData.cards) ~= "table"
             or type(staticData.traits) ~= "table"
-            or type(staticData.environments) ~= "table"
             or type(staticData.subwayLines) ~= "table"
             or type(staticData.characters) ~= "table" then
             addError(errors, "missing_static_data", "$.staticData", "검증된 전체 정적 데이터가 필요합니다.")
@@ -411,8 +411,7 @@
     local function buildResultView(runState, staticData, errors)
         local settlement = runState.lastSettlement
         local character = staticData.characters[settlement.characterId]
-        local environment = staticData.environments[settlement.environmentId]
-        if type(character) ~= "table" or type(environment) ~= "table" then
+        if type(character) ~= "table" then
             addError(errors, "missing_result_reference", "$.result", "최근 세션의 공개 참조를 찾을 수 없습니다.")
             return nil
         end
@@ -438,10 +437,6 @@
             turnLimit = settlement.turnLimit,
             finalStealth = settlement.finalStealth,
             finalResistance = settlement.finalResistance,
-            environment = {
-                id = environment.id,
-                name = environment.name,
-            },
             route = route,
         }
     end
@@ -480,7 +475,8 @@
             name = presentation.card.name,
             descriptionSegments = presentation.card.descriptionSegments,
             ruleLines = presentation.card.ruleLines,
-            actionTag = presentation.card.actionTag,
+            cardType = presentation.card.cardType,
+            roles = presentation.card.roles,
             mechanisms = presentation.card.mechanisms,
             terms = presentation.card.terms,
             baseStealthCost = card.base.stealthCost,
@@ -643,7 +639,7 @@
         if value.kind ~= "tag" or not isAsciiId(value.id) then
             addError(errors, "invalid_tag_identity", path, "태그 View 식별자가 올바르지 않습니다.")
         end
-        if value.tagKind ~= "action" and value.tagKind ~= "mechanism" and value.tagKind ~= "term" then
+        if value.tagKind ~= "type" and value.tagKind ~= "role" and value.tagKind ~= "mechanism" and value.tagKind ~= "term" then
             addError(errors, "invalid_tag_kind", path .. ".tagKind", "태그 종류가 올바르지 않습니다.")
         elseif expectedKind ~= nil and value.tagKind ~= expectedKind then
             addError(errors, "tag_kind_mismatch", path .. ".tagKind", "이 위치의 태그 종류가 다릅니다.")
@@ -700,7 +696,8 @@
             name = true,
             descriptionSegments = true,
             ruleLines = true,
-            actionTag = true,
+            cardType = true,
+            roles = true,
             mechanisms = true,
             terms = true,
             baseStealthCost = true,
@@ -716,7 +713,16 @@
         validateString(card.name, path .. ".name", errors)
         validateSegments(card.descriptionSegments, path .. ".descriptionSegments", errors)
         validateRuleLines(card.ruleLines, path .. ".ruleLines", errors)
-        validateTagView(card.actionTag, path .. ".actionTag", errors, "action")
+        validateTagView(card.cardType, path .. ".cardType", errors, "type")
+        local roleCount = getArrayLength(card.roles, path .. ".roles", errors)
+        if roleCount ~= nil then
+            if roleCount < 1 or roleCount > 2 then
+                addError(errors, "invalid_card_roles", path .. ".roles", "플레이어 카드는 역할 태그를 하나 또는 둘 가져야 합니다.")
+            end
+            for index = 1, roleCount do
+                validateTagView(card.roles[index], path .. ".roles[" .. index .. "]", errors, "role")
+            end
+        end
         local mechanismCount = getArrayLength(card.mechanisms, path .. ".mechanisms", errors)
         if mechanismCount ~= nil then
             local seen = {}
@@ -915,7 +921,6 @@
                 turnLimit = true,
                 finalStealth = true,
                 finalResistance = true,
-                environment = true,
                 route = true,
             }, "$.result", errors)
             if not isInteger(view.result.sessionNumber, 1) then
@@ -956,15 +961,6 @@
             if not isFinite(view.result.finalStealth)
                 or not isFinite(view.result.finalResistance) then
                 addError(errors, "invalid_result_resources", "$.result", "최종 자원 수치가 올바르지 않습니다.")
-            end
-            if type(view.result.environment) ~= "table" then
-                addError(errors, "invalid_result_environment", "$.result.environment", "결과 환경 View가 필요합니다.")
-            else
-                checkAllowedKeys(view.result.environment, { id = true, name = true }, "$.result.environment", errors)
-                if not isAsciiId(view.result.environment.id) then
-                    addError(errors, "invalid_environment_id", "$.result.environment.id", "환경 ID가 올바르지 않습니다.")
-                end
-                validateString(view.result.environment.name, "$.result.environment.name", errors)
             end
             if type(view.result.route) ~= "table" then
                 addError(errors, "invalid_route_view", "$.result.route", "결과 노선 View가 필요합니다.")

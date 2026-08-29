@@ -7,7 +7,7 @@
         turn_start = true,
         cards_drawn = true,
         character_intent_selected = true,
-        action_tag_revealed = true,
+        role_revealed = true,
         effect_applied = true,
         trigger_suppressed = true,
         trigger_resolved = true,
@@ -27,7 +27,7 @@
         turn_start = { turnNumber = true },
         cards_drawn = { requested = true, drawnCount = true },
         character_intent_selected = { selected = true },
-        action_tag_revealed = { actionTag = true },
+        role_revealed = { role = true },
         effect_applied = {
             index = true,
             op = true,
@@ -104,7 +104,6 @@
         plan = 1,
         trait = 2,
         perk = 3,
-        environment = 4,
     }
 
     local function makeError(code, path, message)
@@ -1087,7 +1086,7 @@
         local seenTriggerOrder = {}
         local expectedCharacterIntent = beforeState.characterIntent
         local expectedCharacterSelected = #expectedCharacterIntent.cardInstanceIds > 0
-        local expectedCharacterActionTag = expectedCharacterIntent.publicActionTag
+        local expectedCharacterRole = expectedCharacterIntent.publicRole
         local pendingCharacterIntent = false
         local pendingDeclarations = {}
         local sawTurnStart = false
@@ -1140,10 +1139,10 @@
         end
 
         local function makeTriggerContext(eventType, phase, currentCard)
-            local publicActionTag = beforeState.characterIntent.publicActionTag
+            local publicRole = beforeState.characterIntent.publicRole
             if eventType == "turn_start" then
                 -- turnInitializer runs this trigger before character selection.
-                publicActionTag = nil
+                publicRole = nil
             end
             local context = {
                 turn = resolution.turnNumber,
@@ -1155,7 +1154,7 @@
                 },
                 character = {
                     resistance = trackedResistance,
-                    publicActionTag = publicActionTag,
+                    publicRole = publicRole,
                 },
             }
             if currentCard ~= nil then
@@ -1163,7 +1162,7 @@
                     id = currentCard.id,
                     instanceId = currentCard.instanceId,
                     owner = currentCard.owner,
-                    actionTag = currentCard.actionTag,
+                    roles = currentCard.roles,
                 }
             end
             return context
@@ -1228,7 +1227,7 @@
                     return nil, lookupErrors[1]
                 end
                 local plan = type(card.mechanismData) == "table" and card.mechanismData.plan or nil
-                if not hasMechanism(card, "plan") or type(plan) ~= "table" then
+                if card.cardType ~= "plan" or type(plan) ~= "table" then
                     return nil, makeError("invalid_plan_source", path, "트리거 source가 계획 정의가 아닙니다.")
                 end
                 return plan, nil
@@ -1237,14 +1236,13 @@
             local collections = {
                 trait = staticData.traits,
                 perk = staticData.perks,
-                environment = staticData.environments,
             }
             local collection = collections[kind]
             local definition = type(collection) == "table" and collection[sourceId] or nil
             if type(definition) ~= "table" or definition.id ~= sourceId then
                 return nil, makeError("unknown_trigger_source", path, "트리거 source 정의를 찾을 수 없습니다.")
             end
-            local active = kind == "environment" and beforeState.environmentId == sourceId
+            local active = false
             local activeIds = kind == "trait" and beforeState.character.traitIds
                 or (kind == "perk" and beforeState.player.perkIds or nil)
             for _, activeId in ipairs(type(activeIds) == "table" and activeIds or {}) do
@@ -1258,11 +1256,7 @@
             end
             local owner = definition.owner
             if kind == "perk" and owner == nil then owner = "player" end
-            if kind == "environment" then
-                if side ~= nil then
-                    return nil, makeError("event_side_mismatch", path, "환경 트리거에는 side가 없어야 합니다.")
-                end
-            elseif owner ~= side then
+            if owner ~= side then
                 return nil, makeError("event_side_mismatch", path, "트리거 source owner와 side가 다릅니다.")
             end
             return definition, nil
@@ -1488,21 +1482,6 @@
                         )
                         if not ok then return nil, candidateError end
                     end
-                end
-                local environment = staticData.environments[beforeState.environmentId]
-                for declarationIndex, spec in ipairs(type(environment) == "table" and environment.triggers or {}) do
-                    local ok, candidateError = addCandidate(
-                        inputKey,
-                        inputRecord,
-                        "environment",
-                        beforeState.environmentId,
-                        nil,
-                        nil,
-                        declarationIndex,
-                        spec,
-                        nil
-                    )
-                    if not ok then return nil, candidateError end
                 end
             end
             local orders = {}
@@ -1808,20 +1787,20 @@
                     emit(publicResult, "character_intent", { selected = false })
                     emit(llmEvent, "character_intent", { selected = false })
                 end
-            elseif event.type == "action_tag_revealed" then
-                local actionTag = payload.actionTag
-                local tag = type(staticData.registry.actionTags) == "table" and staticData.registry.actionTags[actionTag] or nil
+            elseif event.type == "role_revealed" then
+                local role = payload.role
+                local tag = type(staticData.registry.roles) == "table" and staticData.registry.roles[role] or nil
                 local _, sourceError = requireSource(event, path, "system", "character_selector")
                 local _, sideError = requireSideSource(event, path, "character")
                 if sourceError or sideError or event.phase ~= "turn_start"
                     or pendingCharacterIntent ~= true
-                    or not isAsciiId(actionTag)
-                    or actionTag ~= expectedCharacterActionTag
+                    or not isAsciiId(role)
+                    or role ~= expectedCharacterRole
                     or type(tag) ~= "table" or tag.owner ~= "character" then
-                    return failure({ makeError("invalid_action_tag_reveal", path .. ".payload.actionTag", "캐릭터 공개 행동 태그가 beforeState·정적 레지스트리와 다릅니다.") })
+                    return failure({ makeError("invalid_role_reveal", path .. ".payload.role", "캐릭터 공개 역할 태그가 beforeState·정적 레지스트리와 다릅니다.") })
                 end
-                emit(publicResult, "character_intent", { selected = true, actionTag = actionTag })
-                emit(llmEvent, "character_intent", { selected = true, actionTag = actionTag })
+                emit(publicResult, "character_intent", { selected = true, role = role })
+                emit(llmEvent, "character_intent", { selected = true, role = role })
                 local selectedInstanceId = expectedCharacterIntent.cardInstanceIds[#expectedCharacterIntent.cardInstanceIds]
                 local selectedInstance = findBeforeInstance(selectedInstanceId)
                 local selectedCard = selectedInstance and staticData.cards[selectedInstance.cardId] or nil
@@ -1829,21 +1808,21 @@
                     return failure({ makeError("character_intent_card_missing", path, "캐릭터 의도 카드를 찾을 수 없습니다.") })
                 end
                 registerTriggerInput(
-                    "action_tag_revealed",
+                    "role_revealed",
                     "turn_start",
                     nil,
                     {
-                        type = "action_tag_revealed",
+                        type = "role_revealed",
                         side = "character",
                         cardId = selectedCard.id,
                         cardInstanceId = selectedInstanceId,
-                        actionTag = actionTag,
+                        role = role,
                     },
                     {
                         id = selectedCard.id,
                         instanceId = selectedInstanceId,
                         owner = "character",
-                        actionTag = actionTag,
+                        roles = selectedCard.roles,
                     },
                     event.eventId
                 )
@@ -1856,7 +1835,6 @@
                     plan = true,
                     trait = true,
                     perk = true,
-                    environment = true,
                 }
                 if allowedEffectSources[event.source.kind] ~= true and not isMoodStateEffect then
                     return failure({ makeError("invalid_effect_source", path .. ".source.kind", "효과 source 종류가 올바르지 않습니다.") })
@@ -1867,7 +1845,7 @@
                         return failure({ sideError })
                     end
                 end
-                local triggerKinds = { plan = true, trait = true, perk = true, environment = true }
+                local triggerKinds = { plan = true, trait = true, perk = true }
                 if triggerKinds[event.source.kind] then
                     local triggerDefinition, triggerError = findTriggerDefinition(
                         event.source.kind,
@@ -1878,15 +1856,9 @@
                     if triggerError then
                         return failure({ triggerError })
                     end
-                    if event.source.kind == "environment" then
-                        if event.side ~= nil or event.source.side ~= nil then
-                            return failure({ makeError("event_side_mismatch", path, "환경 트리거 효과에는 side가 없어야 합니다.") })
-                        end
-                    else
-                        local _, sideError = requireSideSource(event, path, event.source.side)
-                        if sideError then
-                            return failure({ sideError })
-                        end
+                    local _, sideError = requireSideSource(event, path, event.source.side)
+                    if sideError then
+                        return failure({ sideError })
                     end
                     if triggerPhases[event.phase] ~= true
                         or type(event.cause) ~= "table"
@@ -2072,7 +2044,7 @@
                 end
                 local publicPayload = {
                     side = side,
-                    actionTag = card.actionTag,
+                    roles = card.roles,
                     stealthCost = payload.finalStealthCost,
                 }
                 if side == "player" then
@@ -2081,7 +2053,7 @@
                 end
                 emit(publicResult, "card_declared", publicPayload)
 
-                if not hasMechanism(card, "plan") or (effectChoice ~= nil and effectChoice.placesPlan == false) then
+                if card.cardType ~= "plan" or (effectChoice ~= nil and effectChoice.placesPlan == false) then
                     local llmPayload, narrationError = narration(card, "play", side, "played", true)
                     if narrationError then
                         return failure({ narrationError })
@@ -2089,7 +2061,7 @@
                     if effectChoice ~= nil and effectChoice.actorAction ~= nil then
                         llmPayload.actorAction = effectChoice.actorAction
                     end
-                    llmPayload.actionTag = card.actionTag
+                    llmPayload.roles = card.roles
                     emit(llmEvent, "action", llmPayload)
                 end
 
@@ -2133,7 +2105,7 @@
                         side = side,
                         cardId = card.id,
                         cardInstanceId = payload.instanceId,
-                        actionTag = card.actionTag,
+                        roles = card.roles,
                         resolutionId = event.resolutionId,
                         effectChoiceId = payload.effectChoiceId,
                     },
@@ -2141,7 +2113,7 @@
                         id = card.id,
                         instanceId = payload.instanceId,
                         owner = side,
-                        actionTag = card.actionTag,
+                        roles = card.roles,
                         effectChoiceId = payload.effectChoiceId,
                     },
                     event.eventId
@@ -2176,7 +2148,7 @@
                         side = event.side,
                         cardId = card.id,
                         cardInstanceId = payload.instanceId,
-                        actionTag = card.actionTag,
+                        roles = card.roles,
                         resolutionId = event.resolutionId,
                         effectChoiceId = declaration.effectChoiceId,
                     },
@@ -2184,7 +2156,7 @@
                         id = card.id,
                         instanceId = payload.instanceId,
                         owner = event.side,
-                        actionTag = card.actionTag,
+                        roles = card.roles,
                         effectChoiceId = declaration.effectChoiceId,
                     },
                     event.eventId
@@ -2223,7 +2195,7 @@
                 if #lookupErrors > 0
                     or sideError
                     or event.source.kind ~= "plan"
-                    or not hasMechanism(planCard, "plan")
+                    or planCard.cardType ~= "plan"
                     or type(planDefinition) ~= "table"
                     or event.resolutionId == nil
                     or (event.phase ~= "player_card" and event.phase ~= "character_card")
@@ -2314,7 +2286,7 @@
                     })
                 end
             elseif event.type == "trigger_resolved" then
-                local allowedTriggerSources = { plan = true, trait = true, perk = true, environment = true }
+                local allowedTriggerSources = { plan = true, trait = true, perk = true }
                 local definition, definitionError = findTriggerDefinition(
                     event.source.kind,
                     event.source.id,
@@ -2353,15 +2325,9 @@
                 if seenTriggerBatches[resolvedBatchKey] then
                     return failure({ makeError("duplicate_trigger_batch", path, "같은 입력과 source의 트리거 batch가 중복되었습니다.") })
                 end
-                if event.source.kind == "environment" then
-                    if event.side ~= nil or event.source.side ~= nil then
-                        return failure({ makeError("event_side_mismatch", path, "환경 트리거에는 side가 없어야 합니다.") })
-                    end
-                else
-                    local _, sideError = requireSideSource(event, path, event.source.side)
-                    if sideError then
-                        return failure({ sideError })
-                    end
+                local _, sideError = requireSideSource(event, path, event.source.side)
+                if sideError then
+                    return failure({ sideError })
                 end
                 local key = planKey(event)
                 local records = pendingTriggerEffects[key] or {}
@@ -2456,7 +2422,7 @@
                     local discarded = afterSlot == nil
                     if #lookupErrors > 0
                         or event.source.kind ~= "plan"
-                        or not hasMechanism(card, "plan")
+                        or card.cardType ~= "plan"
                         or triggerPhases[event.phase] ~= true
                         or type(event.cause) ~= "table"
                         or event.cause.kind ~= (event.resolutionId ~= nil and "card_resolution" or "turn_event")
@@ -2593,7 +2559,7 @@
                         or planSpecError
                         or planSpecStaticError
                         or event.source.kind ~= "card"
-                        or not hasMechanism(placedCard, "plan")
+                        or placedCard.cardType ~= "plan"
                         or event.phase ~= side .. "_card"
                         or event.resolutionId == nil
                         or type(event.cause) ~= "table"
@@ -2975,7 +2941,7 @@
             return failure({ makeError("missing_start_draw", "$.turnResolution.events", "양측 턴 시작 드로우 사건이 모두 필요합니다.") })
         end
         if pendingCharacterIntent then
-            return failure({ makeError("missing_action_tag_reveal", "$.turnResolution.events", "선택된 캐릭터 의도의 공개 행동 태그 사건이 없습니다.") })
+            return failure({ makeError("missing_role_reveal", "$.turnResolution.events", "선택된 캐릭터 의도의 공개 역할 사건이 없습니다.") })
         end
         if sawMoodEvaluation ~= true or sawCleanup ~= true then
             return failure({ makeError("incomplete_turn_tail", "$.turnResolution.events", "무드 평가 또는 턴 정리 사건이 없습니다.") })
