@@ -90,7 +90,6 @@ end)
 | `PlayerCards.db` | 플레이어 카드 정의 |
 | `CharacterCards.db` | 캐릭터 카드 정의 |
 | `CharTraits.db` | 캐릭터 특성 정의 |
-| `Environments.db` | 전투 환경 정의 |
 | `TokyoSubwayLines.db` | 노선과 역 정보 |
 | `CharacterList.db` | 캐릭터 프로필 목록 |
 
@@ -417,7 +416,7 @@ RUNTIME_BUNDLE_REVISION
 따라서 다음 항목을 변경하면 `System/main.lua`의 `RUNTIME_BUNDLE_REVISION`도 반드시 새 값으로 바꾸십시오.
 
 - 실행 가능한 `System/*.lua` 로어
-- 카드, 캐릭터, 환경, 노선 등 런타임 정적 DB
+- 카드, 캐릭터, 노선 등 런타임 정적 DB
 - 모듈 로딩 결과에 영향을 주는 배포 구성
 
 revision 값의 형식 자체보다 **이전 배포와 다른 값이어야 한다는 점**이 중요합니다.
