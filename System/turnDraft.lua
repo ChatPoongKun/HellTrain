@@ -634,15 +634,6 @@
         return instance, staticData.cards[instance.cardId]
     end
 
-    local function hasMechanism(card, mechanismId)
-        for _, currentId in ipairs(type(card) == "table" and type(card.mechanisms) == "table" and card.mechanisms or {}) do
-            if currentId == mechanismId then
-                return true
-            end
-        end
-        return false
-    end
-
     local function copyArray(values)
         local copy = {}
         for index, value in ipairs(values or {}) do

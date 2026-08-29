@@ -278,18 +278,6 @@
         return staticData
     end
 
-    local function hasMechanism(card, mechanismId)
-        if type(card) ~= "table" or type(card.mechanisms) ~= "table" then
-            return false
-        end
-        for _, id in ipairs(card.mechanisms) do
-            if id == mechanismId then
-                return true
-            end
-        end
-        return false
-    end
-
     local function appendNestedErrors(target, prefix, nested)
         if type(nested) ~= "table" or type(nested.errors) ~= "table" then
             addError(target, "validation_failed", prefix, "하위 검증 결과를 읽을 수 없습니다.")
@@ -2379,15 +2367,7 @@
                             selectedPlayable = false
                         end
 
-                        local hasChain = false
-                        if type(item.mechanisms) == "table" then
-                            for _, mechanism in ipairs(item.mechanisms) do
-                                if type(mechanism) == "table" and mechanism.id == "chain" then
-                                    hasChain = true
-                                    break
-                                end
-                            end
-                        end
+                        local hasChain = type(item.cardType) == "table" and item.cardType.id == "chain"
                         if not hasChain then
                             mainActionCount = mainActionCount + 1
                             mainActionOrder = item.selectionOrder

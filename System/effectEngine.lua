@@ -65,15 +65,6 @@
         return staticData
     end
 
-    local function hasMechanism(card, mechanismId)
-        for _, currentId in ipairs(type(card) == "table" and type(card.mechanisms) == "table" and card.mechanisms or {}) do
-            if currentId == mechanismId then
-                return true
-            end
-        end
-        return false
-    end
-
     local function findInstance(state, instanceId)
         if type(state) ~= "table" or type(state.cardInstances) ~= "table" then
             return nil

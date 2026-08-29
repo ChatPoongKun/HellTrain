@@ -153,15 +153,6 @@
         return true
     end
 
-    local function hasMechanism(card, mechanismId)
-        for _, currentId in ipairs(type(card) == "table" and type(card.mechanisms) == "table" and card.mechanisms or {}) do
-            if currentId == mechanismId then
-                return true
-            end
-        end
-        return false
-    end
-
     local function narrationMatches(staticData, payload, narrationKey, planRequired)
         for _, card in pairs(type(staticData.cards) == "table" and staticData.cards or {}) do
             local isPlan = card.cardType == "plan"

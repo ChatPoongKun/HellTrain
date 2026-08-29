@@ -382,15 +382,6 @@
         return card
     end
 
-    local function hasMechanism(card, mechanismId)
-        for _, current in ipairs(type(card) == "table" and type(card.mechanisms) == "table" and card.mechanisms or {}) do
-            if current == mechanismId then
-                return true
-            end
-        end
-        return false
-    end
-
     local function findEffectChoice(card, choiceId)
         for _, choice in ipairs(type(card) == "table" and type(card.effectChoices) == "table" and card.effectChoices or {}) do
             if choice.id == choiceId then return choice end
