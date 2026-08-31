@@ -51,6 +51,14 @@
         },
     }
 
+    local EFFECT_SOURCE_LABELS = {
+        card = "카드",
+        plan = "계획",
+        trait = "특징",
+        perk = "퍽",
+        system = "상태 효과",
+    }
+
     local ACTION_STOP_REASONS = {
         outcome_latched = "승패가 결정되어",
         skip_actions = "남은 행동이 생략되어",
@@ -373,6 +381,20 @@
         return safe, nil
     end
 
+    local function effectSourceSuffix(source)
+        if type(source) ~= "table" then return "" end
+        return " — 원인: " .. tostring(EFFECT_SOURCE_LABELS[source.kind] or source.kind)
+            .. " 「" .. tostring(source.name) .. "」"
+    end
+
+    local function buildOptionalEffectSource(payload, path, staticData)
+        if payload.source == nil then return nil, nil end
+        if payload.changed ~= true then
+            return nil, makeError("unexpected_effect_source", path .. ".source", "변화가 없는 효과에는 원인 상세정보를 넣을 수 없습니다.")
+        end
+        return buildEffectSource(payload.source, staticData, path .. ".source")
+    end
+
     local function summary(sequence, eventType, text)
         return {
             sequence = sequence,
@@ -416,7 +438,7 @@
         if payload.changed ~= true then
             text = spec.noun .. "에 변화가 없습니다. (" .. numberText(payload.before) .. ")"
         end
-        return text, nil, source
+        return text .. effectSourceSuffix(source), nil, source
     end
 
     local function validateEffect(payload, path, staticData)
@@ -433,6 +455,7 @@
                 changed = true,
                 requested = true,
                 drawnCount = true,
+                source = true,
             }, path)
             if keyError then return nil, keyError end
             if not isSide(payload.target)
@@ -443,8 +466,11 @@
                 or payload.changed ~= (payload.drawnCount > 0) then
                 return nil, makeError("invalid_effect_payload", path, "드로우 표시값이 서로 일치하지 않습니다.")
             end
+            local source, sourceError = buildOptionalEffectSource(payload, path, staticData)
+            if sourceError then return nil, sourceError end
             return sideLabel(payload.target) .. "가 카드 " .. tostring(payload.drawnCount)
-                .. "장을 더 뽑았습니다. (요청 " .. tostring(payload.requested) .. "장)", nil
+                .. "장을 더 뽑았습니다. (요청 " .. tostring(payload.requested) .. "장)"
+                .. effectSourceSuffix(source), nil
         elseif payload.op == "skip_actions" then
             local keyError = checkAllowedKeys(payload, {
                 op = true,
@@ -453,6 +479,7 @@
                 scope = true,
                 before = true,
                 after = true,
+                source = true,
             }, path)
             if keyError then return nil, keyError end
             if not isSide(payload.target)
@@ -463,8 +490,11 @@
                 or payload.changed ~= (payload.before ~= true) then
                 return nil, makeError("invalid_effect_payload", path, "행동 생략 표시값이 서로 일치하지 않습니다.")
             end
+            local source, sourceError = buildOptionalEffectSource(payload, path, staticData)
+            if sourceError then return nil, sourceError end
             if payload.changed then
-                return sideLabel(payload.target) .. "의 이번 턴 남은 행동이 생략됩니다.", nil
+                return sideLabel(payload.target) .. "의 이번 턴 남은 행동이 생략됩니다."
+                    .. effectSourceSuffix(source), nil
             end
             return sideLabel(payload.target) .. "의 남은 행동은 이미 생략된 상태입니다.", nil
         elseif payload.op == "add_mood_token" or payload.op == "remove_mood_token" then
@@ -476,6 +506,7 @@
                 amount = true,
                 before = true,
                 after = true,
+                source = true,
             }, path)
             if keyError then return nil, keyError end
             local mood, moodError = lookupMood(staticData, payload.mood, path .. ".mood")
@@ -490,9 +521,12 @@
                 or payload.changed ~= (payload.before ~= payload.after) then
                 return nil, makeError("invalid_effect_payload", path, "무드 토큰 표시값이 서로 일치하지 않습니다.")
             end
+            local source, sourceError = buildOptionalEffectSource(payload, path, staticData)
+            if sourceError then return nil, sourceError end
             local verb = payload.op == "add_mood_token" and "생성했습니다" or "제거했습니다"
             return mood.label .. " 토큰을 " .. numberText(payload.amount) .. "개 " .. verb .. ". ("
-                .. numberText(payload.before) .. " → " .. numberText(payload.after) .. ")", nil
+                .. numberText(payload.before) .. " → " .. numberText(payload.after) .. ")"
+                .. effectSourceSuffix(source), nil
         elseif payload.op == "force_mood" then
             local keyError = checkAllowedKeys(payload, {
                 op = true,
@@ -501,6 +535,7 @@
                 mood = true,
                 before = true,
                 after = true,
+                source = true,
             }, path)
             if keyError then return nil, keyError end
             local mood, moodError = lookupMood(staticData, payload.mood, path .. ".mood")
@@ -511,7 +546,10 @@
                 or payload.after ~= payload.before + 1 then
                 return nil, makeError("invalid_effect_payload", path, "무드 강제 변경 요청 표시값이 서로 일치하지 않습니다.")
             end
-            return "턴 종료 시 " .. mood.label .. "(으)로 강제 변경하는 효과가 발생했습니다.", nil
+            local source, sourceError = buildOptionalEffectSource(payload, path, staticData)
+            if sourceError then return nil, sourceError end
+            return "턴 종료 시 " .. mood.label .. "(으)로 강제 변경하는 효과가 발생했습니다."
+                .. effectSourceSuffix(source), nil
         end
         return nil, makeError("unsupported_effect_op", path .. ".op", "공개 표시를 지원하지 않는 효과입니다.")
     end

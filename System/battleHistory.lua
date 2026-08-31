@@ -879,6 +879,41 @@
         recover_resistance = "저항 회복",
     }
 
+    local EFFECT_SOURCE_COLLECTIONS = {
+        card = "cards",
+        plan = "cards",
+        trait = "traits",
+        perk = "perks",
+    }
+
+    local EFFECT_SOURCE_LABELS = {
+        card = "카드",
+        plan = "계획",
+        trait = "특징",
+        perk = "퍽",
+        system = "상태 효과",
+    }
+
+    local SYSTEM_EFFECT_NAMES = {
+        mood_state = "무드 효과",
+    }
+
+    local function effectSourceText(staticData, source)
+        if type(source) ~= "table" or not isAsciiId(source.kind) or not isAsciiId(source.id) then
+            return nil
+        end
+        local name = source.kind == "system" and SYSTEM_EFFECT_NAMES[source.id] or nil
+        local collectionName = EFFECT_SOURCE_COLLECTIONS[source.kind]
+        local definition = collectionName and type(staticData) == "table"
+            and type(staticData[collectionName]) == "table"
+            and staticData[collectionName][source.id]
+            or nil
+        if name == nil and type(definition) == "table" then name = definition.name end
+        local label = EFFECT_SOURCE_LABELS[source.kind]
+        if type(label) ~= "string" or type(name) ~= "string" or name == "" then return nil end
+        return label .. " 「" .. name .. "」"
+    end
+
     local function validatePublicView(view)
         local errors = {}
         if type(view) ~= "table" or getmetatable(view) ~= nil then
@@ -1008,6 +1043,20 @@
                         text = "추가 드로우 " .. tostring(payload.drawnCount) .. "장"
                     elseif payload.op == "skip_actions" then
                         text = "남은 행동 생략"
+                    elseif (payload.op == "add_mood_token" or payload.op == "remove_mood_token")
+                        and isAsciiId(payload.mood) and isFinite(payload.amount) then
+                        text = moodLabel(staticData, payload.mood) .. " 토큰 "
+                            .. (payload.op == "add_mood_token" and "추가 " or "제거 ")
+                            .. numberText(payload.amount) .. "개"
+                        if isFinite(payload.before) and isFinite(payload.after) then
+                            text = text .. " (" .. numberText(payload.before) .. " → " .. numberText(payload.after) .. ")"
+                        end
+                    elseif payload.op == "force_mood" and isAsciiId(payload.mood) then
+                        text = moodLabel(staticData, payload.mood) .. " 무드 강제 변경 요청"
+                    end
+                    local sourceText = effectSourceText(staticData, payload.source)
+                    if text ~= nil and sourceText ~= nil then
+                        text = text .. " — 원인: " .. sourceText
                     end
                 elseif eventType == "plan_changed" and type(payload) == "table" then
                     local planText = payload.action == "placed" and "계획 배치"
