@@ -445,6 +445,10 @@
         validateFingerprint(receipt.responseIdentityFingerprint, path .. ".responseIdentityFingerprint", errors)
     end
 
+    local function aftermathEndTurn(authority)
+        return math.max(authority.turnLimit, authority.turnNumber + 2)
+    end
+
     local function validateAftermath(value, authority)
         local errors = {}
         local path = "$.aftermath"
@@ -494,19 +498,20 @@
         if type(authority) ~= "table"
             or authority.status ~= "victory"
             or authority.battleId ~= value.battleId
+            or not isInteger(authority.turnNumber, 1)
             or authority.turnNumber ~= value.victoryTurnNumber
             or not isInteger(authority.turnLimit, 1) then
-            errors[#errors + 1] = makeError("aftermath_authority_mismatch", path, "자유행동 상태가 조기 승리 전투와 일치하지 않습니다.")
+            errors[#errors + 1] = makeError("aftermath_authority_mismatch", path, "자유행동 상태가 승리 전투와 일치하지 않습니다.")
         elseif value.phase == "complete" then
-            if value.completedTurnNumber ~= authority.turnLimit then
+            if value.completedTurnNumber ~= aftermathEndTurn(authority) then
                 errors[#errors + 1] = makeError("incomplete_aftermath", path .. ".completedTurnNumber", "완료된 자유행동이 도착 턴에 이르지 않았습니다.")
             end
         elseif value.phase == "settling" then
-            if value.completedTurnNumber ~= authority.turnLimit then
+            if value.completedTurnNumber ~= aftermathEndTurn(authority) then
                 errors[#errors + 1] = makeError("invalid_aftermath_settlement", path .. ".completedTurnNumber", "정산 중인 자유행동이 도착 턴에 이르지 않았습니다.")
             end
-        elseif value.completedTurnNumber >= authority.turnLimit then
-            errors[#errors + 1] = makeError("aftermath_over_limit", path .. ".completedTurnNumber", "진행 중인 자유행동이 턴 제한을 넘었습니다.")
+        elseif value.completedTurnNumber >= aftermathEndTurn(authority) then
+            errors[#errors + 1] = makeError("aftermath_over_limit", path .. ".completedTurnNumber", "진행 중인 자유행동이 정해진 종료 지점을 넘었습니다.")
         end
 
         local needsRequest = value.phase == "inFlight" or value.phase == "requestInjected"
@@ -2071,7 +2076,7 @@
     end
 
     local function buildAftermathInstruction(authority, aftermath)
-        local finalTurn = aftermath.completedTurnNumber + 1 == authority.turnLimit
+        local finalTurn = aftermath.completedTurnNumber + 1 == aftermathEndTurn(authority)
         local lines = {
             "[함락 후 자유행동]",
             "전투 승리는 이미 확정되었다. 카드, 저항, 은폐, 무드, 전투 판정이나 보상을 언급하지 마라.",
@@ -2083,7 +2088,7 @@
             "사용자가 입력하지 않은 추가 행동, 대사, 생각을 플레이어에게 부여하지 마라.",
         }
         if finalTurn then
-            lines[#lines + 1] = "이번 자유행동은 마지막이다. 응답의 끝에서 반드시 열차가 목적지 역에 도착하고 캐릭터가 황급히 열차에서 내리는 장면으로 마무리하라."
+            lines[#lines + 1] = "이번 자유행동은 마지막이다. 응답의 끝에서 반드시 열차가 목적지 역에 도착하고 캐릭터가 정신을 차린 뒤 황급히 열차에서 내리는 장면으로 마무리하라."
         end
         return {
             role = "system",
@@ -2439,7 +2444,7 @@
         aftermath.completedTurnNumber = completedTurnNumber
         aftermath.lastCommitted = committedReceipt
         aftermath.request = nil
-        aftermath.phase = completedTurnNumber == authority.turnLimit and "settling" or "ready"
+        aftermath.phase = completedTurnNumber == aftermathEndTurn(authority) and "settling" or "ready"
         local validationErrors = validateAftermath(aftermath, authority)
         if #validationErrors > 0 then return failure(validationErrors) end
         local writeErrors = writeStored(KEYS.aftermath, aftermath)
@@ -2531,14 +2536,15 @@
         end
 
         local previousCompletedTurnNumber = aftermath.completedTurnNumber
+        local endTurnNumber = aftermathEndTurn(authority)
         local committedReceipt, receiptErrors = buildAftermathCommitted(
             chat,
-            authority.turnLimit,
+            endTurnNumber,
             responseLuaIndex
         )
         if receiptErrors then return failure(receiptErrors) end
         aftermath.schemaVersion = AFTERMATH_SCHEMA_VERSION
-        aftermath.completedTurnNumber = authority.turnLimit
+        aftermath.completedTurnNumber = endTurnNumber
         aftermath.lastCommitted = committedReceipt
         aftermath.request = nil
         aftermath.phase = "settling"
@@ -2551,7 +2557,7 @@
         if type(settled) == "table" and settled.ok == true then
             settled.skipped = true
             settled.reused = false
-            settled.skippedTurnCount = authority.turnLimit - previousCompletedTurnNumber
+            settled.skippedTurnCount = endTurnNumber - previousCompletedTurnNumber
         end
         return settled
     end
@@ -2825,7 +2831,7 @@
             injected = removed == 0,
             deduplicated = removed > 1,
             aftermath = true,
-            finalTurn = aftermath.completedTurnNumber + 1 == authority.turnLimit,
+            finalTurn = aftermath.completedTurnNumber + 1 == aftermathEndTurn(authority),
             requestPhase = aftermath.phase,
             attemptNumber = aftermath.request.attemptNumber,
         })
@@ -2864,8 +2870,7 @@
                     status = current.authority.status,
                 })
             end
-        elseif current.authority.status == "victory"
-            and current.authority.turnNumber < current.authority.turnLimit then
+        elseif current.authority.status == "victory" then
             return success({
                 terminal = true,
                 hasBattle = true,
@@ -4737,7 +4742,7 @@
             local publishErrors
             published, publishErrors = publishCurrentViewInternal(staticData, true)
             if publishErrors then return failure(publishErrors) end
-        elseif nextState.status == "victory" and nextState.turnNumber < nextState.turnLimit then
+        elseif nextState.status == "victory" then
             local currentAftermath, aftermathErrors = readStored(KEYS.aftermath, false)
             if aftermathErrors then return failure(aftermathErrors) end
             if currentAftermath == nil then

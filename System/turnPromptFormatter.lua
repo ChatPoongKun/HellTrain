@@ -683,7 +683,11 @@
             instructions[#instructions + 1] = "이번 턴 사건을 이어서 묘사하십시오."
         end
         if pending.afterState.status == "defeat" then
-            instructions[#instructions + 1] = "패배 장면의 끝에서 경찰이 다가와 플레이어를 연행하게 되고 열차 밖으로 끌려나가는 순간 시야가 검게 끊기며 의식을 잃는 모습으로 마무리 하십시오."
+            if pending.afterState.player.stealth <= 0 then
+                instructions[#instructions + 1] = "은폐 소진으로 인한 패배다. 패배 장면의 끝에서 경찰이 다가와 플레이어를 연행하게 되고 열차 밖으로 끌려나가는 순간 시야가 검게 끊기며 의식을 잃는 모습으로 마무리하십시오."
+            else
+                instructions[#instructions + 1] = "제한 턴 도달로 인한 패배다. 캐릭터가 목적지 역에서 열차를 내려버려 플레이어가 실패한 것으로 묘사하고, 경찰이나 연행 장면은 만들지 마십시오."
+            end
         end
         instructions[#instructions + 1] = "사건 JSON:"
         instructions[#instructions + 1] = encoded
