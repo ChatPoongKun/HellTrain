@@ -1169,6 +1169,38 @@
         return success(nextState, movedInstanceIds, {})
     end
 
+    local function modifyOldestPlan(state, side, spec)
+        local ownerError = validateOwner(side, "$.side")
+        if ownerError then return failure({ ownerError }) end
+        if type(spec) ~= "table" or getmetatable(spec) ~= nil then
+            return failure({ makeError("invalid_plan_modification", "$.spec", "계획 변경 명세가 올바르지 않습니다.") })
+        end
+        local nextState, stateErrors = prepareState(state)
+        if stateErrors then return failure(stateErrors) end
+        normalizeAll(nextState)
+        local slots = nextState[side].planSlots
+        if #slots == 0 then return success(nextState, {}, {}) end
+        local slot = slots[1]
+        local affectedId = slot.cardInstanceId
+        if spec.remove == true then
+            discardPlanAt(nextState, side, 1)
+        else
+            if spec.remainingTurnsDelta ~= nil and slot.remainingTurns ~= nil then
+                slot.remainingTurns = slot.remainingTurns + spec.remainingTurnsDelta
+            end
+            if spec.remainingChargesDelta ~= nil and slot.remainingCharges ~= nil then
+                slot.remainingCharges = math.max(1, slot.remainingCharges + spec.remainingChargesDelta)
+            end
+            if slot.remainingTurns ~= nil and slot.remainingTurns <= 0 then
+                discardPlanAt(nextState, side, 1)
+            end
+        end
+        normalizeAll(nextState)
+        local outputErrors = validatePlanLinks(nextState, "$")
+        if #outputErrors > 0 then return failure(outputErrors) end
+        return success(nextState, { affectedId }, {})
+    end
+
     local function endTurnCleanup(state)
         local nextState, stateErrors = prepareState(state)
         if stateErrors then
@@ -1316,6 +1348,7 @@
         placePlan = placePlan,
         consumePlanCharge = consumePlanCharge,
         setPlanCapacity = setPlanCapacity,
+        modifyOldestPlan = modifyOldestPlan,
         endTurnCleanup = endTurnCleanup,
         validateConservation = validateConservation,
     }

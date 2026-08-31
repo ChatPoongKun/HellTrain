@@ -3,7 +3,8 @@
     local KIND = "runProgressionV1"
     local MIN_DECK_SIZE = 10
     local MAX_DECK_SIZE = 20
-    local MAX_CARD_COPIES = 2
+    local RARITY_WEIGHTS = { common = 40, rare = 5, legendary = 1 }
+    local RARITY_ORDER = { "common", "rare", "legendary" }
     local REWARD_OFFER_SIZE = 3
     local CHARACTER_OFFER_SIZE = 3
     local MAX_SESSIONS = 999
@@ -424,8 +425,15 @@
             elseif card.owner == "player" then
                 if not isAsciiId(cardId) or card.id ~= cardId then
                     appendError(errors, "invalid_player_card", path, "플레이어 카드 키와 내부 ID가 올바르지 않습니다.")
+                elseif RARITY_WEIGHTS[card.rarity] == nil or not isAsciiId(card.draftStyle) then
+                    appendError(errors, "invalid_player_card_draft_data", path, "플레이어 카드의 희귀도 또는 draftStyle이 올바르지 않습니다.")
                 else
                     playerPool[#playerPool + 1] = cardId
+                    playerPool[cardId] = {
+                        rarity = card.rarity,
+                        draftStyle = card.draftStyle,
+                        maxCopies = card.rarity == "legendary" and 1 or 2,
+                    }
                 end
             end
         end
@@ -670,12 +678,12 @@
                     )
                 else
                     counts[cardId] = (counts[cardId] or 0) + 1
-                    if counts[cardId] > MAX_CARD_COPIES then
+                    if counts[cardId] > playerPool[cardId].maxCopies then
                         appendError(
                             errors,
                             "card_copy_limit_exceeded",
                             path .. "[" .. index .. "]",
-                            "런 덱에는 같은 카드를 2장까지만 넣을 수 있습니다."
+                            "런 덱의 카드별 보유 제한을 초과했습니다."
                         )
                     end
                 end
@@ -685,6 +693,64 @@
             return nil, nil, errors
         end
         return counts, length, nil
+    end
+
+    local function chooseOne(rng, candidates)
+        local values, nextRng, errors = callNextIntegers(rng, {
+            { minimum = 1, maximum = #candidates },
+        })
+        if errors then return nil, nil, errors end
+        return candidates[values[1]], nextRng, nil
+    end
+
+    local function chooseRarity(rng)
+        local total = 0
+        for _, rarity in ipairs(RARITY_ORDER) do total = total + RARITY_WEIGHTS[rarity] end
+        local values, nextRng, errors = callNextIntegers(rng, {
+            { minimum = 1, maximum = total },
+        })
+        if errors then return nil, nil, errors end
+        local cumulative = 0
+        for _, rarity in ipairs(RARITY_ORDER) do
+            cumulative = cumulative + RARITY_WEIGHTS[rarity]
+            if values[1] <= cumulative then return rarity, nextRng, nil end
+        end
+    end
+
+    local function rarityFallbacks(rarity)
+        if rarity == "legendary" then return { "legendary", "rare", "common" } end
+        if rarity == "rare" then return { "rare", "common" } end
+        return { "common", "rare", "legendary" }
+    end
+
+    local function eligibleRewardCards(playerPool, counts, excluded, rarity, style)
+        local candidates = {}
+        for _, cardId in ipairs(playerPool) do
+            local card = playerPool[cardId]
+            if card.rarity == rarity
+                and (style == nil or card.draftStyle == style)
+                and excluded[cardId] ~= true
+                and (counts[cardId] or 0) < card.maxCopies then
+                candidates[#candidates + 1] = cardId
+            end
+        end
+        return candidates
+    end
+
+    local function chooseDominantStyle(rng, deck, playerPool)
+        local styleCounts = {}
+        local maximum = 0
+        for _, cardId in ipairs(deck) do
+            local style = playerPool[cardId].draftStyle
+            styleCounts[style] = (styleCounts[style] or 0) + 1
+            if styleCounts[style] > maximum then maximum = styleCounts[style] end
+        end
+        local tied = {}
+        for style, count in pairs(styleCounts) do
+            if count == maximum then tied[#tied + 1] = style end
+        end
+        table.sort(tied)
+        return chooseOne(rng, tied)
     end
 
     local function generateRewardOffer(
@@ -699,16 +765,14 @@
         if deckErrors then
             return nil, nil, deckErrors
         end
-        local eligible = {}
+        local eligibleCount = 0
         if deckLength < MAX_DECK_SIZE then
             for _, cardId in ipairs(playerPool) do
-                if (counts[cardId] or 0) < MAX_CARD_COPIES then
-                    eligible[#eligible + 1] = cardId
-                end
+                if (counts[cardId] or 0) < playerPool[cardId].maxCopies then eligibleCount = eligibleCount + 1 end
             end
         end
 
-        if #eligible == 0 then
+        if eligibleCount == 0 then
             return {
                 kind = "none",
                 interactionToken = buildRewardToken(
@@ -726,10 +790,34 @@
             }, nil
         end
 
-        local offerCount = math.min(REWARD_OFFER_SIZE, #eligible)
-        local cardIds, nextRng, offerErrors = pickWithoutReplacement(rng, eligible, offerCount)
-        if offerErrors then
-            return nil, nil, offerErrors
+        local offerCount = math.min(REWARD_OFFER_SIZE, eligibleCount)
+        local cardIds = {}
+        local excluded = {}
+        local currentRng = rng
+        local dominantStyle, styleErrors
+        dominantStyle, currentRng, styleErrors = chooseDominantStyle(currentRng, deck, playerPool)
+        if styleErrors then return nil, nil, styleErrors end
+        for slot = 1, offerCount do
+            local rarity, offerErrors
+            rarity, currentRng, offerErrors = chooseRarity(currentRng)
+            if offerErrors then return nil, nil, offerErrors end
+            local requestedStyle = slot == 1 and dominantStyle or nil
+            local candidates = {}
+            for _, fallbackRarity in ipairs(rarityFallbacks(rarity)) do
+                candidates = eligibleRewardCards(playerPool, counts, excluded, fallbackRarity, requestedStyle)
+                if #candidates > 0 then break end
+            end
+            if #candidates == 0 and requestedStyle ~= nil then
+                for _, fallbackRarity in ipairs(rarityFallbacks(rarity)) do
+                    candidates = eligibleRewardCards(playerPool, counts, excluded, fallbackRarity, nil)
+                    if #candidates > 0 then break end
+                end
+            end
+            local cardId
+            cardId, currentRng, offerErrors = chooseOne(currentRng, candidates)
+            if offerErrors then return nil, nil, offerErrors end
+            cardIds[slot] = cardId
+            excluded[cardId] = true
         end
         return {
             kind = "card",
@@ -737,13 +825,13 @@
             interactionToken = buildRewardToken(
                 setupId,
                 sessionNumber,
-                nextRng,
+                currentRng,
                 settlement,
                 deck,
                 "card",
                 cardIds
             ),
-        }, nextRng, nil
+        }, currentRng, nil
     end
 
     local function generateCharacterOffer(
@@ -1180,7 +1268,8 @@
                 ),
             }
         end
-        if deckLength >= MAX_DECK_SIZE or (counts[choice.cardId] or 0) >= MAX_CARD_COPIES then
+        if deckLength >= MAX_DECK_SIZE
+            or (counts[choice.cardId] or 0) >= playerPool[choice.cardId].maxCopies then
             return nil, {
                 makeError(
                     "reward_no_longer_eligible",

@@ -128,7 +128,9 @@ aria-label="{{dictelement::{{slot::run_reward_card}}::name}} 상세 보기"
 <span class="run-card-inner">
 <span class="run-card-top">
 <span class="run-slot-index">{{dictelement::{{slot::run_reward_card}}::slot}}</span>
-<span class="run-owned">보유 {{dictelement::{{slot::run_reward_card}}::ownedCopies}} / 2</span>
+<span class="run-owned">보유 {{dictelement::{{slot::run_reward_card}}::ownedCopies}} / {{dictelement::{{slot::run_reward_card}}::maxCopies}}</span>
+{{#when::keep::{{dictelement::{{slot::run_reward_card}}::rarity}}::is::rare}}<span class="run-owned" aria-label="희귀 카드">희귀</span>{{/when}}
+{{#when::keep::{{dictelement::{{slot::run_reward_card}}::rarity}}::is::legendary}}<span class="run-owned" aria-label="전설 카드">전설</span>{{/when}}
 </span>
 <span class="run-card-name">{{dictelement::{{slot::run_reward_card}}::name}}</span>
 <span class="run-tags" aria-label="카드 태그">

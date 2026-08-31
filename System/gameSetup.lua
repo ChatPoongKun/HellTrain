@@ -3,10 +3,9 @@
     local KIND = "gameSetupV1"
     local TOTAL_DRAFTS = 10
     local OFFER_SIZE = 3
-    local MAX_COPIES = 2
     local MINIMUM_POOL_SIZE = 7
-    local COMMON_WEIGHT = 9
-    local RARE_WEIGHT = 3
+    local RARITY_WEIGHTS = { common = 40, rare = 5, legendary = 1 }
+    local RARITY_ORDER = { "common", "rare", "legendary" }
     local CHARACTER_OFFER_SIZE = 3
     local MINIMUM_CHARACTER_POOL_SIZE = 3
     local BATTLE_SEED_MODULUS = 2147483646
@@ -300,7 +299,7 @@
         end
 
         local cardIds = {}
-        local weights = {}
+        local cardsById = {}
         for cardId, card in pairs(cards) do
             local cardPath = pathForKey("$.staticData.cards", cardId)
             if type(cardId) ~= "string" then
@@ -310,11 +309,17 @@
             elseif rawget(card, "owner") == "player" then
                 if not isAsciiId(cardId) then
                     appendError(errors, "invalid_player_card_id", cardPath, "플레이어 카드 키는 ASCII cardId여야 합니다.")
-                elseif card.rarity ~= "common" and card.rarity ~= "rare" then
-                    appendError(errors, "invalid_player_card_rarity", cardPath .. ".rarity", "플레이어 카드 희귀도는 common 또는 rare여야 합니다.")
+                elseif RARITY_WEIGHTS[card.rarity] == nil then
+                    appendError(errors, "invalid_player_card_rarity", cardPath .. ".rarity", "플레이어 카드 희귀도는 common, rare 또는 legendary여야 합니다.")
+                elseif not isAsciiId(card.draftStyle) then
+                    appendError(errors, "invalid_player_card_style", cardPath .. ".draftStyle", "플레이어 카드에는 ASCII draftStyle이 필요합니다.")
                 else
                     cardIds[#cardIds + 1] = cardId
-                    weights[cardId] = card.rarity == "rare" and RARE_WEIGHT or COMMON_WEIGHT
+                    cardsById[cardId] = {
+                        rarity = card.rarity,
+                        draftStyle = card.draftStyle,
+                        maxCopies = card.rarity == "legendary" and 1 or 2,
+                    }
                 end
             end
         end
@@ -330,7 +335,7 @@
         if #errors > 0 then
             return nil, errors
         end
-        return { cardIds = cardIds, weights = weights }, nil
+        return { cardIds = cardIds, cardsById = cardsById }, nil
     end
 
     local function buildCharacterPool(staticInput)
@@ -549,37 +554,91 @@
         }
     end
 
-    local function generateOffer(setupId, round, rng, selectedCardIds, counts, pool)
-        local eligible = {}
+    local function chooseOne(rng, candidates)
+        local values, nextRng, errors = callNextIntegers(rng, {
+            { minimum = 1, maximum = #candidates },
+        })
+        if errors then return nil, nil, errors end
+        return candidates[values[1]], nextRng, nil
+    end
+
+    local function chooseRarity(rng)
+        local total = 0
+        for _, rarity in ipairs(RARITY_ORDER) do total = total + RARITY_WEIGHTS[rarity] end
+        local values, nextRng, errors = callNextIntegers(rng, {
+            { minimum = 1, maximum = total },
+        })
+        if errors then return nil, nil, errors end
+        local cumulative = 0
+        for _, rarity in ipairs(RARITY_ORDER) do
+            cumulative = cumulative + RARITY_WEIGHTS[rarity]
+            if values[1] <= cumulative then return rarity, nextRng, nil end
+        end
+    end
+
+    local function eligibleCards(pool, counts, excluded, rarity, style)
+        local candidates = {}
         for _, cardId in ipairs(pool.cardIds) do
-            if (counts[cardId] or 0) < MAX_COPIES then
-                eligible[#eligible + 1] = cardId
+            local card = pool.cardsById[cardId]
+            if card.rarity == rarity
+                and (style == nil or card.draftStyle == style)
+                and excluded[cardId] ~= true
+                and (counts[cardId] or 0) < card.maxCopies then
+                candidates[#candidates + 1] = cardId
             end
         end
-        if #eligible < OFFER_SIZE then
+        return candidates
+    end
+
+    local function rarityFallbacks(rarity)
+        if rarity == "legendary" then return { "legendary", "rare", "common" } end
+        if rarity == "rare" then return { "rare", "common" } end
+        return { "common", "rare", "legendary" }
+    end
+
+    local function generateOffer(setupId, round, rng, selectedCardIds, counts, pool)
+        local totalEligible = 0
+        for _, cardId in ipairs(pool.cardIds) do
+            local card = pool.cardsById[cardId]
+            if (counts[cardId] or 0) < card.maxCopies then totalEligible = totalEligible + 1 end
+        end
+        if totalEligible < OFFER_SIZE then
             return nil, nil, {
                 makeError("insufficient_eligible_cards", "$.selectedCardIds", "복제 제한을 지키며 3장을 제시할 수 없습니다."),
             }
         end
 
         local offered = {}
+        local excluded = {}
         local currentRng = rng
+        local anchorStyle = nil
+        if round > 1 then
+            local anchorId, anchorErrors
+            anchorId, currentRng, anchorErrors = chooseOne(currentRng, selectedCardIds)
+            if anchorErrors then return nil, nil, anchorErrors end
+            anchorStyle = pool.cardsById[anchorId].draftStyle
+        end
         for pick = 1, OFFER_SIZE do
-            local totalWeight = 0
-            for _, cardId in ipairs(eligible) do totalWeight = totalWeight + pool.weights[cardId] end
-            local values, nextRng, rngErrors = callNextIntegers(currentRng, {
-                { minimum = 1, maximum = totalWeight },
-            })
+            local rarity, rngErrors
+            rarity, currentRng, rngErrors = chooseRarity(currentRng)
             if rngErrors then return nil, nil, rngErrors end
-            local selectedIndex = 1
-            local cumulative = pool.weights[eligible[1]]
-            while values[1] > cumulative do
-                selectedIndex = selectedIndex + 1
-                cumulative = cumulative + pool.weights[eligible[selectedIndex]]
+            local requestedStyle = pick == 1 and anchorStyle or nil
+            local candidates = {}
+            for _, fallbackRarity in ipairs(rarityFallbacks(rarity)) do
+                candidates = eligibleCards(pool, counts, excluded, fallbackRarity, requestedStyle)
+                if #candidates > 0 then break end
             end
-            offered[pick] = eligible[selectedIndex]
-            table.remove(eligible, selectedIndex)
-            currentRng = nextRng
+            if #candidates == 0 and requestedStyle ~= nil then
+                for _, fallbackRarity in ipairs(rarityFallbacks(rarity)) do
+                    candidates = eligibleCards(pool, counts, excluded, fallbackRarity, nil)
+                    if #candidates > 0 then break end
+                end
+            end
+            local selectedId
+            selectedId, currentRng, rngErrors = chooseOne(currentRng, candidates)
+            if rngErrors then return nil, nil, rngErrors end
+            offered[pick] = selectedId
+            excluded[selectedId] = true
         end
         return {
             round = round,
@@ -628,9 +687,9 @@
                     }
                 end
                 counts[selectedId] = (counts[selectedId] or 0) + 1
-                if counts[selectedId] > MAX_COPIES then
+                if counts[selectedId] > pool.cardsById[selectedId].maxCopies then
                     return nil, {
-                        makeError("card_copy_limit_exceeded", "$.selectedCardIds[" .. round .. "]", "같은 카드는 최대 2장까지 선택할 수 있습니다."),
+                        makeError("card_copy_limit_exceeded", "$.selectedCardIds[" .. round .. "]", "카드별 보유 제한을 초과했습니다."),
                     }
                 end
             else
@@ -725,12 +784,12 @@
         local counts = {}
         for _, cardId in ipairs(selected) do
             counts[cardId] = (counts[cardId] or 0) + 1
-            if counts[cardId] > MAX_COPIES then
+            if counts[cardId] > pool.cardsById[cardId].maxCopies then
                 return nil, {
                     makeError(
                         "card_copy_limit_exceeded",
                         "$.selectedCardIds[" .. #selected .. "]",
-                        "같은 카드는 최대 2장까지 선택할 수 있습니다."
+                        "카드별 보유 제한을 초과했습니다."
                     ),
                 }
             end
@@ -838,8 +897,8 @@
                     appendError(errors, "unknown_selected_card", "$.state.selectedCardIds[" .. index .. "]", "현재 플레이어 카드 풀에 없는 카드입니다.")
                 else
                     counts[cardId] = (counts[cardId] or 0) + 1
-                    if counts[cardId] > MAX_COPIES then
-                        appendError(errors, "card_copy_limit_exceeded", "$.state.selectedCardIds[" .. index .. "]", "같은 카드는 최대 2장까지 선택할 수 있습니다.")
+                    if counts[cardId] > pool.cardsById[cardId].maxCopies then
+                        appendError(errors, "card_copy_limit_exceeded", "$.state.selectedCardIds[" .. index .. "]", "카드별 보유 제한을 초과했습니다.")
                     end
                 end
             end

@@ -417,17 +417,21 @@
         local intent = type(state.characterIntent) == "table" and state.characterIntent or {}
         local context = {
             turn = state.turnNumber,
+            turnLimit = state.turnLimit,
+            remainingTurns = math.max(0, state.turnLimit - state.turnNumber + 1),
             phase = options.phase,
             mood = state.character.mood,
             history = buildHistoryContext(state.history),
             player = {
                 stealth = state.player.stealth,
                 handCount = countZone(state, "player", "hand"),
+                planCount = #(state.player.planSlots or {}),
             },
             character = {
                 resistance = state.character.resistance,
                 moodTokens = state.character.moodTokens,
                 publicRole = intent.publicRole,
+                planCount = #(state.character.planSlots or {}),
             },
         }
         if options.currentCard ~= nil then
