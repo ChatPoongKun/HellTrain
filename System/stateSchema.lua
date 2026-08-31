@@ -628,15 +628,6 @@
                         path .. ".remainingTurns",
                         "정적 카드 정의에 지속시간이 없는 계획은 remainingTurns를 가질 수 없습니다."
                     )
-                elseif isInteger(slot.remainingTurns, 1)
-                    and isInteger(initialDurationTurns, 1)
-                    and slot.remainingTurns > initialDurationTurns then
-                    addError(
-                        errors,
-                        "plan_remaining_turns_exceeded",
-                        path .. ".remainingTurns",
-                        "계획의 남은 지속시간은 정적 카드 정의의 초기 지속시간을 초과할 수 없습니다."
-                    )
                 end
             end
 
@@ -655,15 +646,6 @@
                         "plan_remaining_charges_undefined",
                         path .. ".remainingCharges",
                         "정적 카드 정의에 충전이 없는 계획은 remainingCharges를 가질 수 없습니다."
-                    )
-                elseif isInteger(slot.remainingCharges, 1)
-                    and isInteger(initialCharges, 1)
-                    and slot.remainingCharges > initialCharges then
-                    addError(
-                        errors,
-                        "plan_remaining_charges_exceeded",
-                        path .. ".remainingCharges",
-                        "계획의 남은 충전은 정적 카드 정의의 초기 충전을 초과할 수 없습니다."
                     )
                 end
             end
@@ -2197,7 +2179,56 @@
         end
     end
 
-    local function validateBattleState(state, staticData)
+    local function historyStateForValidation(state, baseline, staticData, errors)
+        if baseline == nil then return state end
+        local path = "$.validationContext.historyBaseline"
+        local errorCount = #errors
+        if type(baseline) ~= "table" or getmetatable(baseline) ~= nil then
+            addError(errors, "invalid_history_baseline", path, "이력 검증 기준값이 일반 객체가 아닙니다.")
+            return state
+        end
+        checkAllowedKeys(baseline, {
+            stealth = true,
+            resistance = true,
+            mood = true,
+        }, path, errors)
+        if not isFinite(baseline.stealth) then
+            addError(errors, "invalid_history_baseline", path .. ".stealth", "이력 검증 기준 은폐가 유한한 숫자가 아닙니다.")
+        end
+        if not isFinite(baseline.resistance) then
+            addError(errors, "invalid_history_baseline", path .. ".resistance", "이력 검증 기준 저항이 유한한 숫자가 아닙니다.")
+        end
+        if not isAsciiId(baseline.mood) then
+            addError(errors, "invalid_history_baseline", path .. ".mood", "이력 검증 기준 무드 ID가 올바르지 않습니다.")
+        elseif type(staticData) == "table"
+            and type(staticData.registry) == "table"
+            and type(staticData.registry.moods) == "table"
+            and not staticData.registry.moods[baseline.mood] then
+            addError(errors, "unknown_mood", path .. ".mood", "이력 검증 기준 무드가 레지스트리에 없습니다.")
+        end
+        if type(state) == "table" and state.turnStartReceipt ~= nil then
+            addError(errors, "history_baseline_with_receipt", path, "턴 시작 영수증이 있는 상태에는 별도 이력 기준값을 사용할 수 없습니다.")
+        end
+        if #errors > errorCount
+            or type(state) ~= "table"
+            or type(state.player) ~= "table"
+            or type(state.character) ~= "table" then
+            return state
+        end
+
+        local historyState = {}
+        for key, value in pairs(state) do historyState[key] = value end
+        historyState.player = {}
+        for key, value in pairs(state.player) do historyState.player[key] = value end
+        historyState.character = {}
+        for key, value in pairs(state.character) do historyState.character[key] = value end
+        historyState.player.stealth = baseline.stealth
+        historyState.character.resistance = baseline.resistance
+        historyState.character.mood = baseline.mood
+        return historyState
+    end
+
+    local function validateBattleState(state, staticData, historyBaseline)
         local errors = {}
         local staticDataProvided = staticData ~= nil
         staticData = normalizeStaticData(staticData)
@@ -2604,11 +2635,12 @@
             end
         end
 
+        local historyState = historyStateForValidation(state, historyBaseline, staticData, errors)
         local historyReport, historyCallError = callReceiptValidator(
             "battleHistory",
             "validate",
             state.history,
-            state,
+            historyState,
             staticData
         )
         if historyCallError ~= nil then
@@ -3321,7 +3353,7 @@
     if action == "newBattleState" then
         return constructBattleState(arguments[1], arguments[2])
     elseif action == "validateBattleState" then
-        return validateBattleState(arguments[1], arguments[2])
+        return validateBattleState(arguments[1], arguments[2], arguments[3])
     elseif action == "fingerprintBattleState" then
         return fingerprintBattleState(arguments[1], arguments[2])
     elseif action == "sealTurnStartReceipt" then
