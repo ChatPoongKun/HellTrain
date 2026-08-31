@@ -1102,6 +1102,18 @@
         local latchedOutcome = nil
         local postCleanupSnapshot = nil
 
+        local historyReport, historyErrors = callModule(
+            "battleHistory",
+            "context",
+            beforeState.history
+        )
+        if historyErrors or type(historyReport.context) ~= "table" then
+            return failure(historyErrors or {
+                makeError("invalid_history_context", "$.beforeState.history", "트리거 재현용 전투 이력 문맥이 올바르지 않습니다."),
+            })
+        end
+        local triggerHistoryContext = historyReport.context
+
         local function moodStealthEffect(moodId, repeated)
             local op
             local amount
@@ -1148,15 +1160,21 @@
             end
             local context = {
                 turn = resolution.turnNumber,
+                turnLimit = beforeState.turnLimit,
+                remainingTurns = math.max(0, beforeState.turnLimit - resolution.turnNumber + 1),
                 phase = phase,
                 mood = trackedMood,
+                history = select(1, cloneData(triggerHistoryContext, "$.triggerContext.history", {})),
                 player = {
                     stealth = trackedStealth,
                     handCount = trackedHandCount.player,
+                    planCount = #trackers.player.slots,
                 },
                 character = {
                     resistance = trackedResistance,
+                    moodTokens = select(1, cloneData(trackedMoodTokens, "$.triggerContext.moodTokens", {})),
                     publicRole = publicRole,
+                    planCount = #trackers.character.slots,
                 },
             }
             if currentCard ~= nil then
@@ -2722,7 +2740,8 @@
                 local resourceOutcome = trackedResistance <= 0 and "victory"
                     or (trackedStealth <= 0 and "defeat" or nil)
                 local expectedOutcome = resourceOutcome
-                local expectedReason = event.phase == "turn_end" and "turn_end_checkpoint" or "card_checkpoint"
+                local expectedReason = event.phase == "turn_start" and "turn_start_checkpoint"
+                    or (event.phase == "turn_end" and "turn_end_checkpoint" or "card_checkpoint")
                 if event.phase == "turn_end"
                     and sawMoodStealthEffect == true
                     and resourceOutcome == "defeat" then
@@ -2735,13 +2754,16 @@
                 end
                 if sourceError
                     or latchedOutcome ~= nil
-                    or (event.phase ~= "player_card" and event.phase ~= "character_card" and event.phase ~= "turn_end")
+                    or (event.phase ~= "turn_start"
+                        and event.phase ~= "player_card"
+                        and event.phase ~= "character_card"
+                        and event.phase ~= "turn_end")
                     or not isOutcome(payload.status)
                     or payload.status ~= expectedOutcome
                     or not isAsciiId(payload.reasonCode)
                     or payload.reasonCode ~= expectedReason
-                    or (event.phase == "turn_end" and event.resolutionId ~= nil)
-                    or (event.phase ~= "turn_end" and event.resolutionId == nil)
+                    or ((event.phase == "turn_start" or event.phase == "turn_end") and event.resolutionId ~= nil)
+                    or ((event.phase == "player_card" or event.phase == "character_card") and event.resolutionId == nil)
                     or not isFinite(payload.stealth)
                     or not isFinite(payload.resistance)
                     or payload.stealth ~= trackedStealth

@@ -702,6 +702,21 @@
             return outcome
         end
 
+        if working.state.turnStartOutcome ~= nil then
+            local expectedOutcome = working.state.turnStartOutcome
+            working.state.turnStartOutcome = nil
+            local outcome = latchOutcome("turn_start_checkpoint", "turn_start", nil)
+            if outcome ~= expectedOutcome then
+                return failure({
+                    makeError(
+                        "turn_start_outcome_mismatch",
+                        "$.authorityState.turnStartOutcome",
+                        "턴 시작 승패 대기값이 실제 자원 판정과 일치하지 않습니다."
+                    ),
+                })
+            end
+        end
+
         local function restorePlayerCards(startIndex, reasonCode, phase, resolutionId)
             local restored = {}
             for index = startIndex, #playerSelection do

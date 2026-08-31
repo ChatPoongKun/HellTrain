@@ -2037,6 +2037,7 @@
             or outcomePayload.status ~= authority.status
             or sessionStatus ~= authority.status
             or (outcomePayload.reasonCode ~= "card_checkpoint"
+                and outcomePayload.reasonCode ~= "turn_start_checkpoint"
                 and outcomePayload.reasonCode ~= "turn_end_checkpoint"
                 and outcomePayload.reasonCode ~= "turn_limit")
             or outcomePayload.stealth ~= authority.player.stealth
@@ -4517,12 +4518,12 @@
 
     local function prepareCurrentActiveTurn(state, staticData, allowExistingDraft)
         if state.status ~= "active" then
-            return state, nil, false, nil
+            return state, nil, false, nil, nil
         end
         if allowExistingDraft then
             local currentDraft, draftReadErrors = readStored(KEYS.draft, false)
             if draftReadErrors then
-                return nil, nil, false, draftReadErrors
+                return nil, nil, false, nil, draftReadErrors
             end
             if currentDraft ~= nil then
                 local validated, validateErrors = callModule(
@@ -4533,14 +4534,14 @@
                     currentDraft
                 )
                 if validateErrors then
-                    return nil, nil, false, validateErrors
+                    return nil, nil, false, nil, validateErrors
                 end
-                return state, validated.draft, false, nil
+                return state, validated.draft, false, nil, nil
             end
         end
         local turnId, turnIdErrors = makeTurnId(state)
         if turnIdErrors then
-            return nil, nil, false, turnIdErrors
+            return nil, nil, false, nil, turnIdErrors
         end
         local initialized, initializeErrors = callModule(
             "turnInitializer",
@@ -4550,14 +4551,41 @@
             { turnId = turnId }
         )
         if initializeErrors then
-            return nil, nil, false, initializeErrors
+            return nil, nil, false, nil, initializeErrors
         end
         if type(initialized.state) ~= "table" or type(initialized.draft) ~= "table" then
-            return nil, nil, false, {
+            return nil, nil, false, nil, {
                 makeError("invalid_next_turn", "$.runtime.turnInitializer", "다음 활성 턴 상태와 draft가 없습니다."),
             }
         end
-        return initialized.state, initialized.draft, initialized.reused ~= true, nil
+        if initialized.state.turnStartOutcome ~= nil then
+            local projected, projectErrors = callModule(
+                "turnDraft",
+                "project",
+                initialized.state,
+                staticData,
+                initialized.draft
+            )
+            if projectErrors then return nil, nil, false, nil, projectErrors end
+            local prepared, prepareErrors = callModule(
+                "battleRuntime",
+                "preparePending",
+                initialized.state,
+                staticData,
+                projected.projection
+            )
+            if prepareErrors then return nil, nil, false, nil, prepareErrors end
+            local committed, commitErrors = callModule(
+                "battleRuntime",
+                "commitPending",
+                initialized.state,
+                staticData,
+                prepared.pendingTurn
+            )
+            if commitErrors then return nil, nil, false, nil, commitErrors end
+            return committed.state, nil, initialized.reused ~= true, prepared.pendingTurn, nil
+        end
+        return initialized.state, initialized.draft, initialized.reused ~= true, nil, nil
     end
 
     commitOutput = function()
@@ -4681,7 +4709,7 @@
             })
         end
 
-        local nextState, nextDraft, initialized, nextErrors = prepareCurrentActiveTurn(
+        local nextState, nextDraft, initialized, turnStartPending, nextErrors = prepareCurrentActiveTurn(
             committed.state,
             staticData,
             committed.applied ~= true
@@ -4705,7 +4733,8 @@
             return failure(committedBindingValidationErrors)
         end
 
-        local lastWriteErrors = writeStored(KEYS.lastCommittedPending, selectedPending)
+        local committedPending = turnStartPending or selectedPending
+        local lastWriteErrors = writeStored(KEYS.lastCommittedPending, committedPending)
         if lastWriteErrors then
             return failure(lastWriteErrors)
         end
@@ -4717,7 +4746,11 @@
         if draftWriteErrors then
             return failure(draftWriteErrors)
         end
-        local bindingWriteErrors = writeStored(KEYS.activeRequest, committedBinding, true)
+        local bindingWriteErrors = writeStored(
+            KEYS.activeRequest,
+            turnStartPending == nil and committedBinding or nil,
+            true
+        )
         if bindingWriteErrors then
             return failure(bindingWriteErrors)
         end
@@ -4777,7 +4810,7 @@
         else
             local summary, summaryErrors = buildTerminalSummary(
                 nextState,
-                selectedPending,
+                committedPending,
                 staticData
             )
             if summaryErrors then return failure(summaryErrors) end
@@ -4805,12 +4838,12 @@
             generationReady = false,
             outputCommitted = true,
             uiTargetIndex = committedBinding.chatAnchor.responseIndex,
-            turnId = committed.turnId,
+            turnId = committedPending.turnId,
             applied = committed.applied == true,
             initializedNextTurn = initialized,
             status = nextState.status,
             turnNumber = nextState.turnNumber,
-            publicResult = selectedPending.turnResult.publicResult,
+            publicResult = committedPending.turnResult.publicResult,
             view = published.view,
             progressionState = progressionState,
         })
