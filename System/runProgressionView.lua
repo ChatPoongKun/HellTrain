@@ -5,7 +5,6 @@
     local SETUP_KIND = "gameSetupV1"
     local DECK_MIN = 10
     local DECK_MAX = 20
-    local CARD_COPY_LIMIT = 2
     local CHARACTER_OFFER_SIZE = 3
     local REWARD_OFFER_MAX = 3
 
@@ -473,6 +472,7 @@
             slot = slot,
             cardId = presentation.card.cardId,
             name = presentation.card.name,
+            rarity = card.rarity,
             descriptionSegments = presentation.card.descriptionSegments,
             ruleLines = presentation.card.ruleLines,
             cardType = presentation.card.cardType,
@@ -482,6 +482,7 @@
             baseStealthCost = card.base.stealthCost,
             baseResistanceDamage = card.base.resistanceDamage,
             ownedCopies = ownedCopies,
+            maxCopies = card.rarity == "legendary" and 1 or 2,
         }
     end
 
@@ -694,6 +695,7 @@
             slot = true,
             cardId = true,
             name = true,
+            rarity = true,
             descriptionSegments = true,
             ruleLines = true,
             cardType = true,
@@ -703,6 +705,7 @@
             baseStealthCost = true,
             baseResistanceDamage = true,
             ownedCopies = true,
+            maxCopies = true,
         }, path, errors)
         if card.slot ~= expectedSlot then
             addError(errors, "card_slot_mismatch", path .. ".slot", "카드 슬롯이 배열 순서와 다릅니다.")
@@ -757,8 +760,15 @@
         if not isFinite(card.baseResistanceDamage) or card.baseResistanceDamage < 0 then
             addError(errors, "invalid_resistance_damage", path .. ".baseResistanceDamage", "기본 저항 피해가 올바르지 않습니다.")
         end
-        if not isInteger(card.ownedCopies, 0, CARD_COPY_LIMIT - 1) then
-            addError(errors, "invalid_owned_copies", path .. ".ownedCopies", "보상 카드 보유 수는 0 또는 1이어야 합니다.")
+        if card.rarity ~= "common" and card.rarity ~= "rare" and card.rarity ~= "legendary" then
+            addError(errors, "invalid_card_rarity", path .. ".rarity", "카드 희귀도가 올바르지 않습니다.")
+        end
+        local expectedMaxCopies = card.rarity == "legendary" and 1 or 2
+        if card.maxCopies ~= expectedMaxCopies then
+            addError(errors, "invalid_max_copies", path .. ".maxCopies", "희귀도에 따른 카드 보유 제한이 올바르지 않습니다.")
+        end
+        if not isInteger(card.ownedCopies, 0, expectedMaxCopies - 1) then
+            addError(errors, "invalid_owned_copies", path .. ".ownedCopies", "보상 카드 보유 수가 카드별 제한 범위를 벗어났습니다.")
         end
     end
 

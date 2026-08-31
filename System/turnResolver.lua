@@ -222,17 +222,21 @@
     local function buildContext(state, phase, card, instance, plan, effectChoiceId)
         local context = {
             turn = state.turnNumber,
+            turnLimit = state.turnLimit,
+            remainingTurns = math.max(0, state.turnLimit - state.turnNumber + 1),
             phase = phase,
             mood = state.character.mood,
             history = buildHistoryContext(state.history),
             player = {
                 stealth = state.player.stealth,
                 handCount = countZone(state, "player", "hand"),
+                planCount = #(state.player.planSlots or {}),
             },
             character = {
                 resistance = state.character.resistance,
                 moodTokens = state.character.moodTokens,
                 publicRole = state.characterIntent.publicRole,
+                planCount = #(state.character.planSlots or {}),
             },
         }
         if card ~= nil and instance ~= nil then
@@ -362,6 +366,9 @@
             events = receiptEvents
         end
         local nextResolutionOrdinal = 1
+        local playerChainCardsResolved = 0
+        local pendingPlayerFollowups = {}
+        local currentResolutionStats = nil
         local transientSeed = {
             skipRemaining = { player = false, character = false },
             forcedMoodRequests = {},
@@ -453,6 +460,13 @@
             working.state = report.state
             working.transient = report.transient
             for _, applied in ipairs(report.applied or {}) do
+                if currentResolutionStats ~= nil and applied.changed == true then
+                    if applied.op == "damage_resistance" and applied.target == "character" then
+                        currentResolutionStats.resistanceDamage = currentResolutionStats.resistanceDamage + math.max(0, applied.before - applied.after)
+                    elseif applied.op == "recover_stealth" and applied.target == "player" then
+                        currentResolutionStats.stealthRecovered = currentResolutionStats.stealthRecovered + math.max(0, applied.after - applied.before)
+                    end
+                end
                 local payload, payloadError = cloneData(applied, "$.effect.applied")
                 if payloadError then
                     return false, { payloadError }
@@ -470,6 +484,63 @@
                     }
                 )
             end
+            return true, nil
+        end
+
+        local function evaluatePlanCallback(planCard, slot, callbackSpec, phase, resolutionId, causeKind)
+            local context = buildContext(working.state, phase, planCard, findInstance(working.state, slot.cardInstanceId), slot, slot.effectChoiceId)
+            local report, errors = callModule(
+                "effectEngine",
+                "evaluateTriggerResolve",
+                staticData,
+                callbackSpec,
+                context,
+                { type = "card_resolved", side = "player" },
+                {}
+            )
+            if errors then return false, errors end
+            return applyCommands(
+                report.commands,
+                source("plan", planCard.id, "player", slot.cardInstanceId),
+                phase,
+                resolutionId,
+                "player",
+                causeKind
+            )
+        end
+
+        local function applyPlanOperation(card, phase, resolutionId)
+            local operation = card.planOperation
+            if type(operation) == "table" and operation.byChoice ~= nil then
+                operation = operation.byChoice[working.currentEffectChoiceId]
+            end
+            if type(operation) ~= "table" then return true, nil end
+            local side = operation.side or "player"
+            local slot = type(working.state[side]) == "table" and working.state[side].planSlots[1] or nil
+            if slot == nil then return true, nil end
+            local planCard = staticData.cards[slot.cardId]
+            if operation.kind == "activate" then
+                local planData = type(planCard.mechanismData) == "table" and planCard.mechanismData.plan or nil
+                if type(planData) ~= "table" or type(planData.resolve) ~= "function" then return true, nil end
+                return evaluatePlanCallback(planCard, slot, planData, phase, resolutionId, "manual_plan_activation")
+            end
+            if operation.kind == "remove"
+                or (operation.remainingTurnsDelta ~= nil
+                    and slot.remainingTurns ~= nil
+                    and slot.remainingTurns + operation.remainingTurnsDelta <= 0) then
+                local planData = type(planCard.mechanismData) == "table" and planCard.mechanismData.plan or nil
+                if type(planData) == "table" and type(planData.exitResolve) == "function" then
+                    local exited, exitErrors = evaluatePlanCallback(planCard, slot, { resolve = planData.exitResolve }, phase, resolutionId, "plan_explicit_exit")
+                    if not exited then return false, exitErrors end
+                end
+            end
+            local report, errors = callModule("cardZones", "modifyOldestPlan", working.state, side, {
+                remove = operation.kind == "remove",
+                remainingTurnsDelta = operation.remainingTurnsDelta,
+                remainingChargesDelta = operation.remainingChargesDelta,
+            })
+            if errors then return false, errors end
+            working.state = report.state
             return true, nil
         end
 
@@ -854,6 +925,7 @@
             end
 
             local context = buildContext(working.state, phase, card, instance, nil, effectChoiceId)
+            context.playerChainCardsResolved = playerChainCardsResolved
             local canPlayReport, canPlayErrors = callModule(
                 "effectEngine",
                 "evaluateCanPlay",
@@ -914,6 +986,8 @@
 
             local resolutionId = turnId .. "-resolution-" .. string.format("%03d", nextResolutionOrdinal)
             nextResolutionOrdinal = nextResolutionOrdinal + 1
+            currentResolutionStats = { resistanceDamage = 0, stealthRecovered = 0 }
+            working.currentEffectChoiceId = effectChoiceId
 
             if expectedSide == "player" then
                 if instance.zone ~= "used" then
@@ -991,6 +1065,7 @@
             end
 
             context = buildContext(working.state, phase, card, instance, nil, effectChoiceId)
+            context.playerChainCardsResolved = playerChainCardsResolved
             local cardEffect, cardEffectErrors = callModule(
                 "effectEngine",
                 "evaluateCardResolve",
@@ -1016,6 +1091,7 @@
 
             local currentMood = working.state.character.mood
             context = buildContext(working.state, phase, card, instance, nil, effectChoiceId)
+            context.playerChainCardsResolved = playerChainCardsResolved
             local moodEffect, moodEffectErrors = callModule(
                 "effectEngine",
                 "evaluateMoodEffect",
@@ -1040,6 +1116,38 @@
                 return false, moodCommandErrors
             end
 
+            local operationApplied, operationErrors = applyPlanOperation(card, phase, resolutionId)
+            if not operationApplied then return false, operationErrors end
+
+            if expectedSide == "player" and #pendingPlayerFollowups > 0 then
+                local followups = pendingPlayerFollowups
+                pendingPlayerFollowups = {}
+                local cardStats = currentResolutionStats
+                currentResolutionStats = nil
+                for _, followup in ipairs(followups) do
+                    if cardStats.resistanceDamage >= followup.minimumDamage then
+                        local applied, followupErrors = applyCommands(
+                            { { op = "recover_stealth", target = "player", amount = followup.recoverStealth, cause = "cardFollowup" } },
+                            source("card", followup.cardId, "player", followup.instanceId),
+                            phase,
+                            resolutionId,
+                            "player",
+                            "card_followup"
+                        )
+                        if not applied then return false, followupErrors end
+                    end
+                end
+                currentResolutionStats = cardStats
+            end
+            if expectedSide == "player" and type(card.afterNextPlayerCard) == "table" then
+                pendingPlayerFollowups[#pendingPlayerFollowups + 1] = {
+                    cardId = card.id,
+                    instanceId = instance.instanceId,
+                    minimumDamage = card.afterNextPlayerCard.minimumDamage,
+                    recoverStealth = card.afterNextPlayerCard.recoverStealth,
+                }
+            end
+
             appendEvent(
                 "card_resolved",
                 phase,
@@ -1047,7 +1155,9 @@
                 {
                     cardId = card.id,
                     instanceId = instance.instanceId,
-                    finalResistanceDamage = finalDamage,
+                    finalResistanceDamage = currentResolutionStats.resistanceDamage,
+                    grossStealthRecovery = currentResolutionStats.stealthRecovered,
+                    finalStealthCost = finalCost,
                 },
                 resolutionId,
                 expectedSide,
@@ -1061,6 +1171,9 @@
                 roles = card.roles,
                 resolutionId = resolutionId,
                 effectChoiceId = effectChoiceId,
+                finalResistanceDamage = currentResolutionStats.resistanceDamage,
+                grossStealthRecovery = currentResolutionStats.stealthRecovered,
+                finalStealthCost = finalCost,
             }
             local postApplied, postApplyErrors = applyTriggerPipeline(
                 resolvedInput,
@@ -1078,6 +1191,11 @@
             if not zoneFinished then
                 return false, zoneFinishErrors
             end
+            if expectedSide == "player" and card.cardType == "chain" then
+                playerChainCardsResolved = playerChainCardsResolved + 1
+            end
+            currentResolutionStats = nil
+            working.currentEffectChoiceId = nil
             local outcome = latchOutcome("card_checkpoint", phase, resolutionId)
             return true, {
                 declared = true,
@@ -1293,6 +1411,33 @@
                     planSlots = characterPlans,
                 },
             }, nil
+        end
+
+        for _, slot in ipairs(working.state.player.planSlots or {}) do
+            local expiresNow = slot.remainingTurns ~= nil
+                and (slot.placedTurn < working.state.turnNumber or slot.durationIncludesPlacementTurn == true)
+                and slot.remainingTurns == 1
+            local planCard = staticData.cards[slot.cardId]
+            local planData = type(planCard) == "table" and type(planCard.mechanismData) == "table"
+                and planCard.mechanismData.plan or nil
+            if expiresNow and type(planData) == "table" and type(planData.exitResolve) == "function" then
+                local exited, exitErrors = evaluatePlanCallback(planCard, slot, { resolve = planData.exitResolve }, "cleanup", nil, "plan_duration_exit")
+                if not exited then return failure(exitErrors) end
+                latchOutcome("plan_exit_checkpoint", "cleanup", nil)
+            end
+        end
+        local expiringHandIds = {}
+        for _, instance in ipairs(working.state.cardInstances) do
+            local card = staticData.cards[instance.cardId]
+            if instance.owner == "player" and instance.zone == "hand"
+                and type(card) == "table" and card.removeIfUnplayed == true then
+                expiringHandIds[#expiringHandIds + 1] = instance.instanceId
+            end
+        end
+        for _, instanceId in ipairs(expiringHandIds) do
+            local removed, removeErrors = callModule("cardZones", "moveToRemoved", working.state, instanceId)
+            if removeErrors then return failure(removeErrors) end
+            working.state = removed.state
         end
 
         local cleanupBefore, cleanupSnapshotError = cleanupSnapshot(working.state)

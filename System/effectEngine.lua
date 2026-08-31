@@ -164,7 +164,7 @@
                 ),
             })
         end
-        checkAllowedKeys(policy, { effects = true }, "$.card.selectionPreview", errors)
+        checkAllowedKeys(policy, { effects = true, when = true }, "$.card.selectionPreview", errors)
         if card.owner ~= "player" or card.cardType ~= "chain" then
             table.insert(errors, makeError(
                 "preview_requires_player_chain",
@@ -181,6 +181,20 @@
         end
         if #errors > 0 then
             return failure(errors)
+        end
+        if policy.when ~= nil then
+            if type(policy.when) ~= "function" then
+                return failure({ makeError("invalid_preview_condition", "$.card.selectionPreview.when", "선택 단계 조건이 함수가 아닙니다.") })
+            end
+            local ok, enabled = pcall(policy.when, {
+                turn = state.turnNumber,
+                turnLimit = state.turnLimit,
+                remainingTurns = math.max(0, state.turnLimit - state.turnNumber + 1),
+            })
+            if not ok or type(enabled) ~= "boolean" then
+                return failure({ makeError("preview_condition_error", "$.card.selectionPreview.when", "선택 단계 조건 평가에 실패했습니다.") })
+            end
+            if not enabled then return success({}, card.id) end
         end
 
         local commands = {}

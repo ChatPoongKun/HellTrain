@@ -5,12 +5,12 @@
     local DEFAULT_PLAYER_PLAN_CAPACITY = 1
 
     local PLAYER_CARD_IDS = {
-        "pc_c01_standard",
-        "pc_c03_heavy_damage",
-        "pc_c19_recovery_mood",
-        "pc_c26_choice_control",
-        "pc_c28_chain_standard",
-        "pc_c33_plan_recovery",
+        "pc_predator_001",
+        "pc_predator_002",
+        "pc_predator_007",
+        "pc_harmonizer_001",
+        "pc_glutton_001",
+        "pc_deceiver_001",
     }
 
     local CHARACTER_ID = "yoo_jiyoung"

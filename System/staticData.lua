@@ -896,10 +896,22 @@
                 if type(card.name) ~= "string" or card.name == "" then
                     addError(errors, "missing_name", path .. ".name", "카드 이름이 없습니다.")
                 end
-                if card.owner == "player" and card.rarity ~= "common" and card.rarity ~= "rare" then
-                    addError(errors, "invalid_rarity", path .. ".rarity", "플레이어 카드 희귀도는 common 또는 rare여야 합니다.")
+                if card.owner == "player"
+                    and card.rarity ~= "common"
+                    and card.rarity ~= "rare"
+                    and card.rarity ~= "legendary" then
+                    addError(errors, "invalid_rarity", path .. ".rarity", "플레이어 카드 희귀도는 common, rare 또는 legendary여야 합니다.")
                 elseif card.owner == "character" and card.rarity ~= nil then
                     addError(errors, "unexpected_rarity", path .. ".rarity", "캐릭터 카드에는 희귀도를 사용하지 않습니다.")
+                end
+                if card.owner == "player"
+                    and card.draftStyle ~= "predator"
+                    and card.draftStyle ~= "glutton"
+                    and card.draftStyle ~= "deceiver"
+                    and card.draftStyle ~= "harmonizer" then
+                    addError(errors, "invalid_draft_style", path .. ".draftStyle", "플레이어 카드에는 정확히 하나의 유효한 draftStyle이 필요합니다.")
+                elseif card.owner == "character" and card.draftStyle ~= nil then
+                    addError(errors, "unexpected_draft_style", path .. ".draftStyle", "캐릭터 카드에는 draftStyle을 사용하지 않습니다.")
                 end
                 if type(card.description) ~= "string" or card.description == "" then
                     addError(errors, "missing_description", path .. ".description", "카드 설명이 없습니다.")
@@ -1034,9 +1046,13 @@
                             addError(errors, "invalid_selection_preview", previewPath, "선택 단계 효과 정책이 테이블이 아닙니다.")
                         else
                             for field in pairs(selectionPreview) do
-                                if field ~= "effects" then
+                                if field ~= "effects" and field ~= "when" then
                                     addError(errors, "unexpected_preview_field", previewPath .. "." .. tostring(field), "선택 단계 효과 정책에 허용되지 않은 필드가 있습니다.")
                                 end
+                            end
+
+                            if selectionPreview.when ~= nil and type(selectionPreview.when) ~= "function" then
+                                addError(errors, "invalid_preview_condition", previewPath .. ".when", "선택 단계 조건은 함수여야 합니다.")
                             end
 
                             if not isArray(selectionPreview.effects) or #selectionPreview.effects == 0 then

@@ -3,7 +3,6 @@
     local TOTAL_ROUNDS = 10
     local OFFER_SIZE = 3
     local CHARACTER_OFFER_SIZE = 3
-    local COPY_LIMIT = 2
 
     local function addError(errors, code, path, message)
         table.insert(errors, {
@@ -264,6 +263,7 @@
             cardId = presentation.card.cardId,
             name = presentation.card.name,
             rarity = card.rarity,
+            maxCopies = card.rarity == "legendary" and 1 or 2,
             descriptionSegments = presentation.card.descriptionSegments,
             ruleLines = presentation.card.ruleLines,
             cardType = presentation.card.cardType,
@@ -512,6 +512,7 @@
             cardId = true,
             name = true,
             rarity = true,
+            maxCopies = true,
             descriptionSegments = true,
             ruleLines = true,
             cardType = true,
@@ -535,8 +536,12 @@
         if type(card.name) ~= "string" or card.name == "" then
             addError(errors, "invalid_card_name", path .. ".name", "카드 이름이 필요합니다.")
         end
-        if card.rarity ~= "common" and card.rarity ~= "rare" then
-            addError(errors, "invalid_card_rarity", path .. ".rarity", "카드 희귀도는 common 또는 rare여야 합니다.")
+        if card.rarity ~= "common" and card.rarity ~= "rare" and card.rarity ~= "legendary" then
+            addError(errors, "invalid_card_rarity", path .. ".rarity", "카드 희귀도는 common, rare 또는 legendary여야 합니다.")
+        end
+        local expectedMaxCopies = card.rarity == "legendary" and 1 or 2
+        if card.maxCopies ~= expectedMaxCopies then
+            addError(errors, "invalid_max_copies", path .. ".maxCopies", "희귀도에 따른 카드 보유 제한이 올바르지 않습니다.")
         end
         validateSegments(card.descriptionSegments, path .. ".descriptionSegments", errors)
         validateRuleLines(card.ruleLines, path .. ".ruleLines", errors)
@@ -558,8 +563,8 @@
         if not isFinite(card.baseResistanceDamage) or card.baseResistanceDamage < 0 then
             addError(errors, "invalid_resistance_damage", path .. ".baseResistanceDamage", "기본 저항 피해는 0 이상의 유한한 숫자여야 합니다.")
         end
-        if not isInteger(card.ownedCopies, 0, COPY_LIMIT - 1) then
-            addError(errors, "invalid_owned_copies", path .. ".ownedCopies", "제안 카드 보유 수는 0 또는 1이어야 합니다.")
+        if not isInteger(card.ownedCopies, 0, expectedMaxCopies - 1) then
+            addError(errors, "invalid_owned_copies", path .. ".ownedCopies", "제안 카드 보유 수가 카드별 제한 범위를 벗어났습니다.")
         elseif isAsciiId(card.cardId) and card.ownedCopies ~= (deckCopies[card.cardId] or 0) then
             addError(errors, "owned_copies_mismatch", path .. ".ownedCopies", "제안 카드 보유 수가 덱 요약과 다릅니다.")
         end
