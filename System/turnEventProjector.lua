@@ -92,14 +92,6 @@
         force_mood = true,
     }
 
-    local RESOURCE_EFFECT_OPS = {
-        pay_stealth_cost = true,
-        damage_resistance = true,
-        recover_resistance = true,
-        lose_stealth = true,
-        recover_stealth = true,
-    }
-
     local CATEGORY_ORDER = {
         plan = 1,
         trait = 2,
@@ -1526,9 +1518,7 @@
             if cloneError then
                 return nil, cloneError
             end
-            if RESOURCE_EFFECT_OPS[effect.op] == true
-                and effect.changed == true
-                and effect.amount > 0 then
+            if effect.changed == true then
                 publicEffect.source = source
             end
             emit(publicResult, "effect_applied", publicEffect)
