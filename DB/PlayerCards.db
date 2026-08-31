@@ -7,7 +7,7 @@ local function draw(n)return cmd("draw_cards","player",n)end
 local function addm(m,n)return cmd("add_mood_token","character",n,m)end
 local function remm(m,n)return cmd("remove_mood_token","character",n,m)end
 local function force(m)return cmd("force_mood","character",nil,m)end
-local function adj(m,d)return MOODS[math.max(1,math.min(5,(MI[m]or 3)+d))]end
+local function adj(m,d)local i=(MI[m]or 3)+d if i<1 then i=1 elseif i>5 then i=5 end return MOODS[i]end
 local function manip(c,n)return addm(adj(c.mood,1),n)end
 local function back(c,n)return addm(adj(c.mood,-1),n)end
 local function calm(c,n)return remm(adj(c.mood,-1),n)end
@@ -54,7 +54,7 @@ add{id="pc_harmonizer_008",name="녹아내린 틈 공략",rarity="common",style=
 add{id="pc_harmonizer_009",name="쾌락의 늪 설계",rarity="common",style="harmonizer",cardType="plan",cost=0,roles={"violation"},rules={"지속 3, 충전 2. 직전 턴보다 긍정적이면 피해 3."},description="상대가 긍정적인 쾌락으로 기울 때마다 빠져나오기 힘든 자극을 겹치는 계획입니다.",placed="쾌락을 받아들이는 순간을 놓치지 않도록 반응의 흐름을 읽는다.",triggered="마음이 쾌락 쪽으로 기울자 민감한 곳을 눌러 더 깊은 늪으로 끌어당긴다.",plan={durationTurns=3,charges=2,event="turn_start",trigger=function(c)return moved(c,1)end,resolve=function()return{dmg(3)}end}}
 add{id="pc_harmonizer_010",name="최면적 밀착 조교",rarity="common",style="harmonizer",cardType="plan",cost=1,roles={"pressure"},rules={"배치 시 농락 1. 지속 4, 충전 2. 부정적으로 이동하면 농락 2."},description="반복되는 밀착과 속삭임으로 부정적인 흔들림마저 타락의 리듬으로 바꾸는 계획입니다.",placed="호흡과 골반의 움직임을 맞추며 조교의 리듬을 몸에 새긴다.",triggered="마음이 거칠게 흔들리자 익숙한 속삭임과 밀착으로 쾌락 쪽을 가리킨다.",resolve=function(c)return{manip(c,1)}end,plan={durationTurns=4,charges=2,event="turn_start",trigger=function(c)return moved(c,-1)end,resolve=function(c)return{manip(c,2)}end}}
 local PAIRS={rs={"rejection","suspicion"},si={"suspicion","ignore"},ic={"ignore","confusion"},cc={"confusion","compliance"}}
-local pc={}for _,x in ipairs({ {"rs","거절 → 의심"},{"si","의심 → 무시"},{"ic","무시 → 혼란"},{"cc","혼란 → 순응"} })do local id=x[1];pc[#pc+1]=choice(id,x[2],"부정 쪽 토큰 최대 2개를 긍정 쪽으로 옮깁니다.","굳은 표정과 호흡을 맞추며 마음을 한 단계 부드러운 방향으로 돌린다.",function(c)local p=PAIRS[id];local n=math.min(2,c.character.moodTokens[p[1]]or 0)if n==0 then return{}end return{remm(p[1],n),addm(p[2],n)}end)end
+local pc={}for _,x in ipairs({ {"rs","거절 → 의심"},{"si","의심 → 무시"},{"ic","무시 → 혼란"},{"cc","혼란 → 순응"} })do local id=x[1];pc[#pc+1]=choice(id,x[2],"부정 쪽 토큰 최대 2개를 긍정 쪽으로 옮깁니다.","굳은 표정과 호흡을 맞추며 마음을 한 단계 부드러운 방향으로 돌린다.",function(c)local p=PAIRS[id];local n=c.character.moodTokens[p[1]]or 0 if n>2 then n=2 end if n==0 then return{}end return{remm(p[1],n),addm(p[2],n)}end)end
 add{id="pc_harmonizer_011",name="마음 돌려놓기",rarity="rare",style="harmonizer",cost=0,damage=1,roles={"pressure","violation"},rules={"인접 무드 쌍의 부정 쪽 토큰 최대 2개를 긍정 쪽으로 이동."},description="인접한 두 무드 사이의 마음을 조율해 부정적인 감정을 긍정적인 쾌락으로 돌립니다.",choices=pc}
 add{id="pc_harmonizer_012",name="감미로운 절정 쐐기",rarity="rare",style="harmonizer",cost=2,damage=3,roles={"violation"},rules={"긍정 무드면 추가 피해 5."},description="이미 쾌락을 받아들이는 상대에게 감미로운 절정의 쐐기를 박아 저항을 무너뜨립니다.",actorAction="흐물거리는 몸을 받치고 가장 민감한 곳을 자극해 달콤한 절정을 끌어낸다.",resolve=function(c)if pos(c.mood)then return{dmg(5)}end return{}end}
 local cc={}for _,x in ipairs({ {"rs","거절·의심"},{"si","의심·무시"},{"ic","무시·혼란"},{"cc","혼란·순응"} })do local id=x[1];cc[#cc+1]=choice(id,x[2],"부정 우세면 농락 3, 긍정 우세면 피해 3, 같으면 둘 다.","맞서는 두 감정을 읽고 가장 효과적인 손길로 균형을 무너뜨린다.",function(c)local p=PAIRS[id];local a,b=c.character.moodTokens[p[1]]or 0,c.character.moodTokens[p[2]]or 0;if a>b then return{manip(c,3)}elseif b>a then return{dmg(3)}end return{manip(c,3),dmg(3)}end)end

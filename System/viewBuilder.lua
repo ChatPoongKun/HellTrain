@@ -1017,6 +1017,7 @@
             )
             return failure(errors)
         end
+        local aftermathEndTurn = math.max(state.turnLimit, state.turnNumber + 2)
         if aftermathInput ~= nil then
             if type(aftermathInput) ~= "table" or getmetatable(aftermathInput) ~= nil then
                 addError(errors, "invalid_aftermath_context", "$.context.aftermath", "승리 후 자유행동 View context가 일반 객체가 아닙니다.")
@@ -1028,8 +1029,8 @@
             }, "$.context.aftermath", errors)
             if state.status ~= "victory"
                 or not isInteger(aftermathInput.completedTurnNumber, state.turnNumber)
-                or aftermathInput.completedTurnNumber >= state.turnLimit then
-                addError(errors, "invalid_aftermath_context", "$.context.aftermath", "자유행동 진행이 조기 승리 전투 범위와 다릅니다.")
+                or aftermathInput.completedTurnNumber >= aftermathEndTurn then
+                addError(errors, "invalid_aftermath_context", "$.context.aftermath", "자유행동 진행이 승리 전투 범위와 다릅니다.")
             end
             if aftermathInput.phase ~= "ready"
                 and aftermathInput.phase ~= "inFlight"
@@ -1517,7 +1518,7 @@
             aftermath = aftermathInput == nil and { active = false } or {
                 active = true,
                 awaitingOutput = aftermathInput.phase ~= "ready",
-                finalTurn = aftermathInput.completedTurnNumber + 1 == state.turnLimit,
+                finalTurn = aftermathInput.completedTurnNumber + 1 == aftermathEndTurn,
             },
         }
         if interactionToken ~= nil then
