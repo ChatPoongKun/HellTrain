@@ -378,6 +378,11 @@
             and (state.player.stealth <= 0 or state.character.resistance <= 0)
     end
 
+    local function outcomeFor(state)
+        if not hasOutcome(state) then return nil end
+        return state.character.resistance <= 0 and "victory" or "defeat"
+    end
+
     local function prepareTurn(authorityState, staticInput, options)
         local normalizedOptions, optionErrors = validateOptions(options, authorityState)
         if optionErrors then
@@ -684,15 +689,7 @@
         if not appended then
             return failure(appendRecordErrors)
         end
-        if hasOutcome(state) then
-            return failure({
-                makeError(
-                    "turn_start_outcome_policy_pending",
-                    "$.state.status",
-                    "턴 시작 효과만으로 승패가 정해질 때의 세션 종료 연결 정책은 아직 지원하지 않습니다."
-                ),
-            })
-        end
+        state.turnStartOutcome = outcomeFor(state)
         local validWorkingState, workingStateErrors = validateWorkingState(state)
         if not validWorkingState then
             return failure(workingStateErrors)
@@ -950,43 +947,37 @@
                 cardInstanceId = selectedInstance.instanceId,
                 role = card.roles[1],
             }
-            local revealPipeline, revealPipelineErrors = callModule(
-                "triggerPipeline",
-                "run",
-                staticData,
-                { state = state, transient = transient },
-                revealInput,
-                {
-                    phase = "turn_start",
-                    currentCard = {
-                        id = card.id,
-                        instanceId = selectedInstance.instanceId,
-                        owner = "character",
-                        roles = card.roles,
-                    },
-                }
-            )
-            if revealPipelineErrors then
-                return failure(revealPipelineErrors)
-            end
-            validPipeline, pipelineShapeErrors = validatePipelineReport(revealPipeline)
-            if not validPipeline then
-                return failure(pipelineShapeErrors)
-            end
-            state = revealPipeline.state
-            transient = revealPipeline.transient
-            appended, appendRecordErrors = appendPipelineRecords(revealPipeline.records, revealEvent.eventId)
-            if not appended then
-                return failure(appendRecordErrors)
-            end
-            if hasOutcome(state) then
-                return failure({
-                    makeError(
-                        "turn_start_outcome_policy_pending",
-                        "$.state.status",
-                        "역할 공개 효과만으로 승패가 정해질 때의 세션 종료 연결 정책은 아직 지원하지 않습니다."
-                    ),
-                })
+            if state.turnStartOutcome == nil then
+                local revealPipeline, revealPipelineErrors = callModule(
+                    "triggerPipeline",
+                    "run",
+                    staticData,
+                    { state = state, transient = transient },
+                    revealInput,
+                    {
+                        phase = "turn_start",
+                        currentCard = {
+                            id = card.id,
+                            instanceId = selectedInstance.instanceId,
+                            owner = "character",
+                            roles = card.roles,
+                        },
+                    }
+                )
+                if revealPipelineErrors then
+                    return failure(revealPipelineErrors)
+                end
+                validPipeline, pipelineShapeErrors = validatePipelineReport(revealPipeline)
+                if not validPipeline then
+                    return failure(pipelineShapeErrors)
+                end
+                state = revealPipeline.state
+                transient = revealPipeline.transient
+                appended, appendRecordErrors = appendPipelineRecords(revealPipeline.records, revealEvent.eventId)
+                if not appended then
+                    return failure(appendRecordErrors)
+                end
+                state.turnStartOutcome = outcomeFor(state)
             end
             validWorkingState, workingStateErrors = validateWorkingState(state)
             if not validWorkingState then

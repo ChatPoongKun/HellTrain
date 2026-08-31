@@ -2270,6 +2270,7 @@
             characterIntent = true,
             history = true,
             turnStartReceipt = true,
+            turnStartOutcome = true,
         }, "$", errors)
 
         if state.schemaVersion ~= SCHEMA_VERSION then
@@ -2296,6 +2297,13 @@
         validateSceneContext(state.sceneContext, errors)
         if state.lastCommittedTurnId ~= nil and not isRuntimeId(state.lastCommittedTurnId) then
             addError(errors, "invalid_turn_id", "$.lastCommittedTurnId", "마지막 확정 턴 ID가 올바르지 않습니다.")
+        end
+        if state.turnStartOutcome ~= nil
+            and state.turnStartOutcome ~= "victory"
+            and state.turnStartOutcome ~= "defeat" then
+            addError(errors, "invalid_turn_start_outcome", "$.turnStartOutcome", "턴 시작 승패 대기값이 올바르지 않습니다.")
+        elseif state.turnStartOutcome ~= nil and state.status ~= "active" then
+            addError(errors, "terminal_turn_start_outcome", "$.turnStartOutcome", "종료 상태에는 턴 시작 승패 대기값을 남길 수 없습니다.")
         end
 
         if type(state.rng) ~= "table" then
@@ -2655,11 +2663,22 @@
 
         if type(state.player) == "table" and type(state.character) == "table"
             and isFinite(state.player.stealth) and isFinite(state.character.resistance) then
-            if state.character.resistance <= 0 and state.status ~= "victory" then
+            local resourceOutcome = state.character.resistance <= 0 and "victory"
+                or (state.player.stealth <= 0 and "defeat" or nil)
+            if state.turnStartOutcome ~= nil and state.turnStartOutcome ~= resourceOutcome then
+                addError(errors, "turn_start_outcome_mismatch", "$.turnStartOutcome", "턴 시작 승패 대기값이 현재 자원 수치와 일치하지 않습니다.")
+            elseif state.turnStartOutcome == nil
+                and state.character.resistance <= 0
+                and state.status ~= "victory" then
                 addError(errors, "victory_priority", "$.status", "저항이 0 이하이면 동시 은폐 소진보다 승리를 우선해야 합니다.")
-            elseif state.character.resistance > 0 and state.player.stealth <= 0 and state.status ~= "defeat" then
+            elseif state.turnStartOutcome == nil
+                and state.character.resistance > 0
+                and state.player.stealth <= 0
+                and state.status ~= "defeat" then
                 addError(errors, "defeat_required", "$.status", "은폐가 0 이하이면 패배 상태여야 합니다.")
-            elseif state.status == "active" and (state.character.resistance <= 0 or state.player.stealth <= 0) then
+            elseif state.turnStartOutcome == nil
+                and state.status == "active"
+                and (state.character.resistance <= 0 or state.player.stealth <= 0) then
                 addError(errors, "active_outcome_conflict", "$.status", "종료 수치에서 active 상태를 유지할 수 없습니다.")
             elseif state.status == "victory" and state.character.resistance > 0 then
                 addError(errors, "invalid_victory", "$.status", "저항이 남아 있으면 승리 상태일 수 없습니다.")
