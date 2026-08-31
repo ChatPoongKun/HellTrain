@@ -527,9 +527,15 @@
         return { ok = true, schemaVersion = SCHEMA_VERSION, errors = {}, valid = true }
     end
 
-    local function selectIntent(state, staticInput)
+    local function selectIntent(state, staticInput, historyBaseline)
         local staticData = normalizeStaticData(staticInput)
-        local validation, validationErrors = callModule("stateSchema", "validateBattleState", state, staticData)
+        local validation, validationErrors = callModule(
+            "stateSchema",
+            "validateBattleState",
+            state,
+            staticData,
+            historyBaseline
+        )
         if validationErrors then return failure(validationErrors) end
         if validation.referencesValidated ~= true then
             return failure({ makeError("static_references_not_validated", "$.staticData", "캐릭터 선택에는 전체 정적 데이터 참조 검증이 필요합니다.") })
@@ -581,7 +587,13 @@
             if rngAfterError then return failure({ rngAfterError }) end
             receipt.rngAfter = rngAfter
             receipt.draw = { kind = "pass" }
-            local outputValidation, outputErrors = callModule("stateSchema", "validateBattleState", nextState, staticData)
+            local outputValidation, outputErrors = callModule(
+                "stateSchema",
+                "validateBattleState",
+                nextState,
+                staticData,
+                historyBaseline
+            )
             if outputErrors then return failure(outputErrors) end
             if outputValidation.referencesValidated ~= true then
                 return failure({ makeError("output_references_not_validated", "$.state", "선택 결과의 정적 참조를 검증하지 못했습니다.") })
@@ -648,7 +660,13 @@
         if rngAfterError then return failure({ rngAfterError }) end
         receipt.rngAfter = rngAfter
 
-        local outputValidation, outputErrors = callModule("stateSchema", "validateBattleState", nextState, staticData)
+        local outputValidation, outputErrors = callModule(
+            "stateSchema",
+            "validateBattleState",
+            nextState,
+            staticData,
+            historyBaseline
+        )
         if outputErrors then return failure(outputErrors) end
         if outputValidation.referencesValidated ~= true then
             return failure({ makeError("output_references_not_validated", "$.state", "선택 결과의 정적 참조를 검증하지 못했습니다.") })

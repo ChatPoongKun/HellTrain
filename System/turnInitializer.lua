@@ -487,6 +487,11 @@
             end
         end
         baseline.moodTokens = baselineTokens
+        local historyBaseline = {
+            stealth = baseline.stealth,
+            resistance = baseline.resistance,
+            mood = baseline.mood,
+        }
         local state, stateCloneError = cloneData(authorityState, "$.state")
         if stateCloneError then
             return failure({ stateCloneError })
@@ -629,7 +634,8 @@
                 "stateSchema",
                 "validateBattleState",
                 value,
-                staticData
+                staticData,
+                historyBaseline
             )
             if workingErrors then
                 return false, workingErrors
@@ -765,7 +771,8 @@
             "characterSelector",
             "selectIntent",
             state,
-            staticData
+            staticData,
+            historyBaseline
         )
         if selectionErrors then
             return failure(selectionErrors)
