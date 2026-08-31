@@ -52,8 +52,14 @@
             movedInstanceIds = true,
             discarded = true,
         },
-        card_declared = { cardId = true, instanceId = true, finalStealthCost = true, effectChoiceId = true },
-        card_resolved = { cardId = true, instanceId = true, finalResistanceDamage = true },
+        card_declared = { cardId = true, instanceId = true, finalStealthCost = true, effectChoiceId = true, narrationConditionMet = true },
+        card_resolved = {
+            cardId = true,
+            instanceId = true,
+            finalResistanceDamage = true,
+            grossStealthRecovery = true,
+            finalStealthCost = true,
+        },
         card_restored = { instanceId = true, reasonCode = true, destination = true },
         action_sequence_stopped = {
             side = true,
@@ -1532,7 +1538,7 @@
             return true, nil
         end
 
-        local function narration(card, key, side, actionName, identityKnown, required)
+        local function narration(card, key, side, actionName, identityKnown, required, conditionMet)
             local payload = {
                 actor = side,
                 action = actionName,
@@ -1551,6 +1557,16 @@
                     "$.staticData.cards.*.narration." .. key,
                     "공개된 카드 사건에 필요한 narration.actorAction이 없습니다."
                 )
+            end
+            if conditionMet == true then
+                entry = entry.conditionMet
+                if type(entry) ~= "table" or type(entry.actorAction) ~= "string" or entry.actorAction == "" then
+                    return nil, makeError(
+                        "missing_card_narration",
+                        "$.staticData.cards.*.narration." .. key .. ".conditionMet",
+                        "조건 충족 사건에 필요한 narration.actorAction이 없습니다."
+                    )
+                end
             end
             payload.actorAction = entry.actorAction
             if side == "character" and entry.actorThought ~= nil then
@@ -2023,6 +2039,12 @@
                 elseif (side ~= "player" or type(card.effectChoices) ~= "table") and payload.effectChoiceId ~= nil then
                     return failure({ makeError("unexpected_effect_choice", path .. ".payload.effectChoiceId", "효과 선택지가 없는 카드 선언에 선택값이 있습니다.") })
                 end
+                local hasNarrationCondition = card.narrationCondition ~= nil
+                if hasNarrationCondition and type(payload.narrationConditionMet) ~= "boolean" then
+                    return failure({ makeError("missing_narration_condition_result", path .. ".payload.narrationConditionMet", "조건부 사용 묘사의 판정 결과가 없습니다.") })
+                elseif not hasNarrationCondition and payload.narrationConditionMet ~= nil then
+                    return failure({ makeError("unexpected_narration_condition_result", path .. ".payload.narrationConditionMet", "조건부 사용 묘사가 없는 카드에 판정 결과가 있습니다.") })
+                end
                 local publicPayload = {
                     side = side,
                     roles = card.roles,
@@ -2035,11 +2057,11 @@
                 emit(publicResult, "card_declared", publicPayload)
 
                 if card.cardType ~= "plan" or (effectChoice ~= nil and effectChoice.placesPlan == false) then
-                    local llmPayload, narrationError = narration(card, "play", side, "played", true)
+                    local llmPayload, narrationError = narration(card, "play", side, "played", true, nil, payload.narrationConditionMet)
                     if narrationError then
                         return failure({ narrationError })
                     end
-                    if effectChoice ~= nil and effectChoice.actorAction ~= nil then
+                    if payload.narrationConditionMet ~= true and effectChoice ~= nil and effectChoice.actorAction ~= nil then
                         llmPayload.actorAction = effectChoice.actorAction
                     end
                     llmPayload.roles = card.roles
@@ -2113,6 +2135,10 @@
                     or payload.instanceId ~= event.source.instanceId
                     or not isFinite(payload.finalResistanceDamage)
                     or payload.finalResistanceDamage < 0
+                    or not isFinite(payload.grossStealthRecovery)
+                    or payload.grossStealthRecovery < 0
+                    or not isFinite(payload.finalStealthCost)
+                    or payload.finalStealthCost < 0
                     or declaration == nil
                     or declaration.side ~= event.side
                     or declaration.cardId ~= cardId
@@ -2132,6 +2158,9 @@
                         roles = card.roles,
                         resolutionId = event.resolutionId,
                         effectChoiceId = declaration.effectChoiceId,
+                        finalResistanceDamage = payload.finalResistanceDamage,
+                        grossStealthRecovery = payload.grossStealthRecovery,
+                        finalStealthCost = payload.finalStealthCost,
                     },
                     {
                         id = card.id,

@@ -1009,7 +1009,7 @@
                 instance = findInstance(working.state, instanceId)
             end
 
-            appendEvent(
+            local declarationEvent = appendEvent(
                 "card_declared",
                 phase,
                 cardSource(card, instance),
@@ -1066,6 +1066,21 @@
 
             context = buildContext(working.state, phase, card, instance, nil, effectChoiceId)
             context.playerChainCardsResolved = playerChainCardsResolved
+            if card.narrationCondition ~= nil then
+                local narrationReport, narrationErrors = callModule(
+                    "effectEngine",
+                    "evaluateNarrationCondition",
+                    staticData,
+                    card.id,
+                    context,
+                    { modifiers = modifiers }
+                )
+                if narrationErrors then
+                    return false, narrationErrors
+                end
+                declarationEvent.payload.narrationConditionMet = narrationReport.matched
+                context.narrationConditionMet = narrationReport.matched
+            end
             local cardEffect, cardEffectErrors = callModule(
                 "effectEngine",
                 "evaluateCardResolve",

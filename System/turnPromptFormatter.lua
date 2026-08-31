@@ -167,6 +167,13 @@
                     and (payload.actor == "character" or payload.actorThought == nil) then
                     return true
                 end
+                local conditionMet = type(entry) == "table" and entry.conditionMet or nil
+                if type(conditionMet) == "table"
+                    and conditionMet.actorAction == payload.actorAction
+                    and payload.actor == "player"
+                    and payload.actorThought == nil then
+                    return true
+                end
                 if narrationKey == "play" and payload.actor == "player" then
                     for _, choice in ipairs(type(card.effectChoices) == "table" and card.effectChoices or {}) do
                         if choice.actorAction == payload.actorAction then return true end

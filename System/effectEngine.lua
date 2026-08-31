@@ -848,6 +848,32 @@
         })
     end
 
+    local function evaluateNarrationCondition(staticData, cardId, context, options)
+        local _, optionsErrors = validateOptions(options)
+        if optionsErrors then return failure(optionsErrors) end
+        local _, card, cardErrors = findRuntimeCard(staticData, cardId)
+        if cardErrors then return failure(cardErrors) end
+        if type(card.narrationCondition) ~= "function" then
+            return failure({
+                makeError("invalid_narration_condition", "$.card.narrationCondition", "조건부 사용 묘사의 판정식이 함수가 아닙니다."),
+            })
+        end
+        local contextCopy, contextFailure = prepareCallbackValue(context, "$.context")
+        if contextFailure then return contextFailure end
+        local ok, matched, unexpected = pcall(card.narrationCondition, contextCopy)
+        if not ok then
+            return failure({
+                makeError("narration_condition_error", "$.card.narrationCondition", "조건부 사용 묘사 판정에 실패했습니다: " .. tostring(matched)),
+            })
+        end
+        if type(matched) ~= "boolean" or unexpected ~= nil then
+            return failure({
+                makeError("invalid_narration_condition_result", "$.card.narrationCondition", "조건부 사용 묘사 판정은 불리언 하나만 반환해야 합니다."),
+            })
+        end
+        return reportSuccess({ cardId = cardId, matched = matched })
+    end
+
     local function evaluateEffectChoice(staticData, cardId, choiceId, context, options)
         local _, optionsErrors = validateOptions(options)
         if optionsErrors then return failure(optionsErrors) end
@@ -1334,6 +1360,7 @@
     local actions = {
         evaluateSelectionPreview = evaluateSelectionPreview,
         evaluateCanPlay = evaluateCanPlay,
+        evaluateNarrationCondition = evaluateNarrationCondition,
         evaluateEffectChoice = evaluateEffectChoice,
         evaluateCardResolve = evaluateCardResolve,
         evaluateMoodEffect = evaluateMoodEffect,

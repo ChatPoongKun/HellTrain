@@ -768,6 +768,24 @@
             or card.narration.play.actorAction == "" then
             addError(errors, "missing_play_narration", path .. ".narration.play", "카드 사용 묘사가 없습니다.")
         end
+
+        local play = type(card.narration.play) == "table" and card.narration.play or nil
+        local conditionMet = play and play.conditionMet or nil
+        if card.narrationCondition ~= nil then
+            if card.owner ~= "player" or isPlan then
+                addError(errors, "invalid_narration_condition_owner", path .. ".narrationCondition", "조건부 사용 묘사는 플레이어의 비계획 카드에만 사용할 수 있습니다.")
+            end
+            if type(card.narrationCondition) ~= "function" then
+                addError(errors, "invalid_narration_condition", path .. ".narrationCondition", "조건부 사용 묘사의 판정식이 함수가 아닙니다.")
+            end
+            if type(conditionMet) ~= "table"
+                or type(conditionMet.actorAction) ~= "string"
+                or conditionMet.actorAction == "" then
+                addError(errors, "missing_condition_met_narration", path .. ".narration.play.conditionMet", "조건 충족 시 카드 사용 묘사가 없습니다.")
+            end
+        elseif conditionMet ~= nil then
+            addError(errors, "missing_narration_condition", path .. ".narrationCondition", "조건 충족 묘사에 대응하는 판정식이 없습니다.")
+        end
     end
 
     local function validatePlanSelectionAssumption(card, plan, path, registry, errors)
