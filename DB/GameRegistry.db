@@ -81,12 +81,12 @@ return {
         backlash = {
             id = "backlash",
             label = "반발",
-            tooltip = "현재 무드보다 한 단계 부정적인 무드에 토큰을 표시된 수만큼 추가합니다. 이미 거절이라면 거절 토큰을 추가합니다.",
+            tooltip = "현재 무드보다 한 단계 부정적인 무드에 토큰을 표시된 수만큼 추가합니다. 이미 거부라면 거부 토큰을 추가합니다.",
         },
         calm = {
             id = "calm",
             label = "진정",
-            tooltip = "현재 무드보다 한 단계 부정적인 무드의 토큰을 표시된 수만큼 제거합니다. 이미 거절이라면 거절 토큰을 제거합니다.",
+            tooltip = "현재 무드보다 한 단계 부정적인 무드의 토큰을 표시된 수만큼 제거합니다. 이미 거부라면 거부 토큰을 제거합니다.",
         },
         cool = {
             id = "cool",
@@ -96,7 +96,7 @@ return {
     },
 
     moods = {
-        rejection = { id = "rejection", label = "거절", order = 1 },
+        rejection = { id = "rejection", label = "거부", order = 1 },
         suspicion = { id = "suspicion", label = "의심", order = 2 },
         ignore = { id = "ignore", label = "무시", order = 3 },
         confusion = { id = "confusion", label = "혼란", order = 4 },
