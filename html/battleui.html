@@ -259,19 +259,19 @@
 <span class="ht-current-mood">현재 · {{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::label}}</span>
 </div>
 <div class="ht-mood-grid">
-<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::rejection}}}}is-current{{/if}}" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-rejection" aria-haspopup="dialog" aria-label="거절 무드 {{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::rejection}}}}aria-current="true"{{/if}}>
+<button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::rejection}}}}is-current{{/if}}" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-rejection" aria-haspopup="dialog" aria-label="거부 무드 {{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::rejection}}}}aria-current="true"{{/if}}>
 <i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}::5}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}::4}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}::3}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}::2}}}}is-filled{{/if}}"></i>
 <i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}::1}}}}is-filled{{/if}}"></i>
-<span class="ht-mood-name">거절</span>
+<span class="ht-mood-name">거부</span>
 </button>
-<div id="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-rejection" class="ht-popover" popover="auto" role="dialog" aria-label="거절 무드 정보">
+<div id="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-rejection" class="ht-popover" popover="auto" role="dialog" aria-label="거부 무드 정보">
 <button type="button" class="ht-popover-dismiss" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-rejection" popovertargetaction="hide">
 <span class="ht-popover-kicker">MOOD</span>
-<span class="ht-popover-title">거절 · {{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}</span>
-<span class="ht-popover-copy">현재 거절 무드 토큰 수입니다.</span>
+<span class="ht-popover-title">거부 · {{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}</span>
+<span class="ht-popover-copy">현재 거부 무드 토큰 수입니다.</span>
 <span class="ht-popover-meta">화면의 게이지는 현재 값을 최대 5칸까지 표시합니다.</span>
 <span class="ht-popover-close-hint">어디든 누르면 닫힙니다</span>
 </button>
