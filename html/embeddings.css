@@ -2352,6 +2352,20 @@ outline: 2px solid #fff;
 outline-offset: -3px;
 }
 
+.run-flow .run-style-icon {
+position: absolute;
+z-index: 0;
+top: 2px;
+right: 12px;
+width: 96px;
+height: 96px;
+object-fit: contain;
+opacity: .12;
+filter: blur(.2px) grayscale(.18);
+pointer-events: none;
+user-select: none;
+}
+
 .run-flow .run-reward-card:hover,
 .run-flow .run-target-card:hover {
 border-color: var(--run-line-strong);
@@ -2663,6 +2677,10 @@ border: 1px solid var(--run-line);
 border-radius: 6px;
 background: rgba(255, 255, 255, .025);
 text-align: center;
+}
+
+.run-flow .run-card-stat {
+background: rgba(60, 60, 60, .5);
 }
 
 .run-flow .run-card-stat strong,

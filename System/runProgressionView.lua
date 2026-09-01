@@ -473,6 +473,7 @@
             cardId = presentation.card.cardId,
             name = presentation.card.name,
             rarity = card.rarity,
+            draftStyle = card.draftStyle,
             descriptionSegments = presentation.card.descriptionSegments,
             ruleLines = presentation.card.ruleLines,
             cardType = presentation.card.cardType,
@@ -696,6 +697,7 @@
             cardId = true,
             name = true,
             rarity = true,
+            draftStyle = true,
             descriptionSegments = true,
             ruleLines = true,
             cardType = true,
@@ -762,6 +764,12 @@
         end
         if card.rarity ~= "common" and card.rarity ~= "rare" and card.rarity ~= "legendary" then
             addError(errors, "invalid_card_rarity", path .. ".rarity", "카드 희귀도가 올바르지 않습니다.")
+        end
+        if card.draftStyle ~= "predator"
+            and card.draftStyle ~= "harmonizer"
+            and card.draftStyle ~= "glutton"
+            and card.draftStyle ~= "deceiver" then
+            addError(errors, "invalid_draft_style", path .. ".draftStyle", "카드 드래프트 스타일이 올바르지 않습니다.")
         end
         local expectedMaxCopies = card.rarity == "legendary" and 1 or 2
         if card.maxCopies ~= expectedMaxCopies then

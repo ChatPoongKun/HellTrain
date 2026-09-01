@@ -125,6 +125,10 @@ aria-label="{{dictelement::{{slot::run_reward_card}}::name}} 상세 보기"
 >
 <article class="run-reward-card" aria-label="{{dictelement::{{slot::run_reward_card}}::name}} 보상 카드">
 <label class="run-reward-card-action" for="run-reward-card-{{dictelement::{{slot::run_reward_card}}::slot}}" aria-label="{{dictelement::{{slot::run_reward_card}}::name}} 상세 보기"></label>
+{{#when::keep::{{dictelement::{{slot::run_reward_card}}::draftStyle}}::is::predator}}<img class="run-style-icon" src="{{raw::포식}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::run_reward_card}}::draftStyle}}::is::harmonizer}}<img class="run-style-icon" src="{{raw::조율}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::run_reward_card}}::draftStyle}}::is::glutton}}<img class="run-style-icon" src="{{raw::탐식}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::run_reward_card}}::draftStyle}}::is::deceiver}}<img class="run-style-icon" src="{{raw::기만}}" alt="" aria-hidden="true">{{/when}}
 <span class="run-card-inner">
 <span class="run-card-top">
 <span class="run-slot-index">{{dictelement::{{slot::run_reward_card}}::slot}}</span>

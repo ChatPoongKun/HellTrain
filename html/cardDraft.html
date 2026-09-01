@@ -218,6 +218,19 @@ cursor: pointer;
 outline: 2px solid #fff;
 outline-offset: -3px;
 }
+.setup-draft .draft-style-icon {
+position: absolute;
+z-index: 0;
+top: -5px;
+right: 33px;
+width: 88px;
+height: 88px;
+object-fit: contain;
+opacity: .12;
+filter: blur(.2px) grayscale(.18);
+pointer-events: none;
+user-select: none;
+}
 .setup-draft .draft-card-top,
 .setup-draft .draft-card-detail,
 .setup-draft .draft-card-bottom {
@@ -352,7 +365,7 @@ min-width: 31px;
 height: 31px;
 padding: 2px 5px;
 border-radius: 6px;
-background: rgba(255, 255, 255, .045);
+background: rgba(60, 60, 60, .5);
 }
 .setup-draft .draft-stat b {
 font-size: 10px;
@@ -790,6 +803,10 @@ aria-label="카드 상세 보기"
 >
 <article class="draft-card" aria-label="{{dictelement::{{slot::setup_offer_card}}::name}} 카드">
 <label class="draft-card-action" for="setup-draft-card-{{dictelement::{{slot::setup_offer_card}}::slot}}" aria-label="{{dictelement::{{slot::setup_offer_card}}::name}} 카드 상세 보기"></label>
+{{#when::keep::{{dictelement::{{slot::setup_offer_card}}::draftStyle}}::is::predator}}<img class="draft-style-icon" src="{{raw::포식}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::setup_offer_card}}::draftStyle}}::is::harmonizer}}<img class="draft-style-icon" src="{{raw::조율}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::setup_offer_card}}::draftStyle}}::is::glutton}}<img class="draft-style-icon" src="{{raw::탐식}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::setup_offer_card}}::draftStyle}}::is::deceiver}}<img class="draft-style-icon" src="{{raw::기만}}" alt="" aria-hidden="true">{{/when}}
 <span class="draft-card-top">
 <span class="draft-card-heading">
 <span class="draft-copy-count">보유 {{dictelement::{{slot::setup_offer_card}}::ownedCopies}} / {{dictelement::{{slot::setup_offer_card}}::maxCopies}}</span>{{#when::keep::{{dictelement::{{slot::setup_offer_card}}::rarity}}::is::rare}}<span class="draft-rarity" aria-label="희귀 카드">희귀</span>{{/when}}{{#when::keep::{{dictelement::{{slot::setup_offer_card}}::rarity}}::is::legendary}}<span class="draft-rarity" aria-label="전설 카드">전설</span>{{/when}}
