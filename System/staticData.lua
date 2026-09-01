@@ -710,12 +710,6 @@
         end
     end
 
-    local function hasTagToken(description, id)
-        return type(description) == "string"
-            and type(id) == "string"
-            and string.find(description, "::tag[" .. id .. "]::", 1, true) ~= nil
-    end
-
     local function validateTagTokens(text, path, registry, errors)
         if type(text) ~= "string" then
             return
@@ -985,9 +979,6 @@
                             addError(errors, "duplicate_mechanism", mechanismPath, "같은 메커니즘이 중복되었습니다.")
                         end
                         seenMechanisms[mechanismId] = true
-                        if not hasTagToken(card.description, mechanismId) then
-                            addError(errors, "missing_mechanism_token", path .. ".description", "설명에 메커니즘 태그 토큰이 없습니다.")
-                        end
                     end
 
                     if type(card.mechanismData) == "table" then
