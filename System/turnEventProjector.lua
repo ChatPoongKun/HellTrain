@@ -2149,6 +2149,7 @@
                         side = side,
                         cardId = card.id,
                         cardInstanceId = payload.instanceId,
+                        finalStealthCost = payload.finalStealthCost,
                         roles = card.roles,
                         resolutionId = event.resolutionId,
                         effectChoiceId = payload.effectChoiceId,
@@ -2524,6 +2525,88 @@
                         return failure({ makeError("duplicate_plan_meaning", path, "같은 계획 발동 의미 사건이 중복되었습니다.") })
                     end
                     pendingPlanMeanings[key] = true
+                elseif payload.action == "adjusted" or payload.action == "removed" then
+                    local declaration = pendingDeclarations[event.resolutionId]
+                    local lookupErrors = {}
+                    local operationCard = declaration ~= nil and findCard(
+                        staticData,
+                        declaration.cardId,
+                        declaration.side,
+                        path .. ".resolutionId",
+                        lookupErrors
+                    ) or nil
+                    local operation = type(operationCard) == "table" and operationCard.planOperation or nil
+                    if type(operation) == "table" and operation.byChoice ~= nil then
+                        operation = operation.byChoice[declaration.effectChoiceId]
+                    end
+                    local beforeSlot = beforeSlots[1]
+                    local expectedAfter, expectedAfterError = cloneData(beforeSlots, path .. ".payload.before", {})
+                    if expectedAfterError then return failure({ expectedAfterError }) end
+                    local discarded = false
+                    if type(operation) == "table" and beforeSlot ~= nil then
+                        if operation.kind == "remove" then
+                            table.remove(expectedAfter, 1)
+                            discarded = true
+                        else
+                            local expectedSlot = expectedAfter[1]
+                            if operation.remainingTurnsDelta ~= nil and expectedSlot.remainingTurns ~= nil then
+                                expectedSlot.remainingTurns = expectedSlot.remainingTurns + operation.remainingTurnsDelta
+                            end
+                            if operation.remainingChargesDelta ~= nil and expectedSlot.remainingCharges ~= nil then
+                                expectedSlot.remainingCharges = math.max(
+                                    1,
+                                    expectedSlot.remainingCharges + operation.remainingChargesDelta
+                                )
+                            end
+                            if expectedSlot.remainingTurns ~= nil and expectedSlot.remainingTurns <= 0 then
+                                table.remove(expectedAfter, 1)
+                                discarded = true
+                            end
+                        end
+                    end
+                    local expectedAction = discarded and "removed" or "adjusted"
+                    local expectedMovedIds = discarded and { beforeSlot.cardInstanceId } or {}
+                    if declaration == nil
+                        or #lookupErrors > 0
+                        or type(operation) ~= "table"
+                        or (operation.kind ~= "adjust" and operation.kind ~= "remove")
+                        or event.source.kind ~= "plan"
+                        or event.phase ~= declaration.side .. "_card"
+                        or type(event.cause) ~= "table"
+                        or event.cause.kind ~= "card_resolution"
+                        or beforeSlot == nil
+                        or event.source.id ~= beforeSlot.cardId
+                        or event.source.instanceId ~= beforeSlot.cardInstanceId
+                        or payload.instanceId ~= nil
+                        or payload.planSpec ~= nil
+                        or payload.action ~= expectedAction
+                        or payload.discarded ~= discarded
+                        or not arraysEqual(payload.movedInstanceIds, expectedMovedIds)
+                        or not dataEqual(afterSlots, expectedAfter) then
+                        return failure(#lookupErrors > 0 and lookupErrors or {
+                            makeError("invalid_plan_modification", path, "계획 조작 사건이 선언 카드·대상 슬롯과 일치하지 않습니다."),
+                        })
+                    end
+                    local afterSlot = discarded and nil or afterSlots[1]
+                    local identityKnown = planKnown(side, beforeSlot)
+                    local changed, changeError = emitPlan(
+                        side,
+                        expectedAction,
+                        beforeSlot.cardId,
+                        identityKnown,
+                        afterSlot and afterSlot.remainingTurns or nil,
+                        1,
+                        nil,
+                        false
+                    )
+                    if not changed then return failure({ changeError }) end
+                    trackers[side].slots = afterSlots
+                    if postCleanupSnapshot ~= nil then
+                        postCleanupSnapshot[side].planSlots = afterSlots
+                        if discarded then
+                            postCleanupSnapshot[side].discard[#postCleanupSnapshot[side].discard + 1] = beforeSlot.cardInstanceId
+                        end
+                    end
                 elseif payload.action == "placed" then
                     local lookupErrors = {}
                     local placedCard = findCard(staticData, cardId, side, path .. ".source.id", lookupErrors)

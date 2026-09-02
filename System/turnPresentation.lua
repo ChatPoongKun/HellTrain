@@ -704,7 +704,14 @@
                 slotIndex = true,
             }, payloadPath)
             if keyError then return nil, keyError end
-            local validActions = { placed = true, triggered = true, replaced = true, expired = true }
+            local validActions = {
+                placed = true,
+                triggered = true,
+                replaced = true,
+                expired = true,
+                adjusted = true,
+                removed = true,
+            }
             if not isSide(payload.side)
                 or validActions[payload.action] ~= true
                 or type(payload.identityKnown) ~= "boolean"
@@ -715,7 +722,8 @@
                 or (payload.side == "player" and payload.identityKnown ~= true)
                 or (payload.action == "triggered" and payload.identityKnown ~= true)
                 or (payload.side == "character" and payload.action == "placed" and payload.identityKnown ~= false)
-                or ((payload.action == "replaced" or payload.action == "expired") and payload.remainingTurns ~= nil) then
+                or ((payload.action == "replaced" or payload.action == "expired" or payload.action == "removed")
+                    and payload.remainingTurns ~= nil) then
                 return nil, makeError("invalid_plan_change", payloadPath, "계획 변화 공개값이 올바르지 않습니다.")
             end
             local actionTexts = {
@@ -723,6 +731,8 @@
                 triggered = "발동했습니다.",
                 replaced = "교체했습니다.",
                 expired = "만료되었습니다.",
+                adjusted = "조정했습니다.",
+                removed = "제거했습니다.",
             }
             local identityText
             if payload.identityKnown then

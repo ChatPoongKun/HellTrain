@@ -613,9 +613,7 @@
         local currentRng = rng
         local anchorStyle = nil
         if round > 1 then
-            local anchorId, anchorErrors
-            anchorId, currentRng, anchorErrors = chooseOne(currentRng, selectedCardIds)
-            if anchorErrors then return nil, nil, anchorErrors end
+            local anchorId = selectedCardIds[#selectedCardIds]
             anchorStyle = pool.cardsById[anchorId].draftStyle
         end
         for pick = 1, OFFER_SIZE do
