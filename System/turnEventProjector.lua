@@ -1044,6 +1044,7 @@
                 or beforeState.character.moodTokens
         )
         local trackedForcedMoodRequests = {}
+        local trackedSkipRemaining = { player = false, character = false }
         local function findBeforeInstance(instanceId)
             for _, instance in ipairs(beforeState.cardInstances) do
                 if instance.instanceId == instanceId then return instance end
@@ -1058,8 +1059,20 @@
             return count
         end
         local function countBeforeHand(side)
+            -- beforeState already includes every initializer draw; rewind them all before replay.
             local draw = type(startReceipt.draws) == "table" and startReceipt.draws[side] or nil
-            return countAuthorityHand(side) - #(type(draw) == "table" and draw.drawnInstanceIds or {})
+            local drawnCount = #(type(draw) == "table" and draw.drawnInstanceIds or {})
+            for _, receiptEvent in ipairs(startReceipt.events or {}) do
+                local payload = type(receiptEvent) == "table" and receiptEvent.payload or nil
+                if receiptEvent.type == "effect_applied"
+                    and type(payload) == "table"
+                    and payload.op == "draw_cards"
+                    and payload.target == side then
+                    drawnCount = drawnCount + #(type(payload.drawnInstanceIds) == "table"
+                        and payload.drawnInstanceIds or {})
+                end
+            end
+            return countAuthorityHand(side) - drawnCount
         end
         local trackedHandCount = {
             player = countBeforeHand("player"),
@@ -1707,6 +1720,10 @@
                     and type(startReceipt.transient) == "table"
                     and startReceipt.transient.forcedMoodRequests
                     or {}
+                local expectedSkipRemaining = type(startReceipt) == "table"
+                    and type(startReceipt.transient) == "table"
+                    and startReceipt.transient.skipRemaining
+                    or { player = false, character = false }
                 if not dataEqual(trackers.player.slots, beforeState.player.planSlots)
                     or not dataEqual(trackers.character.slots, beforeState.character.planSlots)
                     or trackedStealth ~= beforeState.player.stealth
@@ -1714,6 +1731,7 @@
                     or trackedMood ~= beforeState.character.mood
                     or not dataEqual(trackedMoodTokens, normalizedMoodTokens(beforeState.character.moodTokens))
                     or not dataEqual(trackedForcedMoodRequests, expectedForcedMoodRequests)
+                    or not dataEqual(trackedSkipRemaining, expectedSkipRemaining)
                     or trackedHandCount.player ~= countAuthorityHand("player")
                     or trackedHandCount.character ~= countAuthorityHand("character") then
                     return failure({ makeError("turn_start_replay_mismatch", path, "턴 시작 사건 재생 결과가 beforeState와 다릅니다.") })
@@ -1955,6 +1973,11 @@
                     trackedResistance = effect.after
                 elseif payload.op == "draw_cards" then
                     trackedHandCount[effect.target] = trackedHandCount[effect.target] + effect.drawnCount
+                elseif payload.op == "skip_actions" then
+                    if effect.before ~= trackedSkipRemaining[effect.target] then
+                        return failure({ makeError("effect_state_mismatch", path .. ".payload.before", "행동 생략 효과 before가 앞선 사건 결과와 다릅니다.") })
+                    end
+                    trackedSkipRemaining[effect.target] = effect.after
                 elseif payload.op == "add_mood_token" or payload.op == "remove_mood_token" then
                     if effect.before ~= trackedMoodTokens[effect.mood] then
                         return failure({ makeError("effect_state_mismatch", path .. ".payload.before", "무드 토큰 효과 before가 앞선 토큰 수와 다릅니다.") })
