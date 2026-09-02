@@ -249,6 +249,11 @@ background: #2b282b;
 box-shadow: inset 3px 0 0 var(--draft-green), 0 5px 18px rgba(0, 0, 0, .20);
 transform: translateY(-1px);
 }
+.setup-draft .draft-card:has(.draft-rarity.is-legendary) {
+border-color: rgba(246, 200, 93, .88);
+background: linear-gradient(145deg, rgba(246, 200, 93, .10), transparent 48%), var(--draft-panel-2);
+box-shadow: inset 0 0 24px rgba(246, 200, 93, .13), 0 0 15px rgba(246, 200, 93, .28);
+}
 .setup-draft .draft-choice-state:focus-visible + .draft-card {
 outline: 2px solid #fff;
 outline-offset: 2px;
@@ -290,6 +295,13 @@ background: rgba(91, 145, 216, .16);
 font-size: 7px;
 font-weight: 900;
 white-space: nowrap;
+}
+.setup-draft .draft-rarity.is-legendary {
+color: #ffe09a;
+border-color: rgba(246, 200, 93, .9);
+background: rgba(246, 200, 93, .18);
+box-shadow: 0 0 10px rgba(246, 200, 93, .35);
+text-shadow: 0 0 6px rgba(255, 224, 154, .45);
 }
 .setup-draft .draft-choice-state:checked + .draft-card .draft-copy-count {
 color: #102316;
@@ -809,7 +821,7 @@ aria-label="카드 상세 보기"
 {{#when::keep::{{dictelement::{{slot::setup_offer_card}}::draftStyle}}::is::deceiver}}<img class="draft-style-icon" src="{{raw::기만}}" alt="" aria-hidden="true">{{/when}}
 <span class="draft-card-top">
 <span class="draft-card-heading">
-<span class="draft-copy-count">보유 {{dictelement::{{slot::setup_offer_card}}::ownedCopies}} / {{dictelement::{{slot::setup_offer_card}}::maxCopies}}</span>{{#when::keep::{{dictelement::{{slot::setup_offer_card}}::rarity}}::is::rare}}<span class="draft-rarity" aria-label="희귀 카드">희귀</span>{{/when}}{{#when::keep::{{dictelement::{{slot::setup_offer_card}}::rarity}}::is::legendary}}<span class="draft-rarity" aria-label="전설 카드">전설</span>{{/when}}
+<span class="draft-copy-count">보유 {{dictelement::{{slot::setup_offer_card}}::ownedCopies}} / {{dictelement::{{slot::setup_offer_card}}::maxCopies}}</span>{{#when::keep::{{dictelement::{{slot::setup_offer_card}}::rarity}}::is::rare}}<span class="draft-rarity" aria-label="희귀 카드">희귀</span>{{/when}}{{#when::keep::{{dictelement::{{slot::setup_offer_card}}::rarity}}::is::legendary}}<span class="draft-rarity is-legendary" aria-label="전설 카드">전설</span>{{/when}}
 <strong class="draft-card-title">{{dictelement::{{slot::setup_offer_card}}::name}}</strong>
 <span class="draft-tags" aria-label="카드 태그">
 <button type="button" class="draft-tag is-type draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::setup_offer_type}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{tempvar::setup_offer_type}}::label}} 카드 유형 정보 보기">{{dictelement::{{tempvar::setup_offer_type}}::label}}</button>{{#each::keep {{dictelement::{{slot::setup_offer_card}}::roles}} as setup_offer_role}}<button type="button" class="draft-tag draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_offer_role}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::setup_offer_role}}::label}} 역할 정보 보기">{{dictelement::{{slot::setup_offer_role}}::label}}</button>{{/each}}{{#each::keep {{dictelement::{{slot::setup_offer_card}}::mechanisms}} as setup_offer_mechanism}}<button type="button" class="draft-tag is-mechanism draft-tip-trigger" popovertarget="sdp-{{dictelement::{{tempvar::setup_draft_offer}}::interactionToken}}-{{dictelement::{{slot::setup_offer_card}}::slot}}-tag-{{dictelement::{{slot::setup_offer_mechanism}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::setup_offer_mechanism}}::label}} 태그 정보 보기">{{dictelement::{{slot::setup_offer_mechanism}}::label}}</button>{{/each}}
