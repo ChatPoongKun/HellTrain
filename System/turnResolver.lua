@@ -534,6 +534,11 @@
                     if not exited then return false, exitErrors end
                 end
             end
+            local beforePlanSlots, beforeSlotsError = cloneData(
+                working.state[side].planSlots,
+                "$.planOperation.before"
+            )
+            if beforeSlotsError then return false, { beforeSlotsError } end
             local report, errors = callModule("cardZones", "modifyOldestPlan", working.state, side, {
                 remove = operation.kind == "remove",
                 remainingTurnsDelta = operation.remainingTurnsDelta,
@@ -541,6 +546,28 @@
             })
             if errors then return false, errors end
             working.state = report.state
+            local afterPlanSlots, afterSlotsError = cloneData(
+                working.state[side].planSlots,
+                "$.planOperation.after"
+            )
+            if afterSlotsError then return false, { afterSlotsError } end
+            local discarded = afterPlanSlots[1] == nil
+                or afterPlanSlots[1].cardInstanceId ~= slot.cardInstanceId
+            appendEvent(
+                "plan_changed",
+                phase,
+                source("plan", planCard.id, side, slot.cardInstanceId),
+                {
+                    action = discarded and "removed" or "adjusted",
+                    before = beforePlanSlots,
+                    after = afterPlanSlots,
+                    movedInstanceIds = discarded and { slot.cardInstanceId } or {},
+                    discarded = discarded,
+                },
+                resolutionId,
+                side,
+                resolutionCause(resolutionId)
+            )
             return true, nil
         end
 
@@ -1044,6 +1071,7 @@
                 side = expectedSide,
                 cardId = card.id,
                 cardInstanceId = instance.instanceId,
+                finalStealthCost = finalCost,
                 roles = card.roles,
                 resolutionId = resolutionId,
                 effectChoiceId = effectChoiceId,

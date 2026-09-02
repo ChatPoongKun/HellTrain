@@ -390,7 +390,14 @@
                 actorThought = true,
             }, path)
             if keyError then return nil, keyError end
-            local actionNames = { placed = true, triggered = true, replaced = true, expired = true }
+            local actionNames = {
+                placed = true,
+                triggered = true,
+                replaced = true,
+                expired = true,
+                adjusted = true,
+                removed = true,
+            }
             if not isSide(payload.actor)
                 or actionNames[payload.action] ~= true
                 or type(payload.identityKnown) ~= "boolean"
