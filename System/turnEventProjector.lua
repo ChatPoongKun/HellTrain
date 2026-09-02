@@ -1114,31 +1114,6 @@
         end
         local triggerHistoryContext = historyReport.context
 
-        local function moodStealthEffect(moodId, repeated)
-            local op
-            local amount
-            if moodId == "rejection" then
-                op = "lose_stealth"
-                amount = repeated and 6 or 3
-            elseif moodId == "suspicion" then
-                op = "lose_stealth"
-                amount = repeated and 2 or 1
-            elseif moodId == "confusion" then
-                op = "recover_stealth"
-                amount = 1
-            elseif moodId == "compliance" then
-                op = "recover_stealth"
-                amount = 2
-            else
-                return nil
-            end
-            return {
-                op = op,
-                amount = amount,
-                delta = op == "recover_stealth" and amount or -amount,
-            }
-        end
-
         local triggerPhases = {
             turn_start = true,
             player_card = true,
@@ -2869,79 +2844,45 @@
                 })
             elseif event.type == "mood_evaluated" then
                 local _, sourceError = requireSource(event, path, "system", "mood_tokens")
-                local moods = staticData.registry.moods
-                local moodByOrder = {}
-                for moodId, mood in pairs(moods) do moodByOrder[mood.order] = moodId end
-                local expectedMoodAfter = trackedMood
-                local expectedTokensAfter = normalizedMoodTokens(trackedMoodTokens)
-                local expectedResolution
-                local expectedTargetMood
-                local expectedTiedMoods
-                local forcedCount = #trackedForcedMoodRequests
-                if forcedCount == 1 then
-                    expectedResolution = "forced"
-                    expectedTargetMood = trackedForcedMoodRequests[1].mood
-                    expectedMoodAfter = expectedTargetMood
-                else
-                    local maximum = 0
-                    local leaders = {}
-                    for order = 1, #moodByOrder do
-                        local moodId = moodByOrder[order]
-                        local count = expectedTokensAfter[moodId]
-                        if count > maximum then
-                            maximum = count
-                            leaders = { moodId }
-                        elseif count == maximum then
-                            leaders[#leaders + 1] = moodId
-                        end
-                    end
-                    if maximum < 3 then
-                        expectedResolution = "none"
-                    elseif #leaders == 1 then
-                        expectedResolution = "token"
-                        expectedTargetMood = leaders[1]
-                        expectedTokensAfter[expectedTargetMood] = 0
-                        expectedMoodAfter = expectedTargetMood
-                    else
-                        expectedResolution = "tie"
-                        expectedTiedMoods = leaders
-                        for _, moodId in ipairs(leaders) do
-                            expectedTokensAfter[moodId] = expectedTokensAfter[moodId] - 1
-                        end
-                    end
-                end
-                local expectedApplied = trackedMood ~= expectedMoodAfter
+                local moodProjection, moodProjectionErrors = callModule(
+                    "effectEngine",
+                    "projectMood",
+                    staticData,
+                    {
+                        turnNumber = resolution.turnNumber,
+                        mood = trackedMood,
+                        moodTokens = trackedMoodTokens,
+                        forcedMoodRequests = trackedForcedMoodRequests,
+                    }
+                )
+                if moodProjectionErrors then return failure(moodProjectionErrors) end
+                local expectedMood = moodProjection.resolution
+                local expectedPayload = type(expectedMood) == "table" and expectedMood.payload or nil
                 if sourceError
                     or sawMoodEvaluation
                     or event.phase ~= "turn_end"
                     or event.side ~= "character"
-                    or type(moods) ~= "table"
-                    or type(moods[payload.before]) ~= "table"
-                    or type(moods[payload.after]) ~= "table"
-                    or payload.before ~= trackedMood
-                    or payload.after ~= resolution.afterState.character.mood
-                    or payload.after ~= expectedMoodAfter
-                    or type(payload.applied) ~= "boolean"
-                    or payload.applied ~= expectedApplied
-                    or payload.forcedCount ~= forcedCount
-                    or payload.forceCancelled ~= (forcedCount >= 2)
-                    or payload.resolution ~= expectedResolution
-                    or payload.targetMood ~= expectedTargetMood
-                    or not dataEqual(payload.tiedMoods, expectedTiedMoods)
-                    or not dataEqual(payload.tokensBefore, trackedMoodTokens)
-                    or not dataEqual(payload.tokensAfter, expectedTokensAfter)
-                    or not dataEqual(expectedTokensAfter, normalizedMoodTokens(resolution.afterState.character.moodTokens)) then
+                    or type(expectedMood) ~= "table"
+                    or type(expectedPayload) ~= "table"
+                    or not dataEqual(payload, expectedPayload)
+                    or expectedMood.mood ~= resolution.afterState.character.mood
+                    or not dataEqual(
+                        expectedMood.moodTokens,
+                        normalizedMoodTokens(resolution.afterState.character.moodTokens)
+                    ) then
                     return failure({ sourceError or makeError("invalid_mood_evaluation", path .. ".payload", "무드 평가 사건 payload가 올바르지 않습니다.") })
                 end
                 sawMoodEvaluation = true
                 trackedMood = payload.after
-                trackedMoodTokens = expectedTokensAfter
+                trackedMoodTokens = expectedMood.moodTokens
                 expectedMoodStealthEffect = nil
-                if latchedOutcome == nil then
-                    expectedMoodStealthEffect = moodStealthEffect(
-                        payload.after,
-                        resolution.turnNumber > 1 and payload.before == payload.after
-                    )
+                if latchedOutcome == nil and expectedMood.stealthDelta ~= 0 then
+                    local stealthDelta = expectedMood.stealthDelta
+                    expectedMoodStealthEffect = {
+                        op = stealthDelta < 0 and "lose_stealth" or "recover_stealth",
+                        amount = math.abs(stealthDelta),
+                        delta = stealthDelta,
+                    }
                 end
                 local safe = {
                     before = payload.before,
