@@ -1,6 +1,6 @@
 -- RisuAI host entrypoint. Runtime and host orchestration are loaded lazily
 -- because lore access requires the current event triggerId.
-RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION or "runtime-bundle-d0601e2b8a57ac3a"
+RUNTIME_BUNDLE_REVISION = RUNTIME_BUNDLE_REVISION or "runtime-bundle-eb0ec02206afeba5"
 
 local hostCompatHandler = nil
 local runtimeHandler = nil
@@ -125,7 +125,11 @@ local function restoreOutputUiTarget(triggerId, report)
 end
 
 local function outputFailureMessage(report)
-    if type(report) ~= "table" or report.ok ~= false then
+    if type(report) ~= "table" then
+        return "전투 턴 확정에 실패했습니다.\n"
+            .. "[missing_report] battleController가 결과를 반환하지 않았습니다. ($)"
+    end
+    if report.ok == true then
         return nil
     end
     local parts = { "전투 턴 확정에 실패했습니다." }
@@ -140,6 +144,20 @@ local function outputFailureMessage(report)
         end
     end
     return table.concat(parts, "\n")
+end
+
+local function raiseOutputFailure(triggerId, message)
+    message = message
+        .. "\n\n위 오류 내용을 복사하여 개발자에게 제보해 주세요."
+    if type(debug) == "function" then
+        debug(1, message)
+    elseif type(print) == "function" then
+        print(message)
+    end
+    if type(alertError) == "function" then
+        pcall(alertError, triggerId, message)
+    end
+    error(message)
 end
 
 listenEdit("editDisplay", function(triggerId, data, meta)
@@ -170,17 +188,15 @@ onOutput = async(function(triggerId)
     restoreOutputUiTarget(triggerId, report)
 
     if not packed[1] then
-        error(packed[2])
+        raiseOutputFailure(
+            triggerId,
+            "전투 턴 확정 중 치명적인 오류가 발생했습니다.\n" .. tostring(packed[2])
+        )
     end
 
     local failureMessage = outputFailureMessage(report)
     if failureMessage ~= nil then
-        if type(debug) == "function" then
-            debug(1, failureMessage)
-        elseif type(print) == "function" then
-            print(failureMessage)
-        end
-        error(failureMessage)
+        raiseOutputFailure(triggerId, failureMessage)
     end
 
     return table.unpack(packed, 2, packed.n)

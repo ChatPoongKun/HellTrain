@@ -1,7 +1,21 @@
 (function()
-local function controllerSucceeded(label, report)
+local function alertTurnFailure(triggerId, detail)
+    if type(alertError) == "function" then
+        pcall(
+            alertError,
+            triggerId,
+            "치명적인 오류로 턴을 진행할 수 없습니다.\n\n"
+                .. detail
+                .. "\n\n위 오류 내용을 복사하여 개발자에게 제보해 주세요."
+        )
+    end
+end
+
+local function controllerSucceeded(triggerId, label, report)
     if type(report) ~= "table" then
-        debug(1, label .. ": battleController가 결과를 반환하지 않았습니다.")
+        local detail = label .. ": battleController가 결과를 반환하지 않았습니다."
+        debug(1, detail)
+        alertTurnFailure(triggerId, detail)
         return false
     end
     if report.ok == true then
@@ -10,22 +24,26 @@ local function controllerSucceeded(label, report)
 
     local errors = type(report.errors) == "table" and report.errors or {}
     if #errors == 0 then
-        debug(1, label .. ": battleController가 상세 오류 없이 실패했습니다.")
+        local detail = label .. ": battleController가 상세 오류 없이 실패했습니다."
+        debug(1, detail)
+        alertTurnFailure(triggerId, detail)
         return false
     end
+    local details = {}
     for _, item in ipairs(errors) do
+        local detail = nil
         if type(item) == "table" then
-            debug(
-                1,
-                label
-                    .. ": " .. tostring(item.code)
-                    .. " at " .. tostring(item.path)
-                    .. ": " .. tostring(item.message)
-            )
+            detail = label
+                .. ": [" .. tostring(item.code or "error") .. "] "
+                .. tostring(item.message or "알 수 없는 오류")
+                .. " (" .. tostring(item.path or "$") .. ")"
         else
-            debug(1, label .. ": " .. tostring(item))
+            detail = label .. ": " .. tostring(item)
         end
+        debug(1, detail)
+        details[#details + 1] = detail
     end
+    alertTurnFailure(triggerId, table.concat(details, "\n"))
     return false
 end
 
@@ -477,7 +495,7 @@ end
 
 local function finishApproachTransition(triggerId)
     local report = runScript(triggerId, "init", "start")
-    if not controllerSucceeded("approach.init.start", report) then
+    if not controllerSucceeded(triggerId, "approach.init.start", report) then
         return false
     end
     local targetOk, targetError = pcall(syncGameUiTarget, triggerId)
@@ -624,7 +642,7 @@ local function handleButtonClick(triggerId, data)
 
     local report = runScript(triggerId, script, table.unpack(parts))
     if script == "init" and parts[1] == "start" then
-        if controllerSucceeded("onButtonClick.init.start", report) then
+        if controllerSucceeded(triggerId, "onButtonClick.init.start", report) then
             local targetOk, targetError = pcall(syncGameUiTarget, triggerId)
             if not targetOk then
                 debug(1, "onButtonClick.init.start: UI target 갱신 실패: " .. tostring(targetError))
@@ -665,7 +683,7 @@ local function handleEditRequest(triggerId, data)
         "injectRequest",
         data
     )
-    if not controllerSucceeded("editRequest", report) then
+    if not controllerSucceeded(triggerId, "editRequest", report) then
         return data
     end
     if type(report.promptArray) ~= "table" then
@@ -702,7 +720,7 @@ local function handleStart(triggerId)
         "battleController",
         "prepareGeneration"
     )
-    if not controllerSucceeded("onStart", report) then
+    if not controllerSucceeded(triggerId, "onStart", report) then
         return false
     end
 
