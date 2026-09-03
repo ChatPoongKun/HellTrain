@@ -1121,6 +1121,11 @@
             turn_end = true,
             session_end = true,
         }
+        local planCallbackPhases = {
+            manual_plan_activation = { player_card = true, character_card = true },
+            plan_explicit_exit = { player_card = true, character_card = true },
+            plan_duration_exit = { cleanup = true },
+        }
 
         local function triggerInputKey(resolutionId, phase, eventType)
             if resolutionId ~= nil then return "resolution|" .. resolutionId .. "|" .. eventType end
@@ -1838,6 +1843,11 @@
             elseif event.type == "effect_applied" then
                 local isMoodStateEffect = event.source.kind == "system"
                     and event.source.id == "mood_state"
+                local planEffectCause = type(event.cause) == "table" and event.cause.kind or nil
+                local planCallbackCause = planCallbackPhases[planEffectCause]
+                local isPlanCallbackEffect = event.source.kind == "plan"
+                    and type(planCallbackCause) == "table"
+                    and planCallbackCause[event.phase] == true
                 local allowedEffectSources = {
                     card = true,
                     plan = true,
@@ -1868,9 +1878,22 @@
                     if sideError then
                         return failure({ sideError })
                     end
-                    if triggerPhases[event.phase] ~= true
+                    local callbackSlot = isPlanCallbackEffect and select(1, findPlanSlot(
+                        trackers[event.source.side].slots,
+                        event.source.instanceId
+                    )) or nil
+                    local callbackResolve = triggerDefinition.exitResolve
+                    if planEffectCause == "manual_plan_activation" then
+                        callbackResolve = triggerDefinition.resolve
+                    end
+                    if isPlanCallbackEffect and (type(callbackSlot) ~= "table"
+                        or callbackSlot.cardId ~= event.source.id
+                        or type(callbackResolve) ~= "function"
+                        or event.cause.resolutionId ~= event.resolutionId) then
+                        return failure({ makeError("invalid_plan_callback", path, "계획 콜백 효과가 활성 계획·정적 정의와 다릅니다.") })
+                    elseif not isPlanCallbackEffect and (triggerPhases[event.phase] ~= true
                         or type(event.cause) ~= "table"
-                        or event.cause.kind ~= event.source.kind .. "_trigger" then
+                        or event.cause.kind ~= event.source.kind .. "_trigger") then
                         return failure({ makeError("effect_cause_mismatch", path .. ".cause", "트리거 효과 cause가 source와 다릅니다.") })
                     end
                 elseif event.source.kind == "card" then
@@ -1998,7 +2021,7 @@
                         cardId = event.source.id,
                         instanceId = event.source.instanceId,
                     }
-                elseif triggerKinds[event.source.kind] then
+                elseif triggerKinds[event.source.kind] and not isPlanCallbackEffect then
                     local key = planKey(event)
                     pendingTriggerEffects[key] = pendingTriggerEffects[key] or {}
                     pendingTriggerEffects[key][#pendingTriggerEffects[key] + 1] = {
@@ -2519,7 +2542,7 @@
                     if expectedAfterError then return failure({ expectedAfterError }) end
                     local discarded = false
                     if type(operation) == "table" and beforeSlot ~= nil then
-                        if operation.kind == "remove" then
+                        if operation.kind == "remove" or operation.kind == "remove_all" then
                             table.remove(expectedAfter, 1)
                             discarded = true
                         else
@@ -2544,7 +2567,9 @@
                     if declaration == nil
                         or #lookupErrors > 0
                         or type(operation) ~= "table"
-                        or (operation.kind ~= "adjust" and operation.kind ~= "remove")
+                        or (operation.kind ~= "adjust"
+                            and operation.kind ~= "remove"
+                            and operation.kind ~= "remove_all")
                         or event.source.kind ~= "plan"
                         or event.phase ~= declaration.side .. "_card"
                         or type(event.cause) ~= "table"
@@ -2562,7 +2587,7 @@
                             makeError("invalid_plan_modification", path, "계획 조작 사건이 선언 카드·대상 슬롯과 일치하지 않습니다."),
                         })
                     end
-                    local afterSlot = discarded and nil or afterSlots[1]
+                    local afterSlot = not discarded and afterSlots[1] or nil
                     local identityKnown = planKnown(side, beforeSlot)
                     local changed, changeError = emitPlan(
                         side,
