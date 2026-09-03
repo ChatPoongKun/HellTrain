@@ -515,6 +515,61 @@
                 operation = operation.byChoice[working.currentEffectChoiceId]
             end
             if type(operation) ~= "table" then return true, nil end
+            if operation.kind == "remove_all" then
+                for _, targetSide in ipairs({ "player", "character" }) do
+                    while true do
+                        local targetSlot = type(working.state[targetSide]) == "table"
+                            and working.state[targetSide].planSlots[1] or nil
+                        if targetSlot == nil then break end
+                        local targetPlanCard = staticData.cards[targetSlot.cardId]
+                        local targetPlanData = type(targetPlanCard) == "table"
+                            and type(targetPlanCard.mechanismData) == "table"
+                            and targetPlanCard.mechanismData.plan or nil
+                        if type(targetPlanData) == "table" and type(targetPlanData.exitResolve) == "function" then
+                            local exited, exitErrors = evaluatePlanCallback(
+                                targetPlanCard,
+                                targetSlot,
+                                { resolve = targetPlanData.exitResolve },
+                                phase,
+                                resolutionId,
+                                "plan_explicit_exit"
+                            )
+                            if not exited then return false, exitErrors end
+                        end
+                        local beforePlanSlots, beforeSlotsError = cloneData(
+                            working.state[targetSide].planSlots,
+                            "$.planOperation.before"
+                        )
+                        if beforeSlotsError then return false, { beforeSlotsError } end
+                        local report, errors = callModule("cardZones", "modifyOldestPlan", working.state, targetSide, {
+                            remove = true,
+                        })
+                        if errors then return false, errors end
+                        working.state = report.state
+                        local afterPlanSlots, afterSlotsError = cloneData(
+                            working.state[targetSide].planSlots,
+                            "$.planOperation.after"
+                        )
+                        if afterSlotsError then return false, { afterSlotsError } end
+                        appendEvent(
+                            "plan_changed",
+                            phase,
+                            source("plan", targetPlanCard.id, targetSide, targetSlot.cardInstanceId),
+                            {
+                                action = "removed",
+                                before = beforePlanSlots,
+                                after = afterPlanSlots,
+                                movedInstanceIds = { targetSlot.cardInstanceId },
+                                discarded = true,
+                            },
+                            resolutionId,
+                            targetSide,
+                            resolutionCause(resolutionId)
+                        )
+                    end
+                end
+                return true, nil
+            end
             local side = operation.side or "player"
             local slot = type(working.state[side]) == "table" and working.state[side].planSlots[1] or nil
             if slot == nil then return true, nil end
