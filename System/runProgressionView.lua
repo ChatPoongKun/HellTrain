@@ -440,11 +440,11 @@
         }
     end
 
-    local function buildCardView(slot, cardId, ownedCopies, staticData, errors)
-        local path = "$.rewardOffer.cards[" .. slot .. "]"
+    local function buildCardView(slot, cardId, ownedCopies, staticData, errors, basePath)
+        local path = (basePath or "$.rewardOffer.cards") .. "[" .. slot .. "]"
         local card = staticData.cards[cardId]
         if type(card) ~= "table" or card.owner ~= "player" or card.id ~= cardId then
-            addError(errors, "unknown_reward_card", path .. ".cardId", "보상 카드 정의를 찾을 수 없습니다.")
+            addError(errors, "unknown_player_card", path .. ".cardId", "플레이어 카드 정의를 찾을 수 없습니다.")
             return nil
         end
         local presentation, callError = callRuntime(
@@ -500,12 +500,68 @@
                 copies[cardId] = (copies[cardId] or 0) + 1
             end
             for slot, cardId in ipairs(offer.cardIds) do
-                local cardView = buildCardView(slot, cardId, copies[cardId] or 0, staticData, errors)
+                local cardView = buildCardView(
+                    slot,
+                    cardId,
+                    copies[cardId] or 0,
+                    staticData,
+                    errors,
+                    "$.rewardOffer.cards"
+                )
                 if cardView ~= nil then result.cards[#result.cards + 1] = cardView end
             end
         end
         result.count = #result.cards
         return result
+    end
+
+    local function buildDeckView(runState, staticData, errors)
+        local copies = {}
+        local cardIds = {}
+        local totalCost = 0
+        for _, cardId in ipairs(runState.playerCardIds) do
+            if copies[cardId] == nil then
+                copies[cardId] = 0
+                cardIds[#cardIds + 1] = cardId
+            end
+            copies[cardId] = copies[cardId] + 1
+            local card = staticData.cards[cardId]
+            if type(card) == "table" and type(card.base) == "table"
+                and isFinite(card.base.stealthCost) then
+                totalCost = totalCost + card.base.stealthCost
+            end
+        end
+        local function cardCost(cardId)
+            local card = staticData.cards[cardId]
+            local cost = type(card) == "table" and type(card.base) == "table"
+                and card.base.stealthCost or nil
+            return isFinite(cost) and cost or math.huge
+        end
+        table.sort(cardIds, function(left, right)
+            local leftCost = cardCost(left)
+            local rightCost = cardCost(right)
+            if leftCost ~= rightCost then return leftCost < rightCost end
+            return left < right
+        end)
+
+        local items = {}
+        for slot, cardId in ipairs(cardIds) do
+            local cardView = buildCardView(
+                slot,
+                cardId,
+                copies[cardId],
+                staticData,
+                errors,
+                "$.deck.items"
+            )
+            if cardView ~= nil then items[#items + 1] = cardView end
+        end
+        return {
+            count = #runState.playerCardIds,
+            limit = DECK_MAX,
+            averageCost = math.floor(totalCost / #runState.playerCardIds * 10 + 0.5) / 10,
+            items = items,
+        }
     end
 
     local function buildAppearanceSummary(profile, path, errors)
@@ -687,7 +743,7 @@
         end
     end
 
-    local function validateCardView(card, path, expectedSlot, errors)
+    local function validateCardView(card, path, expectedSlot, errors, allowFullCopies)
         if type(card) ~= "table" then
             addError(errors, "invalid_card_view", path, "보상 카드 View가 테이블이 아닙니다.")
             return
@@ -775,8 +831,9 @@
         if card.maxCopies ~= expectedMaxCopies then
             addError(errors, "invalid_max_copies", path .. ".maxCopies", "희귀도에 따른 카드 보유 제한이 올바르지 않습니다.")
         end
-        if not isInteger(card.ownedCopies, 0, expectedMaxCopies - 1) then
-            addError(errors, "invalid_owned_copies", path .. ".ownedCopies", "보상 카드 보유 수가 카드별 제한 범위를 벗어났습니다.")
+        local ownedMaximum = allowFullCopies and expectedMaxCopies or expectedMaxCopies - 1
+        if not isInteger(card.ownedCopies, allowFullCopies and 1 or 0, ownedMaximum) then
+            addError(errors, "invalid_owned_copies", path .. ".ownedCopies", "카드 보유 수가 카드별 제한 범위를 벗어났습니다.")
         end
     end
 
@@ -914,12 +971,50 @@
         if type(view.deck) ~= "table" then
             addError(errors, "invalid_deck", "$.deck", "덱 요약 View가 필요합니다.")
         else
-            checkAllowedKeys(view.deck, { count = true, limit = true }, "$.deck", errors)
+            checkAllowedKeys(view.deck, {
+                count = true,
+                limit = true,
+                averageCost = true,
+                items = true,
+            }, "$.deck", errors)
             if not isInteger(view.deck.count, DECK_MIN, DECK_MAX) then
                 addError(errors, "invalid_deck_count", "$.deck.count", "덱 수는 10장 이상 20장 이하여야 합니다.")
             end
             if view.deck.limit ~= DECK_MAX then
                 addError(errors, "invalid_deck_limit", "$.deck.limit", "덱 상한 표시는 20이어야 합니다.")
+            end
+            if not isFinite(view.deck.averageCost) or view.deck.averageCost < 0 then
+                addError(errors, "invalid_deck_average_cost", "$.deck.averageCost", "덱 평균 은폐 비용이 올바르지 않습니다.")
+            end
+            local itemCount = getArrayLength(view.deck.items, "$.deck.items", errors)
+            if itemCount ~= nil then
+                local seen = {}
+                local copies = 0
+                local totalCost = 0
+                for index = 1, itemCount do
+                    local card = view.deck.items[index]
+                    validateCardView(card, "$.deck.items[" .. index .. "]", index, errors, true)
+                    if type(card) == "table" and type(card.cardId) == "string" then
+                        if seen[card.cardId] then
+                            addError(errors, "duplicate_deck_card", "$.deck.items[" .. index .. "].cardId", "덱 카드가 중복 집계되었습니다.")
+                        end
+                        seen[card.cardId] = true
+                    end
+                    if type(card) == "table"
+                        and isInteger(card.ownedCopies, 1)
+                        and isFinite(card.baseStealthCost) then
+                        copies = copies + card.ownedCopies
+                        totalCost = totalCost + card.baseStealthCost * card.ownedCopies
+                    end
+                end
+                if isInteger(view.deck.count, DECK_MIN, DECK_MAX) and copies ~= view.deck.count then
+                    addError(errors, "deck_copy_sum_mismatch", "$.deck.items", "덱 카드 장수 합계가 덱 수와 다릅니다.")
+                elseif copies > 0 and isFinite(view.deck.averageCost) then
+                    local expectedAverage = math.floor(totalCost / copies * 10 + 0.5) / 10
+                    if view.deck.averageCost ~= expectedAverage then
+                        addError(errors, "deck_average_cost_mismatch", "$.deck.averageCost", "덱 평균 은폐 비용이 카드 구성과 다릅니다.")
+                    end
+                end
             end
         end
 
@@ -1112,10 +1207,7 @@
             phase = runState.phase,
             sessionIndex = runState.sessionNumber,
             stats = statsCopy,
-            deck = {
-                count = #runState.playerCardIds,
-                limit = DECK_MAX,
-            },
+            deck = buildDeckView(runState, staticData, errors),
             result = resultView,
         }
         if runState.phase == "reward" then

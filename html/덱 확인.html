@@ -1,3 +1,12 @@
+{{settempvar::current_run_view::{{getvar::runProgressionView}}}}
+{{settempvar::current_setup_view::{{getvar::gameSetupView}}}}
+{{settempvar::current_run_deck::{{dictelement::{{tempvar::current_run_view}}::deck}}}}
+{{settempvar::current_setup_deck::{{dictelement::{{tempvar::current_setup_view}}::deck}}}}
+{{settempvar::current_deck::{{tempvar::current_setup_deck}}}}
+{{settempvar::current_deck_ready::false}}
+{{#when::keep::{{dictelement::{{tempvar::current_run_view}}::kind}}::is::runProgressionView}}{{settempvar::current_deck::{{tempvar::current_run_deck}}}}{{settempvar::current_deck_ready::true}}{{/when}}
+{{#when::keep::{{dictelement::{{tempvar::current_run_view}}::kind}}::isnot::runProgressionView}}{{#when::keep::{{dictelement::{{tempvar::current_setup_view}}::kind}}::is::gameSetupView}}{{settempvar::current_deck_ready::true}}{{/when}}{{/when}}
+
 <!-- popup -->
 <div class="bg-orb orb-1"></div>
 <div class="bg-orb orb-2"></div>
@@ -8,7 +17,7 @@
 <div class="popup-header">
 <div class="popup-heading">
 <div class="popup-title">덱 확인</div>
-<div class="popup-subtitle">현재 보유한 카드와 덱 구성을 확인합니다.</div>
+<div class="popup-subtitle">현재 런에서 보유한 카드 구성을 확인합니다.</div>
 </div>
 <button class="close-btn" aria-label="닫기" risu-btn="popupManage|close">
 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -19,46 +28,43 @@
 </div>
 
 <div class="deck-content">
-<section class="deck-perks" aria-label="장착 퍽">
+<section class="deck-perks" aria-label="보유 퍽, 기능 준비 중">
 <div class="perks-top">
-<span class="overview-label">Active perks</span>
-<span class="perks-count">2 / 3</span>
+<span class="overview-label">Owned perks</span>
+<span class="perks-count">기능 준비 중</span>
 </div>
 <div class="perk-grid">
-<div class="perk-slot">
-<div class="perk-icon" aria-hidden="true">◌</div>
-<div class="perk-info"><div class="perk-name">낮은 존재감</div><div class="perk-desc">세션 시작 은폐 +3</div></div>
-</div>
-<div class="perk-slot">
-<div class="perk-icon" aria-hidden="true">⇣</div>
-<div class="perk-info"><div class="perk-name">혼잡 적응</div><div class="perk-desc">비용 증가 1 상쇄</div></div>
-</div>
-<div class="perk-slot is-empty">
-<div class="perk-icon" aria-hidden="true">＋</div>
-<div class="perk-info"><div class="perk-name">빈 슬롯</div><div class="perk-desc">새로운 퍽을 장착할 수 있습니다.</div></div>
-</div>
+<div class="perk-slot is-empty"><div class="perk-icon" aria-hidden="true">◇</div><div class="perk-info"><div class="perk-name">보유 퍽</div><div class="perk-desc">퍽 데이터 연동 예정</div></div></div>
+<div class="perk-slot is-empty"><div class="perk-icon" aria-hidden="true">◇</div><div class="perk-info"><div class="perk-name">보유 퍽</div><div class="perk-desc">퍽 데이터 연동 예정</div></div></div>
+<div class="perk-slot is-empty"><div class="perk-icon" aria-hidden="true">◇</div><div class="perk-info"><div class="perk-name">보유 퍽</div><div class="perk-desc">퍽 데이터 연동 예정</div></div></div>
 </div>
 </section>
 
+{{#when::keep::{{dictelement::{{tempvar::current_run_view}}::kind}}::is::runProgressionView}}
 <div class="deck-overview">
 <div class="deck-capacity">
-<div class="capacity-top">
-<span class="overview-label">Deck capacity</span>
-<strong class="capacity-count">10 <span>/ 20장</span></strong>
-</div>
-<div class="capacity-bar" aria-label="덱 용량 20장 중 10장"></div>
+<div class="capacity-top"><span class="overview-label">Deck capacity</span><strong class="capacity-count">{{dictelement::{{tempvar::current_deck}}::count}} <span>/ {{dictelement::{{tempvar::current_deck}}::limit}}장</span></strong></div>
+<progress class="capacity-bar" max="{{dictelement::{{tempvar::current_deck}}::limit}}" value="{{dictelement::{{tempvar::current_deck}}::count}}" aria-label="현재 덱 카드 수"></progress>
 </div>
 <div class="deck-breakdown">
-<div class="breakdown-top">
-<span class="overview-label">은폐 비용 분포</span>
-<span class="breakdown-value">평균 비용 0.6</span>
-</div>
-<div class="breakdown-bar" aria-hidden="true">
-<span class="bar-cost-zero"></span><span class="bar-cost-three"></span>
+<div class="breakdown-top"><span class="overview-label">은폐 비용</span><span class="breakdown-value">평균 {{dictelement::{{tempvar::current_deck}}::averageCost}}</span></div>
+<div class="deck-summary-note">카드는 기본 은폐 비용 순서로 표시됩니다.</div>
 </div>
 </div>
-</div>
+{{/when}}
 
+{{#when::keep::{{dictelement::{{tempvar::current_run_view}}::kind}}::isnot::runProgressionView}}
+{{#when::keep::{{dictelement::{{tempvar::current_setup_view}}::kind}}::is::gameSetupView}}
+<div class="deck-overview deck-overview--setup">
+<div class="deck-capacity">
+<div class="capacity-top"><span class="overview-label">Initial deck</span><strong class="capacity-count">{{dictelement::{{tempvar::current_deck}}::count}} <span>/ {{dictelement::{{tempvar::current_deck}}::limit}}장</span></strong></div>
+<progress class="capacity-bar" max="{{dictelement::{{tempvar::current_deck}}::limit}}" value="{{dictelement::{{tempvar::current_deck}}::count}}" aria-label="현재 선택한 초기 덱 카드 수"></progress>
+</div>
+</div>
+{{/when}}
+{{/when}}
+
+{{#when::keep::{{tempvar::current_deck_ready}}::is::true}}
 <input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-all" checked>
 <input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-cost-0">
 <input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-cost-1">
@@ -66,93 +72,49 @@
 <input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-cost-3">
 <input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-cost-4">
 <input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-cost-5">
-<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-cost-over">
 
 <div class="deck-toolbar">
 <div class="deck-filters" aria-label="은폐 비용 필터">
-<label class="filter-chip" for="deck-filter-all">전체</label>
-<label class="filter-chip" for="deck-filter-cost-0">0</label>
-<label class="filter-chip" for="deck-filter-cost-1">1</label>
-<label class="filter-chip" for="deck-filter-cost-2">2</label>
-<label class="filter-chip" for="deck-filter-cost-3">3</label>
-<label class="filter-chip" for="deck-filter-cost-4">4</label>
-<label class="filter-chip" for="deck-filter-cost-5">5</label>
-<label class="filter-chip" for="deck-filter-cost-over">5+</label>
+<label class="filter-chip" for="deck-filter-all">전체</label><label class="filter-chip" for="deck-filter-cost-0">0</label><label class="filter-chip" for="deck-filter-cost-1">1</label><label class="filter-chip" for="deck-filter-cost-2">2</label><label class="filter-chip" for="deck-filter-cost-3">3</label><label class="filter-chip" for="deck-filter-cost-4">4</label><label class="filter-chip" for="deck-filter-cost-5">5</label>
 </div>
-<div class="deck-sort">◐ 기본 은폐 비용</div>
+<div class="deck-sort">카드를 눌러 상세 정보 확인</div>
 </div>
 
 <div class="deck-grid">
-<article class="deck-card card-approach cost-0">
-<div class="card-top">
-<div class="card-cost" aria-label="은폐 비용 0"><span class="cost-icon" aria-hidden="true">◐</span><strong>0</strong></div>
-<span class="card-owned" aria-label="2장 보유">×2</span>
+{{#each::keep {{dictelement::{{tempvar::current_deck}}::items}} as current_deck_card}}
+{{settempvar::current_deck_card_type::{{dictelement::{{slot::current_deck_card}}::cardType}}}}
+<details class="deck-card card-{{dictelement::{{slot::current_deck_card}}::draftStyle}} cost-{{dictelement::{{slot::current_deck_card}}::baseStealthCost}}">
+<summary class="deck-card-summary" aria-label="{{dictelement::{{slot::current_deck_card}}::name}} 상세 정보 보기">
+<span class="card-top">
+<span class="card-name">{{dictelement::{{slot::current_deck_card}}::name}}</span>
+<span class="card-owned" aria-label="{{dictelement::{{slot::current_deck_card}}::ownedCopies}}장 보유">×{{dictelement::{{slot::current_deck_card}}::ownedCopies}}</span>
+</span>
+<span class="deck-card-tags" aria-label="카드 태그">
+<span class="deck-tag deck-tag--type">{{dictelement::{{tempvar::current_deck_card_type}}::label}}</span>
+{{#each::keep {{dictelement::{{slot::current_deck_card}}::roles}} as current_deck_role}}<span class="deck-tag">{{dictelement::{{slot::current_deck_role}}::label}}</span>{{/each}}
+{{#each::keep {{dictelement::{{slot::current_deck_card}}::mechanisms}} as current_deck_mechanism}}<span class="deck-tag deck-tag--mechanism">{{dictelement::{{slot::current_deck_mechanism}}::label}}</span>{{/each}}
+</span>
+<span class="deck-card-stats">
+<span class="deck-stat deck-stat--cost" aria-label="기본 은폐 비용 {{dictelement::{{slot::current_deck_card}}::baseStealthCost}}"><strong>{{dictelement::{{slot::current_deck_card}}::baseStealthCost}}</strong><small>비용</small></span>
+<span class="deck-stat deck-stat--damage" aria-label="기본 저항 피해 {{dictelement::{{slot::current_deck_card}}::baseResistanceDamage}}"><strong>{{dictelement::{{slot::current_deck_card}}::baseResistanceDamage}}</strong><small>피해</small></span>
+</span>
+<span class="deck-expand-hint">상세 정보 <span aria-hidden="true">⌄</span></span>
+</summary>
+<div class="deck-card-detail">
+<p class="deck-description">{{#each::keep {{dictelement::{{slot::current_deck_card}}::descriptionSegments}} as current_deck_description_segment}}{{#when::keep::{{dictelement::{{slot::current_deck_description_segment}}::kind}}::is::text}}{{dictelement::{{slot::current_deck_description_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::current_deck_description_segment}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::current_deck_description_segment}}::label}}</span>{{/when}}{{/each}}</p>
+<div class="card-rule">
+{{#each::keep {{dictelement::{{slot::current_deck_card}}::ruleLines}} as current_deck_rule}}<div>{{#each::keep {{dictelement::{{slot::current_deck_rule}}::segments}} as current_deck_segment}}{{#when::keep::{{dictelement::{{slot::current_deck_segment}}::kind}}::is::text}}{{dictelement::{{slot::current_deck_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::current_deck_segment}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::current_deck_segment}}::label}}</span>{{/when}}{{/each}}</div>{{/each}}
 </div>
-<div class="card-name">은밀한 접근</div>
-<div class="card-rule">다음 턴이 무시 무드로 시작되면 그 턴 동안 무드가 변경되지 않습니다.</div>
-<div class="card-bottom">
-<div class="resistance-damage is-zero" aria-label="저항 피해 0">
-<span class="damage-label">저항 피해</span><span class="damage-value"><span class="damage-icon" aria-hidden="true">🛡</span><strong>0</strong></span>
 </div>
+</details>
+{{/each}}
+{{#when::keep::{{dictelement::{{tempvar::current_deck}}::count}}::is::0}}<div class="deck-empty">아직 선택한 카드가 없습니다.</div>{{/when}}
 </div>
-</article>
+{{/when}}
 
-<article class="deck-card card-touch cost-0">
-<div class="card-top">
-<div class="card-cost" aria-label="은폐 비용 0"><span class="cost-icon" aria-hidden="true">◐</span><strong>0</strong></div>
-<span class="card-owned" aria-label="2장 보유">×2</span>
-</div>
-<div class="card-name">우연한 스침</div>
-<div class="card-rule">의심 무드에서 사용하면 은폐를 3 잃습니다.</div>
-<div class="card-bottom">
-<div class="resistance-damage" aria-label="저항 피해 3">
-<span class="damage-label">저항 피해</span><span class="damage-value"><span class="damage-icon" aria-hidden="true">🛡</span><strong>3</strong></span>
-</div>
-</div>
-</article>
+{{#when::keep::{{tempvar::current_deck_ready}}::isnot::true}}<div class="deck-empty">현재 확인할 수 있는 덱이 없습니다.</div>{{/when}}
 
-<article class="deck-card card-deceive cost-0">
-<div class="card-top">
-<div class="card-cost" aria-label="은폐 비용 0"><span class="cost-icon" aria-hidden="true">◐</span><strong>0</strong></div>
-<span class="card-owned" aria-label="2장 보유">×2</span>
-</div>
-<div class="card-name">능청떨기</div>
-<div class="card-rule">은폐를 3 회복합니다. 거절 무드라면 대신 1 회복합니다.</div>
-<div class="card-bottom">
-<div class="resistance-damage is-zero" aria-label="저항 피해 0">
-<span class="damage-label">저항 피해</span><span class="damage-value"><span class="damage-icon" aria-hidden="true">🛡</span><strong>0</strong></span>
-</div>
-</div>
-</article>
-
-<article class="deck-card card-observe cost-0">
-<div class="card-top">
-<div class="card-cost" aria-label="은폐 비용 0"><span class="cost-icon" aria-hidden="true">◐</span><strong>0</strong></div>
-<span class="card-owned" aria-label="2장 보유">×2</span>
-</div>
-<div class="card-name">눈치보기</div>
-<div class="card-rule">카드를 1장 뽑고 숨겨진 계획이 있다면 그 계획을 공개합니다.</div>
-<div class="card-bottom">
-<div class="resistance-damage is-zero" aria-label="저항 피해 0">
-<span class="damage-label">저항 피해</span><span class="damage-value"><span class="damage-icon" aria-hidden="true">🛡</span><strong>0</strong></span>
-</div>
-</div>
-</article>
-
-<article class="deck-card card-threat cost-3">
-<div class="card-top">
-<div class="card-cost" aria-label="은폐 비용 3"><span class="cost-icon" aria-hidden="true">◐</span><strong>3</strong></div>
-<span class="card-owned" aria-label="2장 보유">×2</span>
-</div>
-<div class="card-name">제압</div>
-<div class="card-rule">저항이 20 이하라면 무드가 한 단계 상승합니다.</div>
-<div class="card-bottom">
-<div class="resistance-damage" aria-label="저항 피해 7">
-<span class="damage-label">저항 피해</span><span class="damage-value"><span class="damage-icon" aria-hidden="true">🛡</span><strong>7</strong></span>
-</div>
-</div>
-</article>
-</div>
+<button class="deck-save" type="button" disabled aria-disabled="true" title="향후 업데이트에서 지원됩니다.">덱을 텍스트로 저장 · 준비 중</button>
 </div>
 </div>
 </div>
