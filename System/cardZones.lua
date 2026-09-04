@@ -1180,25 +1180,29 @@
         normalizeAll(nextState)
         local slots = nextState[side].planSlots
         if #slots == 0 then return success(nextState, {}, {}) end
-        local slot = slots[1]
-        local affectedId = slot.cardInstanceId
-        if spec.remove == true then
-            discardPlanAt(nextState, side, 1)
-        else
-            if spec.remainingTurnsDelta ~= nil and slot.remainingTurns ~= nil then
-                slot.remainingTurns = slot.remainingTurns + spec.remainingTurnsDelta
-            end
-            if spec.remainingChargesDelta ~= nil and slot.remainingCharges ~= nil then
-                slot.remainingCharges = math.max(1, slot.remainingCharges + spec.remainingChargesDelta)
-            end
-            if slot.remainingTurns ~= nil and slot.remainingTurns <= 0 then
-                discardPlanAt(nextState, side, 1)
+        local affectedIds = {}
+        local lastIndex = spec.all == true and #slots or 1
+        for index = lastIndex, 1, -1 do
+            local slot = slots[index]
+            table.insert(affectedIds, 1, slot.cardInstanceId)
+            if spec.remove == true then
+                discardPlanAt(nextState, side, index)
+            else
+                if spec.remainingTurnsDelta ~= nil and slot.remainingTurns ~= nil then
+                    slot.remainingTurns = slot.remainingTurns + spec.remainingTurnsDelta
+                end
+                if spec.remainingChargesDelta ~= nil and slot.remainingCharges ~= nil then
+                    slot.remainingCharges = math.max(1, slot.remainingCharges + spec.remainingChargesDelta)
+                end
+                if slot.remainingTurns ~= nil and slot.remainingTurns <= 0 then
+                    discardPlanAt(nextState, side, index)
+                end
             end
         end
         normalizeAll(nextState)
         local outputErrors = validatePlanLinks(nextState, "$")
         if #outputErrors > 0 then return failure(outputErrors) end
-        return success(nextState, { affectedId }, {})
+        return success(nextState, affectedIds, {})
     end
 
     local function endTurnCleanup(state)

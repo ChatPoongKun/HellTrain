@@ -2546,19 +2546,22 @@
                             table.remove(expectedAfter, 1)
                             discarded = true
                         else
-                            local expectedSlot = expectedAfter[1]
-                            if operation.remainingTurnsDelta ~= nil and expectedSlot.remainingTurns ~= nil then
-                                expectedSlot.remainingTurns = expectedSlot.remainingTurns + operation.remainingTurnsDelta
-                            end
-                            if operation.remainingChargesDelta ~= nil and expectedSlot.remainingCharges ~= nil then
-                                expectedSlot.remainingCharges = math.max(
-                                    1,
-                                    expectedSlot.remainingCharges + operation.remainingChargesDelta
-                                )
-                            end
-                            if expectedSlot.remainingTurns ~= nil and expectedSlot.remainingTurns <= 0 then
-                                table.remove(expectedAfter, 1)
-                                discarded = true
+                            local lastIndex = operation.all == true and #expectedAfter or 1
+                            for index = lastIndex, 1, -1 do
+                                local expectedSlot = expectedAfter[index]
+                                if operation.remainingTurnsDelta ~= nil and expectedSlot.remainingTurns ~= nil then
+                                    expectedSlot.remainingTurns = expectedSlot.remainingTurns + operation.remainingTurnsDelta
+                                end
+                                if operation.remainingChargesDelta ~= nil and expectedSlot.remainingCharges ~= nil then
+                                    expectedSlot.remainingCharges = math.max(
+                                        1,
+                                        expectedSlot.remainingCharges + operation.remainingChargesDelta
+                                    )
+                                end
+                                if expectedSlot.remainingTurns ~= nil and expectedSlot.remainingTurns <= 0 then
+                                    table.remove(expectedAfter, index)
+                                    if index == 1 then discarded = true end
+                                end
                             end
                         end
                     end
