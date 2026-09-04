@@ -3,6 +3,7 @@
     local TOTAL_ROUNDS = 10
     local OFFER_SIZE = 3
     local CHARACTER_OFFER_SIZE = 3
+    local COPY_LIMIT = 2
 
     local function addError(errors, code, path, message)
         table.insert(errors, {
@@ -226,8 +227,8 @@
         return report, nil
     end
 
-    local function buildOfferCard(slot, cardId, ownedCopies, data, errors)
-        local path = "$.offer.cards[" .. slot .. "]"
+    local function buildOfferCard(slot, cardId, ownedCopies, data, errors, basePath)
+        local path = (basePath or "$.offer.cards") .. "[" .. slot .. "]"
         local card = data.cards[cardId]
         if type(card) ~= "table" or card.owner ~= "player" then
             addError(errors, "missing_player_card", path .. ".cardId", "제안된 플레이어 카드를 찾을 수 없습니다: " .. tostring(cardId))
@@ -503,7 +504,15 @@
         end
     end
 
-    local function validateOfferCard(card, path, expectedSlot, deckCopies, seenCards, errors)
+    local function validateOfferCard(
+        card,
+        path,
+        expectedSlot,
+        deckCopies,
+        seenCards,
+        errors,
+        allowFullCopies
+    )
         if type(card) ~= "table" then
             addError(errors, "invalid_offer_card", path, "제안 카드가 테이블이 아닙니다.")
             return
@@ -524,6 +533,7 @@
             baseStealthCost = true,
             baseResistanceDamage = true,
             ownedCopies = true,
+            copies = true,
         }, path, errors)
         if card.slot ~= expectedSlot then
             addError(errors, "invalid_offer_slot", path .. ".slot", "제안 카드 슬롯은 배열 순서와 같아야 합니다.")
@@ -571,10 +581,18 @@
         if not isFinite(card.baseResistanceDamage) or card.baseResistanceDamage < 0 then
             addError(errors, "invalid_resistance_damage", path .. ".baseResistanceDamage", "기본 저항 피해는 0 이상의 유한한 숫자여야 합니다.")
         end
-        if not isInteger(card.ownedCopies, 0, expectedMaxCopies - 1) then
-            addError(errors, "invalid_owned_copies", path .. ".ownedCopies", "제안 카드 보유 수가 카드별 제한 범위를 벗어났습니다.")
+        local ownedMaximum = allowFullCopies and expectedMaxCopies or expectedMaxCopies - 1
+        if not isInteger(card.ownedCopies, allowFullCopies and 1 or 0, ownedMaximum) then
+            addError(errors, "invalid_owned_copies", path .. ".ownedCopies", "카드 보유 수가 카드별 제한 범위를 벗어났습니다.")
         elseif isAsciiId(card.cardId) and card.ownedCopies ~= (deckCopies[card.cardId] or 0) then
-            addError(errors, "owned_copies_mismatch", path .. ".ownedCopies", "제안 카드 보유 수가 덱 요약과 다릅니다.")
+            addError(errors, "owned_copies_mismatch", path .. ".ownedCopies", "카드 보유 수가 덱 요약과 다릅니다.")
+        end
+        if allowFullCopies then
+            if card.copies ~= card.ownedCopies then
+                addError(errors, "deck_copies_mismatch", path .. ".copies", "덱 표시 장수가 카드 보유 수와 다릅니다.")
+            end
+        elseif card.copies ~= nil then
+            addError(errors, "unexpected_offer_copies", path .. ".copies", "제안 카드에는 덱 표시 장수를 둘 수 없습니다.")
         end
     end
 
@@ -766,6 +784,7 @@
         end
 
         local deckCopies = {}
+        local seenDeckCards = {}
         local deckSum = 0
         if type(view.deck) ~= "table" then
             addError(errors, "invalid_deck", "$.deck", "deck이 테이블이 아닙니다.")
@@ -784,25 +803,20 @@
                 for index = 1, itemCount do
                     local item = view.deck.items[index]
                     local path = "$.deck.items[" .. index .. "]"
-                    if type(item) ~= "table" then
-                        addError(errors, "invalid_deck_item", path, "덱 요약 항목이 테이블이 아닙니다.")
-                    else
-                        checkAllowedKeys(item, { cardId = true, name = true, copies = true }, path, errors)
-                        if not isAsciiId(item.cardId) then
-                            addError(errors, "invalid_card_id", path .. ".cardId", "카드 ID가 올바르지 않습니다.")
-                        elseif deckCopies[item.cardId] ~= nil then
-                            addError(errors, "duplicate_deck_item", path .. ".cardId", "덱 요약에 같은 카드가 중복되었습니다.")
-                        else
-                            deckCopies[item.cardId] = item.copies
-                        end
-                        if type(item.name) ~= "string" or item.name == "" then
-                            addError(errors, "invalid_card_name", path .. ".name", "카드 이름이 필요합니다.")
-                        end
-                        if not isInteger(item.copies, 1, COPY_LIMIT) then
-                            addError(errors, "invalid_card_copies", path .. ".copies", "같은 카드는 1장 또는 2장이어야 합니다.")
-                        else
-                            deckSum = deckSum + item.copies
-                        end
+                    if type(item) == "table" and isAsciiId(item.cardId) then
+                        deckCopies[item.cardId] = item.copies
+                    end
+                    validateOfferCard(
+                        item,
+                        path,
+                        index,
+                        deckCopies,
+                        seenDeckCards,
+                        errors,
+                        true
+                    )
+                    if type(item) == "table" and isInteger(item.copies, 1, COPY_LIMIT) then
+                        deckSum = deckSum + item.copies
                     end
                 end
             end
@@ -949,11 +963,18 @@
             elseif card.id ~= cardId then
                 addError(errors, "card_identity_mismatch", "$.state.selectedCardIds[" .. index .. "]", "선택 카드의 DB 키와 내부 ID가 일치하지 않습니다.")
             else
-                table.insert(deckItems, {
-                    cardId = card.id,
-                    name = card.name,
-                    copies = copies[cardId],
-                })
+                local deckCard = buildOfferCard(
+                    index,
+                    cardId,
+                    copies[cardId],
+                    data,
+                    errors,
+                    "$.deck.items"
+                )
+                if deckCard then
+                    deckCard.copies = deckCard.ownedCopies
+                    table.insert(deckItems, deckCard)
+                end
             end
         end
 
