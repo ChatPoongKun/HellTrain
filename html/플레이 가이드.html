@@ -6,9 +6,12 @@
 <div class="popup-backdrop" aria-hidden="true" risu-btn="popupManage|close"></div>
 <div class="popup-container">
 <div class="popup-header">
+<div class="popup-heading">
 <div class="popup-title">플레이 가이드</div>
+<div class="popup-subtitle">규칙 · 전투 시스템 · 카드 효과 빠른 참조</div>
+</div>
 <button class="close-btn" aria-label="닫기" risu-btn="popupManage|close">
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 <line x1="18" y1="6" x2="6" y2="18"></line>
 <line x1="6" y1="6" x2="18" y2="18"></line>
 </svg>
@@ -19,14 +22,27 @@
 <div class="guide-intro">
 <span class="guide-eyebrow">INFINITE HELLTRAIN · FIELD MANUAL</span>
 <strong>상대의 저항을 무너뜨리고<br>목적지에 닿기 전에 함락시키세요.</strong>
-<p>처음이라면 1번부터 읽고, 플레이 중에는 필요한 항목만 펼쳐 확인하세요.</p>
+<p>처음이라면 1번부터 읽고, 플레이 중에는 필요한 항목을 터치해 확인하세요.</p>
 </div>
 
-<details class="guide-section" open>
+<div class="guide-nav" aria-label="빠른 바로가기">
+<a class="guide-nav-chip" href="#sec-1">1. 덱 구성</a>
+<a class="guide-nav-chip" href="#sec-2">2. 승패 조건</a>
+<a class="guide-nav-chip" href="#sec-3">3. 턴 흐름</a>
+<a class="guide-nav-chip" href="#sec-4">4. 카드 규칙</a>
+<a class="guide-nav-chip" href="#sec-5">5. 비용/역할</a>
+<a class="guide-nav-chip" href="#sec-6">6. 무드 시스템</a>
+<a class="guide-nav-chip" href="#sec-7">7. 상대 계획</a>
+<a class="guide-nav-chip" href="#sec-8">8. 보상/진행</a>
+</div>
+
+<details class="guide-section" id="sec-1" open>
 <summary>
 <span class="guide-number">1</span>
 <span><strong>빠른 시작과 덱 구성</strong><small>드래프트부터 첫 전투까지</small></span>
-<span class="guide-chevron" aria-hidden="true">⌄</span>
+<span class="guide-chevron" aria-hidden="true">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+</span>
 </summary>
 <div class="guide-section-body">
 <ol class="guide-steps">
@@ -38,11 +54,13 @@
 </div>
 </details>
 
-<details class="guide-section">
+<details class="guide-section" id="sec-2">
 <summary>
 <span class="guide-number">2</span>
 <span><strong>승리와 패배</strong><small>저항, 은폐, 목적지</small></span>
-<span class="guide-chevron" aria-hidden="true">⌄</span>
+<span class="guide-chevron" aria-hidden="true">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+</span>
 </summary>
 <div class="guide-section-body">
 <div class="guide-outcomes">
@@ -53,11 +71,13 @@
 </div>
 </details>
 
-<details class="guide-section">
+<details class="guide-section" id="sec-3">
 <summary>
 <span class="guide-number">3</span>
 <span><strong>한 턴의 흐름</strong><small>드로우부터 무드 판정까지</small></span>
-<span class="guide-chevron" aria-hidden="true">⌄</span>
+<span class="guide-chevron" aria-hidden="true">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+</span>
 </summary>
 <div class="guide-section-body">
 <ol class="guide-flow">
@@ -70,11 +90,13 @@
 </div>
 </details>
 
-<details class="guide-section">
+<details class="guide-section" id="sec-4">
 <summary>
 <span class="guide-number">4</span>
 <span><strong>카드 선택 규칙</strong><small>행동, 연계, 계획</small></span>
-<span class="guide-chevron" aria-hidden="true">⌄</span>
+<span class="guide-chevron" aria-hidden="true">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+</span>
 </summary>
 <div class="guide-section-body">
 <div class="guide-types">
@@ -91,11 +113,13 @@
 </div>
 </details>
 
-<details class="guide-section">
+<details class="guide-section" id="sec-5">
 <summary>
 <span class="guide-number">5</span>
 <span><strong>비용, 역할과 특수효과</strong><small>카드에서 무엇을 읽어야 하나요?</small></span>
-<span class="guide-chevron" aria-hidden="true">⌄</span>
+<span class="guide-chevron" aria-hidden="true">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+</span>
 </summary>
 <div class="guide-section-body">
 <div class="guide-note is-warning"><strong>은폐 비용</strong><span>은폐는 30으로 시작합니다. 카드는 비용을 먼저 지불하며, 지불 후 은폐가 최소 1 남아야 사용할 수 있습니다.</span></div>
@@ -113,11 +137,13 @@
 </div>
 </details>
 
-<details class="guide-section">
+<details class="guide-section" id="sec-6">
 <summary>
 <span class="guide-number">6</span>
 <span><strong>무드와 은폐 변화</strong><small>토큰 3개가 판세를 바꿉니다</small></span>
-<span class="guide-chevron" aria-hidden="true">⌄</span>
+<span class="guide-chevron" aria-hidden="true">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+</span>
 </summary>
 <div class="guide-section-body">
 <p class="guide-copy">토큰이 3개 이상인 무드가 단독 최다가 되면 턴 종료 시 그 무드로 변경됩니다. 최다 무드가 동률이면 각 토큰을 1개씩 줄이고 무드는 유지됩니다.</p>
@@ -131,11 +157,13 @@
 </div>
 </details>
 
-<details class="guide-section">
+<details class="guide-section" id="sec-7">
 <summary>
 <span class="guide-number">7</span>
 <span><strong>상대 행동과 계획</strong><small>예고를 읽고 숨은 계획에 대비하세요</small></span>
-<span class="guide-chevron" aria-hidden="true">⌄</span>
+<span class="guide-chevron" aria-hidden="true">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+</span>
 </summary>
 <div class="guide-section-body">
 <div class="guide-role-grid is-enemy">
@@ -151,11 +179,13 @@
 </div>
 </details>
 
-<details class="guide-section">
+<details class="guide-section" id="sec-8">
 <summary>
 <span class="guide-number">8</span>
 <span><strong>전투 이후</strong><small>보상과 다음 세션</small></span>
-<span class="guide-chevron" aria-hidden="true">⌄</span>
+<span class="guide-chevron" aria-hidden="true">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+</span>
 </summary>
 <div class="guide-section-body">
 <ul class="guide-list">
