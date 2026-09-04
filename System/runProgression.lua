@@ -3,7 +3,7 @@
     local KIND = "runProgressionV1"
     local MIN_DECK_SIZE = 10
     local MAX_DECK_SIZE = 20
-    local RARITY_WEIGHTS = { common = 40, rare = 5, legendary = 1 }
+    local RARITY_WEIGHTS = { common = 80, rare = 10, legendary = 1 }
     local RARITY_ORDER = { "common", "rare", "legendary" }
     local REWARD_OFFER_SIZE = 3
     local CHARACTER_OFFER_SIZE = 3

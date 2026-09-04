@@ -4,7 +4,7 @@
     local TOTAL_DRAFTS = 10
     local OFFER_SIZE = 3
     local MINIMUM_POOL_SIZE = 7
-    local RARITY_WEIGHTS = { common = 40, rare = 5, legendary = 1 }
+    local RARITY_WEIGHTS = { common = 80, rare = 10, legendary = 1 }
     local RARITY_ORDER = { "common", "rare", "legendary" }
     local CHARACTER_OFFER_SIZE = 3
     local MINIMUM_CHARACTER_POOL_SIZE = 3
