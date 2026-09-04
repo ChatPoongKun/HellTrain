@@ -573,12 +573,19 @@
             local side = operation.side or "player"
             local slot = type(working.state[side]) == "table" and working.state[side].planSlots[1] or nil
             if slot == nil then return true, nil end
-            local planCard = staticData.cards[slot.cardId]
             if operation.kind == "activate" then
-                local planData = type(planCard.mechanismData) == "table" and planCard.mechanismData.plan or nil
-                if type(planData) ~= "table" or type(planData.resolve) ~= "function" then return true, nil end
-                return evaluatePlanCallback(planCard, slot, planData, phase, resolutionId, "manual_plan_activation")
+                local slots = operation.all == true and working.state[side].planSlots or { slot }
+                for _, targetSlot in ipairs(slots) do
+                    local targetCard = staticData.cards[targetSlot.cardId]
+                    local planData = type(targetCard.mechanismData) == "table" and targetCard.mechanismData.plan or nil
+                    if type(planData) == "table" and type(planData.resolve) == "function" then
+                        local applied, applyErrors = evaluatePlanCallback(targetCard, targetSlot, planData, phase, resolutionId, "manual_plan_activation")
+                        if not applied then return false, applyErrors end
+                    end
+                end
+                return true, nil
             end
+            local planCard = staticData.cards[slot.cardId]
             if operation.kind == "remove"
                 or (operation.remainingTurnsDelta ~= nil
                     and slot.remainingTurns ~= nil
@@ -596,6 +603,7 @@
             if beforeSlotsError then return false, { beforeSlotsError } end
             local report, errors = callModule("cardZones", "modifyOldestPlan", working.state, side, {
                 remove = operation.kind == "remove",
+                all = operation.all,
                 remainingTurnsDelta = operation.remainingTurnsDelta,
                 remainingChargesDelta = operation.remainingChargesDelta,
             })
