@@ -1,12 +1,7 @@
 {{settempvar::current_run_view::{{getvar::runProgressionView}}}}
 {{settempvar::current_setup_view::{{getvar::gameSetupView}}}}
-{{settempvar::current_run_deck::{{dictelement::{{tempvar::current_run_view}}::deck}}}}
-{{settempvar::current_setup_deck::{{dictelement::{{tempvar::current_setup_view}}::deck}}}}
-{{settempvar::current_deck::{{tempvar::current_setup_deck}}}}
-{{settempvar::current_deck_ready::false}}
-{{#when::keep::{{dictelement::{{tempvar::current_run_view}}::kind}}::is::runProgressionView}}{{settempvar::current_deck::{{tempvar::current_run_deck}}}}{{settempvar::current_deck_ready::true}}{{/when}}
-{{#when::keep::{{dictelement::{{tempvar::current_run_view}}::kind}}::isnot::runProgressionView}}{{#when::keep::{{dictelement::{{tempvar::current_setup_view}}::kind}}::is::gameSetupView}}{{settempvar::current_deck_ready::true}}{{/when}}{{/when}}
-
+{{settempvar::current_deck::{{#when::keep::{{dictelement::{{tempvar::current_run_view}}::kind}}::is::runProgressionView}}{{dictelement::{{tempvar::current_run_view}}::deck}}{{:else}}{{dictelement::{{tempvar::current_setup_view}}::deck}}{{/when}}}}
+{{settempvar::current_deck_ready::{{#when::keep::{{dictelement::{{tempvar::current_deck}}::count}}::>=::0}}{{#when::keep::{{dictelement::{{tempvar::current_deck}}::items}}::isnot::null}}true{{/when}}{{/when}}}}
 <!-- popup -->
 <div class="bg-orb orb-1"></div>
 <div class="bg-orb orb-2"></div>
@@ -40,42 +35,30 @@
 </div>
 </section>
 
-{{#when::keep::{{dictelement::{{tempvar::current_run_view}}::kind}}::is::runProgressionView}}
+{{#when::keep::{{tempvar::current_deck_ready}}::is::true}}
 <div class="deck-overview">
 <div class="deck-capacity">
-<div class="capacity-top"><span class="overview-label">Deck capacity</span><strong class="capacity-count">{{dictelement::{{tempvar::current_deck}}::count}} <span>/ {{dictelement::{{tempvar::current_deck}}::limit}}장</span></strong></div>
+<div class="capacity-top"><span class="overview-label">보유 카드</span><strong class="capacity-count">{{dictelement::{{tempvar::current_deck}}::count}} <span>/ {{dictelement::{{tempvar::current_deck}}::limit}}장</span></strong></div>
 <progress class="capacity-bar" max="{{dictelement::{{tempvar::current_deck}}::limit}}" value="{{dictelement::{{tempvar::current_deck}}::count}}" aria-label="현재 덱 카드 수"></progress>
 </div>
+{{#when::keep::{{dictelement::{{tempvar::current_run_view}}::kind}}::is::runProgressionView}}
 <div class="deck-breakdown">
 <div class="breakdown-top"><span class="overview-label">은폐 비용</span><span class="breakdown-value">평균 {{dictelement::{{tempvar::current_deck}}::averageCost}}</span></div>
 <div class="deck-summary-note">카드는 기본 은폐 비용 순서로 표시됩니다.</div>
 </div>
+{{/when}}
 </div>
 {{/when}}
-
-{{#when::keep::{{dictelement::{{tempvar::current_run_view}}::kind}}::isnot::runProgressionView}}
-{{#when::keep::{{dictelement::{{tempvar::current_setup_view}}::kind}}::is::gameSetupView}}
-<div class="deck-overview deck-overview--setup">
-<div class="deck-capacity">
-<div class="capacity-top"><span class="overview-label">Initial deck</span><strong class="capacity-count">{{dictelement::{{tempvar::current_deck}}::count}} <span>/ {{dictelement::{{tempvar::current_deck}}::limit}}장</span></strong></div>
-<progress class="capacity-bar" max="{{dictelement::{{tempvar::current_deck}}::limit}}" value="{{dictelement::{{tempvar::current_deck}}::count}}" aria-label="현재 선택한 초기 덱 카드 수"></progress>
-</div>
-</div>
-{{/when}}
-{{/when}}
-
 {{#when::keep::{{tempvar::current_deck_ready}}::is::true}}
 <input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-all" checked>
-<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-cost-0">
-<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-cost-1">
-<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-cost-2">
-<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-cost-3">
-<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-cost-4">
-<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-cost-5">
+<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-style-predator">
+<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-style-harmonizer">
+<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-style-glutton">
+<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-style-deceiver">
 
 <div class="deck-toolbar">
-<div class="deck-filters" aria-label="은폐 비용 필터">
-<label class="filter-chip" for="deck-filter-all">전체</label><label class="filter-chip" for="deck-filter-cost-0">0</label><label class="filter-chip" for="deck-filter-cost-1">1</label><label class="filter-chip" for="deck-filter-cost-2">2</label><label class="filter-chip" for="deck-filter-cost-3">3</label><label class="filter-chip" for="deck-filter-cost-4">4</label><label class="filter-chip" for="deck-filter-cost-5">5</label>
+<div class="deck-filters" aria-label="스타일 필터">
+<label class="filter-chip" for="deck-filter-all">전체</label><label class="filter-chip" for="deck-filter-style-predator">포식</label><label class="filter-chip" for="deck-filter-style-harmonizer">조율</label><label class="filter-chip" for="deck-filter-style-glutton">탐식</label><label class="filter-chip" for="deck-filter-style-deceiver">기만</label>
 </div>
 <div class="deck-sort">카드를 눌러 상세 정보 확인</div>
 </div>
@@ -83,11 +66,15 @@
 <div class="deck-grid">
 {{#each::keep {{dictelement::{{tempvar::current_deck}}::items}} as current_deck_card}}
 {{settempvar::current_deck_card_type::{{dictelement::{{slot::current_deck_card}}::cardType}}}}
-<details class="deck-card card-{{dictelement::{{slot::current_deck_card}}::draftStyle}} cost-{{dictelement::{{slot::current_deck_card}}::baseStealthCost}}">
+<details class="deck-card card-{{dictelement::{{slot::current_deck_card}}::draftStyle}} rarity-{{dictelement::{{slot::current_deck_card}}::rarity}}">
 <summary class="deck-card-summary" aria-label="{{dictelement::{{slot::current_deck_card}}::name}} 상세 정보 보기">
+{{#when::keep::{{dictelement::{{slot::current_deck_card}}::draftStyle}}::is::predator}}<img class="deck-style-icon" src="{{raw::포식}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::current_deck_card}}::draftStyle}}::is::harmonizer}}<img class="deck-style-icon" src="{{raw::조율}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::current_deck_card}}::draftStyle}}::is::glutton}}<img class="deck-style-icon" src="{{raw::탐식}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::current_deck_card}}::draftStyle}}::is::deceiver}}<img class="deck-style-icon" src="{{raw::기만}}" alt="" aria-hidden="true">{{/when}}
 <span class="card-top">
-<span class="card-name">{{dictelement::{{slot::current_deck_card}}::name}}</span>
 <span class="card-owned" aria-label="{{dictelement::{{slot::current_deck_card}}::ownedCopies}}장 보유">×{{dictelement::{{slot::current_deck_card}}::ownedCopies}}</span>
+<span class="card-name">{{dictelement::{{slot::current_deck_card}}::name}}</span>
 </span>
 <span class="deck-card-tags" aria-label="카드 태그">
 <span class="deck-tag deck-tag--type">{{dictelement::{{tempvar::current_deck_card_type}}::label}}</span>
