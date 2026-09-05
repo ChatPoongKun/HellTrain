@@ -3200,13 +3200,10 @@ font-size: 0.68rem;
 }
 
 .popup-shell--deck #deck-filter-all:checked ~ .deck-toolbar label[for="deck-filter-all"],
-.popup-shell--deck #deck-filter-cost-0:checked ~ .deck-toolbar label[for="deck-filter-cost-0"],
-.popup-shell--deck #deck-filter-cost-1:checked ~ .deck-toolbar label[for="deck-filter-cost-1"],
-.popup-shell--deck #deck-filter-cost-2:checked ~ .deck-toolbar label[for="deck-filter-cost-2"],
-.popup-shell--deck #deck-filter-cost-3:checked ~ .deck-toolbar label[for="deck-filter-cost-3"],
-.popup-shell--deck #deck-filter-cost-4:checked ~ .deck-toolbar label[for="deck-filter-cost-4"],
-.popup-shell--deck #deck-filter-cost-5:checked ~ .deck-toolbar label[for="deck-filter-cost-5"],
-.popup-shell--deck #deck-filter-cost-over:checked ~ .deck-toolbar label[for="deck-filter-cost-over"] {
+.popup-shell--deck #deck-filter-style-predator:checked ~ .deck-toolbar label[for="deck-filter-style-predator"],
+.popup-shell--deck #deck-filter-style-harmonizer:checked ~ .deck-toolbar label[for="deck-filter-style-harmonizer"],
+.popup-shell--deck #deck-filter-style-glutton:checked ~ .deck-toolbar label[for="deck-filter-style-glutton"],
+.popup-shell--deck #deck-filter-style-deceiver:checked ~ .deck-toolbar label[for="deck-filter-style-deceiver"] {
 color: #e0f2fe;
 background: rgba(56, 189, 248, 0.12);
 border-color: rgba(56, 189, 248, 0.3);
@@ -3226,13 +3223,13 @@ gap: 0.7rem;
 }
 
 .popup-shell--deck .deck-card {
---accent: 56, 189, 248;
+--accent: 255, 255, 255;
+--rarity-border: rgba(255, 255, 255, .10);
 position: relative;
 display: block;
-min-height: 166px;
-padding: 0.9rem;
+padding: 0.65rem 0.75rem;
 background: linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018));
-border: 1px solid rgba(255, 255, 255, 0.065);
+border: 1px solid var(--rarity-border);
 border-radius: 16px;
 overflow: hidden;
 transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
@@ -3264,25 +3261,38 @@ pointer-events: none;
 .popup-shell--deck .deck-card:hover {
 transform: translateY(-2px);
 background: linear-gradient(145deg, rgba(255, 255, 255, 0.085), rgba(var(--accent), 0.035));
-border-color: rgba(var(--accent), 0.34);
+border-color: var(--rarity-border);
 box-shadow: 0 10px 20px -10px rgba(0,0,0,0.5), 0 0 15px rgba(var(--accent), 0.13);
 }
 
 .popup-shell--deck .deck-card[open] {
 background: linear-gradient(145deg, rgba(255, 255, 255, 0.085), rgba(var(--accent), 0.035));
-border-color: rgba(var(--accent), 0.34);
+border-color: var(--rarity-border);
 }
 
-.popup-shell--deck .card-approach { --accent: 139, 92, 246; }
-.popup-shell--deck .card-touch { --accent: 244, 114, 182; }
-.popup-shell--deck .card-deceive { --accent: 245, 158, 11; }
-.popup-shell--deck .card-observe { --accent: 56, 189, 248; }
-.popup-shell--deck .card-threat { --accent: 251, 113, 133; }
-.popup-shell--deck .card-predator { --accent: 244, 63, 94; }
-.popup-shell--deck .card-harmonizer { --accent: 34, 197, 94; }
-.popup-shell--deck .card-glutton { --accent: 168, 85, 247; }
-.popup-shell--deck .card-deceiver { --accent: 245, 158, 11; }
 
+
+.popup-shell--deck .rarity-rare {
+--accent: 91, 145, 216;
+--rarity-border: rgba(91, 145, 216, .58);
+}
+.popup-shell--deck .rarity-legendary {
+--accent: 246, 200, 93;
+--rarity-border: rgba(246, 200, 93, .88);
+}
+.popup-shell--deck .deck-style-icon {
+position: absolute;
+z-index: -1;
+top: -5px;
+right: 33px;
+width: 88px;
+height: 88px;
+object-fit: contain;
+opacity: .12;
+filter: blur(.2px) grayscale(.18);
+pointer-events: none;
+user-select: none;
+}
 .popup-shell--deck .card-top {
 display: flex;
 align-items: flex-start;
@@ -3362,7 +3372,9 @@ z-index: 1;
 .popup-shell--deck .deck-card-summary {
 position: relative;
 z-index: 1;
-display: block;
+display: grid;
+grid-template-columns: minmax(0, 1fr) auto;
+column-gap: 0.5rem;
 cursor: pointer;
 list-style: none;
 }
@@ -3378,7 +3390,12 @@ border-radius: 8px;
 }
 
 .popup-shell--deck .deck-card-summary .card-top {
+grid-column: 1;
 align-items: center;
+justify-content: flex-start;
+}
+.popup-shell--deck .deck-card-summary .card-owned {
+flex-shrink: 0;
 }
 
 .popup-shell--deck .deck-card-summary .card-name {
@@ -3396,7 +3413,8 @@ z-index: 1;
 display: flex;
 flex-wrap: wrap;
 gap: 0.28rem;
-margin-top: 0.65rem;
+grid-column: 1;
+margin-top: 0.35rem;
 }
 
 .popup-shell--deck .deck-tag {
@@ -3428,29 +3446,36 @@ color: #7dd3fc;
 .popup-shell--deck .deck-card-stats {
 position: relative;
 z-index: 1;
+grid-column: 2;
+grid-row: 1 / span 3;
+align-self: start;
 display: grid;
-grid-template-columns: repeat(2, minmax(0, 1fr));
-gap: 0.42rem;
-margin-top: 0.72rem;
+gap: 4px;
 }
 
 .popup-shell--deck .deck-stat {
 display: flex;
+flex-direction: column;
 align-items: center;
-justify-content: space-between;
-padding: 0.42rem 0.55rem;
+justify-content: center;
+min-width: 31px;
+min-height: 31px;
+padding: 2px 5px;
 border: 1px solid rgba(255, 255, 255, 0.07);
 border-radius: 9px;
 background: rgba(15, 23, 42, 0.35);
 }
 
 .popup-shell--deck .deck-stat strong {
-font-size: 1rem;
+font-size: 0.75rem;
+line-height: 1;
 font-variant-numeric: tabular-nums;
 }
 
 .popup-shell--deck .deck-stat small {
-font-size: 0.58rem;
+margin-top: 3px;
+font-size: 0.5rem;
+line-height: 1;
 font-weight: 800;
 letter-spacing: 0.06em;
 }
@@ -3470,7 +3495,8 @@ display: flex;
 align-items: center;
 justify-content: flex-end;
 gap: 0.3rem;
-margin-top: 0.55rem;
+grid-column: 1;
+margin-top: 0.3rem;
 color: #64748b;
 font-size: 0.62rem;
 font-weight: 700;
@@ -3599,13 +3625,10 @@ font-weight: 700;
 cursor: not-allowed;
 }
 
-.popup-shell--deck #deck-filter-cost-0:checked ~ .deck-grid .deck-card:not(.cost-0),
-.popup-shell--deck #deck-filter-cost-1:checked ~ .deck-grid .deck-card:not(.cost-1),
-.popup-shell--deck #deck-filter-cost-2:checked ~ .deck-grid .deck-card:not(.cost-2),
-.popup-shell--deck #deck-filter-cost-3:checked ~ .deck-grid .deck-card:not(.cost-3),
-.popup-shell--deck #deck-filter-cost-4:checked ~ .deck-grid .deck-card:not(.cost-4),
-.popup-shell--deck #deck-filter-cost-5:checked ~ .deck-grid .deck-card:not(.cost-5),
-.popup-shell--deck #deck-filter-cost-over:checked ~ .deck-grid .deck-card:not(.cost-over) {
+.popup-shell--deck #deck-filter-style-predator:checked ~ .deck-grid .deck-card:not(.card-predator),
+.popup-shell--deck #deck-filter-style-harmonizer:checked ~ .deck-grid .deck-card:not(.card-harmonizer),
+.popup-shell--deck #deck-filter-style-glutton:checked ~ .deck-grid .deck-card:not(.card-glutton),
+.popup-shell--deck #deck-filter-style-deceiver:checked ~ .deck-grid .deck-card:not(.card-deceiver) {
 display: none;
 }
 
