@@ -161,7 +161,7 @@ animation: none;
 <div class="helltrain-approach-processing__body">
 <span class="helltrain-approach-processing__spinner" aria-hidden="true"></span>
 <p class="helltrain-approach-processing__label">처리중<span aria-hidden="true"><span class="helltrain-approach-processing__dot">.</span><span class="helltrain-approach-processing__dot">.</span><span class="helltrain-approach-processing__dot">.</span></span></p>
-<p class="helltrain-approach-processing__copy">선택한 상대에게 접근하고 있습니다.</p>
+<p class="helltrain-approach-processing__copy">{{approachCharacterName}}에게 접근하고 있습니다.</p>
 </div>
 </section>]]
 
@@ -302,8 +302,15 @@ local function writeApproachRetryVerified(triggerId, phase, characterId)
     writeUiFragment(triggerId, APPROACH_RETRY_VAR, value)
 end
 
-local function showApproachProcessing(triggerId)
-    writeUiFragment(triggerId, UI_BODY_VAR, APPROACH_PROCESSING_MARKUP)
+local function escapeApproachName(name)
+    return (name:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
+end
+
+local function showApproachProcessing(triggerId, characterName)
+    local markup = APPROACH_PROCESSING_MARKUP:gsub("{{approachCharacterName}}", function()
+        return escapeApproachName(characterName)
+    end)
+    writeUiFragment(triggerId, UI_BODY_VAR, markup)
     writeUiFragment(triggerId, UI_POPUP_VAR, "")
     writeUiFragment(triggerId, UI_READY_VAR, "ready")
     refreshGameUi(triggerId)
@@ -336,7 +343,7 @@ local function selectedApproachCharacter(triggerId, report, characterId)
     end
 
     if type(name) ~= "string" or name == "" then
-        name = "선택한 캐릭터"
+        name = characterId
     end
     return name, profile
 end
@@ -509,7 +516,7 @@ end
 local function resumeApproachTransition(triggerId, report, characterId, phase)
     removeApproachRetryFiller(triggerId)
     if phase == "pending" then
-        showApproachProcessing(triggerId)
+        showApproachProcessing(triggerId, selectedApproachCharacter(triggerId, report, characterId))
         local output, generationError = generateApproachScene(
             triggerId,
             report,
@@ -540,11 +547,24 @@ local function resumeApproachWithAlert(triggerId, report, characterId, phase)
     end
     detail = runOk and detail or completed
     debug(1, "character approach: 생성 또는 전환 실패: " .. tostring(detail))
+    local uiOk, uiError = pcall(function()
+        local characterName = escapeApproachName(selectedApproachCharacter(triggerId, report, characterId))
+        writeUiFragment(triggerId, UI_BODY_VAR, [[<section style="padding: 28px; text-align: center;" aria-live="polite">
+<h2>요청을 완료하지 못했습니다</h2>
+<p>]] .. characterName .. [[에게 접근하지 못했습니다. 아래 버튼을 눌러 다시 시도하세요.</p>
+<button type="button" risu-btn="hostFlow|retryApproach" style="padding: 12px 20px; cursor: pointer;">다시 시도</button>
+</section>]])
+        writeUiFragment(triggerId, UI_READY_VAR, "ready")
+        refreshGameUi(triggerId)
+    end)
+    if not uiOk then
+        debug(1, "character approach: 재시도 화면 표시 실패: " .. tostring(uiError))
+    end
     if type(alertError) == "function" then
         pcall(
             alertError,
             triggerId,
-            "접근 장면을 생성하지 못했습니다. 전송 버튼을 눌러 다시 시도하세요.\n"
+            "요청을 완료하지 못했습니다. 다시 시도 버튼을 누르세요. 전송 버튼으로도 재시도할 수 있습니다.\n"
                 .. tostring(detail)
         )
     end
@@ -597,6 +617,7 @@ end
 
 --버튼 클릭시 동작
 local BUTTON_ACTIONS = {
+    hostFlow = { retryApproach = true },
     init = { start = true, choose = true, chooseCharacter = true },
     battleController = { clickCard = true, registerCard = true, cancelCard = true, selectCardEffect = true, armSubmission = true, skipAftermath = true },
     popupManage = { root = true, push = true, replace = true, back = true, close = true },
@@ -608,7 +629,9 @@ local function isAllowedButtonRoute(script, arguments)
     if type(actions) ~= "table" or actions[action] ~= true then
         return false
     end
-    if script == "init" then
+    if script == "hostFlow" then
+        return #arguments == 1
+    elseif script == "init" then
         return (action == "start" and #arguments == 1)
             or (action == "choose" and #arguments == 3)
             or (action == "chooseCharacter" and #arguments == 3)
@@ -639,6 +662,16 @@ local function handleButtonClick(triggerId, data)
         return
     end
     debug(3, "Button route: " .. tostring(script) .. "|" .. tostring(parts[1]))
+
+    if script == "hostFlow" then
+        local readOk, phase, characterId = pcall(readApproachRetry, triggerId)
+        if not readOk then
+            alertTurnFailure(triggerId, "재시도 상태를 읽지 못했습니다: " .. tostring(phase))
+        elseif phase ~= nil then
+            resumeApproachWithAlert(triggerId, nil, characterId, phase)
+        end
+        return
+    end
 
     local report = runScript(triggerId, script, table.unpack(parts))
     if script == "init" and parts[1] == "start" then
