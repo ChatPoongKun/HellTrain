@@ -808,6 +808,13 @@
                 if #candidates > 0 then break end
             end
             if #candidates == 0 and requestedStyle ~= nil then
+                -- 희귀도보다 최다 보유 스타일 보장을 우선합니다.
+                for _, fallbackRarity in ipairs(RARITY_ORDER) do
+                    candidates = eligibleRewardCards(playerPool, counts, excluded, fallbackRarity, requestedStyle)
+                    if #candidates > 0 then break end
+                end
+            end
+            if #candidates == 0 and requestedStyle ~= nil then
                 for _, fallbackRarity in ipairs(rarityFallbacks(rarity)) do
                     candidates = eligibleRewardCards(playerPool, counts, excluded, fallbackRarity, nil)
                     if #candidates > 0 then break end
@@ -819,6 +826,14 @@
             cardIds[slot] = cardId
             excluded[cardId] = true
         end
+        -- 확정 스타일 카드를 확보한 뒤 표시 위치만 무작위로 바꿉니다.
+        local positions, positionErrors
+        positions, currentRng, positionErrors = callNextIntegers(currentRng, {
+            { minimum = 1, maximum = offerCount },
+        })
+        if positionErrors then return nil, nil, positionErrors end
+        local position = positions[1]
+        cardIds[1], cardIds[position] = cardIds[position], cardIds[1]
         return {
             kind = "card",
             cardIds = cardIds,
