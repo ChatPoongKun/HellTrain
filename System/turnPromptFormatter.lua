@@ -672,6 +672,15 @@
         local sanitized, llmErrors = validateLlmEvent(llmEvent, staticData, pending)
         if llmErrors then return failure(llmErrors) end
 
+        if pending.afterState.status == "victory" then
+            for _, event in ipairs(sanitized.events) do
+                if type(event.payload) == "table" and event.payload.actor == "character" then
+                    event.payload.actorAction = nil
+                    event.payload.actorThought = nil
+                end
+            end
+        end
+
         local ok, encoded = pcall(encodeCanonical, sanitized)
         if not ok then
             return failure({ makeError("prompt_encoding_failed", "$.pendingTurn.turnResult.llmEvent", "LLM 사건 직렬화에 실패했습니다.") })
@@ -696,7 +705,9 @@
             local character = staticData.characters[pending.beforeState.character.characterId]
             instructions[#instructions + 1] = "이번 턴 사건을 이어서 묘사하십시오."
         end
-        if pending.afterState.status == "defeat" then
+        if pending.afterState.status == "victory" then
+            instructions[#instructions + 1] = "승리 턴이다. 캐릭터 카드의 행동·생각 서술은 반영하지 말고, 대신 캐릭터가 플레이어의 행동으로 강렬하게 절정하며 저항이 완전히 무너지는 모습을 묘사하십시오."
+        elseif pending.afterState.status == "defeat" then
             if pending.afterState.player.stealth <= 0 then
                 instructions[#instructions + 1] = "은폐 소진으로 인한 패배다. 패배 장면의 끝에서 경찰이 다가와 플레이어를 연행하게 되고 열차 밖으로 끌려나가는 순간 시야가 검게 끊기며 의식을 잃는 모습으로 마무리하십시오."
             else
