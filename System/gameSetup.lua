@@ -638,6 +638,16 @@
             offered[pick] = selectedId
             excluded[selectedId] = true
         end
+        if anchorStyle ~= nil then
+            -- 스타일 우선 카드를 확보한 뒤 표시 위치만 무작위로 바꿉니다.
+            local positions, positionErrors
+            positions, currentRng, positionErrors = callNextIntegers(currentRng, {
+                { minimum = 1, maximum = OFFER_SIZE },
+            })
+            if positionErrors then return nil, nil, positionErrors end
+            local position = positions[1]
+            offered[1], offered[position] = offered[position], offered[1]
+        end
         return {
             round = round,
             cardIds = offered,
