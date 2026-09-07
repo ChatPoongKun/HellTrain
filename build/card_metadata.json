@@ -11,7 +11,7 @@
   "group_only_greetings": [],
   "tags": [],
   "creator": "JamesCane",
-  "character_version": "v 0.1",
+  "character_version": "v 0.2",
   "nickname": "",
   "source": [],
   "creation_date": 1782919817620,
@@ -64,8 +64,6 @@
   "icon": "imgs/game_icon.png",
   "output_basename": "HellTrain",
   "asset_order": [
-    "cost.png",
-    "damage.png",
     "한제니.png",
     "윤서아.png",
     "유지영.png",
