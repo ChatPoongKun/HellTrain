@@ -22,6 +22,7 @@
     local REASON_LABELS = {
         card_checkpoint = "카드 해결 중 승패 확정",
         turn_end_checkpoint = "턴 종료 판정",
+        plan_exit_checkpoint = "계획 만료 효과로 승패 확정",
         turn_limit = "제한 구간 도착",
     }
 

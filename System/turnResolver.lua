@@ -1473,11 +1473,6 @@
             latchOutcome("mood_state_checkpoint", "turn_end", nil)
         end
 
-        local endingStealth = working.state.player.stealth
-        local endingResistance = working.state.character.resistance
-        local resistancePerformance = startValues.resistance - endingResistance
-        local stealthSpent = math.max(0, startValues.stealth - endingStealth)
-
         local function orderedZoneIds(state, owner, zone)
             local entries = {}
             for index, instance in ipairs(state.cardInstances) do
@@ -1535,6 +1530,8 @@
         end
 
         for _, slot in ipairs(working.state.player.planSlots or {}) do
+            -- 이미 확정된 승패 뒤에는 만료 피해로 최종 자원을 바꾸지 않는다.
+            if working.state.status ~= "active" then break end
             local expiresNow = slot.remainingTurns ~= nil
                 and (slot.placedTurn < working.state.turnNumber or slot.durationIncludesPlacementTurn == true)
                 and slot.remainingTurns == 1
@@ -1632,6 +1629,12 @@
             )
         end
         working.state.lastCommittedTurnId = turnId
+
+        -- 계획 만료 효과까지 반영한 동일한 값으로 이력과 지표를 확정한다.
+        local endingStealth = working.state.player.stealth
+        local endingResistance = working.state.character.resistance
+        local resistancePerformance = startValues.resistance - endingResistance
+        local stealthSpent = math.max(0, startValues.stealth - endingStealth)
 
         local historyReport, historyErrors = callModule(
             "battleHistory",

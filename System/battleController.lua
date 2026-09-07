@@ -2039,6 +2039,7 @@
             or (outcomePayload.reasonCode ~= "card_checkpoint"
                 and outcomePayload.reasonCode ~= "turn_start_checkpoint"
                 and outcomePayload.reasonCode ~= "turn_end_checkpoint"
+                and outcomePayload.reasonCode ~= "plan_exit_checkpoint"
                 and outcomePayload.reasonCode ~= "turn_limit")
             or outcomePayload.stealth ~= authority.player.stealth
             or outcomePayload.resistance ~= authority.character.resistance then

@@ -71,6 +71,7 @@
         card_checkpoint = true,
         turn_start_checkpoint = true,
         turn_end_checkpoint = true,
+        plan_exit_checkpoint = true,
         mood_state_checkpoint = true,
         turn_limit = true,
     }

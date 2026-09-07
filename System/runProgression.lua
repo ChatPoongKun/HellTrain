@@ -1020,6 +1020,7 @@
     local OUTCOME_REASONS = {
         card_checkpoint = true,
         turn_end_checkpoint = true,
+        plan_exit_checkpoint = true,
         turn_limit = true,
     }
 
@@ -1167,7 +1168,8 @@
                 "turn_limit 패배는 마지막 턴에 저항과 은폐가 모두 남은 경우여야 합니다."
             )
         elseif (summary.reasonCode == "card_checkpoint"
-                or summary.reasonCode == "turn_end_checkpoint")
+                or summary.reasonCode == "turn_end_checkpoint"
+                or summary.reasonCode == "plan_exit_checkpoint")
             and isFinite(summary.finalResistance)
             and isFinite(summary.finalStealth)
             and summary.finalResistance > 0

@@ -1091,6 +1091,7 @@
         local expectedCharacterRole = expectedCharacterIntent.publicRole
         local pendingCharacterIntent = false
         local pendingDeclarations = {}
+        local pendingPlayerFollowup = nil
         local sawTurnStart = false
         local sawStartDraw = { player = false, character = false }
         local sawCharacterIntent = false
@@ -1694,10 +1695,15 @@
                 local expectedTailType = "turn_cleanup"
                 if expectedMoodStealthEffect ~= nil and sawMoodStealthEffect ~= true then
                     expectedTailType = "effect_applied"
-                elseif sawMoodStealthEffect == true
-                    and trackedStealth <= 0
+                elseif (trackedStealth <= 0 or trackedResistance <= 0)
                     and latchedOutcome == nil then
                     expectedTailType = "outcome_latched"
+                elseif latchedOutcome == nil
+                    and event.type == "effect_applied"
+                    and event.phase == "cleanup"
+                    and type(event.cause) == "table"
+                    and event.cause.kind == "plan_duration_exit" then
+                    expectedTailType = "effect_applied"
                 end
                 if event.type ~= expectedTailType then
                     return failure({
@@ -1896,6 +1902,16 @@
                         or event.cause.kind ~= event.source.kind .. "_trigger") then
                         return failure({ makeError("effect_cause_mismatch", path .. ".cause", "트리거 효과 cause가 source와 다릅니다.") })
                     end
+                    if planEffectCause == "plan_duration_exit"
+                        and (event.source.side ~= "player"
+                            or event.resolutionId ~= nil
+                            or sawMoodEvaluation ~= true
+                            or latchedOutcome ~= nil
+                            or callbackSlot.remainingTurns ~= 1
+                            or not (callbackSlot.placedTurn < resolution.turnNumber
+                                or callbackSlot.durationIncludesPlacementTurn == true)) then
+                        return failure({ makeError("invalid_plan_expiry", path, "이번 턴에 만료되는 플레이어 계획의 효과가 아닙니다.") })
+                    end
                 elseif event.source.kind == "card" then
                     local lookupErrors = {}
                     findCard(staticData, event.source.id, event.source.side, path .. ".source.id", lookupErrors)
@@ -1937,6 +1953,7 @@
                     and (type(event.cause) ~= "table"
                         or (event.cause.kind ~= "card_base"
                             and event.cause.kind ~= "card_effect"
+                            and event.cause.kind ~= "card_followup"
                             and event.cause.kind ~= "mood_effect")) then
                     return failure({ makeError("effect_cause_mismatch", path .. ".cause", "카드 효과 cause가 올바르지 않습니다.") })
                 elseif not isInteger(payload.index, 1) or type(payload.cause) ~= "string" or payload.cause == "" then
@@ -1949,6 +1966,23 @@
                 )
                 if effectError then
                     return failure({ effectError })
+                end
+                if event.source.kind == "card" and event.cause.kind == "card_followup" then
+                    -- 출처는 직전 카드지만 resolutionId는 피해를 준 현재 카드다.
+                    local declaration = pendingDeclarations[event.resolutionId]
+                    local followup = declaration and declaration.followup
+                    if followup == nil or declaration.followupApplied == true
+                        or declaration.resistanceDamage < followup.minimumDamage
+                        or event.source.id ~= followup.cardId
+                        or event.source.instanceId ~= followup.instanceId
+                        or event.source.side ~= "player" or event.side ~= "player"
+                        or event.cause.resolutionId ~= event.resolutionId
+                        or payload.index ~= 1 or payload.cause ~= "cardFollowup"
+                        or effect.op ~= "recover_stealth" or effect.target ~= "player"
+                        or effect.amount ~= followup.recoverStealth then
+                        return failure({ makeError("invalid_card_followup", path, "후속 효과가 직전 플레이어 카드의 정의 또는 해결 순서와 다릅니다.") })
+                    end
+                    declaration.followupApplied = true
                 end
                 if isMoodStateEffect then
                     local expected = expectedMoodStealthEffect
@@ -1987,6 +2021,10 @@
                         return failure({ makeError("effect_state_mismatch", path .. ".payload.before", "저항 효과 before가 앞선 사건 결과와 다릅니다.") })
                     end
                     trackedResistance = effect.after
+                    local declaration = pendingDeclarations[event.resolutionId]
+                    if declaration and payload.op == "damage_resistance" and effect.changed == true then
+                        declaration.resistanceDamage = declaration.resistanceDamage + math.max(0, effect.before - effect.after)
+                    end
                 elseif payload.op == "draw_cards" then
                     trackedHandCount[effect.target] = trackedHandCount[effect.target] + effect.drawnCount
                 elseif payload.op == "skip_actions" then
@@ -2131,7 +2169,10 @@
                     cardId = card.id,
                     instanceId = payload.instanceId,
                     effectChoiceId = payload.effectChoiceId,
+                    resistanceDamage = 0,
+                    followup = side == "player" and pendingPlayerFollowup or nil,
                 }
+                if side == "player" then pendingPlayerFollowup = nil end
                 if side == "character" then
                     trackedHandCount.character = trackedHandCount.character - 1
                     if trackedHandCount.character < 0 then
@@ -2184,6 +2225,19 @@
                     or declaration.cardId ~= cardId
                     or declaration.instanceId ~= payload.instanceId then
                     return failure(#lookupErrors > 0 and lookupErrors or { makeError("card_event_mismatch", path, "card_resolved source와 payload 카드가 다릅니다.") })
+                end
+                if declaration.followup ~= nil
+                    and (declaration.followupApplied == true)
+                        ~= (declaration.resistanceDamage >= declaration.followup.minimumDamage) then
+                    return failure({ makeError("card_followup_mismatch", path, "다음 플레이어 카드의 피해와 후속 효과 발동 여부가 다릅니다.") })
+                end
+                if event.side == "player" and type(card.afterNextPlayerCard) == "table" then
+                    pendingPlayerFollowup = {
+                        cardId = card.id,
+                        instanceId = payload.instanceId,
+                        minimumDamage = card.afterNextPlayerCard.minimumDamage,
+                        recoverStealth = card.afterNextPlayerCard.recoverStealth,
+                    }
                 end
                 pendingDeclarations[event.resolutionId] = nil
                 registerTriggerInput(
@@ -2827,6 +2881,7 @@
                     or (trackedStealth <= 0 and "defeat" or nil)
                 local expectedOutcome = resourceOutcome
                 local expectedReason = event.phase == "turn_start" and "turn_start_checkpoint"
+                    or (event.phase == "cleanup" and "plan_exit_checkpoint")
                     or (event.phase == "turn_end" and "turn_end_checkpoint" or "card_checkpoint")
                 if event.phase == "turn_end"
                     and sawMoodStealthEffect == true
@@ -2843,12 +2898,13 @@
                     or (event.phase ~= "turn_start"
                         and event.phase ~= "player_card"
                         and event.phase ~= "character_card"
+                        and event.phase ~= "cleanup"
                         and event.phase ~= "turn_end")
                     or not isOutcome(payload.status)
                     or payload.status ~= expectedOutcome
                     or not isAsciiId(payload.reasonCode)
                     or payload.reasonCode ~= expectedReason
-                    or ((event.phase == "turn_start" or event.phase == "turn_end") and event.resolutionId ~= nil)
+                    or ((event.phase == "turn_start" or event.phase == "turn_end" or event.phase == "cleanup") and event.resolutionId ~= nil)
                     or ((event.phase == "player_card" or event.phase == "character_card") and event.resolutionId == nil)
                     or not isFinite(payload.stealth)
                     or not isFinite(payload.resistance)
