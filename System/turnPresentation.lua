@@ -500,6 +500,7 @@
             end
             return sideLabel(payload.target) .. "의 남은 행동은 이미 생략된 상태입니다.", nil
         elseif payload.op == "add_mood_token" or payload.op == "remove_mood_token" then
+            local debt = payload.moodTokenDebtBefore == nil and 0 or payload.moodTokenDebtBefore
             local keyError = checkAllowedKeys(payload, {
                 op = true,
                 target = true,
@@ -509,6 +510,7 @@
                 before = true,
                 after = true,
                 source = true,
+                moodTokenDebtBefore = true,
             }, path)
             if keyError then return nil, keyError end
             local mood, moodError = lookupMood(staticData, payload.mood, path .. ".mood")
@@ -517,14 +519,22 @@
                 or not isInteger(payload.amount, 1)
                 or not isInteger(payload.before, 0)
                 or not isInteger(payload.after, 0)
+                or not isInteger(debt, 0) or debt > 9007199254740991
                 or payload.after ~= (payload.op == "add_mood_token"
-                    and payload.before + payload.amount
+                    and math.max(0, payload.before - debt + payload.amount)
                     or math.max(0, payload.before - payload.amount))
                 or payload.changed ~= (payload.before ~= payload.after) then
                 return nil, makeError("invalid_effect_payload", path, "무드 토큰 표시값이 서로 일치하지 않습니다.")
             end
             local source, sourceError = buildOptionalEffectSource(payload, path, staticData)
             if sourceError then return nil, sourceError end
+            if payload.op == "add_mood_token" and debt > 0 then
+                return mood.label .. " 토큰 생성량 " .. numberText(payload.amount)
+                    .. "개 중 " .. numberText(math.min(debt, payload.amount))
+                    .. "개가 앞선 감소 효과와 상쇄되었습니다. ("
+                    .. numberText(payload.before) .. " → " .. numberText(payload.after) .. ")"
+                    .. effectSourceSuffix(source), nil
+            end
             local verb = payload.op == "add_mood_token" and "생성했습니다" or "제거했습니다"
             return mood.label .. " 토큰을 " .. numberText(payload.amount) .. "개 " .. verb .. ". ("
                 .. numberText(payload.before) .. " → " .. numberText(payload.after) .. ")"

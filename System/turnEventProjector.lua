@@ -924,6 +924,7 @@
             output.amount = payload.amount
             output.before = payload.before
             output.after = payload.after
+            output.moodTokenDebtBefore = payload.moodTokenDebtBefore
         elseif op == "force_mood" then
             if payload.target ~= "character" then
                 return nil, makeError("effect_target_mismatch", path .. ".target", "무드 강제 변경 대상은 character여야 합니다.")

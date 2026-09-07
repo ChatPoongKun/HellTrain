@@ -213,7 +213,7 @@
         elseif op == "skip_actions" then
             allowed = { op = true, target = true, changed = true, scope = true, before = true, after = true }
         elseif op == "add_mood_token" or op == "remove_mood_token" then
-            allowed = { op = true, target = true, changed = true, mood = true, amount = true, before = true, after = true }
+            allowed = { op = true, target = true, changed = true, mood = true, amount = true, before = true, after = true, moodTokenDebtBefore = true }
         elseif op == "force_mood" then
             allowed = { op = true, target = true, changed = true, mood = true, before = true, after = true }
         else
@@ -284,13 +284,15 @@
             safe.after = true
         elseif op == "add_mood_token" or op == "remove_mood_token" then
             local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
+            local debt = payload.moodTokenDebtBefore == nil and 0 or payload.moodTokenDebtBefore
             if payload.target ~= "character"
                 or type(moods) ~= "table"
                 or type(moods[payload.mood]) ~= "table"
                 or not isInteger(payload.amount, 1)
                 or not isInteger(payload.before, 0)
+                or not isInteger(debt, 0) or debt > 9007199254740991
                 or payload.after ~= (op == "add_mood_token"
-                    and payload.before + payload.amount
+                    and math.max(0, payload.before - debt + payload.amount)
                     or math.max(0, payload.before - payload.amount)) then
                 return nil, makeError("invalid_effect", path, "무드 토큰 효과 값이 올바르지 않습니다.")
             end
@@ -298,6 +300,7 @@
             safe.amount = payload.amount
             safe.before = payload.before
             safe.after = payload.after
+            safe.moodTokenDebtBefore = payload.moodTokenDebtBefore
         elseif op == "force_mood" then
             local moods = type(staticData.registry) == "table" and staticData.registry.moods or nil
             if payload.target ~= "character"
