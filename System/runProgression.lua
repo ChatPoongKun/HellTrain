@@ -1022,6 +1022,7 @@
         turn_end_checkpoint = true,
         plan_exit_checkpoint = true,
         turn_limit = true,
+        surrender = true,
     }
 
     local function normalizeSummary(summaryInput, staticData, path)
@@ -1151,10 +1152,14 @@
             elseif summary.status == "victory" and summary.finalResistance > 0 then
                 appendError(errors, "invalid_victory", path .. ".status", "저항이 남은 summary는 승리일 수 없습니다.")
             elseif summary.status == "defeat"
+                and summary.reasonCode ~= "surrender"
                 and summary.finalStealth > 0
                 and summary.turnNumber < summary.turnLimit then
                 appendError(errors, "invalid_defeat", path .. ".status", "은폐가 남고 제한 턴 전이면 패배일 수 없습니다.")
             end
+        end
+        if summary.reasonCode == "surrender" and summary.status ~= "defeat" then
+            appendError(errors, "invalid_surrender", path .. ".status", "포기 결과는 패배여야 합니다.")
         end
         if summary.reasonCode == "turn_limit"
             and (summary.status ~= "defeat"

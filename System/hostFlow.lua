@@ -640,7 +640,7 @@ end
 local BUTTON_ACTIONS = {
     hostFlow = { retryApproach = true },
     init = { start = true, choose = true, chooseCharacter = true },
-    battleController = { clickCard = true, registerCard = true, cancelCard = true, selectCardEffect = true, armSubmission = true, skipAftermath = true },
+    battleController = { clickCard = true, registerCard = true, cancelCard = true, selectCardEffect = true, armSubmission = true, surrender = true, skipAftermath = true },
     popupManage = { root = true, push = true, replace = true, back = true, close = true },
 }
 
@@ -658,7 +658,7 @@ local function isAllowedButtonRoute(script, arguments)
             or (action == "chooseCharacter" and #arguments == 3)
     elseif script == "battleController" then
         return (action == "selectCardEffect" and #arguments == 4)
-            or (action == "armSubmission" and #arguments == 2)
+            or ((action == "armSubmission" or action == "surrender") and #arguments == 2)
             or ((action == "clickCard"
                 or action == "registerCard"
                 or action == "cancelCard"
@@ -695,6 +695,36 @@ local function handleButtonClick(triggerId, data)
     end
 
     local report = runScript(triggerId, script, table.unpack(parts))
+    if script == "battleController" and parts[1] == "surrender" then
+        if not controllerSucceeded(triggerId, "surrender", report) or report.applied ~= true then return end
+        local ok, detail = pcall(function()
+            local prepared = runScript(triggerId, "battleController", "prepareGeneration")
+            if not controllerSucceeded(triggerId, "surrender.prepare", prepared) or prepared.generationReady ~= true then return end
+            local prompt = {}
+            for _, message in ipairs(getFullChat(triggerId)) do
+                prompt[#prompt + 1] = {
+                    role = message.role == "char" and "assistant" or message.role,
+                    content = message.data,
+                }
+            end
+            local injected = runScript(triggerId, "battleController", "injectRequest", prompt)
+            if not controllerSucceeded(triggerId, "surrender.inject", injected) then return end
+            local response = LLM(triggerId, addRequestContext(triggerId, injected.promptArray), false, { streaming = true })
+            if type(response) ~= "table" or response.success ~= true
+                or type(response.result) ~= "string" or not response.result:match("%S") then
+                error(type(response) == "table" and tostring(response.result) or "빈 LLM 응답")
+            end
+            appendChatVerified(triggerId, "char", response.result)
+            local committed = runScript(triggerId, "battleController", "commitOutput")
+            if controllerSucceeded(triggerId, "surrender.commit", committed) then
+                syncGameUiTarget(triggerId, committed.uiTargetIndex)
+            end
+        end)
+        if not ok then
+            alertTurnFailure(triggerId, "포기 장면 전송에 실패했습니다. 입력창을 비운 채 전송하여 재시도하세요.\n" .. tostring(detail))
+        end
+        return
+    end
     if script == "init" and parts[1] == "start" then
         if controllerSucceeded(triggerId, "onButtonClick.init.start", report) then
             local targetOk, targetError = pcall(syncGameUiTarget, triggerId)

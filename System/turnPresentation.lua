@@ -74,6 +74,7 @@
         plan_exit_checkpoint = true,
         mood_state_checkpoint = true,
         turn_limit = true,
+        surrender = true,
     }
 
     local function makeError(code, path, message)

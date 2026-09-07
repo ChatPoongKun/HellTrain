@@ -1436,6 +1436,7 @@ pointer-events: none;
 }
 .ht-footer {
 display: flex;
+flex-wrap: wrap;
 align-items: center;
 gap: 7px;
 margin-top: 7px;
@@ -1477,6 +1478,12 @@ cursor: pointer;
 .ht-submit:disabled {
 cursor: default;
 opacity: .72;
+}
+.ht-submit.ht-surrender {
+margin-left: 0;
+color: #d4aaa7;
+border-color: rgba(196, 121, 115, .35);
+background: rgba(196, 121, 115, .08);
 }
 .ht-submit.is-armed {
 border-color: rgba(104, 194, 139, .34);

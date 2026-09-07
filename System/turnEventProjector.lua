@@ -1664,7 +1664,7 @@
             local path = "$.turnResolution.events[" .. index .. "]"
             if event.phase == "turn_end"
                 and latchedOutcome == nil
-                and not (event.type == "outcome_latched" and payload.reasonCode == "turn_limit") then
+                and not (event.type == "outcome_latched" and (payload.reasonCode == "turn_limit" or payload.reasonCode == "surrender")) then
                 registerTriggerInput(
                     "turn_end",
                     "turn_end",
@@ -2897,7 +2897,13 @@
                 local expectedReason = event.phase == "turn_start" and "turn_start_checkpoint"
                     or (event.phase == "cleanup" and "plan_exit_checkpoint")
                     or (event.phase == "turn_end" and "turn_end_checkpoint" or "card_checkpoint")
-                if event.phase == "turn_end"
+                if payload.reasonCode == "surrender"
+                    and resolution.afterState.surrendered == true
+                    and resourceOutcome == nil
+                    and event.phase == "turn_end" then
+                    expectedOutcome = "defeat"
+                    expectedReason = "surrender"
+                elseif event.phase == "turn_end"
                     and sawMoodStealthEffect == true
                     and resourceOutcome == "defeat" then
                     expectedReason = "mood_state_checkpoint"

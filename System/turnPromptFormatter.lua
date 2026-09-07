@@ -700,7 +700,9 @@
             "사건의 순서, 행동 주체, 수치 변화, 무드와 승패를 바꾸거나 다시 판정하지 마십시오.",
             "actorAction은 장면 속 실제 행동으로 자연스럽게 반영하고, actorThought가 있을 때만 캐릭터의 내면에 반영하십시오.",
             "type, action, op, reasonCode 같은 기계 필드명을 독자에게 그대로 나열하지 마십시오.",
-            "이미 조우 장면이 끝난 뒤의 전투 턴이므로 이전 이동, 암전, 의식 상실, 대상 등장 장면을 되풀이하지 마십시오.",
+            pending.afterState.surrendered == true
+                and "이번 응답은 전투를 포기하고 하차하는 장면이며, 마지막에 시야가 암전됩니다."
+                or "이미 조우 장면이 끝난 뒤의 전투 턴이므로 이전 이동, 암전, 의식 상실, 대상 등장 장면을 되풀이하지 마십시오.",
             "이 지침은 기존 프리셋을 대체하지 않고 이번 턴의 확정 사실만 추가합니다.",
         }
         if pending.beforeState.turnNumber == 1
@@ -711,7 +713,12 @@
         if pending.afterState.status == "victory" then
             instructions[#instructions + 1] = "승리 턴이다. 캐릭터 카드의 행동·생각 서술은 반영하지 말고, 대신 캐릭터가 플레이어의 행동으로 강렬하게 절정하며 저항이 완전히 무너지는 모습을 묘사하십시오."
         elseif pending.afterState.status == "defeat" then
-            if pending.afterState.player.stealth <= 0 then
+            if pending.afterState.surrendered == true then
+                local character = staticData.characters[pending.beforeState.character.characterId]
+                instructions[#instructions + 1] = (character.name or "대상 캐릭터")
+                    .. "의 공략을 포기하고 이번 역에서 내린다. 열차문을 나서자 눈앞이 깜깜하게 암전된다."
+                instructions[#instructions + 1] = "자발적인 포기로 전투가 끝났습니다. 추가 카드 행동이나 경찰의 연행 장면을 만들지 마십시오."
+            elseif pending.afterState.player.stealth <= 0 then
                 instructions[#instructions + 1] = "은폐 소진으로 인한 패배다. 패배 장면의 끝에서 경찰이 다가와 플레이어를 연행하게 되고 열차 밖으로 끌려나가는 순간 시야가 검게 끊기며 의식을 잃는 모습으로 마무리하십시오."
             else
                 instructions[#instructions + 1] = "제한 턴 도달로 인한 패배다. 캐릭터가 목적지 역에서 열차를 내려버려 플레이어가 실패한 것으로 묘사하고, 경찰이나 연행 장면은 만들지 마십시오."

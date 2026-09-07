@@ -84,6 +84,9 @@
 </section>
 
 <div class="ht-footer">
+{{#if {{equal::{{tempvar::battle_interaction_phase}}::selecting}}}}
+<button type="button" class="ht-submit ht-surrender" risu-btn="battleController|surrender|{{tempvar::battle_interaction_token}}" aria-label="공략을 포기하고 이번 역에서 내리기" {{#if {{equal::{{tempvar::battle_interaction_locked}}::true}}}}disabled{{/if}}>포기하고 내리기</button>
+{{/if}}
 <div class="ht-selection-state">
 {{#if {{equal::{{tempvar::battle_interaction_phase}}::selecting}}}}<i class="ht-selection-dot" aria-hidden="true"></i>{{/if}}
 {{#if {{equal::{{tempvar::battle_interaction_phase}}::awaitingOutput}}}}<i class="ht-selection-dot ht-selection-dot--wait" aria-hidden="true"></i>{{/if}}

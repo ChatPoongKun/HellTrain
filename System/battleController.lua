@@ -2047,7 +2047,8 @@
                 and outcomePayload.reasonCode ~= "turn_start_checkpoint"
                 and outcomePayload.reasonCode ~= "turn_end_checkpoint"
                 and outcomePayload.reasonCode ~= "plan_exit_checkpoint"
-                and outcomePayload.reasonCode ~= "turn_limit")
+                and outcomePayload.reasonCode ~= "turn_limit"
+                and outcomePayload.reasonCode ~= "surrender")
             or outcomePayload.stealth ~= authority.player.stealth
             or outcomePayload.resistance ~= authority.character.resistance then
             return nil, {
@@ -3698,7 +3699,7 @@
         return interactCard("choose", instanceId, expectedInteractionToken, choiceId)
     end
 
-    local function armSubmission(expectedInteractionToken)
+    local function armSubmission(expectedInteractionToken, surrender)
         if type(expectedInteractionToken) ~= "string" or expectedInteractionToken == "" then
             return failure({
                 makeError("invalid_interaction_token", "$.expectedInteractionToken", "비어 있지 않은 draft interaction token이 필요합니다."),
@@ -3748,6 +3749,24 @@
                 interactionToken = interactionToken,
                 view = published.view,
             })
+        end
+        if surrender then
+            if authority.status ~= "active" or authority.turnStartOutcome ~= nil then
+                return failure({ makeError("battle_ended", "$.authority.status", "승패가 정해진 전투는 포기할 수 없습니다.") })
+            end
+            local fresh, freshErrors = callModule("turnDraft", "newDraft", authority, staticData)
+            if freshErrors then return failure(freshErrors) end
+            local projected, projectErrors = callModule("turnDraft", "project", authority, staticData, fresh.draft)
+            if projectErrors then return failure(projectErrors) end
+            local prepared, prepareErrors = callModule("battleRuntime", "preparePending", authority, staticData, projected.projection, true)
+            if prepareErrors then return failure(prepareErrors) end
+            local pendingWriteErrors = writeStored(KEYS.pending, prepared.pendingTurn)
+            if pendingWriteErrors then return failure(pendingWriteErrors) end
+            local clearErrors = clearSubmission()
+            if clearErrors then return failure(clearErrors) end
+            local published, publishErrors = publishCurrentViewInternal(staticData, true)
+            if publishErrors then return failure(publishErrors) end
+            return success({ applied = true, stale = false, surrendered = true, view = published.view })
         end
         local writeErrors = writeStored(KEYS.submission, interactionToken)
         if writeErrors then return failure(writeErrors) end
@@ -4941,6 +4960,8 @@
         return selectCardEffect(arguments[1], arguments[2], arguments[3])
     elseif action == "armSubmission" then
         return armSubmission(arguments[1])
+    elseif action == "surrender" then
+        return armSubmission(arguments[1], true)
     elseif action == "prepareGeneration" then
         return prepareGeneration()
     elseif action == "injectRequest" then

@@ -2285,6 +2285,7 @@
             history = true,
             turnStartReceipt = true,
             turnStartOutcome = true,
+            surrendered = true,
         }, "$", errors)
 
         if state.schemaVersion ~= SCHEMA_VERSION then
@@ -2671,6 +2672,9 @@
             appendNestedErrors(errors, "$.history", historyReport)
         end
 
+        if state.surrendered ~= nil and (state.surrendered ~= true or state.status ~= "defeat") then
+            addError(errors, "invalid_surrender", "$.surrendered", "포기는 패배 상태에서만 허용됩니다.")
+        end
         if state.turnStartReceipt ~= nil then
             validateTurnStartReceipt(state.turnStartReceipt, state, staticData, referencesValidated, errors)
         end
@@ -2697,6 +2701,7 @@
             elseif state.status == "victory" and state.character.resistance > 0 then
                 addError(errors, "invalid_victory", "$.status", "저항이 남아 있으면 승리 상태일 수 없습니다.")
             elseif state.status == "defeat"
+                and state.surrendered ~= true
                 and state.player.stealth > 0
                 and isInteger(state.turnNumber, 1)
                 and isInteger(state.turnLimit, 1)

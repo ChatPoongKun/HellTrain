@@ -189,13 +189,16 @@
             return nil, { makeError("invalid_options", "$.options", "턴 해결 옵션은 일반 테이블이어야 합니다.") }
         end
         for key in pairs(options) do
-            if key ~= "turnId" then
+            if key ~= "turnId" and key ~= "surrender" then
                 table.insert(errors, makeError(
                     "unexpected_option",
                     "$.options." .. tostring(key),
                     "지원하지 않는 턴 해결 옵션입니다."
                 ))
             end
+        end
+        if options.surrender ~= nil and type(options.surrender) ~= "boolean" then
+            table.insert(errors, makeError("invalid_surrender", "$.options.surrender", "포기 옵션은 boolean이어야 합니다."))
         end
         if not isRuntimeId(options.turnId) then
             table.insert(errors, makeError("invalid_turn_id", "$.options.turnId", "turnId가 올바르지 않습니다."))
@@ -205,7 +208,7 @@
         if #errors > 0 then
             return nil, errors
         end
-        return { turnId = options.turnId }, nil
+        return { turnId = options.turnId, surrender = options.surrender == true }, nil
     end
 
     local function buildHistoryContext(history)
@@ -1324,6 +1327,19 @@
                 stopped = outcome ~= nil,
                 resolutionId = resolutionId,
             }
+        end
+
+        if normalizedOptions.surrender and working.state.status == "active" then
+            working.state.status = "defeat"
+            working.state.surrendered = true
+            working.transient.halted = true
+            working.transient.haltReason = "surrender"
+            appendEvent("outcome_latched", "turn_end", source("system", "turn_resolver"), {
+                status = "defeat",
+                reasonCode = "surrender",
+                stealth = working.state.player.stealth,
+                resistance = working.state.character.resistance,
+            }, nil, nil, { kind = "turn_rule" })
         end
 
         for index, instanceId in ipairs(playerSelection) do

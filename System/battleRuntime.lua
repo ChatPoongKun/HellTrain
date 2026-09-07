@@ -282,7 +282,7 @@
         return pendingCopy, nil
     end
 
-    local function preparePending(authorityState, staticData, projection)
+    local function preparePending(authorityState, staticData, projection, surrender)
         local validatedState, authorityErrors = validateAuthority(authorityState, staticData)
         if authorityErrors then
             return failure(authorityErrors)
@@ -321,7 +321,7 @@
             validatedState,
             staticData,
             sealed.projection,
-            { turnId = receipt.turnId }
+            { turnId = receipt.turnId, surrender = surrender }
         )
         if resolveErrors then
             return failure(resolveErrors)
@@ -470,7 +470,7 @@
 
     local arguments = { ... }
     if action == "preparePending" then
-        return preparePending(arguments[1], arguments[2], arguments[3])
+        return preparePending(arguments[1], arguments[2], arguments[3], arguments[4])
     elseif action == "reusePending" then
         return reusePending(arguments[1], arguments[2], arguments[3])
     elseif action == "commitPending" then
