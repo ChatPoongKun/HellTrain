@@ -711,6 +711,9 @@
     end
 
     local function writeStored(key, value, verify)
+        -- A host write may return normally without persisting. Verify before
+        -- later writes retire the draft, pending turn, or recovery receipt.
+        if verify == nil then verify = true end
         if type(HostCompat) ~= "table" or type(HostCompat.writeState) ~= "function" then
             return {
                 makeError("state_write_unavailable", "$.host.setState", "상태 쓰기 호환 함수를 찾을 수 없습니다."),
