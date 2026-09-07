@@ -384,6 +384,7 @@
             end
             transientSeed.skipRemaining = receiptTransient.skipRemaining
             transientSeed.forcedMoodRequests = receiptTransient.forcedMoodRequests
+            transientSeed.moodTokenDebt = receiptTransient.moodTokenDebt
         end
         local working = {
             state = workingState,

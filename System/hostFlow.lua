@@ -442,6 +442,27 @@ appendChatVerified = function(triggerId, role, content)
     end
 end
 
+local function addRequestContext(triggerId, prompt)
+    local report = runScript(triggerId, "battleController", "getRequestContext")
+    if not controllerSucceeded(triggerId, "getRequestContext", report) then
+        error("현재 장면 정보를 구성하지 못했습니다.")
+    end
+    local marker = "[현재 주변 정보]"
+    local normalized = {}
+    for _, message in ipairs(prompt) do
+        if not (message.role == "system" and type(message.content) == "string"
+            and message.content:sub(1, #marker) == marker) then
+            normalized[#normalized + 1] = message
+        end
+    end
+    table.insert(normalized, math.max(1, #normalized), {
+        role = "system",
+        content = marker .. "\n" .. json.encode(report.context)
+            .. "\n현재 화면과 동일한 배경 정보입니다. scene.time은 시간대이며, 달력 날짜는 제공되지 않았습니다.",
+    })
+    return normalized
+end
+
 local function generateApproachScene(triggerId, report, characterId)
     if type(LLM) ~= "function" then
         return nil, "LLM 함수를 사용할 수 없습니다. Lua 스크립트의 low-level access를 활성화해야 합니다."
@@ -458,7 +479,7 @@ local function generateApproachScene(triggerId, report, characterId)
     end
 
     local encounters = pastApproachEncounters(triggerId, report, characterId)
-    local prompt = buildApproachPrompt(characterName, profile, encounters)
+    local prompt = addRequestContext(triggerId, buildApproachPrompt(characterName, profile, encounters))
     local lastError = "알 수 없는 LLM 오류"
     for _ = 1, APPROACH_REQUEST_ATTEMPTS do
         local requestOk, response = pcall(LLM, triggerId, prompt, false, { streaming = true })
@@ -723,7 +744,7 @@ local function handleEditRequest(triggerId, data)
         debug(1, "editRequest: 주입된 promptArray가 없습니다.")
         return data
     end
-    return report.promptArray
+    return addRequestContext(triggerId, report.promptArray)
 end
 
 --수동 전송의 턴 준비·실패 복구·commit-only 복구

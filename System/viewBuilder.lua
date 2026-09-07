@@ -791,7 +791,12 @@
             tokens[registeredMoodId] = stateTokens[registeredMoodId] or 0
         end
 
+        local turns = state.history and state.history.turns or {}
+        local previousTurn = turns[#turns]
+        local previousId = previousTurn and previousTurn.start.mood or ""
+
         return {
+            previousId = previousId ~= moodId and previousId or "",
             id = moodId,
             label = mood.label,
             tokenThreshold = 3,
@@ -2221,6 +2226,7 @@
                 addError(errors, "invalid_mood", "$.character.mood", "무드 View가 테이블이 아닙니다.")
             else
                 checkAllowedKeys(mood, {
+                    previousId = true,
                     id = true,
                     label = true,
                     tokenThreshold = true,
@@ -2228,6 +2234,11 @@
                 }, "$.character.mood", errors)
                 if not isAsciiId(mood.id) or type(mood.label) ~= "string" then
                     addError(errors, "invalid_mood_value", "$.character.mood", "무드 표시 값이 올바르지 않습니다.")
+                end
+                if mood.previousId ~= nil and mood.previousId ~= ""
+                    and (not isAsciiId(mood.previousId) or mood.previousId == mood.id
+                        or type(mood.tokens) ~= "table" or mood.tokens[mood.previousId] == nil) then
+                    addError(errors, "invalid_previous_mood", "$.character.mood.previousId", "직전 턴 무드 표시 값이 올바르지 않습니다.")
                 end
                 if mood.tokenThreshold ~= 3 or type(mood.tokens) ~= "table" then
                     addError(errors, "invalid_mood_tokens", "$.character.mood", "무드 토큰 표시값이 올바르지 않습니다.")

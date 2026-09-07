@@ -1508,7 +1508,7 @@
         return after, nil
     end
 
-    local function publishCurrentViewInternal(staticData, suppressRefresh, skipUiRender, interactionOnly)
+    local function publishCurrentViewInternal(staticData, suppressRefresh, skipUiRender, interactionOnly, readOnly)
         staticData = staticData or select(1, loadStaticData())
         if staticData == nil then
             local _, errors = loadStaticData()
@@ -1620,6 +1620,10 @@
                     "viewBuilder 성공 결과에 battleInteractionView가 없습니다."
                 ),
             }
+        end
+
+        if readOnly == true then
+            return { view = built.view }, nil
         end
 
         local publishedViewName = interactionOnly == true and INTERACTION_VIEW_NAME or VIEW_NAME
@@ -4891,12 +4895,12 @@
         return success({ snapshot = snapshot })
     end
 
-    local function publishCurrentView()
+    local function publishCurrentView(readOnly)
         local staticData, staticErrors = loadStaticData()
         if staticErrors then
             return failure(staticErrors)
         end
-        local published, publishErrors = publishCurrentViewInternal(staticData)
+        local published, publishErrors = publishCurrentViewInternal(staticData, nil, nil, nil, readOnly)
         if publishErrors then
             return failure(publishErrors)
         end
@@ -4944,6 +4948,17 @@
         return skipAftermath(arguments[1], arguments[2])
     elseif action == "publishCurrentView" then
         return publishCurrentView()
+    elseif action == "getRequestContext" then
+        local result = publishCurrentView(true)
+        if result.ok ~= true then return result end
+        local view = result.view
+        return success({ context = {
+            scene = view.scene,
+            line = view.subway.lineName,
+            currentStation = view.subway.currentStation.name,
+            startStation = view.subway.startStation.name,
+            destinationStation = view.subway.destinationStation.name,
+        } })
     elseif action == "getSnapshot" then
         return getSnapshot()
     elseif action == "getTerminalSummary" then

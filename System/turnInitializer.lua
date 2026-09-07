@@ -1000,6 +1000,9 @@
             return failure({ forcedRequestsError })
         end
         storedTransient.forcedMoodRequests = forcedRequestsCopy
+        local debtCopy, debtError = cloneData(transient.moodTokenDebt, "$.transient.moodTokenDebt")
+        if debtError then return failure({ debtError }) end
+        storedTransient.moodTokenDebt = debtCopy
 
         local receiptDraws, receiptDrawsError = cloneData(draws, "$.draws")
         if receiptDrawsError then

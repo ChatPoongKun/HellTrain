@@ -1988,7 +1988,21 @@
             checkAllowedKeys(transient, {
                 skipRemaining = true,
                 forcedMoodRequests = true,
+                moodTokenDebt = true,
             }, path .. ".transient", errors)
+
+            if transient.moodTokenDebt ~= nil then
+                if type(transient.moodTokenDebt) ~= "table" then
+                    addError(errors, "invalid_mood_token_debt", path .. ".transient.moodTokenDebt", "무드 토큰 감소 잔액이 올바르지 않습니다.")
+                else
+                    for moodId, count in pairs(transient.moodTokenDebt) do
+                        if not isAsciiId(moodId) or not isSafeInteger(count, 0)
+                            or (referencesValidated and not staticData.registry.moods[moodId]) then
+                            addError(errors, "invalid_mood_token_debt", path .. ".transient.moodTokenDebt", "무드 토큰 감소 잔액이 올바르지 않습니다.")
+                        end
+                    end
+                end
+            end
 
             local skipRemaining = transient.skipRemaining
             if type(skipRemaining) ~= "table" then

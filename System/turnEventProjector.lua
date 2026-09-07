@@ -40,6 +40,7 @@
             drawnInstanceIds = true,
             scope = true,
             mood = true,
+            moodTokenDebtBefore = true,
         },
         trigger_suppressed = { inputEventType = true, reasonCode = true, hidden = true },
         trigger_resolved = { inputEventType = true, commandCount = true },
@@ -904,6 +905,7 @@
                 return nil, makeError("effect_change_mismatch", path .. ".changed", "행동 생략 효과의 changed가 before와 다릅니다.")
             end
         elseif op == "add_mood_token" or op == "remove_mood_token" then
+            local debt = payload.moodTokenDebtBefore or 0
             if payload.target ~= "character" then
                 return nil, makeError("effect_target_mismatch", path .. ".target", "무드 토큰 대상은 character여야 합니다.")
             end
@@ -911,8 +913,9 @@
                 or not isInteger(payload.amount, 1)
                 or not isInteger(payload.before, 0)
                 or not isInteger(payload.after, 0)
+                or not isSafeInteger(debt, 0)
                 or payload.after ~= (op == "add_mood_token"
-                    and payload.before + payload.amount
+                    and math.max(0, payload.before - debt + payload.amount)
                     or math.max(0, payload.before - payload.amount))
                 or payload.changed ~= (payload.before ~= payload.after) then
                 return nil, makeError("invalid_effect_payload", path, "무드 토큰 효과 payload가 올바르지 않습니다.")
@@ -1044,6 +1047,7 @@
                 or beforeState.character.moodTokens
         )
         local trackedForcedMoodRequests = {}
+        local trackedMoodTokenDebt = {}
         local trackedSkipRemaining = { player = false, character = false }
         local function findBeforeInstance(instanceId)
             for _, instance in ipairs(beforeState.cardInstances) do
@@ -2035,6 +2039,15 @@
                 elseif payload.op == "add_mood_token" or payload.op == "remove_mood_token" then
                     if effect.before ~= trackedMoodTokens[effect.mood] then
                         return failure({ makeError("effect_state_mismatch", path .. ".payload.before", "무드 토큰 효과 before가 앞선 토큰 수와 다릅니다.") })
+                    end
+                    -- Older events have no debt field and retain their original clamping rules.
+                    if payload.moodTokenDebtBefore ~= nil then
+                        if payload.moodTokenDebtBefore ~= (trackedMoodTokenDebt[effect.mood] or 0) then
+                            return failure({ makeError("effect_state_mismatch", path .. ".payload.moodTokenDebtBefore", "무드 토큰 감소 잔액이 앞선 사건 결과와 다릅니다.") })
+                        end
+                        local balance = effect.before - payload.moodTokenDebtBefore
+                            + (payload.op == "add_mood_token" and effect.amount or -effect.amount)
+                        trackedMoodTokenDebt[effect.mood] = math.max(0, -balance)
                     end
                     trackedMoodTokens[effect.mood] = effect.after
                 elseif payload.op == "force_mood" then

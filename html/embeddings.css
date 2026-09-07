@@ -1104,6 +1104,10 @@ border: 1px solid transparent;
 border-radius: 6px;
 background: transparent;
 }
+.ht-mood.is-previous {
+border: 1px dashed rgba(255, 255, 255, .18);
+background: rgba(255, 255, 255, .025);
+}
 .ht-mood.is-current {
 border-color: rgba(255, 255, 255, .30);
 background: rgba(255, 255, 255, .055);

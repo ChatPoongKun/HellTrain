@@ -451,8 +451,8 @@
                 local before = tokens[command.mood]
                 local after = command.op == "add_mood_token"
                     and before + command.amount
-                    or math.max(0, before - command.amount)
-                if not isInteger(after, 0) or after > 9007199254740991 then
+                    or (before - command.amount)
+                if not isInteger(math.abs(after), 0) or math.abs(after) > 9007199254740991 then
                     return failure({ makeError("mood_token_overflow", path, "무드 토큰 수가 안전한 범위를 벗어났습니다.") })
                 end
                 tokens[command.mood] = after
@@ -463,6 +463,7 @@
             end
         end
 
+        for moodId, count in pairs(tokens) do tokens[moodId] = math.max(0, count) end
         local tokensBefore, tokensBeforeError = cloneData(tokens, "$.projection.tokensBefore")
         if tokensBeforeError then return failure({ tokensBeforeError }) end
         local payload = {
@@ -1315,10 +1316,18 @@
                         makeError("invalid_mood_token_count", "$.working.state.character.moodTokens." .. command.mood, "무드 토큰 수가 0 이상의 정수가 아닙니다."),
                     })
                 end
-                local after = command.op == "add_mood_token"
-                    and (before + command.amount)
-                    or math.max(0, before - command.amount)
-                if after > 9007199254740991 then
+                -- Unpaid removals expire with this turn's transient state.
+                transient.moodTokenDebt = transient.moodTokenDebt or {}
+                if type(transient.moodTokenDebt) ~= "table" then
+                    return failure({ makeError("invalid_mood_token_debt", "$.working.transient.moodTokenDebt", "무드 토큰 감소 잔액이 올바르지 않습니다.") })
+                end
+                local debt = transient.moodTokenDebt[command.mood] or 0
+                if not isInteger(debt, 0) or debt > 9007199254740991 then
+                    return failure({ makeError("invalid_mood_token_debt", "$.working.transient.moodTokenDebt", "무드 토큰 감소 잔액이 올바르지 않습니다.") })
+                end
+                local balance = before - debt + (command.op == "add_mood_token" and command.amount or -command.amount)
+                local after = math.max(0, balance)
+                if math.abs(balance) > 9007199254740991 then
                     return failure({
                         makeError("mood_token_overflow", "$.commands[" .. index .. "].amount", "무드 토큰 수가 안전한 정수 범위를 벗어났습니다."),
                     })
@@ -1328,6 +1337,8 @@
                 entry.before = before
                 entry.after = after
                 entry.changed = before ~= after
+                entry.moodTokenDebtBefore = debt
+                transient.moodTokenDebt[command.mood] = math.max(0, -balance)
                 state.character.moodTokens[command.mood] = after
             elseif command.op == "force_mood" then
                 if transient.forcedMoodRequests == nil then
