@@ -10,7 +10,7 @@
 {{settempvar::run_progression_reached::{{dictelement::{{tempvar::run_progression_route}}::reachedStation}}}}
 {{settempvar::run_progression_destination::{{dictelement::{{tempvar::run_progression_route}}::destinationStation}}}}
 {{settempvar::battle_log_view::{{getvar::battleLogView}}}}
-<section class="run-flow" aria-label="전투 결과와 다음 진행">
+<section class="run-flow draft-ui" aria-label="전투 결과와 다음 진행">
 <div class="run-shell">
 <header class="run-topbar">
 <div>
@@ -108,112 +108,101 @@
 {{settempvar::run_progression_reward::{{dictelement::{{tempvar::run_progression_view}}::rewardOffer}}}}
 <div class="run-section-head">
 <h3 class="run-section-title">전투 보상을 선택하세요</h3>
-<span class="run-instruction">첫 클릭: 상세 확인 · 열린 카드 아래 버튼: 보상 확정 · 원치 않으면 선택하지 않기</span>
+<span class="run-instruction">카드 클릭: 상세 확인 · 아래 버튼: 선택 확정 · 원치 않으면 선택하지 않기</span>
 </div>
 {{#when::keep::{{dictelement::{{tempvar::run_progression_reward}}::kind}}::is::card}}
-<input class="run-choice-none" type="radio" name="run-reward-choice" id="run-reward-none" checked aria-hidden="true">
-<div class="run-card-grid" role="list" aria-label="전투 보상 카드">
-{{#each::keep {{dictelement::{{tempvar::run_progression_reward}}::cards}} as run_reward_card}}
-{{settempvar::run_reward_type::{{dictelement::{{slot::run_reward_card}}::cardType}}}}
-<div class="run-choice-slot" role="listitem">
+<input class="draft-none" type="radio" name="run-reward-choice" id="run-reward-none" checked aria-hidden="true">
+<div class="draft-offers" role="list" aria-label="전투 보상 카드">
+{{#each::keep {{dictelement::{{tempvar::run_progression_reward}}::cards}} as run_reward_offer_card}}
+{{settempvar::run_reward_offer_type::{{dictelement::{{slot::run_reward_offer_card}}::cardType}}}}
+<div class="draft-slot" role="listitem">
 <input
-class="run-choice-state"
+class="draft-choice-state"
 type="radio"
 name="run-reward-choice"
-id="run-reward-card-{{dictelement::{{slot::run_reward_card}}::slot}}"
-aria-label="{{dictelement::{{slot::run_reward_card}}::name}} 상세 보기"
+id="run-reward-card-{{dictelement::{{slot::run_reward_offer_card}}::slot}}"
+aria-label="{{dictelement::{{slot::run_reward_offer_card}}::name}} 카드 상세 보기"
 >
-<article class="run-reward-card" aria-label="{{dictelement::{{slot::run_reward_card}}::name}} 보상 카드">
-<label class="run-reward-card-action" for="run-reward-card-{{dictelement::{{slot::run_reward_card}}::slot}}" aria-label="{{dictelement::{{slot::run_reward_card}}::name}} 상세 보기"></label>
-{{#when::keep::{{dictelement::{{slot::run_reward_card}}::draftStyle}}::is::predator}}<img class="run-style-icon" src="{{raw::포식}}" alt="" aria-hidden="true">{{/when}}
-{{#when::keep::{{dictelement::{{slot::run_reward_card}}::draftStyle}}::is::harmonizer}}<img class="run-style-icon" src="{{raw::조율}}" alt="" aria-hidden="true">{{/when}}
-{{#when::keep::{{dictelement::{{slot::run_reward_card}}::draftStyle}}::is::glutton}}<img class="run-style-icon" src="{{raw::탐식}}" alt="" aria-hidden="true">{{/when}}
-{{#when::keep::{{dictelement::{{slot::run_reward_card}}::draftStyle}}::is::deceiver}}<img class="run-style-icon" src="{{raw::기만}}" alt="" aria-hidden="true">{{/when}}
-<span class="run-card-inner">
-<span class="run-card-top">
-<span class="run-slot-index">{{dictelement::{{slot::run_reward_card}}::slot}}</span>
-<span class="run-owned">보유 {{dictelement::{{slot::run_reward_card}}::ownedCopies}} / {{dictelement::{{slot::run_reward_card}}::maxCopies}}</span>
-{{#when::keep::{{dictelement::{{slot::run_reward_card}}::rarity}}::is::rare}}<span class="run-owned run-rarity" aria-label="희귀 카드">희귀</span>{{/when}}
-{{#when::keep::{{dictelement::{{slot::run_reward_card}}::rarity}}::is::legendary}}<span class="run-owned run-rarity is-legendary" aria-label="전설 카드">전설</span>{{/when}}
+<article class="draft-card" aria-label="{{dictelement::{{slot::run_reward_offer_card}}::name}} 카드">
+<label class="draft-card-action" for="run-reward-card-{{dictelement::{{slot::run_reward_offer_card}}::slot}}" aria-label="{{dictelement::{{slot::run_reward_offer_card}}::name}} 카드 상세 보기"></label>
+{{#when::keep::{{dictelement::{{slot::run_reward_offer_card}}::draftStyle}}::is::predator}}<img class="draft-style-icon" src="{{raw::포식}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::run_reward_offer_card}}::draftStyle}}::is::harmonizer}}<img class="draft-style-icon" src="{{raw::조율}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::run_reward_offer_card}}::draftStyle}}::is::glutton}}<img class="draft-style-icon" src="{{raw::탐식}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::run_reward_offer_card}}::draftStyle}}::is::deceiver}}<img class="draft-style-icon" src="{{raw::기만}}" alt="" aria-hidden="true">{{/when}}
+<span class="draft-card-top">
+<span class="draft-card-heading">
+<span class="draft-copy-count">보유 {{dictelement::{{slot::run_reward_offer_card}}::ownedCopies}} / {{dictelement::{{slot::run_reward_offer_card}}::maxCopies}}</span>{{#when::keep::{{dictelement::{{slot::run_reward_offer_card}}::rarity}}::is::rare}}<span class="draft-rarity" aria-label="희귀 카드">희귀</span>{{/when}}{{#when::keep::{{dictelement::{{slot::run_reward_offer_card}}::rarity}}::is::legendary}}<span class="draft-rarity is-legendary" aria-label="전설 카드">전설</span>{{/when}}
+<strong class="draft-card-title">{{dictelement::{{slot::run_reward_offer_card}}::name}}</strong>
+<span class="draft-tags" aria-label="카드 태그">
+<button type="button" class="draft-tag is-type draft-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::run_reward_offer_type}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{tempvar::run_reward_offer_type}}::label}} 카드 유형 정보 보기">{{dictelement::{{tempvar::run_reward_offer_type}}::label}}</button>{{#each::keep {{dictelement::{{slot::run_reward_offer_card}}::roles}} as run_reward_offer_role}}<button type="button" class="draft-tag draft-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_offer_role}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::run_reward_offer_role}}::label}} 역할 정보 보기">{{dictelement::{{slot::run_reward_offer_role}}::label}}</button>{{/each}}{{#each::keep {{dictelement::{{slot::run_reward_offer_card}}::mechanisms}} as run_reward_offer_mechanism}}<button type="button" class="draft-tag is-mechanism draft-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_offer_mechanism}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::run_reward_offer_mechanism}}::label}} 태그 정보 보기">{{dictelement::{{slot::run_reward_offer_mechanism}}::label}}</button>{{/each}}
 </span>
-<span class="run-card-name">{{dictelement::{{slot::run_reward_card}}::name}}</span>
-<span class="run-tags" aria-label="카드 태그">
-<button type="button" class="run-tag run-is-type run-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{tempvar::run_reward_type}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{tempvar::run_reward_type}}::label}} 카드 유형 정보 보기">{{dictelement::{{tempvar::run_reward_type}}::label}}</button>
-{{#each::keep {{dictelement::{{slot::run_reward_card}}::roles}} as run_reward_role}}
-<button type="button" class="run-tag run-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_role}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::run_reward_role}}::label}} 역할 정보 보기">{{dictelement::{{slot::run_reward_role}}::label}}</button>
-{{/each}}
-{{#each::keep {{dictelement::{{slot::run_reward_card}}::mechanisms}} as run_reward_mechanism}}
-<button type="button" class="run-tag run-is-mechanism run-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_mechanism}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::run_reward_mechanism}}::label}} 태그 정보 보기">{{dictelement::{{slot::run_reward_mechanism}}::label}}</button>
-{{/each}}
 </span>
-<span class="run-card-details">
-<span class="run-card-details-inner">
-<span class="run-description">
-{{#each::keep {{dictelement::{{slot::run_reward_card}}::descriptionSegments}} as run_reward_segment}}{{#when::keep::{{dictelement::{{slot::run_reward_segment}}::kind}}::is::text}}{{dictelement::{{slot::run_reward_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::run_reward_segment}}::kind}}::isnot::text}}{{#when::keep::{{dictelement::{{slot::run_reward_segment}}::tagKind}}::is::mechanism}}<button type="button" class="run-inline-tag run-is-mechanism run-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_segment}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::run_reward_segment}}::label}} 태그 정보 보기">{{dictelement::{{slot::run_reward_segment}}::label}}</button>{{/when}}{{#when::keep::{{dictelement::{{slot::run_reward_segment}}::tagKind}}::isnot::mechanism}}<button type="button" class="run-inline-tag run-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_segment}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::run_reward_segment}}::label}} 태그 정보 보기">{{dictelement::{{slot::run_reward_segment}}::label}}</button>{{/when}}{{/when}}{{/each}}
+<span class="draft-stats">
+<span class="draft-stat draft-stat--cost" aria-label="기본 은폐 비용 {{dictelement::{{slot::run_reward_offer_card}}::baseStealthCost}}"><b>{{dictelement::{{slot::run_reward_offer_card}}::baseStealthCost}}</b><small>은폐 비용</small></span>
+<span class="draft-stat draft-stat--damage" aria-label="기본 저항 피해 {{dictelement::{{slot::run_reward_offer_card}}::baseResistanceDamage}}"><b>{{dictelement::{{slot::run_reward_offer_card}}::baseResistanceDamage}}</b><small>저항 피해</small></span>
 </span>
-<span class="run-rule-lines">
-{{#each::keep {{dictelement::{{slot::run_reward_card}}::ruleLines}} as run_reward_rule}}
-<span class="run-rule-line">{{#each::keep {{dictelement::{{slot::run_reward_rule}}::segments}} as run_reward_rule_segment}}{{#when::keep::{{dictelement::{{slot::run_reward_rule_segment}}::kind}}::is::text}}{{dictelement::{{slot::run_reward_rule_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::run_reward_rule_segment}}::kind}}::isnot::text}}{{#when::keep::{{dictelement::{{slot::run_reward_rule_segment}}::tagKind}}::is::mechanism}}<button type="button" class="run-inline-tag run-is-mechanism run-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_rule_segment}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::run_reward_rule_segment}}::label}} 태그 정보 보기">{{dictelement::{{slot::run_reward_rule_segment}}::label}}</button>{{/when}}{{#when::keep::{{dictelement::{{slot::run_reward_rule_segment}}::tagKind}}::isnot::mechanism}}<button type="button" class="run-inline-tag run-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_rule_segment}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::run_reward_rule_segment}}::label}} 태그 정보 보기">{{dictelement::{{slot::run_reward_rule_segment}}::label}}</button>{{/when}}{{/when}}{{/each}}</span>
-{{/each}}
+</span>
+
+<span class="draft-details">
+<span class="draft-details-inner">
+<span class="draft-card-detail">
+<span class="draft-description">
+{{#each::keep {{dictelement::{{slot::run_reward_offer_card}}::descriptionSegments}} as run_reward_description_segment}}{{#when::keep::{{dictelement::{{slot::run_reward_description_segment}}::kind}}::is::text}}{{dictelement::{{slot::run_reward_description_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::run_reward_description_segment}}::kind}}::isnot::text}}{{#when::keep::{{dictelement::{{slot::run_reward_description_segment}}::tagKind}}::is::mechanism}}<button type="button" class="draft-inline-tag is-mechanism draft-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_description_segment}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::run_reward_description_segment}}::label}} 태그 정보 보기">{{dictelement::{{slot::run_reward_description_segment}}::label}}</button>{{/when}}{{#when::keep::{{dictelement::{{slot::run_reward_description_segment}}::tagKind}}::isnot::mechanism}}<button type="button" class="draft-inline-tag draft-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_description_segment}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::run_reward_description_segment}}::label}} 태그 정보 보기">{{dictelement::{{slot::run_reward_description_segment}}::label}}</button>{{/when}}{{/when}}{{/each}}</span>
+<span class="draft-rule-lines">{{#each::keep {{dictelement::{{slot::run_reward_offer_card}}::ruleLines}} as run_reward_rule_line}}<span class="draft-rule-line">{{#each::keep {{dictelement::{{slot::run_reward_rule_line}}::segments}} as run_reward_rule_segment}}{{#when::keep::{{dictelement::{{slot::run_reward_rule_segment}}::kind}}::is::text}}{{dictelement::{{slot::run_reward_rule_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::run_reward_rule_segment}}::kind}}::isnot::text}}{{#when::keep::{{dictelement::{{slot::run_reward_rule_segment}}::tagKind}}::is::mechanism}}<button type="button" class="draft-inline-tag is-mechanism draft-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_rule_segment}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::run_reward_rule_segment}}::label}} 태그 정보 보기">{{dictelement::{{slot::run_reward_rule_segment}}::label}}</button>{{/when}}{{#when::keep::{{dictelement::{{slot::run_reward_rule_segment}}::tagKind}}::isnot::mechanism}}<button type="button" class="draft-inline-tag draft-tip-trigger" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_rule_segment}}::id}}" aria-haspopup="dialog" aria-label="{{dictelement::{{slot::run_reward_rule_segment}}::label}} 태그 정보 보기">{{dictelement::{{slot::run_reward_rule_segment}}::label}}</button>{{/when}}{{/when}}{{/each}}</span>{{/each}}</span>
 </span>
 </span>
 </span>
-<span class="run-card-stats">
-<span class="run-card-stat">
-<span class="run-card-stat-label">은폐 비용</span>
-<strong>{{dictelement::{{slot::run_reward_card}}::baseStealthCost}}</strong>
-</span>
-<span class="run-card-stat">
-<span class="run-card-stat-label">저항 피해</span>
-<strong>{{dictelement::{{slot::run_reward_card}}::baseResistanceDamage}}</strong>
-</span>
-</span>
+
+<span class="draft-card-bottom">
+<span class="draft-first-hint">카드를 눌러 상세 보기</span>
+<span class="draft-selected-state"><span class="draft-selected-idle">선택 대기</span><span class="draft-selected-open">확인 중</span></span>
 </span>
 </article>
 <button
-class="run-confirm"
+class="draft-confirm"
 type="button"
-risu-btn="init|choose|{{dictelement::{{slot::run_reward_card}}::cardId}}|{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}"
-aria-label="{{dictelement::{{slot::run_reward_card}}::name}} 카드를 전투 보상으로 확정"
->이 카드를 획득 · 클릭해 확정</button>
-<div class="run-popover-bank">
-<div id="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{tempvar::run_reward_type}}::id}}" class="run-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{tempvar::run_reward_type}}::label}} 카드 유형 정보">
-<button type="button" class="run-popover-dismiss" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{tempvar::run_reward_type}}::id}}" popovertargetaction="hide">
-<span class="run-popover-kicker">CARD TYPE</span>
-<span class="run-popover-title">{{dictelement::{{tempvar::run_reward_type}}::label}}</span>
-<span class="run-popover-copy">{{dictelement::{{tempvar::run_reward_type}}::tooltip}}</span>
-<span class="run-popover-close-hint">어디든 누르면 닫힙니다</span>
+risu-btn="init|choose|{{dictelement::{{slot::run_reward_offer_card}}::cardId}}|{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}"
+aria-label="{{dictelement::{{slot::run_reward_offer_card}}::name}} 카드를 전투 보상으로 확정"
+>이 카드를 보상으로 획득</button>
+
+<div class="draft-popover-bank">
+<div id="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::run_reward_offer_type}}::id}}" class="draft-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{tempvar::run_reward_offer_type}}::label}} 카드 유형 정보">
+<button type="button" class="draft-popover-dismiss" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{tempvar::run_reward_offer_type}}::id}}" popovertargetaction="hide">
+<span class="draft-popover-kicker">CARD TYPE</span>
+<span class="draft-popover-title">{{dictelement::{{tempvar::run_reward_offer_type}}::label}}</span>
+<span class="draft-popover-copy">{{dictelement::{{tempvar::run_reward_offer_type}}::tooltip}}</span>
+<span class="draft-popover-close-hint">어디든 누르면 닫힙니다</span>
 </button>
 </div>
-{{#each::keep {{dictelement::{{slot::run_reward_card}}::mechanisms}} as run_popover_mechanism}}
-<div id="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_popover_mechanism}}::id}}" class="run-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{slot::run_popover_mechanism}}::label}} 태그 정보">
-<button type="button" class="run-popover-dismiss" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_popover_mechanism}}::id}}" popovertargetaction="hide">
-<span class="run-popover-kicker run-is-mechanism">MECHANISM</span>
-<span class="run-popover-title">{{dictelement::{{slot::run_popover_mechanism}}::label}}</span>
-<span class="run-popover-copy">{{dictelement::{{slot::run_popover_mechanism}}::tooltip}}</span>
-<span class="run-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
-{{/each}}
-{{#each::keep {{dictelement::{{slot::run_reward_card}}::terms}} as run_popover_term}}
-<div id="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_popover_term}}::id}}" class="run-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{slot::run_popover_term}}::label}} 규칙 용어 정보">
-<button type="button" class="run-popover-dismiss" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_popover_term}}::id}}" popovertargetaction="hide">
-<span class="run-popover-kicker">RULE TERM</span>
-<span class="run-popover-title">{{dictelement::{{slot::run_popover_term}}::label}}</span>
-<span class="run-popover-copy">{{dictelement::{{slot::run_popover_term}}::tooltip}}</span>
-<span class="run-popover-close-hint">어디든 누르면 닫힙니다</span>
-</button>
-</div>
-{{#each::keep {{dictelement::{{slot::run_reward_card}}::roles}} as run_popover_role}}
-<div id="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_popover_role}}::id}}" class="run-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{slot::run_popover_role}}::label}} 역할 정보">
-<button type="button" class="run-popover-dismiss" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_card}}::slot}}-tag-{{dictelement::{{slot::run_popover_role}}::id}}" popovertargetaction="hide">
-<span class="run-popover-kicker">ROLE</span>
-<span class="run-popover-title">{{dictelement::{{slot::run_popover_role}}::label}}</span>
-<span class="run-popover-copy">{{dictelement::{{slot::run_popover_role}}::tooltip}}</span>
-<span class="run-popover-close-hint">어디든 누르면 닫힙니다</span>
+{{#each::keep {{dictelement::{{slot::run_reward_offer_card}}::roles}} as run_reward_popover_role}}
+<div id="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_popover_role}}::id}}" class="draft-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{slot::run_reward_popover_role}}::label}} 역할 정보">
+<button type="button" class="draft-popover-dismiss" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_popover_role}}::id}}" popovertargetaction="hide">
+<span class="draft-popover-kicker">ROLE</span>
+<span class="draft-popover-title">{{dictelement::{{slot::run_reward_popover_role}}::label}}</span>
+<span class="draft-popover-copy">{{dictelement::{{slot::run_reward_popover_role}}::tooltip}}</span>
+<span class="draft-popover-close-hint">어디든 누르면 닫힙니다</span>
 </button>
 </div>
 {{/each}}
+{{#each::keep {{dictelement::{{slot::run_reward_offer_card}}::mechanisms}} as run_reward_popover_mechanism}}
+<div id="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_popover_mechanism}}::id}}" class="draft-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{slot::run_reward_popover_mechanism}}::label}} 태그 정보">
+<button type="button" class="draft-popover-dismiss" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_popover_mechanism}}::id}}" popovertargetaction="hide">
+<span class="draft-popover-kicker is-mechanism">MECHANISM</span>
+<span class="draft-popover-title">{{dictelement::{{slot::run_reward_popover_mechanism}}::label}}</span>
+<span class="draft-popover-copy">{{dictelement::{{slot::run_reward_popover_mechanism}}::tooltip}}</span>
+<span class="draft-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
+{{/each}}
+{{#each::keep {{dictelement::{{slot::run_reward_offer_card}}::terms}} as run_reward_popover_term}}
+<div id="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_popover_term}}::id}}" class="draft-popover" popover="auto" role="dialog" aria-label="{{dictelement::{{slot::run_reward_popover_term}}::label}} 규칙 용어 정보">
+<button type="button" class="draft-popover-dismiss" popovertarget="rnp-{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}-{{dictelement::{{slot::run_reward_offer_card}}::slot}}-tag-{{dictelement::{{slot::run_reward_popover_term}}::id}}" popovertargetaction="hide">
+<span class="draft-popover-kicker">RULE TERM</span>
+<span class="draft-popover-title">{{dictelement::{{slot::run_reward_popover_term}}::label}}</span>
+<span class="draft-popover-copy">{{dictelement::{{slot::run_reward_popover_term}}::tooltip}}</span>
+<span class="draft-popover-close-hint">어디든 누르면 닫힙니다</span>
+</button>
+</div>
 {{/each}}
 </div>
 </div>
@@ -339,7 +328,7 @@ aria-label="{{dictelement::{{slot::run_target}}::name}}을 다음 전투 상대�
 {{/when}}
 
 {{#when::keep::{{dictelement::{{tempvar::run_progression_view}}::kind}}::isnot::runProgressionView}}
-<section class="run-flow" aria-label="전투 결과 데이터 대기">
+<section class="run-flow draft-ui" aria-label="전투 결과 데이터 대기">
 <div class="run-fallback" aria-live="polite">
 <div class="run-kicker">RUN PROGRESSION</div>
 <div class="run-fallback-mark" aria-hidden="true">…</div>
