@@ -659,9 +659,11 @@
             mood = state.character.mood,
             player = {
                 stealth = state.player.stealth,
+                planCount = #(state.player.planSlots or {}),
             },
             character = {
                 resistance = state.character.resistance,
+                planCount = #(state.character.planSlots or {}),
                 moodTokens = tokens,
                 publicRole = state.characterIntent.publicRole,
             },

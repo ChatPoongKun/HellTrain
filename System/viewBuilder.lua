@@ -1258,9 +1258,13 @@
                     turn = displayState.turnNumber,
                     phase = "player_selection",
                     mood = displayState.character.mood,
-                    player = { stealth = displayState.player.stealth },
+                    player = {
+                        stealth = displayState.player.stealth,
+                        planCount = #(displayState.player.planSlots or {}),
+                    },
                     character = {
                         resistance = displayState.character.resistance,
+                        planCount = #(displayState.character.planSlots or {}),
                         moodTokens = displayState.character.moodTokens,
                         publicRole = displayState.characterIntent.publicRole,
                     },
