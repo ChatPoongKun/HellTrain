@@ -1131,9 +1131,64 @@ border-radius: 2px;
 opacity: .13;
 background: currentColor;
 }
-.ht-mood-cell.is-filled {
+.ht-mood-cell--filled {
 opacity: 1;
 box-shadow: 0 0 4px currentColor;
+}
+.ht-mood-cell--increased,
+.ht-mood-cell--decreased {
+position: relative;
+opacity: 1;
+background: transparent;
+box-shadow: none;
+}
+.ht-mood-cell--increased::before,
+.ht-mood-cell--decreased::before,
+.ht-mood-cell--increased::after,
+.ht-mood-cell--decreased::after {
+content: "";
+position: absolute;
+inset: 0;
+border-radius: inherit;
+background: currentColor;
+}
+.ht-mood-cell--increased::before,
+.ht-mood-cell--decreased::before {
+opacity: .13;
+}
+.ht-mood-cell--increased::after {
+animation: ht-mood-fill 1.2s ease-in-out 2 both;
+}
+.ht-mood-cell--decreased::after {
+animation: ht-mood-drain 1.2s ease-in-out 2 both;
+}
+@keyframes ht-mood-fill {
+0%, 15% { clip-path: inset(0 100% 0 0); }
+75%, 100% { clip-path: inset(0 0 0 0); }
+}
+@keyframes ht-mood-drain {
+0%, 15% { clip-path: inset(0 0 0 0); }
+75%, 100% { clip-path: inset(0 100% 0 0); }
+}
+.ht-mood-overflow {
+grid-column: 1;
+grid-row: 7;
+color: var(--muted);
+font-size: 7px;
+font-variant-numeric: tabular-nums;
+white-space: nowrap;
+}
+.ht-mood-overflow:empty {
+display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+.ht-mood-cell--increased::after,
+.ht-mood-cell--decreased::after {
+animation: none;
+}
+.ht-mood-cell--decreased::after {
+clip-path: inset(0 100% 0 0);
+}
 }
 .ht-mood-cell--5 {
 grid-row: 1;
@@ -2968,10 +3023,12 @@ font-size: 0.68rem;
 }
 
 .popup-shell--deck #deck-filter-all:checked ~ .deck-toolbar label[for="deck-filter-all"],
+.popup-shell--deck #deck-filter-player:checked ~ .deck-toolbar label[for="deck-filter-player"],
 .popup-shell--deck #deck-filter-style-predator:checked ~ .deck-toolbar label[for="deck-filter-style-predator"],
 .popup-shell--deck #deck-filter-style-harmonizer:checked ~ .deck-toolbar label[for="deck-filter-style-harmonizer"],
 .popup-shell--deck #deck-filter-style-glutton:checked ~ .deck-toolbar label[for="deck-filter-style-glutton"],
-.popup-shell--deck #deck-filter-style-deceiver:checked ~ .deck-toolbar label[for="deck-filter-style-deceiver"] {
+.popup-shell--deck #deck-filter-style-deceiver:checked ~ .deck-toolbar label[for="deck-filter-style-deceiver"],
+.popup-shell--deck #deck-filter-character:checked ~ .deck-toolbar label[for="deck-filter-character"] {
 color: #e0f2fe;
 background: rgba(56, 189, 248, 0.12);
 border-color: rgba(56, 189, 248, 0.3);
@@ -3047,6 +3104,10 @@ border-color: var(--rarity-border);
 .popup-shell--deck .rarity-legendary {
 --accent: 246, 200, 93;
 --rarity-border: rgba(246, 200, 93, .88);
+}
+.popup-shell--deck .rarity-character {
+--accent: 196, 181, 253;
+--rarity-border: rgba(196, 181, 253, .45);
 }
 .popup-shell--deck .deck-style-icon {
 position: absolute;
@@ -3258,6 +3319,11 @@ color: #7dd3fc;
 color: #fda4af;
 }
 
+.popup-shell--deck .deck-stat--character strong,
+.popup-shell--deck .deck-stat--character small {
+color: #c4b5fd;
+}
+
 .popup-shell--deck .deck-expand-hint {
 display: flex;
 align-items: center;
@@ -3393,10 +3459,17 @@ font-weight: 700;
 cursor: not-allowed;
 }
 
+.popup-shell--deck #deck-filter-player:checked ~ .deck-grid .card-character,
 .popup-shell--deck #deck-filter-style-predator:checked ~ .deck-grid .deck-card:not(.card-predator),
+.popup-shell--deck #deck-filter-style-predator:checked ~ .deck-grid .deck-empty:not(.card-predator),
 .popup-shell--deck #deck-filter-style-harmonizer:checked ~ .deck-grid .deck-card:not(.card-harmonizer),
+.popup-shell--deck #deck-filter-style-harmonizer:checked ~ .deck-grid .deck-empty:not(.card-harmonizer),
 .popup-shell--deck #deck-filter-style-glutton:checked ~ .deck-grid .deck-card:not(.card-glutton),
-.popup-shell--deck #deck-filter-style-deceiver:checked ~ .deck-grid .deck-card:not(.card-deceiver) {
+.popup-shell--deck #deck-filter-style-glutton:checked ~ .deck-grid .deck-empty:not(.card-glutton),
+.popup-shell--deck #deck-filter-style-deceiver:checked ~ .deck-grid .deck-card:not(.card-deceiver),
+.popup-shell--deck #deck-filter-style-deceiver:checked ~ .deck-grid .deck-empty:not(.card-deceiver),
+.popup-shell--deck #deck-filter-character:checked ~ .deck-grid .deck-card:not(.card-character),
+.popup-shell--deck #deck-filter-character:checked ~ .deck-grid .deck-empty:not(.card-character) {
 display: none;
 }
 
@@ -3442,27 +3515,7 @@ transition: none;
 }
 }
 
-/* 도감.html: 카드 본문은 덱 확인의 기존 컴포넌트를 공유한다. */
-.popup-shell--codex #codex-owner-player:checked ~ .codex-toolbar label[for="codex-owner-player"],
-.popup-shell--codex #codex-owner-character:checked ~ .codex-toolbar label[for="codex-owner-character"] {
-color: #e0f2fe;
-background: rgba(56, 189, 248, 0.12);
-border-color: rgba(56, 189, 248, 0.3);
-}
-
-.popup-shell--codex .codex-panel--character,
-.popup-shell--codex #codex-owner-character:checked ~ .codex-panel--player {
-display: none;
-}
-
-.popup-shell--codex #codex-owner-character:checked ~ .codex-panel--character {
-display: block;
-}
-
-.popup-shell--codex .rarity-character {
---accent: 196, 181, 253;
---rarity-border: rgba(196, 181, 253, .45);
-}
+/* 도감.html: 덱 확인의 디자인 언어 및 컴포넌트를 공용으로 사용한다. */
 
 /* 설정.html */
 .popup-shell--settings .settings-content {

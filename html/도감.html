@@ -3,7 +3,7 @@
 <div class="bg-orb orb-1"></div>
 <div class="bg-orb orb-2"></div>
 
-<div class="popup-overlay popup-shell--deck popup-shell--codex">
+<div class="popup-overlay popup-shell--deck">
 <div class="popup-backdrop" aria-hidden="true" risu-btn="popupManage|close"></div>
 <div class="popup-container">
 <div class="popup-header">
@@ -19,55 +19,93 @@
 </button>
 </div>
 
-<div class="deck-content codex-content">
-<input class="deck-filter-state" type="radio" name="codex-owner" id="codex-owner-player" checked>
-<input class="deck-filter-state" type="radio" name="codex-owner" id="codex-owner-character">
-<div class="deck-toolbar codex-toolbar">
-<div class="deck-filters" aria-label="카드 종류">
-<label class="filter-chip" for="codex-owner-player">플레이어 <span>{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::count}} / {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::total}}</span></label>
-<label class="filter-chip" for="codex-owner-character">캐릭터 <span>{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::character}}::count}} / {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::character}}::total}}</span></label>
+<div class="deck-content">
+<div class="deck-overview">
+<div class="deck-capacity">
+<div class="capacity-top"><span class="overview-label">플레이어 카드 수집</span><strong class="capacity-count">{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::count}} <span>/ {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::total}}장</span></strong></div>
+<progress class="capacity-bar" max="{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::total}}" value="{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::count}}" aria-label="플레이어 카드 수집도"></progress>
+</div>
+<div class="deck-capacity">
+<div class="capacity-top"><span class="overview-label">캐릭터 카드 수집</span><strong class="capacity-count">{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::character}}::count}} <span>/ {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::character}}::total}}장</span></strong></div>
+<progress class="capacity-bar" max="{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::character}}::total}}" value="{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::character}}::count}}" aria-label="캐릭터 카드 수집도"></progress>
+</div>
+</div>
+
+<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-all" checked>
+<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-player">
+<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-style-predator">
+<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-style-harmonizer">
+<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-style-glutton">
+<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-style-deceiver">
+<input class="deck-filter-state" type="radio" name="deck-filter" id="deck-filter-character">
+
+<div class="deck-toolbar">
+<div class="deck-filters" aria-label="카드 필터">
+<label class="filter-chip" for="deck-filter-all">전체</label><label class="filter-chip" for="deck-filter-player">플레이어</label><label class="filter-chip" for="deck-filter-style-predator">포식</label><label class="filter-chip" for="deck-filter-style-harmonizer">조율</label><label class="filter-chip" for="deck-filter-style-glutton">탐식</label><label class="filter-chip" for="deck-filter-style-deceiver">기만</label><label class="filter-chip" for="deck-filter-character">캐릭터</label>
 </div>
 <div class="deck-sort">카드를 눌러 상세 정보 확인</div>
 </div>
 
-<section class="codex-panel codex-panel--player" aria-label="발견한 플레이어 카드">
 <div class="deck-grid">
 {{#each::keep {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::items}} as codex_card}}
 {{settempvar::codex_card_type::{{dictelement::{{slot::codex_card}}::cardType}}}}
-<details class="deck-card card-{{dictelement::{{slot::codex_card}}::draftStyle}} rarity-{{dictelement::{{slot::codex_card}}::rarity}}">
+<details class="deck-card card-{{dictelement::{{slot::codex_card}}::draftStyle}} rarity-{{dictelement::{{slot::codex_card}}::rarity}} card-player">
 <summary class="deck-card-summary" aria-label="{{dictelement::{{slot::codex_card}}::name}} 상세 정보 보기">
 {{#when::keep::{{dictelement::{{slot::codex_card}}::draftStyle}}::is::predator}}<img class="deck-style-icon" src="{{raw::포식}}" alt="" aria-hidden="true">{{/when}}
 {{#when::keep::{{dictelement::{{slot::codex_card}}::draftStyle}}::is::harmonizer}}<img class="deck-style-icon" src="{{raw::조율}}" alt="" aria-hidden="true">{{/when}}
 {{#when::keep::{{dictelement::{{slot::codex_card}}::draftStyle}}::is::glutton}}<img class="deck-style-icon" src="{{raw::탐식}}" alt="" aria-hidden="true">{{/when}}
 {{#when::keep::{{dictelement::{{slot::codex_card}}::draftStyle}}::is::deceiver}}<img class="deck-style-icon" src="{{raw::기만}}" alt="" aria-hidden="true">{{/when}}
-<span class="card-top"><span class="card-name">{{dictelement::{{slot::codex_card}}::name}}</span></span>
-<span class="deck-card-tags"><span class="deck-tag deck-tag--type">{{dictelement::{{tempvar::codex_card_type}}::label}}</span>{{#each::keep {{dictelement::{{slot::codex_card}}::roles}} as codex_role}}<span class="deck-tag">{{dictelement::{{slot::codex_role}}::label}}</span>{{/each}}{{#each::keep {{dictelement::{{slot::codex_card}}::mechanisms}} as codex_mechanism}}<span class="deck-tag deck-tag--mechanism">{{dictelement::{{slot::codex_mechanism}}::label}}</span>{{/each}}</span>
-<span class="deck-card-stats"><span class="deck-stat deck-stat--cost"><strong>{{dictelement::{{slot::codex_card}}::baseStealthCost}}</strong><small>비용</small></span><span class="deck-stat deck-stat--damage"><strong>{{dictelement::{{slot::codex_card}}::baseResistanceDamage}}</strong><small>피해</small></span></span>
+<span class="card-top">
+<span class="card-owned" aria-label="스타일">{{#when::keep::{{dictelement::{{slot::codex_card}}::draftStyle}}::is::predator}}포식{{/when}}{{#when::keep::{{dictelement::{{slot::codex_card}}::draftStyle}}::is::harmonizer}}조율{{/when}}{{#when::keep::{{dictelement::{{slot::codex_card}}::draftStyle}}::is::glutton}}탐식{{/when}}{{#when::keep::{{dictelement::{{slot::codex_card}}::draftStyle}}::is::deceiver}}기만{{/when}}</span>
+<span class="card-name">{{dictelement::{{slot::codex_card}}::name}}</span>
+</span>
+<span class="deck-card-tags" aria-label="카드 태그">
+<span class="deck-tag deck-tag--type">{{dictelement::{{tempvar::codex_card_type}}::label}}</span>
+{{#each::keep {{dictelement::{{slot::codex_card}}::roles}} as codex_role}}<span class="deck-tag">{{dictelement::{{slot::codex_role}}::label}}</span>{{/each}}
+{{#each::keep {{dictelement::{{slot::codex_card}}::mechanisms}} as codex_mechanism}}<span class="deck-tag deck-tag--mechanism">{{dictelement::{{slot::codex_mechanism}}::label}}</span>{{/each}}
+</span>
+<span class="deck-card-stats">
+<span class="deck-stat deck-stat--cost" aria-label="기본 은폐 비용 {{dictelement::{{slot::codex_card}}::baseStealthCost}}"><strong>{{dictelement::{{slot::codex_card}}::baseStealthCost}}</strong><small>비용</small></span>
+<span class="deck-stat deck-stat--damage" aria-label="기본 저항 피해 {{dictelement::{{slot::codex_card}}::baseResistanceDamage}}"><strong>{{dictelement::{{slot::codex_card}}::baseResistanceDamage}}</strong><small>피해</small></span>
+</span>
 <span class="deck-expand-hint">상세 정보 <span aria-hidden="true">⌄</span></span>
 </summary>
-<div class="deck-card-detail"><p class="deck-description">{{#each::keep {{dictelement::{{slot::codex_card}}::descriptionSegments}} as codex_desc}}{{#when::keep::{{dictelement::{{slot::codex_desc}}::kind}}::is::text}}{{dictelement::{{slot::codex_desc}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::codex_desc}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::codex_desc}}::label}}</span>{{/when}}{{/each}}</p><div class="card-rule">{{#each::keep {{dictelement::{{slot::codex_card}}::ruleLines}} as codex_rule}}<div>{{#each::keep {{dictelement::{{slot::codex_rule}}::segments}} as codex_segment}}{{#when::keep::{{dictelement::{{slot::codex_segment}}::kind}}::is::text}}{{dictelement::{{slot::codex_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::codex_segment}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::codex_segment}}::label}}</span>{{/when}}{{/each}}</div>{{/each}}</div></div>
+<div class="deck-card-detail">
+<p class="deck-description">{{#each::keep {{dictelement::{{slot::codex_card}}::descriptionSegments}} as codex_desc}}{{#when::keep::{{dictelement::{{slot::codex_desc}}::kind}}::is::text}}{{dictelement::{{slot::codex_desc}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::codex_desc}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::codex_desc}}::label}}</span>{{/when}}{{/each}}</p>
+<div class="card-rule">
+{{#each::keep {{dictelement::{{slot::codex_card}}::ruleLines}} as codex_rule}}<div>{{#each::keep {{dictelement::{{slot::codex_rule}}::segments}} as codex_segment}}{{#when::keep::{{dictelement::{{slot::codex_segment}}::kind}}::is::text}}{{dictelement::{{slot::codex_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::codex_segment}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::codex_segment}}::label}}</span>{{/when}}{{/each}}</div>{{/each}}
+</div>
+</div>
 </details>
 {{/each}}
-{{#when::keep::{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::count}}::is::0}}<div class="deck-empty">아직 발견한 플레이어 카드가 없습니다.</div>{{/when}}
-</div>
-</section>
-
-<section class="codex-panel codex-panel--character" aria-label="발견한 캐릭터 카드">
-<div class="deck-grid">
 {{#each::keep {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::character}}::items}} as codex_character_card}}
 {{settempvar::codex_character_card_type::{{dictelement::{{slot::codex_character_card}}::cardType}}}}
 <details class="deck-card card-character rarity-character">
 <summary class="deck-card-summary" aria-label="{{dictelement::{{slot::codex_character_card}}::name}} 상세 정보 보기">
-<span class="card-top"><span class="card-name">{{dictelement::{{slot::codex_character_card}}::name}}</span></span>
-<span class="deck-card-tags"><span class="deck-tag deck-tag--type">{{dictelement::{{tempvar::codex_character_card_type}}::label}}</span>{{#each::keep {{dictelement::{{slot::codex_character_card}}::roles}} as codex_character_role}}<span class="deck-tag">{{dictelement::{{slot::codex_character_role}}::label}}</span>{{/each}}{{#each::keep {{dictelement::{{slot::codex_character_card}}::mechanisms}} as codex_character_mechanism}}<span class="deck-tag deck-tag--mechanism">{{dictelement::{{slot::codex_character_mechanism}}::label}}</span>{{/each}}</span>
+<span class="card-top">
+<span class="card-owned" aria-label="캐릭터 카드">캐릭터</span>
+<span class="card-name">{{dictelement::{{slot::codex_character_card}}::name}}</span>
+</span>
+<span class="deck-card-tags" aria-label="카드 태그">
+<span class="deck-tag deck-tag--type">{{dictelement::{{tempvar::codex_character_card_type}}::label}}</span>
+{{#each::keep {{dictelement::{{slot::codex_character_card}}::roles}} as codex_character_role}}<span class="deck-tag">{{dictelement::{{slot::codex_character_role}}::label}}</span>{{/each}}
+{{#each::keep {{dictelement::{{slot::codex_character_card}}::mechanisms}} as codex_character_mechanism}}<span class="deck-tag deck-tag--mechanism">{{dictelement::{{slot::codex_character_mechanism}}::label}}</span>{{/each}}
+</span>
+<span class="deck-card-stats">
+<span class="deck-stat deck-stat--character" aria-label="캐릭터 대응 카드"><strong>대응</strong><small>행동</small></span>
+</span>
 <span class="deck-expand-hint">상세 정보 <span aria-hidden="true">⌄</span></span>
 </summary>
-<div class="deck-card-detail"><p class="deck-description">{{#each::keep {{dictelement::{{slot::codex_character_card}}::descriptionSegments}} as codex_character_desc}}{{#when::keep::{{dictelement::{{slot::codex_character_desc}}::kind}}::is::text}}{{dictelement::{{slot::codex_character_desc}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::codex_character_desc}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::codex_character_desc}}::label}}</span>{{/when}}{{/each}}</p><div class="card-rule">{{#each::keep {{dictelement::{{slot::codex_character_card}}::ruleLines}} as codex_character_rule}}<div>{{#each::keep {{dictelement::{{slot::codex_character_rule}}::segments}} as codex_character_segment}}{{#when::keep::{{dictelement::{{slot::codex_character_segment}}::kind}}::is::text}}{{dictelement::{{slot::codex_character_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::codex_character_segment}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::codex_character_segment}}::label}}</span>{{/when}}{{/each}}</div>{{/each}}</div></div>
+<div class="deck-card-detail">
+<p class="deck-description">{{#each::keep {{dictelement::{{slot::codex_character_card}}::descriptionSegments}} as codex_character_desc}}{{#when::keep::{{dictelement::{{slot::codex_character_desc}}::kind}}::is::text}}{{dictelement::{{slot::codex_character_desc}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::codex_character_desc}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::codex_character_desc}}::label}}</span>{{/when}}{{/each}}</p>
+<div class="card-rule">
+{{#each::keep {{dictelement::{{slot::codex_character_card}}::ruleLines}} as codex_character_rule}}<div>{{#each::keep {{dictelement::{{slot::codex_character_rule}}::segments}} as codex_character_segment}}{{#when::keep::{{dictelement::{{slot::codex_character_segment}}::kind}}::is::text}}{{dictelement::{{slot::codex_character_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::codex_character_segment}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::codex_character_segment}}::label}}</span>{{/when}}{{/each}}</div>{{/each}}
+</div>
+</div>
 </details>
 {{/each}}
-{{#when::keep::{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::character}}::count}}::is::0}}<div class="deck-empty">캐릭터가 사용한 카드를 발견하면 여기에 기록됩니다.</div>{{/when}}
-</div>
-</section>
+{{#when::keep::{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::count}}::is::0}}<div class="deck-empty card-player">아직 발견한 플레이어 카드가 없습니다.</div>{{/when}}
+{{#when::keep::{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::character}}::count}}::is::0}}<div class="deck-empty card-character">캐릭터가 사용한 카드를 발견하면 여기에 기록됩니다.</div>{{/when}}
 </div>
 </div>
 </div>
