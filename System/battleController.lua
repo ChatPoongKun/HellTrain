@@ -1647,6 +1647,7 @@
                 makeError("missing_published_view", "$.runtime.dataBridge.encoded", "dataBridge 성공 결과에 게시 문자열이 없습니다."),
             }
         end
+        pcall(runScript, triggerId, "cardCodex", "record", { publishedView, authority.history }, staticData)
         if skipUiRender == true then
             return {
                 view = publishedView,

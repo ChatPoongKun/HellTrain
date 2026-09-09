@@ -32,6 +32,13 @@
             errorMessage = "runProgressionView 스키마 검증에 실패했습니다.",
             validatorMessage = "runProgressionView.validate 검증을 통과하지 못했습니다.",
         },
+        cardCodexView = {
+            moduleName = "cardCodex",
+            action = "validateView",
+            errorCode = "card_codex_view_invalid",
+            errorMessage = "cardCodexView 스키마 검증에 실패했습니다.",
+            validatorMessage = "cardCodex.validateView 검증을 통과하지 못했습니다.",
+        },
     }
 
     local function makeError(code, path, message)

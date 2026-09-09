@@ -9,7 +9,7 @@
     local UI_NAME = "🔯🔯🔯"
     local UI_SHELL_NAME = "helltrainUiShellV1"
     local UI_SHELL_REVISION_NAME = "helltrainUiShellRevision"
-    local UI_SHELL_REVISION = "sidebar-e3f104ae8f3037cd"
+    local UI_SHELL_REVISION = "sidebar-card-codex-20260909"
     local DIAGNOSTIC_SCOPE = "helltrain.gameSetupController"
     local arguments = { ... }
     local argumentCount = select("#", ...)
@@ -816,6 +816,7 @@
                 makeError("missing_published_view", "$.runtime.dataBridge.encoded", "게시 결과에 gameSetupView 문자열이 없습니다."),
             })
         end
+        pcall(runScript, triggerId, "cardCodex", "record", target.view, staticData)
         local shellErrors = ensureUiShell()
         if shellErrors then return failure(shellErrors) end
 
@@ -892,6 +893,7 @@
                 ),
             })
         end
+        pcall(runScript, triggerId, "cardCodex", "record", target.view, staticData)
         local shellErrors = ensureUiShell()
         if shellErrors then return failure(shellErrors) end
         local ui, loadUiErrors = loadRunUi()

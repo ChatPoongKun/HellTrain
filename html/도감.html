@@ -1,53 +1,73 @@
+{{settempvar::card_codex_view::{{getvar::cardCodexView}}}}
 <!-- popup -->
 <div class="bg-orb orb-1"></div>
 <div class="bg-orb orb-2"></div>
 
-<div class="popup-overlay popup-shell--codex">
+<div class="popup-overlay popup-shell--deck popup-shell--codex">
 <div class="popup-backdrop" aria-hidden="true" risu-btn="popupManage|close"></div>
 <div class="popup-container">
 <div class="popup-header">
-<div class="popup-title">도감</div>
+<div class="popup-heading">
+<div class="popup-title">카드 도감</div>
+<div class="popup-subtitle">플레이 중 발견한 카드를 확인합니다.</div>
+</div>
 <button class="close-btn" aria-label="닫기" risu-btn="popupManage|close">
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 <line x1="18" y1="6" x2="6" y2="18"></line>
 <line x1="6" y1="6" x2="18" y2="18"></line>
 </svg>
 </button>
 </div>
 
-<div class="mock-content">
-<div class="codex-card">
-<div>
-<div class="codex-icon">🚇</div>
-<div class="codex-title">지옥철 1호칸</div>
-<div class="codex-desc">처음 마주하는 객차. 낮은 위험도지만 이상 현상이 잦습니다.</div>
+<div class="deck-content codex-content">
+<input class="deck-filter-state" type="radio" name="codex-owner" id="codex-owner-player" checked>
+<input class="deck-filter-state" type="radio" name="codex-owner" id="codex-owner-character">
+<div class="deck-toolbar codex-toolbar">
+<div class="deck-filters" aria-label="카드 종류">
+<label class="filter-chip" for="codex-owner-player">플레이어 <span>{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::count}} / {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::total}}</span></label>
+<label class="filter-chip" for="codex-owner-character">캐릭터 <span>{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::character}}::count}} / {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::character}}::total}}</span></label>
 </div>
-<div class="codex-state">Unlocked</div>
+<div class="deck-sort">카드를 눌러 상세 정보 확인</div>
 </div>
-<div class="codex-card">
-<div>
-<div class="codex-icon">🕯️</div>
-<div class="codex-title">꺼지지 않는 조명</div>
-<div class="codex-desc">관찰할수록 밝기가 달라지는 수상한 객실 조명입니다.</div>
+
+<section class="codex-panel codex-panel--player" aria-label="발견한 플레이어 카드">
+<div class="deck-grid">
+{{#each::keep {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::items}} as codex_card}}
+{{settempvar::codex_card_type::{{dictelement::{{slot::codex_card}}::cardType}}}}
+<details class="deck-card card-{{dictelement::{{slot::codex_card}}::draftStyle}} rarity-{{dictelement::{{slot::codex_card}}::rarity}}">
+<summary class="deck-card-summary" aria-label="{{dictelement::{{slot::codex_card}}::name}} 상세 정보 보기">
+{{#when::keep::{{dictelement::{{slot::codex_card}}::draftStyle}}::is::predator}}<img class="deck-style-icon" src="{{raw::포식}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::codex_card}}::draftStyle}}::is::harmonizer}}<img class="deck-style-icon" src="{{raw::조율}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::codex_card}}::draftStyle}}::is::glutton}}<img class="deck-style-icon" src="{{raw::탐식}}" alt="" aria-hidden="true">{{/when}}
+{{#when::keep::{{dictelement::{{slot::codex_card}}::draftStyle}}::is::deceiver}}<img class="deck-style-icon" src="{{raw::기만}}" alt="" aria-hidden="true">{{/when}}
+<span class="card-top"><span class="card-name">{{dictelement::{{slot::codex_card}}::name}}</span></span>
+<span class="deck-card-tags"><span class="deck-tag deck-tag--type">{{dictelement::{{tempvar::codex_card_type}}::label}}</span>{{#each::keep {{dictelement::{{slot::codex_card}}::roles}} as codex_role}}<span class="deck-tag">{{dictelement::{{slot::codex_role}}::label}}</span>{{/each}}{{#each::keep {{dictelement::{{slot::codex_card}}::mechanisms}} as codex_mechanism}}<span class="deck-tag deck-tag--mechanism">{{dictelement::{{slot::codex_mechanism}}::label}}</span>{{/each}}</span>
+<span class="deck-card-stats"><span class="deck-stat deck-stat--cost"><strong>{{dictelement::{{slot::codex_card}}::baseStealthCost}}</strong><small>비용</small></span><span class="deck-stat deck-stat--damage"><strong>{{dictelement::{{slot::codex_card}}::baseResistanceDamage}}</strong><small>피해</small></span></span>
+<span class="deck-expand-hint">상세 정보 <span aria-hidden="true">⌄</span></span>
+</summary>
+<div class="deck-card-detail"><p class="deck-description">{{#each::keep {{dictelement::{{slot::codex_card}}::descriptionSegments}} as codex_desc}}{{#when::keep::{{dictelement::{{slot::codex_desc}}::kind}}::is::text}}{{dictelement::{{slot::codex_desc}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::codex_desc}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::codex_desc}}::label}}</span>{{/when}}{{/each}}</p><div class="card-rule">{{#each::keep {{dictelement::{{slot::codex_card}}::ruleLines}} as codex_rule}}<div>{{#each::keep {{dictelement::{{slot::codex_rule}}::segments}} as codex_segment}}{{#when::keep::{{dictelement::{{slot::codex_segment}}::kind}}::is::text}}{{dictelement::{{slot::codex_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::codex_segment}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::codex_segment}}::label}}</span>{{/when}}{{/each}}</div>{{/each}}</div></div>
+</details>
+{{/each}}
+{{#when::keep::{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::count}}::is::0}}<div class="deck-empty">아직 발견한 플레이어 카드가 없습니다.</div>{{/when}}
 </div>
-<div class="codex-state">Observed</div>
+</section>
+
+<section class="codex-panel codex-panel--character" aria-label="발견한 캐릭터 카드">
+<div class="deck-grid">
+{{#each::keep {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::character}}::items}} as codex_character_card}}
+{{settempvar::codex_character_card_type::{{dictelement::{{slot::codex_character_card}}::cardType}}}}
+<details class="deck-card card-character rarity-character">
+<summary class="deck-card-summary" aria-label="{{dictelement::{{slot::codex_character_card}}::name}} 상세 정보 보기">
+<span class="card-top"><span class="card-name">{{dictelement::{{slot::codex_character_card}}::name}}</span></span>
+<span class="deck-card-tags"><span class="deck-tag deck-tag--type">{{dictelement::{{tempvar::codex_character_card_type}}::label}}</span>{{#each::keep {{dictelement::{{slot::codex_character_card}}::roles}} as codex_character_role}}<span class="deck-tag">{{dictelement::{{slot::codex_character_role}}::label}}</span>{{/each}}{{#each::keep {{dictelement::{{slot::codex_character_card}}::mechanisms}} as codex_character_mechanism}}<span class="deck-tag deck-tag--mechanism">{{dictelement::{{slot::codex_character_mechanism}}::label}}</span>{{/each}}</span>
+<span class="deck-expand-hint">상세 정보 <span aria-hidden="true">⌄</span></span>
+</summary>
+<div class="deck-card-detail"><p class="deck-description">{{#each::keep {{dictelement::{{slot::codex_character_card}}::descriptionSegments}} as codex_character_desc}}{{#when::keep::{{dictelement::{{slot::codex_character_desc}}::kind}}::is::text}}{{dictelement::{{slot::codex_character_desc}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::codex_character_desc}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::codex_character_desc}}::label}}</span>{{/when}}{{/each}}</p><div class="card-rule">{{#each::keep {{dictelement::{{slot::codex_character_card}}::ruleLines}} as codex_character_rule}}<div>{{#each::keep {{dictelement::{{slot::codex_character_rule}}::segments}} as codex_character_segment}}{{#when::keep::{{dictelement::{{slot::codex_character_segment}}::kind}}::is::text}}{{dictelement::{{slot::codex_character_segment}}::value}}{{/when}}{{#when::keep::{{dictelement::{{slot::codex_character_segment}}::kind}}::isnot::text}}<span class="deck-rule-tag">{{dictelement::{{slot::codex_character_segment}}::label}}</span>{{/when}}{{/each}}</div>{{/each}}</div></div>
+</details>
+{{/each}}
+{{#when::keep::{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::character}}::count}}::is::0}}<div class="deck-empty">캐릭터가 사용한 카드를 발견하면 여기에 기록됩니다.</div>{{/when}}
 </div>
-<div class="codex-card">
-<div>
-<div class="codex-icon">🎫</div>
-<div class="codex-title">찢어진 승차권</div>
-<div class="codex-desc">목적지가 지워진 채 발견되는 기본 단서 아이템입니다.</div>
-</div>
-<div class="codex-state">Item</div>
-</div>
-<div class="codex-card">
-<div>
-<div class="codex-icon">?</div>
-<div class="codex-title">미확인 개체</div>
-<div class="codex-desc">아직 충분한 정보가 수집되지 않았습니다.</div>
-</div>
-<div class="codex-state">Locked</div>
-</div>
+</section>
 </div>
 </div>
 </div>

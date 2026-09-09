@@ -64,6 +64,9 @@
         if entry.script == "캐릭터 프로필" then
             return args[1] == "유지영" and args[2] == nil
         end
+        if entry.script == "cardCodex" then
+            return args[1] == "open" and args[2] == nil
+        end
         return false
     end
 
