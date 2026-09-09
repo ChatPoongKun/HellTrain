@@ -1,3 +1,5 @@
+{{settempvar::journal_record::{{dictelement::{{getvar::characterJournalView}}::selected}}}}
+{{settempvar::journal_person::{{dictelement::{{tempvar::journal_record}}::profile}}}}
 <!-- popup -->
 <div class="profile-overlay popup-shell--profile">
 <div class="popup-backdrop" aria-hidden="true" risu-btn="popupManage|close"></div>
@@ -5,136 +7,50 @@
 <div class="profile-header">
 <div class="profile-title">캐릭터 프로필</div>
 <div class="profile-actions">
-<button class="close-btn back-btn" aria-label="뒤로" risu-btn="popupManage|back">
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-<path d="M15 18l-6-6 6-6"></path>
-</svg>
-</button>
-<button class="close-btn" aria-label="닫기" risu-btn="popupManage|close">
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-<line x1="18" y1="6" x2="6" y2="18"></line>
-<line x1="6" y1="6" x2="18" y2="18"></line>
-</svg>
-</button>
+<button class="close-btn back-btn" aria-label="캐릭터 리스트로 돌아가기" risu-btn="popupManage|back">‹</button>
+<button class="close-btn" aria-label="닫기" risu-btn="popupManage|close">×</button>
 </div>
 </div>
-
 <div class="profile-content">
 <section class="profile-character">
-<div class="profile-avatar" aria-label="유지영 초상 영역">YJ</div>
+<img class="profile-avatar journal-portrait" src="{{raw::{{dictelement::{{tempvar::journal_person}}::name}}}}" alt="{{dictelement::{{tempvar::journal_person}}::name}}">
 <div class="profile-main">
-<div class="profile-name-row">
-<div>
-<div class="profile-heading">
-<div class="profile-name">유지영</div>
-<div class="profile-role">대학생</div>
-</div>
-<div class="profile-subtitle">조용하고 선한 인상의 대학생. 낯을 가리지만 익숙한 주제에는 차분하게 마음을 엽니다.</div>
-</div>
-</div>
-
+<div class="profile-heading"><div class="profile-name">{{dictelement::{{tempvar::journal_person}}::name}}</div><div class="profile-role">{{dictelement::{{tempvar::journal_person}}::occupation}}</div></div>
+<div class="profile-subtitle">{{dictelement::{{tempvar::journal_person}}::age}}세 · 시작 무드 {{dictelement::{{dictelement::{{tempvar::journal_person}}::startingMood}}::label}}</div>
 <div class="profile-stats">
-<div class="profile-stat">
-<div class="stat-value">20</div>
-<div class="stat-label">나이</div>
+<div class="profile-stat"><div class="stat-value">{{dictelement::{{tempvar::journal_record}}::encounters}}</div><div class="stat-label">조우 횟수</div></div>
+<div class="profile-stat"><div class="stat-value">{{dictelement::{{tempvar::journal_record}}::victories}}</div><div class="stat-label">함락 횟수</div></div>
+<div class="profile-stat"><div class="stat-value">{{dictelement::{{tempvar::journal_record}}::defeats}}</div><div class="stat-label">패배 횟수</div></div>
 </div>
-<div class="profile-stat">
-<div class="stat-value">30</div>
-<div class="stat-label">기본 저항</div>
-</div>
-<div class="profile-stat">
-<div class="stat-value">160cm</div>
-<div class="stat-label">신장</div>
-</div>
-<div class="profile-stat">
-<div class="stat-value">50kg</div>
-<div class="stat-label">체중</div>
-</div>
-</div>
-
-<div class="profile-tags">
-<span class="profile-tag">내향적</span>
-<span class="profile-tag">상냥함</span>
-<span class="profile-tag">수줍음</span>
-<span class="profile-tag">견고함</span>
-</div>
+{{#when::keep::{{dictelement::{{tempvar::journal_record}}::active}}::is::1}}<div class="profile-subtitle">현재 조우 중 · 결과는 전투가 끝나면 반영됩니다.</div>{{/when}}
 </div>
 </section>
-
 <div class="profile-grid">
-<section class="profile-panel">
-<div class="panel-title">외형 정보 <span>Appearance</span></div>
-<div class="info-list">
-<div class="info-row">
-<div class="info-key">머리</div>
-<div class="info-value">갈색</div>
-</div>
-<div class="info-row">
-<div class="info-key">눈</div>
-<div class="info-value">검은색</div>
-</div>
-<div class="info-row">
-<div class="info-key">피부</div>
-<div class="info-value">깨끗하고 밝은 피부</div>
-</div>
-<div class="info-row">
-<div class="info-key">체형</div>
-<div class="info-value">85-60-85</div>
-</div>
-</div>
-</section>
-
-<section class="profile-panel">
-<div class="panel-title">성향 정보 <span>Persona</span></div>
-<div class="info-list">
-<div class="info-row">
-<div class="info-key">성격</div>
-<div class="info-value">내향적, 상냥함, 수줍음</div>
-</div>
-<div class="info-row">
-<div class="info-key">선호</div>
-<div class="info-value">독서, 음악, 자연</div>
-</div>
-<div class="info-row">
-<div class="info-key">취미</div>
-<div class="info-value">독서, 음악 감상, 자연 산책</div>
-</div>
-<div class="info-row">
-<div class="info-key">가족</div>
-<div class="info-value">부모님과 함께 살고 있음</div>
-</div>
-</div>
-</section>
-
 <section class="profile-panel wide-panel">
-<div class="panel-title">민감 프로필 <span>Private</span></div>
-<div class="profile-note">관련 지식은 영상 매체로만 접한 수준이며, 실제 관계 경험은 없습니다. 개인 경험 기록은 별도 상태값으로 관리하는 것을 전제로 한 목업입니다.</div>
+<div class="panel-title">외형 정보</div>
+<div class="profile-note">{{dictelement::{{tempvar::journal_person}}::appearanceSummary}}</div>
 </section>
-
+<section class="profile-panel">
+<div class="panel-title">생활 정보</div>
+<div class="info-list">
+<div class="info-row"><div class="info-key">가족</div><div class="info-value">{{dictelement::{{tempvar::journal_record}}::family}}</div></div>
+<div class="info-row"><div class="info-key">취미</div><div class="info-value">{{dictelement::{{tempvar::journal_record}}::hobbies}}</div></div>
+</div>
+</section>
+<section class="profile-panel">
+<div class="panel-title">전투 정보</div>
+<div class="info-list">
+<div class="info-row"><div class="info-key">기본 저항</div><div class="info-value">{{dictelement::{{tempvar::journal_person}}::startingResistance}}</div></div>
+<div class="info-row"><div class="info-key">제한 턴</div><div class="info-value">{{dictelement::{{tempvar::journal_person}}::turnLimit}}</div></div>
+<div class="info-row"><div class="info-key">드로우</div><div class="info-value">{{dictelement::{{tempvar::journal_person}}::baseDrawCount}}장</div></div>
+<div class="info-row"><div class="info-key">손패 상한</div><div class="info-value">{{dictelement::{{tempvar::journal_person}}::maxHandSize}}장</div></div>
+</div>
+</section>
 <section class="profile-panel wide-panel">
-<div class="panel-title">누적 기록 <span>Records</span></div>
-<div class="count-grid">
-<div class="count-item">
-<div class="count-value">0</div>
-<div class="count-label">절정</div>
-</div>
-<div class="count-item">
-<div class="count-value">0</div>
-<div class="count-label">외부 사정</div>
-</div>
-<div class="count-item">
-<div class="count-value">0</div>
-<div class="count-label">구강 사정</div>
-</div>
-<div class="count-item">
-<div class="count-value">0</div>
-<div class="count-label">질내 사정</div>
-</div>
-<div class="count-item">
-<div class="count-value">0</div>
-<div class="count-label">항문 사정</div>
-</div>
-</div>
+<div class="panel-title">캐릭터 특징</div>
+{{#each::keep {{dictelement::{{tempvar::journal_person}}::traits}} as journal_trait}}
+<div class="info-row"><div class="info-key">{{dictelement::{{slot::journal_trait}}::name}}</div><div class="info-value">{{dictelement::{{slot::journal_trait}}::description}}</div></div>
+{{/each}}
 </section>
 </div>
 </div>

@@ -282,6 +282,12 @@ battleLogView
 - View를 읽어 권위 상태를 복원하지 마십시오.
 - 영속 상태는 가능하면 해당 컨트롤러의 공개 action을 통해서만 변경하십시오.
 
+### 사이드바 캐릭터 기록
+
+캐릭터 리스트는 `runProgressionV1.authority.sessions`와 현재 `battleRuntimeV1.authority`를 읽어 조우한 캐릭터만 표시합니다. `battleId`로 중복을 제거하며, 진행 중 전투는 조우 1회, 확정된 `victory`는 함락 1회, `defeat`는 패배 1회로 계산합니다. 별도 누적 카운터를 저장하지 않으므로 같은 화면을 반복해서 열어도 횟수가 늘지 않습니다.
+
+`System/캐릭터 프로필.lua`가 정적 데이터 캐시를 읽고, `runProgressionView.buildCharacterJournal`이 기존 캐릭터 표시·검증 함수를 재사용해 `characterJournalView`를 만듭니다. 상세 화면은 공개 프로필과 전투 특징만 표시하며, 미조우 캐릭터 ID로 직접 접근하는 요청은 거부합니다. 기록의 범위는 현재 채팅에 보존된 진행 이력입니다.
+
 ## 전투 컨트롤러 공개 action
 
 `battleController`는 현재 다음 action을 외부 진입점으로 제공합니다.

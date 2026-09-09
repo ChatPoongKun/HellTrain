@@ -1286,6 +1286,116 @@
         return buildCanonicalView(runReport.state, setupReport.state, staticInput)
     end
 
+    -- 조우 기록은 기존 정산 이력과 현재 전투에서 파생한다. 별도 카운터를 저장하지 않는다.
+    local function validateCharacterJournal(view)
+        local errors = {}
+        if type(view) ~= "table" then
+            addError(errors, "invalid_character_journal", "$", "캐릭터 기록 View가 필요합니다.")
+            return failure(errors)
+        end
+        checkAllowedKeys(view, { kind = true, schemaVersion = true, count = true, items = true, selected = true }, "$", errors)
+        if view.kind ~= "characterJournalView" or view.schemaVersion ~= SCHEMA_VERSION then
+            addError(errors, "invalid_character_journal", "$", "캐릭터 기록 View 형식이 올바르지 않습니다.")
+        end
+        local count = getArrayLength(view.items, "$.items", errors)
+        if view.count ~= count then addError(errors, "character_count_mismatch", "$.count", "캐릭터 수가 목록과 다릅니다.") end
+        local byId = {}
+        for index = 1, count or 0 do
+            local item = view.items[index]
+            local path = "$.items[" .. index .. "]"
+            if type(item) ~= "table" then
+                addError(errors, "invalid_character_record", path, "캐릭터 기록이 필요합니다.")
+            else
+                checkAllowedKeys(item, { profile = true, encounters = true, victories = true, defeats = true, active = true, family = true, hobbies = true }, path, errors)
+                validateCharacterView(item.profile, path .. ".profile", index, errors)
+                validateString(item.family, path .. ".family", errors)
+                validateString(item.hobbies, path .. ".hobbies", errors)
+                for _, field in ipairs({ "encounters", "victories", "defeats", "active" }) do
+                    if not isInteger(item[field], 0) then addError(errors, "invalid_encounter_count", path .. "." .. field, "조우 집계가 올바르지 않습니다.") end
+                end
+                if isInteger(item.encounters, 1) and isInteger(item.victories, 0) and isInteger(item.defeats, 0) and isInteger(item.active, 0, 1) then
+                    if item.encounters ~= item.victories + item.defeats + item.active then
+                        addError(errors, "encounter_count_mismatch", path, "조우 수와 전투 결과 합계가 다릅니다.")
+                    end
+                else
+                    addError(errors, "invalid_encounter_count", path, "조우한 캐릭터만 기록에 표시할 수 있습니다.")
+                end
+                local id = type(item.profile) == "table" and item.profile.characterId or nil
+                if type(id) == "string" then
+                    if byId[id] then addError(errors, "duplicate_character", path, "캐릭터 기록이 중복되었습니다.") end
+                    byId[id] = item
+                end
+            end
+        end
+        if view.selected ~= nil then
+            local id = type(view.selected) == "table" and type(view.selected.profile) == "table" and view.selected.profile.characterId
+            if not id or not byId[id] or not deepEqual(view.selected, byId[id]) then
+                addError(errors, "unknown_selected_character", "$.selected", "조우한 캐릭터만 상세 조회할 수 있습니다.")
+            end
+        end
+        if #errors > 0 then return failure(errors) end
+        return success("valid", true)
+    end
+
+    local function buildCharacterJournal(input, staticInput)
+        local errors = {}
+        if type(input) ~= "table" then
+            addError(errors, "invalid_journal_input", "$", "캐릭터 기록 입력이 필요합니다.")
+            return failure(errors)
+        end
+        local data = normalizeStaticData(staticInput)
+        if type(data) ~= "table" or type(data.characters) ~= "table" then
+            addError(errors, "missing_static_data", "$.staticData", "검증된 캐릭터 데이터가 필요합니다.")
+            return failure(errors)
+        end
+        local sessions = {}
+        if input.runState ~= nil then
+            local report, callError = callRuntime("runProgression", "validate", input.runState, input.setupState, data)
+            if callError then return failure({ callError }) end
+            if not report.ok then return report end
+            sessions = report.state.sessions
+        end
+        local battle = input.battleState
+        if battle ~= nil then
+            local report, callError = callRuntime("stateSchema", "validateBattleState", battle, data)
+            if callError then return failure({ callError }) end
+            if not report.ok then return report end
+            battle = report.value
+        end
+        local counts, seen = {}, {}
+        local function add(battleId, characterId, status)
+            if seen[battleId] then return end
+            seen[battleId] = true
+            local item = counts[characterId] or { encounters = 0, victories = 0, defeats = 0, active = 0 }
+            counts[characterId] = item
+            item.encounters = item.encounters + 1
+            local field = status == "victory" and "victories" or status == "defeat" and "defeats" or "active"
+            item[field] = item[field] + 1
+        end
+        for _, session in ipairs(sessions) do add(session.battleId, session.characterId, session.status) end
+        if battle then add(battle.battleId, battle.character.characterId, battle.status) end
+        local ids = {}
+        for id in pairs(counts) do ids[#ids + 1] = id end
+        table.sort(ids, function(a, b) return data.characters[a].name < data.characters[b].name end)
+        local view = { kind = "characterJournalView", schemaVersion = SCHEMA_VERSION, count = #ids, items = {} }
+        for index, id in ipairs(ids) do
+            local item = counts[id]
+            item.profile = buildCharacterView(index, id, data, errors)
+            local background = data.characters[id].publicProfile.background or {}
+            item.family = type(background.family) == "string" and background.family ~= "" and background.family or "알려진 정보 없음"
+            item.hobbies = type(background.hobbies) == "string" and background.hobbies ~= "" and background.hobbies or "알려진 정보 없음"
+            view.items[index] = item
+            if input.characterId == id then view.selected = item end
+        end
+        if input.characterId ~= nil and view.selected == nil then
+            addError(errors, "character_not_encountered", "$.characterId", "아직 조우하지 않은 캐릭터입니다.")
+        end
+        if #errors > 0 then return failure(errors) end
+        local checked = validateCharacterJournal(view)
+        if not checked.ok then return checked end
+        return success("view", view)
+    end
+
     local function capabilityAllows(capability)
         if type(capability) ~= "function" then return false end
         local ok, allowed = pcall(capability, "runProgressionViewCanonicalV1")
@@ -1295,6 +1405,10 @@
     local arguments = { ... }
     if action == "validate" then
         return validateRunProgressionView(arguments[1])
+    elseif action == "buildCharacterJournal" then
+        return buildCharacterJournal(arguments[1], arguments[2])
+    elseif action == "validateCharacterJournal" then
+        return validateCharacterJournal(arguments[1])
     elseif action == "build" then
         return buildPublic(arguments[1], arguments[2], arguments[3])
     elseif action == "_buildCanonical" then

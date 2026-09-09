@@ -3711,6 +3711,21 @@ display: -webkit-box;
 overflow: hidden;
 }
 
+.popup-shell--characters button.char-card {
+width: 100%;
+font: inherit;
+text-align: left;
+height: auto;
+min-height: 110px;
+}
+.popup-shell--characters .char-info { min-width: 0; }
+.popup-shell--characters .char-avatar { flex-shrink: 0; }
+.popup-shell--characters .char-name { gap: .5rem; flex-wrap: wrap; }
+.popup-shell--characters .char-records { margin-top: .4rem; color: #c4b5fd; font-size: .8rem; }
+.popup-shell--characters .char-empty { color: #94a3b8; text-align: center; line-height: 1.7; }
+.popup-shell--characters .char-card:focus-visible { outline: 2px solid #a78bfa; outline-offset: 2px; }
+.popup-shell--profile .profile-avatar.journal-portrait { object-fit: cover; padding: 0; }
+
 /* Mobile Adjustments */
 @media (max-width: 600px) {
 .popup-shell--characters .character-list {

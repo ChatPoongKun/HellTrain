@@ -9,7 +9,7 @@
     local UI_NAME = "🔯🔯🔯"
     local UI_SHELL_NAME = "helltrainUiShellV1"
     local UI_SHELL_REVISION_NAME = "helltrainUiShellRevision"
-    local UI_SHELL_REVISION = "sidebar-card-codex-20260909"
+    local UI_SHELL_REVISION = "sidebar-character-journal-20260910"
     local DIAGNOSTIC_SCOPE = "helltrain.gameSetupController"
     local arguments = { ... }
     local argumentCount = select("#", ...)

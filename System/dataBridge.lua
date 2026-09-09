@@ -32,6 +32,13 @@
             errorMessage = "runProgressionView 스키마 검증에 실패했습니다.",
             validatorMessage = "runProgressionView.validate 검증을 통과하지 못했습니다.",
         },
+        characterJournalView = {
+            moduleName = "runProgressionView",
+            action = "validateCharacterJournal",
+            errorCode = "character_journal_invalid",
+            errorMessage = "캐릭터 기록 View 검증에 실패했습니다.",
+            validatorMessage = "runProgressionView.validateCharacterJournal 검증을 통과하지 못했습니다.",
+        },
         cardCodexView = {
             moduleName = "cardCodex",
             action = "validateView",

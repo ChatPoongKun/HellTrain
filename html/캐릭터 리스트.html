@@ -1,80 +1,28 @@
+{{settempvar::journal::{{getvar::characterJournalView}}}}
 <!-- popup -->
 <div class="bg-orb orb-1"></div>
 <div class="bg-orb orb-2"></div>
-
 <div class="popup-overlay popup-shell--characters">
 <div class="popup-backdrop" aria-hidden="true" risu-btn="popupManage|close"></div>
 <div class="popup-container">
 <div class="popup-header">
-<div class="popup-title">캐릭터 선택</div>
-<button class="close-btn" aria-label="닫기" risu-btn="popupManage|close">
-<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-<line x1="18" y1="6" x2="6" y2="18"></line>
-<line x1="6" y1="6" x2="18" y2="18"></line>
-</svg>
-</button>
+<div class="popup-title">조우한 캐릭터 · {{dictelement::{{tempvar::journal}}::count}}명</div>
+<button class="close-btn" aria-label="닫기" risu-btn="popupManage|close">×</button>
 </div>
-
 <div class="character-list">
-<!-- Character 1 -->
-<div class="char-card" risu-btn="popupManage|push|캐릭터 프로필|유지영">
-<img src="knight_portrait_1783616309562.png" alt="기사" class="char-avatar">
-<div class="char-info">
-<div class="char-name">
-유지영
-<span class="char-role">Knight</span>
-</div>
-<div class="char-desc">왕국을 수호하기로 맹세한 단호한 전사입니다. 근접 전투에 능숙합니다.</div>
-</div>
-</div>
-
-<!-- Character 2 -->
-<div class="char-card">
-<img src="mage_portrait_1783616319692.png" alt="마법사" class="char-avatar">
-<div class="char-info">
-<div class="char-name">
-벡살리아
-<span class="char-role">Mage</span>
-</div>
-<div class="char-desc">강력한 파괴력과 어두운 신비의 마법을 다루는 마법사입니다.</div>
-</div>
-</div>
-
-<!-- Character 3 -->
-<div class="char-card">
-<img src="rogue_portrait_1783616328890.png" alt="도적" class="char-avatar">
-<div class="char-info">
-<div class="char-name">
-징크스
-<span class="char-role">Rogue</span>
-</div>
-<div class="char-desc">빠르고 민첩하며, 언제나 다음 보물을 찾아 헤매는 도적입니다.</div>
-</div>
-</div>
-
-<!-- Character 4 (This one will be partially cut off to show exactly 3.5 cards on desktop) -->
-<div class="char-card">
-<img src="cleric_portrait_1783616338785.png" alt="성직자" class="char-avatar">
-<div class="char-info">
-<div class="char-name">
-엘라라 라이트브링어
-<span class="char-role">Cleric</span>
-</div>
-<div class="char-desc">상처받은 자들을 치유하기 위해 고대의 서약을 맺은 부드러운 치유사입니다.</div>
-</div>
-</div>
-
-<!-- Character 5 (Scroll to see) -->
-<div class="char-card">
-<img src="knight_portrait_1783616309562.png" alt="전사" class="char-avatar is-hue-shifted">
-<div class="char-info">
-<div class="char-name">
-카일렌
-<span class="char-role">Fighter</span>
-</div>
-<div class="char-desc">전장에서 견줄 데 없는 기술을 가진 노련한 베테랑 전사입니다.</div>
-</div>
-</div>
+{{#each::keep {{dictelement::{{tempvar::journal}}::items}} as journal_item}}
+{{settempvar::journal_profile::{{dictelement::{{slot::journal_item}}::profile}}}}
+<button type="button" class="char-card" risu-btn="popupManage|push|캐릭터 프로필|{{dictelement::{{tempvar::journal_profile}}::characterId}}" aria-label="{{dictelement::{{tempvar::journal_profile}}::name}} 상세 정보 보기">
+<img src="{{raw::{{dictelement::{{tempvar::journal_profile}}::name}}}}" alt="" class="char-avatar">
+<span class="char-info">
+<span class="char-name">{{dictelement::{{tempvar::journal_profile}}::name}}<span class="char-role">{{dictelement::{{tempvar::journal_profile}}::occupation}}</span></span>
+<span class="char-desc">{{dictelement::{{tempvar::journal_profile}}::age}}세 · {{dictelement::{{dictelement::{{tempvar::journal_profile}}::startingMood}}::label}}</span>
+<span class="char-records">조우 {{dictelement::{{slot::journal_item}}::encounters}}회 · 함락 {{dictelement::{{slot::journal_item}}::victories}}회 · 패배 {{dictelement::{{slot::journal_item}}::defeats}}회</span>
+{{#when::keep::{{dictelement::{{slot::journal_item}}::active}}::is::1}}<span class="char-desc">현재 조우 중</span>{{/when}}
+</span>
+</button>
+{{/each}}
+{{#when::keep::{{dictelement::{{tempvar::journal}}::count}}::is::0}}<p class="char-empty">아직 조우한 캐릭터가 없습니다.<br>캐릭터와 전투를 시작하면 이곳에 기록됩니다.</p>{{/when}}
 </div>
 </div>
 </div>

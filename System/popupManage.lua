@@ -62,7 +62,7 @@
                 and args[3] == nil
         end
         if entry.script == "캐릭터 프로필" then
-            return args[1] == "유지영" and args[2] == nil
+            return type(args[1]) == "string" and args[1]:match("^[a-z][a-z0-9_]*$") ~= nil and args[2] == nil
         end
         if entry.script == "cardCodex" then
             return args[1] == "open" and args[2] == nil
