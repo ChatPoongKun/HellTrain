@@ -260,12 +260,13 @@
 </div>
 <div class="ht-mood-grid">
 <button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::rejection}}}}is-current{{/if}} {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::previousId}}::rejection}}}}is-previous{{/if}}" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-rejection" aria-haspopup="dialog" aria-label="거절 무드 {{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::rejection}}}}aria-current="true"{{/if}}>
-<i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}::5}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}::4}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}::3}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}::2}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}::1}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--5 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::rejection}}::4}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--4 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::rejection}}::3}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--3 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::rejection}}::2}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--2 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::rejection}}::1}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--1 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::rejection}}::0}}" aria-hidden="true"></i>
 <span class="ht-mood-name">거절</span>
+<span class="ht-mood-overflow">{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::overflowLabels}}::rejection}}</span>
 </button>
 <div id="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-rejection" class="ht-popover" popover="auto" role="dialog" aria-label="거절 무드 정보">
 <button type="button" class="ht-popover-dismiss" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-rejection" popovertargetaction="hide">
@@ -277,12 +278,13 @@
 </button>
 </div>
 <button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::suspicion}}}}is-current{{/if}} {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::previousId}}::suspicion}}}}is-previous{{/if}}" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-suspicion" aria-haspopup="dialog" aria-label="의심 무드 {{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::suspicion}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::suspicion}}}}aria-current="true"{{/if}}>
-<i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::suspicion}}::5}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::suspicion}}::4}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::suspicion}}::3}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::suspicion}}::2}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::suspicion}}::1}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--5 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::suspicion}}::4}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--4 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::suspicion}}::3}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--3 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::suspicion}}::2}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--2 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::suspicion}}::1}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--1 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::suspicion}}::0}}" aria-hidden="true"></i>
 <span class="ht-mood-name">의심</span>
+<span class="ht-mood-overflow">{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::overflowLabels}}::suspicion}}</span>
 </button>
 <div id="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-suspicion" class="ht-popover" popover="auto" role="dialog" aria-label="의심 무드 정보">
 <button type="button" class="ht-popover-dismiss" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-suspicion" popovertargetaction="hide">
@@ -294,12 +296,13 @@
 </button>
 </div>
 <button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::ignore}}}}is-current{{/if}} {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::previousId}}::ignore}}}}is-previous{{/if}}" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-ignore" aria-haspopup="dialog" aria-label="무시 무드 {{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::ignore}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::ignore}}}}aria-current="true"{{/if}}>
-<i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::ignore}}::5}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::ignore}}::4}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::ignore}}::3}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::ignore}}::2}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::ignore}}::1}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--5 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::ignore}}::4}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--4 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::ignore}}::3}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--3 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::ignore}}::2}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--2 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::ignore}}::1}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--1 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::ignore}}::0}}" aria-hidden="true"></i>
 <span class="ht-mood-name">무시</span>
+<span class="ht-mood-overflow">{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::overflowLabels}}::ignore}}</span>
 </button>
 <div id="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-ignore" class="ht-popover" popover="auto" role="dialog" aria-label="무시 무드 정보">
 <button type="button" class="ht-popover-dismiss" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-ignore" popovertargetaction="hide">
@@ -311,12 +314,13 @@
 </button>
 </div>
 <button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::confusion}}}}is-current{{/if}} {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::previousId}}::confusion}}}}is-previous{{/if}}" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-confusion" aria-haspopup="dialog" aria-label="혼란 무드 {{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::confusion}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::confusion}}}}aria-current="true"{{/if}}>
-<i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::confusion}}::5}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::confusion}}::4}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::confusion}}::3}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::confusion}}::2}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::confusion}}::1}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--5 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::confusion}}::4}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--4 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::confusion}}::3}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--3 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::confusion}}::2}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--2 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::confusion}}::1}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--1 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::confusion}}::0}}" aria-hidden="true"></i>
 <span class="ht-mood-name">혼란</span>
+<span class="ht-mood-overflow">{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::overflowLabels}}::confusion}}</span>
 </button>
 <div id="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-confusion" class="ht-popover" popover="auto" role="dialog" aria-label="혼란 무드 정보">
 <button type="button" class="ht-popover-dismiss" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-confusion" popovertargetaction="hide">
@@ -328,12 +332,13 @@
 </button>
 </div>
 <button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::compliance}}}}is-current{{/if}} {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::previousId}}::compliance}}}}is-previous{{/if}}" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-compliance" aria-haspopup="dialog" aria-label="순응 무드 {{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::compliance}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::compliance}}}}aria-current="true"{{/if}}>
-<i class="ht-mood-cell ht-mood-cell--5 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::compliance}}::5}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--4 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::compliance}}::4}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--3 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::compliance}}::3}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--2 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::compliance}}::2}}}}is-filled{{/if}}"></i>
-<i class="ht-mood-cell ht-mood-cell--1 {{#if {{greater_equal::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::compliance}}::1}}}}is-filled{{/if}}"></i>
+<i class="ht-mood-cell ht-mood-cell--5 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::compliance}}::4}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--4 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::compliance}}::3}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--3 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::compliance}}::2}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--2 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::compliance}}::1}}" aria-hidden="true"></i>
+<i class="ht-mood-cell ht-mood-cell--1 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::compliance}}::0}}" aria-hidden="true"></i>
 <span class="ht-mood-name">순응</span>
+<span class="ht-mood-overflow">{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::overflowLabels}}::compliance}}</span>
 </button>
 <div id="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-compliance" class="ht-popover" popover="auto" role="dialog" aria-label="순응 무드 정보">
 <button type="button" class="ht-popover-dismiss" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-compliance" popovertargetaction="hide">
@@ -350,7 +355,7 @@
 <!--HELLTRAIN_BATTLE_INTERACTION_V1-->
 {{#if {{equal::{{dict_element::{{tempvar::battle_view_last_turn}}::available}}::true}}}}
 <details class="ht-log">
-<summary>직전 판정 결과 보기</summary>
+<summary>직전 턴 효과 펼쳐보기</summary>
 <ol class="ht-log-list">
 {{#each {{dict_element::{{tempvar::battle_view_last_turn}}::summaries}} summary}}
 <li>{{dict_element::{{slot::summary}}::text}}</li>

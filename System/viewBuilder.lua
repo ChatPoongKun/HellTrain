@@ -777,7 +777,7 @@
         return views
     end
 
-    local function buildMoodView(state, data, errors)
+    local function buildMoodView(state, data, errors, lastCommitted)
         local moodId = state.character.mood
         local mood = data.registry.moods[moodId]
         if type(mood) ~= "table" then
@@ -794,6 +794,20 @@
         local turns = state.history and state.history.turns or {}
         local previousTurn = turns[#turns]
         local previousId = previousTurn and previousTurn.start.mood or ""
+        -- Compare with the initialized state displayed on the previous turn.
+        local previousTokens = lastCommitted and lastCommitted.beforeState.character.moodTokens or tokens
+        local tokenCells, overflowLabels = {}, {}
+        for registeredMoodId, count in pairs(tokens) do
+            local before = previousTokens[registeredMoodId] or 0
+            local cells = {}
+            for level = 1, 5 do
+                cells[level] = count >= level and (before < level and "increased" or "filled")
+                    or (before >= level and "decreased" or "empty")
+            end
+            tokenCells[registeredMoodId] = cells
+            overflowLabels[registeredMoodId] = math.max(before, count) > 5
+                and (before ~= count and (tostring(before) .. " → " .. tostring(count)) or tostring(count)) or ""
+        end
 
         return {
             previousId = previousId ~= moodId and previousId or "",
@@ -801,6 +815,8 @@
             label = mood.label,
             tokenThreshold = 3,
             tokens = tokens,
+            tokenCells = tokenCells,
+            overflowLabels = overflowLabels,
         }
     end
 
@@ -1502,7 +1518,7 @@
                 name = characterDefinition.name,
                 resistance = displayState.character.resistance,
                 startingResistance = characterDefinition.battle.startingResistance,
-                mood = buildMoodView(displayState, data, errors),
+                mood = buildMoodView(displayState, data, errors, lastCommittedInput),
                 publicAction = publicAction,
                 traits = buildTraitViews(displayState, data, errors),
                 planCapacity = displayState.character.planCapacity,
@@ -2235,6 +2251,8 @@
                     label = true,
                     tokenThreshold = true,
                     tokens = true,
+                    tokenCells = true,
+                    overflowLabels = true,
                 }, "$.character.mood", errors)
                 if not isAsciiId(mood.id) or type(mood.label) ~= "string" then
                     addError(errors, "invalid_mood_value", "$.character.mood", "무드 표시 값이 올바르지 않습니다.")
@@ -2250,6 +2268,32 @@
                     for _, moodId in ipairs({ "rejection", "suspicion", "ignore", "confusion", "compliance" }) do
                         if not isInteger(mood.tokens[moodId], 0) then
                             addError(errors, "invalid_mood_token_count", "$.character.mood.tokens." .. moodId, "무드 토큰 표시값은 0 이상의 정수여야 합니다.")
+                        end
+                    end
+                end
+                for _, field in ipairs({ "tokenCells", "overflowLabels" }) do
+                    local values = mood[field]
+                    local path = "$.character.mood." .. field
+                    if type(values) ~= "table" then
+                        addError(errors, "invalid_mood_animation", path, "무드 변화 표시가 올바르지 않습니다.")
+                    else
+                        checkAllowedKeys(values, { rejection = true, suspicion = true, ignore = true,
+                            confusion = true, compliance = true }, path, errors)
+                        for _, id in ipairs({ "rejection", "suspicion", "ignore", "confusion", "compliance" }) do
+                            local value = values[id]
+                            if field == "overflowLabels" then
+                                if type(value) ~= "string" then
+                                    addError(errors, "invalid_mood_animation", path .. "." .. id, "무드 수량 표시가 문자열이 아닙니다.")
+                                end
+                            elseif getArrayLength(value, path .. "." .. id, errors) ~= 5 then
+                                addError(errors, "invalid_mood_animation", path .. "." .. id, "무드 게이지는 5칸이어야 합니다.")
+                            else
+                                for _, cell in ipairs(value) do
+                                    if cell ~= "empty" and cell ~= "filled" and cell ~= "increased" and cell ~= "decreased" then
+                                        addError(errors, "invalid_mood_animation", path .. "." .. id, "무드 칸의 변화 종류가 올바르지 않습니다.")
+                                    end
+                                end
+                            end
                         end
                     end
                 end
