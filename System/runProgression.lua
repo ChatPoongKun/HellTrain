@@ -1019,7 +1019,9 @@
 
     local OUTCOME_REASONS = {
         card_checkpoint = true,
+        turn_start_checkpoint = true,
         turn_end_checkpoint = true,
+        mood_state_checkpoint = true,
         plan_exit_checkpoint = true,
         turn_limit = true,
         surrender = true,
@@ -1161,6 +1163,9 @@
         if summary.reasonCode == "surrender" and summary.status ~= "defeat" then
             appendError(errors, "invalid_surrender", path .. ".status", "포기 결과는 패배여야 합니다.")
         end
+        if summary.reasonCode == "mood_state_checkpoint" and summary.status ~= "defeat" then
+            appendError(errors, "invalid_mood_outcome", path .. ".status", "무드 효과 종료는 은폐 소진 패배여야 합니다.")
+        end
         if summary.reasonCode == "turn_limit"
             and (summary.status ~= "defeat"
                 or summary.turnNumber ~= summary.turnLimit
@@ -1173,7 +1178,9 @@
                 "turn_limit 패배는 마지막 턴에 저항과 은폐가 모두 남은 경우여야 합니다."
             )
         elseif (summary.reasonCode == "card_checkpoint"
+                or summary.reasonCode == "turn_start_checkpoint"
                 or summary.reasonCode == "turn_end_checkpoint"
+                or summary.reasonCode == "mood_state_checkpoint"
                 or summary.reasonCode == "plan_exit_checkpoint")
             and isFinite(summary.finalResistance)
             and isFinite(summary.finalStealth)
