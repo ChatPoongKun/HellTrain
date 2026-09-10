@@ -689,8 +689,10 @@
             return failure({ makeError("prompt_encoding_failed", "$.pendingTurn.turnResult.llmEvent", "LLM 사건 직렬화에 실패했습니다.") })
         end
 
+        local character = staticData.characters[pending.beforeState.character.characterId]
         local instructions = {
             "[전투 사건 전달]",
+            "현재 전투 상대: " .. character.name .. " (" .. character.id .. "). 이전 조우의 상대와 구분하고, 이번 사건의 character는 이 인물로 묘사하십시오.",
             "기존 프리셋의 문체, 시점, 인물 표현과 응답 형식을 그대로 유지하십시오.",
             "현재 장면은 " .. pending.beforeState.sceneContext.weekday .. " "
                 .. pending.beforeState.sceneContext.time .. "이며 날씨는 "
@@ -705,16 +707,10 @@
                 or "이미 조우 장면이 끝난 뒤의 전투 턴이므로 이전 이동, 암전, 의식 상실, 대상 등장 장면을 되풀이하지 마십시오.",
             "이 지침은 기존 프리셋을 대체하지 않고 이번 턴의 확정 사실만 추가합니다.",
         }
-        if pending.beforeState.turnNumber == 1
-            and string.find(pending.beforeState.battleId, "-session-", 1, true) then
-            local character = staticData.characters[pending.beforeState.character.characterId]
-            instructions[#instructions + 1] = "이번 턴 사건을 이어서 묘사하십시오."
-        end
         if pending.afterState.status == "victory" then
             instructions[#instructions + 1] = "승리 턴이다. 캐릭터 카드의 행동·생각 서술은 반영하지 말고, 대신 캐릭터가 플레이어의 행동으로 강렬하게 절정하며 저항이 완전히 무너지는 모습을 묘사하십시오."
         elseif pending.afterState.status == "defeat" then
             if pending.afterState.surrendered == true then
-                local character = staticData.characters[pending.beforeState.character.characterId]
                 instructions[#instructions + 1] = (character.name or "대상 캐릭터")
                     .. "의 공략을 포기하고 이번 역에서 내린다. 열차문을 나서자 눈앞이 깜깜하게 암전된다."
                 instructions[#instructions + 1] = "자발적인 포기로 전투가 끝났습니다. 추가 카드 행동이나 경찰의 연행 장면을 만들지 마십시오."

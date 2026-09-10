@@ -468,16 +468,6 @@ local function generateApproachScene(triggerId, report, characterId)
         return nil, "LLM 함수를 사용할 수 없습니다. Lua 스크립트의 low-level access를 활성화해야 합니다."
     end
     local characterName, profile = selectedApproachCharacter(triggerId, report, characterId)
-    local chat = getFullChat(triggerId)
-    local last = type(chat) == "table" and chat[#chat] or nil
-    if type(last) == "table"
-        and last.role == "char"
-        and type(last.data) == "string"
-        and last.data:match("%S") ~= nil
-        and last.time == 0 then
-        return last.data, nil
-    end
-
     local encounters = pastApproachEncounters(triggerId, report, characterId)
     local prompt = addRequestContext(triggerId, buildApproachPrompt(characterName, profile, encounters))
     local lastError = "알 수 없는 LLM 오류"

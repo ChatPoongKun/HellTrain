@@ -1157,18 +1157,24 @@ background: currentColor;
 opacity: .13;
 }
 .ht-mood-cell--increased::after {
-animation: ht-mood-fill 1.2s ease-in-out 2 both;
+animation: ht-mood-fill 2s linear infinite both;
 }
 .ht-mood-cell--decreased::after {
-animation: ht-mood-drain 1.2s ease-in-out 2 both;
+animation: ht-mood-drain 2s linear infinite both;
 }
+/* Reset the clip while invisible, separately from the opacity change. */
 @keyframes ht-mood-fill {
-0%, 15% { clip-path: inset(0 100% 0 0); }
-75%, 100% { clip-path: inset(0 0 0 0); }
+0% { clip-path: inset(0 100% 0 0); opacity: 1; }
+60%, 85% { clip-path: inset(0 0 0 0); opacity: 1; }
+99% { clip-path: inset(0 0 0 0); opacity: 0; }
+100% { clip-path: inset(0 100% 0 0); opacity: 0; }
 }
 @keyframes ht-mood-drain {
-0%, 15% { clip-path: inset(0 0 0 0); }
-75%, 100% { clip-path: inset(0 100% 0 0); }
+0% { clip-path: inset(0 0 0 0); opacity: 1; }
+60% { clip-path: inset(0 100% 0 0); opacity: 1; animation-timing-function: steps(1, end); }
+85% { clip-path: inset(0 100% 0 0); opacity: 0; }
+86% { clip-path: inset(0 0 0 0); opacity: 0; }
+100% { clip-path: inset(0 0 0 0); opacity: 1; }
 }
 .ht-mood-overflow {
 grid-column: 1;
