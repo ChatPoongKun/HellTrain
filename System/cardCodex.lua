@@ -32,6 +32,7 @@
             kind = "cardCodexState",
             playerCardIds = {},
             characterCardIds = {},
+            perkIds = {},
         }
     end
 
@@ -42,10 +43,17 @@
         end
     end
 
+    local function addPerkId(found, id, staticData)
+        found.perks = found.perks or {}
+        if type(id)=="string" and staticData.perks and staticData.perks[id] then found.perks[id]=true end
+    end
+
     local function collectCardIds(value, found, staticData, active)
         if type(value) ~= "table" or active[value] then return end
         active[value] = true
         addCardId(found, value.cardId, staticData)
+        addPerkId(found,value.perkId,staticData)
+        for _,id in ipairs(type(value.perkIds)=="table" and value.perkIds or {}) do addPerkId(found,id,staticData) end
         for _, child in pairs(value) do
             collectCardIds(child, found, staticData, active)
         end
@@ -70,6 +78,7 @@
     local function normalizeState(stored, staticData)
         local found = { player = {}, character = {} }
         if type(stored) == "table" then
+            for _,id in ipairs(stored.perkIds or {}) do addPerkId(found,id,staticData) end
             for _, cardId in ipairs(type(stored.playerCardIds) == "table" and stored.playerCardIds or {}) do
                 addCardId(found, cardId, staticData)
             end
@@ -80,6 +89,7 @@
         local state = emptyState()
         state.playerCardIds = sortedIds(found.player)
         state.characterCardIds = sortedIds(found.character)
+        state.perkIds = sortedIds(found.perks or {})
         return state
     end
 
@@ -89,12 +99,14 @@
             return nil, { makeError("state_read_failed", "$.state", "도감 발견 기록을 읽지 못했습니다.") }
         end
         local state = normalizeState(stored, staticData)
+        for _,id in ipairs(state.perkIds) do addPerkId(found,id,staticData) end
         for _, cardId in ipairs(state.playerCardIds) do found.player[cardId] = true end
         for _, cardId in ipairs(state.characterCardIds) do found.character[cardId] = true end
 
         local nextState = emptyState()
         nextState.playerCardIds = sortedIds(found.player)
         nextState.characterCardIds = sortedIds(found.character)
+        nextState.perkIds = sortedIds(found.perks or {})
         local unchanged = type(stored) == "table"
             and stored.schemaVersion == SCHEMA_VERSION
             and stored.kind == "cardCodexState"
@@ -102,6 +114,7 @@
             and type(stored.characterCardIds) == "table"
             and arraysEqual(stored.playerCardIds, nextState.playerCardIds)
             and arraysEqual(stored.characterCardIds, nextState.characterCardIds)
+            and arraysEqual(stored.perkIds or {}, nextState.perkIds)
         if not unchanged then
             local writeOk = pcall(HostCompat.writeState, triggerId, STATE_KEY, nextState)
             if not writeOk then
@@ -123,6 +136,7 @@
         end
         local run = read("runProgressionV1.authority")
         if run then
+            collectCardIds(run,found,staticData,{})
             for _, cardId in ipairs(run.playerCardIds or {}) do addCardId(found, cardId, staticData) end
             for _, cardId in ipairs(type(run.rewardOffer) == "table" and run.rewardOffer.cardIds or {}) do addCardId(found, cardId, staticData) end
         end
@@ -197,7 +211,13 @@
             kind = "cardCodexView",
             player = buildGroup("player", state.playerCardIds, staticData, errors),
             character = buildGroup("character", state.characterCardIds, staticData, errors),
+            perks = {count=#state.perkIds,total=0,items={}},
         }
+        for _ in pairs(staticData.perks) do view.perks.total=view.perks.total+1 end
+        for _,id in ipairs(state.perkIds) do
+            local perk=staticData.perks[id]
+            view.perks.items[#view.perks.items+1]={perkId=id,name=perk.name,description=perk.description}
+        end
         if #errors > 0 then return nil, errors end
         return view, nil
     end
@@ -207,10 +227,21 @@
         if type(view) ~= "table" or view.schemaVersion ~= SCHEMA_VERSION or view.kind ~= "cardCodexView" then
             errors[#errors + 1] = makeError("invalid_card_codex_view", "$", "도감 View 형식이 올바르지 않습니다.")
         else
-            local allowed = { schemaVersion = true, kind = true, player = true, character = true }
+            local allowed = { schemaVersion = true, kind = true, player = true, character = true, perks=true }
             for key in pairs(view) do
                 if allowed[key] ~= true then
                     errors[#errors + 1] = makeError("unknown_card_codex_field", "$", "도감 View에 허용되지 않은 필드가 있습니다.")
+                end
+            end
+        end
+        local perks = type(view)=="table" and view.perks
+        if type(perks)~="table" or type(perks.items)~="table" or perks.count~=#perks.items
+            or type(perks.total)~="number" or perks.total<perks.count then
+            errors[#errors+1]=makeError("invalid_codex_perks","$.perks","퍽 도감이 올바르지 않습니다.")
+        else
+            for _,item in ipairs(perks.items) do
+                if type(item)~="table" or type(item.perkId)~="string" or type(item.name)~="string" or type(item.description)~="string" then
+                    errors[#errors+1]=makeError("invalid_codex_perk","$.perks.items","퍽 도감 항목이 올바르지 않습니다.")
                 end
             end
         end

@@ -8,8 +8,8 @@
 <div class="popup-container">
 <div class="popup-header">
 <div class="popup-heading">
-<div class="popup-title">카드 도감</div>
-<div class="popup-subtitle">플레이 중 발견한 카드를 확인합니다.</div>
+<div class="popup-title">카드 · 퍽 도감</div>
+<div class="popup-subtitle">플레이 중 발견한 카드와 퍽을 확인합니다.</div>
 </div>
 <button class="close-btn" aria-label="닫기" risu-btn="popupManage|close">
 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -20,6 +20,14 @@
 </div>
 
 <div class="deck-content">
+<details class="deck-perks">
+<summary>발견한 퍽 {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::perks}}::count}} / {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::perks}}::total}}</summary>
+<div class="perk-grid">
+{{#each::keep {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::perks}}::items}} as codex_perk}}
+<article class="perk-slot"><div class="perk-info"><h3 class="perk-name">{{dictelement::{{slot::codex_perk}}::name}}</h3><p class="perk-desc">{{dictelement::{{slot::codex_perk}}::description}}</p></div></article>
+{{/each}}
+</div>
+</details>
 <div class="deck-overview">
 <div class="deck-capacity">
 <div class="capacity-top"><span class="overview-label">플레이어 카드 수집</span><strong class="capacity-count">{{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::count}} <span>/ {{dictelement::{{dictelement::{{tempvar::card_codex_view}}::player}}::total}}장</span></strong></div>

@@ -23,15 +23,19 @@
 </div>
 
 <div class="deck-content">
-<section class="deck-perks" aria-label="보유 퍽, 기능 준비 중">
+<section class="deck-perks" aria-label="보유 퍽">
 <div class="perks-top">
 <span class="overview-label">Owned perks</span>
-<span class="perks-count">기능 준비 중</span>
+<span class="perks-count">최대 3개</span>
 </div>
 <div class="perk-grid">
-<div class="perk-slot is-empty"><div class="perk-icon" aria-hidden="true">◇</div><div class="perk-info"><div class="perk-name">보유 퍽</div><div class="perk-desc">퍽 데이터 연동 예정</div></div></div>
-<div class="perk-slot is-empty"><div class="perk-icon" aria-hidden="true">◇</div><div class="perk-info"><div class="perk-name">보유 퍽</div><div class="perk-desc">퍽 데이터 연동 예정</div></div></div>
-<div class="perk-slot is-empty"><div class="perk-icon" aria-hidden="true">◇</div><div class="perk-info"><div class="perk-name">보유 퍽</div><div class="perk-desc">퍽 데이터 연동 예정</div></div></div>
+{{#when::keep::{{dictelement::{{tempvar::current_run_view}}::kind}}::is::runProgressionView}}
+{{#each::keep {{dictelement::{{tempvar::current_run_view}}::perks}} as owned_perk}}
+<div class="perk-slot"><div class="perk-icon" aria-hidden="true">◇</div><div class="perk-info"><div class="perk-name">{{dictelement::{{slot::owned_perk}}::name}}</div><div class="perk-desc">{{dictelement::{{slot::owned_perk}}::description}}</div></div></div>
+{{/each}}
+{{:else}}
+<p>보유 퍽 없음 · 승리 보상으로 최대 3개까지 획득할 수 있습니다.</p>
+{{/when}}
 </div>
 </section>
 
