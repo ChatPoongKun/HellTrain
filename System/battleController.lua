@@ -2974,6 +2974,9 @@
         end
 
         local initialPlayerCards = {}
+        if not deepEqual(authority.player.perkIds, spec.perkIds or {}) then
+            conflict("$.state.authority.player.perkIds", "기존 전투의 퍽이 진행 상태의 보유 퍽과 다릅니다.")
+        end
         for _, instance in ipairs(type(authority.cardInstances) == "table" and authority.cardInstances or {}) do
             if type(instance) == "table" and type(instance.instanceId) == "string" then
                 local rawIndex = string.match(instance.instanceId, "^player%-(%d%d%d)$")
@@ -3186,6 +3189,7 @@
             seed = battleSpec.seed,
             playerCardIds = deckCopy,
             characterId = battleSpec.characterId,
+            perkIds = battleSpec.perkIds,
         }, nil
     end
 
@@ -3219,6 +3223,7 @@
             seed = battleSpec.seed,
             playerCardIds = battleSpec.playerCardIds,
             characterId = battleSpec.characterId,
+            perkIds = battleSpec.perkIds,
         }, nil
     end
 

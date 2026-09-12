@@ -203,6 +203,7 @@
             currentCard = true,
             insightSide = true,
             allowGameplayCommands = true,
+            playerPressureCardsResolved = true,
         }
         for key in pairs(options) do
             if type(key) ~= "string" or not allowed[key] then
@@ -318,6 +319,7 @@
             currentCard = currentCard,
             insightSide = options.insightSide,
             allowGameplayCommands = options.allowGameplayCommands ~= false,
+            playerPressureCardsResolved = options.playerPressureCardsResolved or 0,
         }, nil
     end
 
@@ -413,13 +415,14 @@
         return report.context
     end
 
-    local function buildContext(state, options, planState)
+    local function buildContext(state, options, planState, staticData)
         local intent = type(state.characterIntent) == "table" and state.characterIntent or {}
         local context = {
             turn = state.turnNumber,
             turnLimit = state.turnLimit,
             remainingTurns = math.max(0, state.turnLimit - state.turnNumber + 1),
             phase = options.phase,
+            playerPressureCardsResolved = options.playerPressureCardsResolved,
             mood = state.character.mood,
             history = buildHistoryContext(state.history),
             player = {
@@ -440,10 +443,16 @@
                 instanceId = options.currentCard.instanceId,
                 owner = options.currentCard.owner,
                 roles = options.currentCard.roles,
+                cardType = staticData.cards[options.currentCard.id].cardType,
+                mechanisms = staticData.cards[options.currentCard.id].mechanisms,
             }
             if options.currentCard.effectChoiceId ~= nil then
                 context.effectChoiceId = options.currentCard.effectChoiceId
             end
+        end
+        local pressure = options.playerPressureCardsResolved
+        if pressure ~= nil and (type(pressure) ~= "number" or pressure < 0 or pressure % 1 ~= 0) then
+            errors[#errors+1]=makeError("invalid_pressure_count","$.options.playerPressureCardsResolved","압박 사용 횟수는 비음수 정수여야 합니다.")
         end
         if planState ~= nil then
             context.plan = {
@@ -513,6 +522,7 @@
         local nextOrdinal = 1
 
         local function addCandidate(kind, sourceId, ownerSide, declarationIndex, spec, planState, path)
+            if inputEvent.type == "rule_effect_resolved" and kind ~= "perk" then return true, nil end
             if type(sourceId) ~= "string" or sourceId == "" then
                 return false, {
                     makeError("invalid_trigger_source", path, "트리거 source ID가 올바르지 않습니다."),
@@ -701,7 +711,7 @@
 
         local matched = {}
         for _, candidate in ipairs(candidates) do
-            local context = buildContext(snapshot, options, candidate.planState)
+            local context = buildContext(snapshot, options, candidate.planState, staticData)
             local conditionReport, conditionErrors = callModule(
                 "effectEngine",
                 "evaluateTriggerCondition",
@@ -721,7 +731,25 @@
         return matched, nil
     end
 
-    local function runPipeline(staticData, working, inputEvent, options)
+    local runPipeline
+    local function reactToRules(staticData, working, sourceRecords, options)
+        local state, transient, records = working.state, working.transient, {}
+        for _, original in ipairs(sourceRecords) do
+            local p = original.payload
+            if original.type == "effect_applied" and original.source.side == "player" and p.ruleTerm then
+                local input = {type="rule_effect_resolved", side="player", ruleTerm=p.ruleTerm, amount=p.amount, mood=p.ruleMood}
+                records[#records+1] = {type="rule_effect_resolved", source={kind="system",id="rule_effect",side="player"},side="player",
+                    payload={ruleTerm=p.ruleTerm,amount=p.amount,mood=p.ruleMood}}
+                local nextReport = runPipeline(staticData, {state=state,transient=transient}, input, options)
+                if not nextReport.ok then return nextReport end
+                state,transient=nextReport.state,nextReport.transient
+                for _, record in ipairs(nextReport.records) do records[#records+1]=record end
+            end
+        end
+        return success(state, transient, records)
+    end
+
+    runPipeline = function(staticData, working, inputEvent, options)
         local normalizedStaticData, inputErrors = validateInputs(staticData, working, inputEvent)
         if inputErrors then
             return failure(inputErrors)
@@ -819,6 +847,9 @@
                     state = applyReport.state
                     transient = applyReport.transient
                     for _, applied in ipairs(applyReport.applied or {}) do
+                        if inputEvent.type == "rule_effect_resolved" and applied.ruleTerm ~= nil then
+                            return failure({makeError("recursive_rule_effect","$.commands","의미 효과 반응은 다른 의미 효과를 만들 수 없습니다.")})
+                        end
                         local payload
                         payload, cloneError = cloneData(applied, "$.records.effect_applied.payload")
                         if cloneError then
@@ -872,12 +903,19 @@
             end
         end
 
+        if inputEvent.type ~= "rule_effect_resolved" then
+            local reactions = reactToRules(normalizedStaticData, {state=state,transient=transient}, records, normalizedOptions)
+            if not reactions.ok then return reactions end
+            state,transient=reactions.state,reactions.transient
+            for _, record in ipairs(reactions.records) do records[#records+1]=record end
+        end
         return success(state, transient, records)
     end
 
     local arguments = { ... }
     local actions = {
         run = runPipeline,
+        react = reactToRules,
     }
     local handler = actions[action]
     if not handler then

@@ -104,6 +104,8 @@ return {
     },
 
     events = {
+        rule_effect_resolved = { id = "rule_effect_resolved" },
+        mood_resolved = { id = "mood_resolved" },
         session_start = { id = "session_start" },
         turn_start = { id = "turn_start" },
         role_revealed = { id = "role_revealed" },
@@ -114,6 +116,7 @@ return {
     },
 
     effectOps = {
+        random_token_strike = { id = "random_token_strike" },
         damage_resistance = { id = "damage_resistance" },
         recover_resistance = { id = "recover_resistance" },
         lose_stealth = { id = "lose_stealth" },

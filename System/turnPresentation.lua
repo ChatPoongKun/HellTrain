@@ -819,6 +819,7 @@
                 tiedMoods = true,
                 tokensBefore = true,
                 tokensAfter = true,
+                perkId = true,
             }, payloadPath)
             if keyError then return nil, keyError end
             local beforeMood, beforeError = lookupMood(staticData, payload.before, payloadPath .. ".before")
@@ -842,6 +843,11 @@
             elseif payload.resolution == "token" then
                 local targetMood, targetError = lookupMood(staticData, payload.targetMood, payloadPath .. ".targetMood")
                 if targetError then return nil, targetError end
+                if payload.perkId ~= nil then
+                    local perk = staticData.perks[payload.perkId]
+                    if not perk or not perk.positiveTiebreak then return nil,makeError("invalid_perk_source",payloadPath,"동률 퍽 출처가 올바르지 않습니다.") end
+                    return summary(index,event.type,cancelled .. perk.name .. ": 최다 동률 중 가장 긍정적인 " .. targetMood.label .. " 무드로 결정하고 해당 토큰을 모두 소비했습니다."),nil
+                end
                 return summary(index, event.type, cancelled .. targetMood.label
                     .. " 토큰이 단독 최다여서 무드를 " .. afterMood.label .. "(으)로 결정하고 해당 토큰을 0으로 만들었습니다."), nil
             elseif payload.resolution == "tie" then

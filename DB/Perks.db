@@ -1,0 +1,56 @@
+local moods = {"rejection", "suspicion", "ignore", "confusion", "compliance"}
+local order = {} for i, id in ipairs(moods) do order[id] = i end
+local function has(values, value) for _, v in ipairs(values or {}) do if v == value then return true end end return false end
+local function damage(n) return {op="damage_resistance", target="character", amount=n, cause="perkEffect"} end
+local function recover(n) return {op="recover_stealth", target="player", amount=n, cause="perkEffect"} end
+local function adjacent(mood, delta)
+    local i = order[mood] + delta
+    if i < 1 then i = 1 elseif i > 5 then i = 5 end
+    return moods[i]
+end
+local perks = {}
+local function add(id, name, rule, event, side, trigger, resolve, extra)
+    local p = {id=id, owner="player", name=name, description=rule, rules={rule}, triggers={}}
+    if event then p.triggers[1] = {event=event, side=side, trigger=trigger, resolve=resolve} end
+    for k, v in pairs(extra or {}) do p[k]=v end
+    perks[id]=p
+end
+add("perk_chain_recovery", "유연한 연계", "플레이어 연계 카드 사용 후 은폐 1 회복.", "card_resolved", "player",
+    function(c) return c.card.cardType == "chain" end, function() return {recover(1)} end)
+add("perk_damage_draw", "공세의 여세", "직전 턴에 플레이어 측이 준 총 저항 피해가 6 이상이면 턴 시작 시 카드 1장 드로우.", "turn_start", nil,
+    function(c) local p=c.history.previousTurn return p ~= nil and (p.playerResistanceDamage or 0)>=6 end,
+    function() return { {op="draw_cards", target="player", amount=1, cause="perkEffect"} } end)
+add("perk_stealth_pressure", "여유로운 압박", "턴 시작 시 은폐가 15 이상이면 저항 피해 1.", "turn_start", nil,
+    function(c) return c.player.stealth>=15 end, function() return {damage(1)} end)
+add("perk_positive_stockpile", "쌓이는 동요", "턴 시작 시 혼란·순응 토큰 합만큼 저항 피해. 토큰은 소비하지 않는다.", "turn_start", nil,
+    function(c) return c.character.moodTokens.confusion+c.character.moodTokens.compliance>0 end,
+    function(c) return {damage(c.character.moodTokens.confusion+c.character.moodTokens.compliance)} end)
+add("perk_positive_tiebreak", "긍정의 저울", "무드 판정에서 최다 토큰이 3개 이상으로 동률이면 그중 가장 긍정적인 무드를 선택하고 해당 무드의 토큰을 모두 소비한다.", nil,nil,nil,nil,{positiveTiebreak=true})
+add("perk_manipulation_damage", "흐름의 결실", "플레이어 측 농락 효과 발생 시 현재 무드가 혼란·순응이면 농락 수치만큼 저항 피해.", "rule_effect_resolved", "player",
+    function(_,e) return e.ruleTerm=="manipulate" and (e.mood=="confusion" or e.mood=="compliance") end,
+    function(_,e) return {damage(e.amount)} end)
+add("perk_negative_violation", "완강한 돌파", "부정 무드에서 플레이어 유린 카드 사용 시 농락 1.", "card_declared", "player",
+    function(c,e) return (c.mood=="rejection" or c.mood=="suspicion") and has(e.roles,"violation") end,
+    function(c) return { {op="add_mood_token",target="character",mood=adjacent(c.mood,1),amount=1,cause="perkEffect",ruleTerm="manipulate"} } end)
+add("perk_backlash_conversion", "반발의 대가", "플레이어 측 반발 효과 발생 시 반발 수치만큼 은폐 감소 및 저항 피해.", "rule_effect_resolved", "player",
+    function(_,e) return e.ruleTerm=="backlash" end,
+    function(_,e) return { {op="lose_stealth",target="player",amount=e.amount,cause="perkEffect"},damage(e.amount) } end)
+add("perk_token_consumption", "동요 흡수", "턴 시작 시 남은 토큰 중 하나를 무작위로 제거한 뒤 저항 피해 2. 토큰이 없으면 발동하지 않는다.", "turn_start", nil,
+    function(c) for _,n in pairs(c.character.moodTokens) do if n>0 then return true end end return false end,
+    function() return { {op="random_token_strike",target="character",amount=2,cause="perkEffect"} } end)
+add("perk_stealth_overflow", "넘치는 여유", "플레이어 기만 카드 사용 후 은폐가 25를 초과하면 초과량만큼 저항 피해. 은폐는 소비하지 않는다.", "card_resolved", "player",
+    function(c,e) return c.player.stealth>25 and has(e.roles,"deception") end,
+    function(c) return {damage(c.player.stealth-25)} end)
+add("perk_extra_plan", "이중 설계", "플레이어 계획 슬롯 +1.", nil,nil,nil,nil,{initial={planCapacity=1}})
+add("perk_insight_strike", "준비의 허점", "캐릭터 계획이 있을 때 플레이어 간파 카드 사용 시 저항 피해 3.", "card_declared", "player",
+    function(c) return c.character.planCount>0 and has(c.card.mechanisms,"insight") end, function() return {damage(3)} end)
+add("perk_starting_stealth", "완벽한 출발", "매 전투의 플레이어 시작 은폐 +5.", nil,nil,nil,nil,{initial={stealth=5}})
+add("perk_pressure_cycle", "세 번째 박자", "한 전투에서 플레이어 압박 카드를 3장 사용할 때마다 저항 피해 2. 계획 자동 발동은 제외.", "card_resolved", "player",
+    function(c,e) return has(e.roles,"pressure") and (c.playerPressureCardsResolved or 0)>0 and c.playerPressureCardsResolved%3==0 end,
+    function() return {damage(2)} end)
+add("perk_end_calm", "차분한 마무리", "전투가 계속되는 턴 종료 시 진정 1.", "turn_end", nil,
+    function() return true end,
+    function(c) return { {op="remove_mood_token",target="character",mood=adjacent(c.mood,-1),amount=1,cause="perkEffect"} } end)
+add("perk_mood_refund", "변화의 숨통", "무드 판정에서 무드가 실제로 변경되면 그 판정으로 소비한 토큰 수만큼 은폐 회복.", "mood_resolved", nil,
+    function(_,e) return e.before~=e.after and e.consumed>0 end, function(_,e) return {recover(e.consumed)} end)
+return {schemaVersion=1, kind="perkDatabase", perks=perks}

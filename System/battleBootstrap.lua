@@ -291,6 +291,7 @@
             seed = true,
             playerCardIds = true,
             characterId = true,
+            perkIds = true,
         }
         for key in pairs(spec) do
             if type(key) ~= "string" or not allowed[key] then
@@ -355,6 +356,17 @@
                 "캐릭터 ID는 lower_snake_case ASCII ID여야 합니다."
             )
         end
+        local perkCount = getArrayLength(spec.perkIds or {})
+        if perkCount == nil or perkCount > 3 then
+            errors[#errors + 1] = makeError("invalid_perks", "$.perkIds", "퍽은 최대 3개의 연속 배열이어야 합니다.")
+        else
+            local seen = {}
+            for _, id in ipairs(spec.perkIds or {}) do
+                if not isAsciiId(id) or seen[id] then
+                    errors[#errors + 1] = makeError("invalid_perk_id", "$.perkIds", "퍽 ID가 잘못되었거나 중복되었습니다.")
+                else seen[id] = true end
+            end
+        end
         if #errors > 0 then
             return nil, errors
         end
@@ -362,6 +374,7 @@
             battleId = spec.battleId,
             seed = spec.seed,
             playerCardIds = copyArray(spec.playerCardIds),
+            perkIds = copyArray(spec.perkIds or {}),
             characterId = spec.characterId,
         }, nil
     end
@@ -712,6 +725,14 @@
         if specErrors then
             return failure(specErrors)
         end
+        local playerStealth, playerCapacity = 30, DEFAULT_PLAYER_PLAN_CAPACITY
+        for _, id in ipairs(normalized.perkIds) do
+            local perk = type(staticData.perks) == "table" and staticData.perks[id]
+            if type(perk) ~= "table" then return failure({makeError("unknown_perk", "$.perkIds", "등록되지 않은 퍽입니다.")}) end
+            playerStealth = playerStealth + (perk.initial and perk.initial.stealth or 0)
+            playerCapacity = playerCapacity + (perk.initial and perk.initial.planCapacity or 0)
+        end
+        if not isPlanCapacity(playerCapacity) then return failure({makeError("invalid_plan_capacity", "$.player.planCapacity", "계획 용량이 범위를 벗어났습니다.")}) end
 
         local characterDefinition, characterBattle, definitionErrors, definitionFatal =
             getSetupDefinitions(normalized, staticData)
@@ -752,11 +773,11 @@
                 cursor = 0,
             },
             player = {
-                stealth = 30,
+                stealth = playerStealth,
                 baseDrawCount = 3,
                 maxHandSize = 5,
-                perkIds = {},
-                planCapacity = DEFAULT_PLAYER_PLAN_CAPACITY,
+                perkIds = normalized.perkIds,
+                planCapacity = playerCapacity,
                 planSlots = {},
             },
             character = {

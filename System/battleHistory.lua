@@ -349,6 +349,9 @@
             end
         end
 
+        if not isFinite(entry.playerResistanceDamage) or entry.playerResistanceDamage < 0 then
+            addError(errors, "invalid_history_damage", path .. ".playerResistanceDamage", "턴 전체 피해 집계가 올바르지 않습니다.")
+        end
         if type(entry.roleCounts) ~= "table" then
             addError(errors, "invalid_history_role_counts", path .. ".roleCounts", "턴 역할 태그 집계가 객체가 아닙니다.")
         else
@@ -602,6 +605,7 @@
             finish = finishCopy,
             mood = moodCopy,
             cards = cards,
+            playerResistanceDamage = 0,
             roleCounts = {
                 player = {
                     declared = countCards(cards.player, "declared"),
@@ -613,6 +617,16 @@
                 },
             },
         }
+        for _, event in ipairs(spec.events) do
+            local p = event.payload
+            if event.type == "effect_applied" and event.source.side == "player" then
+                if p.op == "damage_resistance" then
+                    entry.playerResistanceDamage = entry.playerResistanceDamage + math.max(0, p.before-p.after)
+                elseif p.op == "random_token_strike" then
+                    entry.playerResistanceDamage = entry.playerResistanceDamage + math.max(0, p.before.resistance-p.after.resistance)
+                end
+            end
+        end
         historyCopy.turns[#historyCopy.turns + 1] = entry
         stateCopy.history = historyCopy
 
@@ -684,6 +698,7 @@
             turnNumber = entry.turnNumber,
             turnId = entry.turnId,
             startMood = entry.start.mood,
+            playerResistanceDamage = entry.playerResistanceDamage or 0,
             endMood = entry.finish.mood,
             status = entry.finish.status,
             start = {

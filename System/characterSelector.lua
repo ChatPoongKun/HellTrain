@@ -205,7 +205,7 @@
         return {
             turnNumber = state.turnNumber,
             history = buildHistoryContext(state),
-            player = { stealth = state.player.stealth, handCount = countZone(state, "player", "hand") },
+            player = { stealth = state.player.stealth, handCount = countZone(state, "player", "hand"), perkIds = state.player.perkIds or {} },
             character = {
                 resistance = state.character.resistance,
                 mood = state.character.mood,
@@ -346,6 +346,9 @@
             moodTokens = moodTokenSnapshot(state, staticData),
             forcedMoodRequests = {},
         }
+        for _, id in ipairs(state.player.perkIds or {}) do
+            if staticData.perks[id].positiveTiebreak then spec.positiveTiebreak = true end
+        end
         local baseline, baselineErrors = callModule("effectEngine", "projectMood", staticData, spec)
         if baselineErrors then return nil, baselineErrors end
         spec.commands = commands
@@ -485,7 +488,7 @@
         local syntheticState = {
             turnNumber = context.turnNumber,
             historyContextOverride = context.history,
-            player = { stealth = context.player.stealth },
+            player = { stealth = context.player.stealth, perkIds = context.player.perkIds },
             character = {
                 resistance = context.character.resistance,
                 mood = context.character.mood,

@@ -43,11 +43,15 @@ end
 
 -- 공통 무드 키워드의 런타임 표현. 극단에서는 현재 무드로 clamp되어 앵커링한다.
 local function manipulate(context, amount, cause) -- 농락
-    return addMood(adjacentMood(context.mood, 1), amount, cause)
+    local v = addMood(adjacentMood(context.mood, 1), amount, cause)
+    v.ruleTerm = "manipulate"
+    return v
 end
 
 local function backlash(context, amount, cause) -- 반발
-    return addMood(adjacentMood(context.mood, -1), amount, cause)
+    local v = addMood(adjacentMood(context.mood, -1), amount, cause)
+    v.ruleTerm = "backlash"
+    return v
 end
 
 local function calm(context, amount, cause) -- 진정

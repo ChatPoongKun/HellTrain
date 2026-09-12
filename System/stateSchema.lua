@@ -1024,7 +1024,12 @@
             checkAllowedKeys(context.player, {
                 stealth = true,
                 handCount = true,
+                perkIds = true,
             }, path .. ".player", errors)
+            validateIdArray(context.player.perkIds,path .. ".player.perkIds",errors,isAsciiId)
+            for _,id in ipairs(type(context.player.perkIds)=="table" and context.player.perkIds or {}) do
+                if not (staticData and staticData.perks and staticData.perks[id]) then addError(errors,"unknown_perk",path .. ".player.perkIds","등록되지 않은 퍽입니다.") end
+            end
             if not isFinite(context.player.stealth) then
                 addError(errors, "invalid_selection_context", path .. ".player.stealth", "선택 시점 은폐가 유한한 숫자가 아닙니다.")
             end
@@ -1329,6 +1334,7 @@
             player = {
                 stealth = playerStealth,
                 handCount = playerHandCount,
+                perkIds = state.player.perkIds,
             },
             character = {
                 resistance = characterResistance,
@@ -1361,6 +1367,7 @@
             or type(left.player) ~= "table" or type(right.player) ~= "table"
             or left.player.stealth ~= right.player.stealth
             or left.player.handCount ~= right.player.handCount
+            or not historyContextEqual(left.player.perkIds,right.player.perkIds)
             or type(left.character) ~= "table" or type(right.character) ~= "table"
             or left.character.resistance ~= right.character.resistance
             or left.character.mood ~= right.character.mood
@@ -1945,11 +1952,13 @@
             addError(errors, "invalid_receipt_baseline", path .. ".baseline", "turnStartReceipt baseline이 객체가 아닙니다.")
         else
             checkAllowedKeys(baseline, {
+                rng = true,
                 stealth = true,
                 resistance = true,
                 mood = true,
                 moodTokens = true,
             }, path .. ".baseline", errors)
+            validateReceiptRng(baseline.rng,path .. ".baseline.rng",errors)
             if not isFinite(baseline.stealth) then
                 addError(errors, "invalid_receipt_baseline", path .. ".baseline.stealth", "baseline 은폐가 유한한 숫자가 아닙니다.")
             end
@@ -2359,6 +2368,14 @@
                 addError(errors, "draw_exceeds_hand_limit", "$.player.baseDrawCount", "기본 드로우 수는 최대 손패보다 클 수 없습니다.")
             end
             validateIdArray(state.player.perkIds, "$.player.perkIds", errors, isAsciiId)
+            if type(state.player.perkIds) == "table" then
+                if #state.player.perkIds > 3 then addError(errors, "perk_limit", "$.player.perkIds", "퍽은 최대 3개입니다.") end
+                for _, id in ipairs(state.player.perkIds) do
+                    if referencesValidated and not (staticData.perks and staticData.perks[id]) then
+                        addError(errors, "unknown_perk", "$.player.perkIds", "등록되지 않은 퍽입니다.")
+                    end
+                end
+            end
         end
 
         if type(state.character) ~= "table" then

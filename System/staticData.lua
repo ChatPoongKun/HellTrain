@@ -7,6 +7,7 @@
         "PlayerCards.db",
         "CharacterCards.db",
         "CharTraits.db",
+        "Perks.db",
         "TokyoSubwayLines.db",
         "CharacterList.db",
     }
@@ -262,6 +263,7 @@
     local SUPPORTED_SCHEMA_VERSION = 1
 
     local SOURCES = {
+        perks = {kind = "perkDatabase", collection = "perks", lores = {"Perks.db"}},
         registry = {
             kind = "gameRegistry",
             collection = nil,
@@ -289,6 +291,7 @@
         },
     }
     local RESERVED_CHARACTER_DATABASES = {
+        ["Perks.db"] = true,
         ["GameRegistry.db"] = true,
         ["PlayerCards.db"] = true,
         ["CharacterCards.db"] = true,
@@ -1583,6 +1586,30 @@
         local registry = loadSingleModule(SOURCES.registry, errors, captured)
         local cards = loadMergedCollection(SOURCES.cards, errors, captured)
         local traits = loadMergedCollection(SOURCES.traits, errors, captured)
+        local perks = loadMergedCollection(SOURCES.perks, errors, captured)
+        for id, perk in pairs(perks) do
+            if type(perk) ~= "table" or perk.id ~= id or not isAsciiId(id)
+                or perk.owner ~= "player" or type(perk.name) ~= "string" or perk.name == ""
+                or type(perk.description) ~= "string" or not isArray(perk.rules)
+                or #perk.rules == 0 or not isArray(perk.triggers)
+                or (perk.initial ~= nil and type(perk.initial) ~= "table")
+                or (perk.positiveTiebreak ~= nil and type(perk.positiveTiebreak) ~= "boolean") then
+                addError(errors, "invalid_perk", "perks." .. tostring(id), "퍽 정의가 올바르지 않습니다.")
+            else
+                for _, spec in ipairs(perk.triggers) do
+                    if type(spec) ~= "table" or type(registry) ~= "table" or type(registry.events) ~= "table" or not registry.events[spec.event]
+                        or type(spec.trigger) ~= "function" or type(spec.resolve) ~= "function"
+                        or (spec.side ~= nil and spec.side ~= "player") then
+                        addError(errors, "invalid_perk_trigger", "perks." .. id, "퍽 트리거가 올바르지 않습니다.")
+                    end
+                end
+                for stat, amount in pairs(perk.initial or {}) do
+                    if (stat ~= "stealth" and stat ~= "planCapacity") or not isFiniteInteger(amount) or amount < 0 then
+                        addError(errors, "invalid_perk_initial", "perks." .. id, "퍽 초기 보정이 올바르지 않습니다.")
+                    end
+                end
+            end
+        end
         local subwayLines = loadMergedCollection(SOURCES.subwayLines, errors, captured)
         local characterList = discoveredCharacterList
         if characterList == nil then
@@ -1604,6 +1631,7 @@
             counts = {
                 cards = countEntries(cards),
                 traits = countEntries(traits),
+                perks = countEntries(perks),
                 subwayLines = countEntries(subwayLines),
                 characters = countEntries(characters),
             },
@@ -1611,6 +1639,7 @@
                 registry = registry,
                 cards = cards,
                 traits = traits,
+                perks = perks,
                 subwayLines = subwayLines,
                 characters = characters,
             } or nil,

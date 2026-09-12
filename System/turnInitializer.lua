@@ -492,6 +492,7 @@
             end
         end
         baseline.moodTokens = baselineTokens
+        baseline.rng = {seed=authorityState.rng.seed,cursor=authorityState.rng.cursor}
         local historyBaseline = {
             stealth = baseline.stealth,
             resistance = baseline.resistance,
@@ -571,7 +572,7 @@
                         return false, { payloadError }
                     end
                 end
-                appendEvent(
+                local appendedEvent = appendEvent(
                     record.type,
                     sourceCopy,
                     payloadCopy,
@@ -584,6 +585,7 @@
                         eventId = inputEventId,
                     }
                 )
+                if record.type == "rule_effect_resolved" then inputEventId = appendedEvent.eventId end
             end
             return true, nil
         end

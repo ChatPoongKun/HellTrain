@@ -9,6 +9,7 @@
         character_intent_selected = true,
         role_revealed = true,
         effect_applied = true,
+        rule_effect_resolved = true,
         trigger_suppressed = true,
         trigger_resolved = true,
         plan_changed = true,
@@ -41,7 +42,10 @@
             scope = true,
             mood = true,
             moodTokenDebtBefore = true,
+            ruleTerm = true,
+            ruleMood = true,
         },
+        rule_effect_resolved = {ruleTerm=true, amount=true, mood=true},
         trigger_suppressed = { inputEventType = true, reasonCode = true, hidden = true },
         trigger_resolved = { inputEventType = true, commandCount = true },
         plan_changed = {
@@ -81,6 +85,7 @@
             tiedMoods = true,
             tokensBefore = true,
             tokensAfter = true,
+            perkId = true,
         },
         turn_cleanup = { before = true, after = true, movedInstanceIds = true, resolvedTurnNumber = true },
         session_end = { status = true },
@@ -97,6 +102,7 @@
         add_mood_token = true,
         remove_mood_token = true,
         force_mood = true,
+        random_token_strike = true,
     }
 
     local CATEGORY_ORDER = {
@@ -737,6 +743,9 @@
             if resolutionCopy.afterState.battleId ~= resolutionCopy.battleId then
                 errors[#errors + 1] = makeError("after_battle_mismatch", "$.turnResolution.afterState.battleId", "afterState battleId가 다릅니다.")
             end
+            if not dataEqual(beforeState.player.perkIds,resolutionCopy.afterState.player.perkIds) then
+                errors[#errors+1]=makeError("perks_changed","$.turnResolution.afterState.player.perkIds","전투 중 보유 퍽을 변경할 수 없습니다.")
+            end
             if resolutionCopy.afterState.lastCommittedTurnId ~= resolutionCopy.turnId then
                 errors[#errors + 1] = makeError("after_turn_not_committed", "$.turnResolution.afterState.lastCommittedTurnId", "afterState가 해결 turnId를 확정하지 않았습니다.")
             end
@@ -838,6 +847,10 @@
             return nil, makeError("invalid_effect_target", path .. ".target", "효과 대상이 올바르지 않습니다.")
         end
         local op = payload.op
+        if (payload.ruleTerm ~= nil and op ~= "add_mood_token")
+            or (payload.ruleMood ~= nil and payload.ruleTerm == nil) then
+            return nil,makeError("invalid_rule_effect",path,"의미 효과 표식은 토큰 추가에만 사용할 수 있습니다.")
+        end
         local output = {
             op = op,
             target = payload.target,
@@ -882,6 +895,13 @@
             output.amount = amount
             output.before = before
             output.after = after
+        elseif op == "random_token_strike" then
+            if payload.target ~= "character" or not isInteger(payload.amount, 1)
+                or type(payload.before) ~= "table" or type(payload.after) ~= "table" then
+                return nil, makeError("invalid_effect_payload", path, "토큰 추첨 영수증이 올바르지 않습니다.")
+            end
+            output.amount, output.mood = payload.amount, payload.mood
+            output.before, output.after = payload.before, payload.after
         elseif op == "draw_cards" then
             local requested, requestedError = requireFinite("amount")
             local _, idError = validateIdArray(payload.drawnInstanceIds, path .. ".drawnInstanceIds")
@@ -925,6 +945,13 @@
             output.before = payload.before
             output.after = payload.after
             output.moodTokenDebtBefore = payload.moodTokenDebtBefore
+            if payload.ruleTerm ~= nil then
+                if op ~= "add_mood_token" or (payload.ruleTerm ~= "manipulate" and payload.ruleTerm ~= "backlash")
+                    or moods[payload.ruleMood] == nil then
+                    return nil, makeError("invalid_rule_effect", path, "의미 효과 표식이 올바르지 않습니다.")
+                end
+                output.ruleTerm, output.ruleMood = payload.ruleTerm, payload.ruleMood
+            end
         elseif op == "force_mood" then
             if payload.target ~= "character" then
                 return nil, makeError("effect_target_mismatch", path .. ".target", "무드 강제 변경 대상은 character여야 합니다.")
@@ -1034,6 +1061,7 @@
         local startingResistance = type(startBaseline) == "table" and startBaseline.resistance or beforeState.character.resistance
         local trackedStealth = startingStealth
         local trackedResistance = startingResistance
+        local trackedRng = startBaseline.rng
         local trackedMood = type(startBaseline) == "table" and startBaseline.mood or beforeState.character.mood
         local function normalizedMoodTokens(source)
             local counts = {}
@@ -1119,8 +1147,15 @@
             })
         end
         local triggerHistoryContext = historyReport.context
+        local resolvedPressure = triggerHistoryContext.player.resolvedRoleCounts.pressure or 0
+        local ruleOrdinal, pendingRules = 0, {}
+        local positiveTiebreak = false
+        for _, id in ipairs(beforeState.player.perkIds) do
+            if staticData.perks[id].positiveTiebreak then positiveTiebreak = true end
+        end
 
         local triggerPhases = {
+            cleanup = true,
             turn_start = true,
             player_card = true,
             character_card = true,
@@ -1134,6 +1169,7 @@
         }
 
         local function triggerInputKey(resolutionId, phase, eventType)
+            if eventType == "rule_effect_resolved" then return "rule|" .. ruleOrdinal end
             if resolutionId ~= nil then return "resolution|" .. resolutionId .. "|" .. eventType end
             return "phase|" .. phase .. "|" .. eventType
         end
@@ -1149,6 +1185,7 @@
                 turnLimit = beforeState.turnLimit,
                 remainingTurns = math.max(0, beforeState.turnLimit - resolution.turnNumber + 1),
                 phase = phase,
+                playerPressureCardsResolved = resolvedPressure,
                 mood = trackedMood,
                 history = select(1, cloneData(triggerHistoryContext, "$.triggerContext.history", {})),
                 player = {
@@ -1169,6 +1206,8 @@
                     instanceId = currentCard.instanceId,
                     owner = currentCard.owner,
                     roles = currentCard.roles,
+                    cardType = staticData.cards[currentCard.id].cardType,
+                    mechanisms = staticData.cards[currentCard.id].mechanisms,
                 }
             end
             return context
@@ -1350,13 +1389,14 @@
             if command.op == "damage_resistance"
                 or command.op == "recover_resistance"
                 or command.op == "lose_stealth"
-                or command.op == "recover_stealth" then
+                or command.op == "recover_stealth"
+                or command.op == "random_token_strike" then
                 return effect.amount == command.amount
             end
             if command.op == "draw_cards" then return effect.requested == command.amount end
             if command.op == "skip_actions" then return effect.scope == command.scope end
             if command.op == "add_mood_token" or command.op == "remove_mood_token" then
-                return effect.mood == command.mood and effect.amount == command.amount
+                return effect.mood == command.mood and effect.amount == command.amount and effect.ruleTerm == command.ruleTerm
             end
             if command.op == "force_mood" then return effect.mood == command.mood end
             return false
@@ -1378,6 +1418,7 @@
                 planSlot,
                 planSlotIndex
             )
+                if inputRecord.event.type == "rule_effect_resolved" and kind ~= "perk" then return true, nil end
                 local context, contextError = cloneData(inputRecord.context, "$.triggerReplay.context", {})
                 if contextError then return nil, contextError end
                 if planSlot ~= nil then
@@ -1537,6 +1578,14 @@
         end
 
         local function emitEffect(effect, source)
+            if effect.op == "random_token_strike" then
+                if not effect.changed then return true, nil end
+                local ok, err = emitEffect({op="remove_mood_token",target="character",changed=true,
+                    mood=effect.mood,amount=1,before=effect.before.moodTokens[effect.mood],after=effect.after.moodTokens[effect.mood]}, source)
+                if not ok then return nil, err end
+                return emitEffect({op="damage_resistance",target="character",changed=true,amount=effect.amount,
+                    before=effect.before.resistance,after=effect.after.resistance}, source)
+            end
             local publicEffect, cloneError = cloneData(effect, "$.publicEffect", {})
             if cloneError then
                 return nil, cloneError
@@ -1544,12 +1593,14 @@
             if effect.changed == true then
                 publicEffect.source = source
             end
+            publicEffect.ruleTerm, publicEffect.ruleMood = nil, nil
             emit(publicResult, "effect_applied", publicEffect)
             if effect.changed == true or effect.blocked == true then
                 local llmCopy, cloneError = cloneData(effect, "$.llmEffect", {})
                 if cloneError then
                     return nil, cloneError
                 end
+                llmCopy.ruleTerm, llmCopy.ruleMood = nil, nil
                 emit(llmEvent, "effect_applied", llmCopy)
             end
             return true, nil
@@ -1710,7 +1761,10 @@
                     and event.cause.kind == "plan_duration_exit" then
                     expectedTailType = "effect_applied"
                 end
-                if event.type ~= expectedTailType then
+                local perkTail = latchedOutcome == nil and event.source.kind == "perk"
+                    and (event.type == "effect_applied" or event.type == "trigger_resolved")
+                    and (event.phase == "cleanup" or not sawMoodStealthEffect)
+                if event.type ~= expectedTailType and not perkTail and event.type ~= "rule_effect_resolved" then
                     return failure({
                         makeError(
                             "invalid_turn_tail_order",
@@ -1788,6 +1842,10 @@
                     return failure({ sourceError or sideError or makeError("invalid_draw_event", path .. ".payload", "드로우 사건 수치가 올바르지 않습니다.") })
                 end
                 sawStartDraw[event.side] = true
+                if not dataEqual(trackedRng, expectedDraw.rngBefore) then
+                    return failure({makeError("rng_discontinuity", path, "드로우 RNG 시작점이 앞선 결과와 다릅니다.")})
+                end
+                trackedRng = expectedDraw.rngAfter
                 trackedHandCount[event.side] = trackedHandCount[event.side] + payload.drawnCount
                 if event.side == "player" then
                     emit(publicResult, "player_cards_drawn", {
@@ -1805,6 +1863,10 @@
                     return failure({ makeError("invalid_character_intent", path .. ".payload.selected", "캐릭터 의도 selected가 beforeState와 다릅니다.") })
                 end
                 sawCharacterIntent = true
+                if not dataEqual(trackedRng, startReceipt.characterSelection.rngBefore) then
+                    return failure({makeError("rng_discontinuity", path, "상대 선택 RNG 시작점이 다릅니다.")})
+                end
+                trackedRng = startReceipt.characterSelection.rngAfter
                 if payload.selected then
                     pendingCharacterIntent = true
                 else
@@ -1851,6 +1913,17 @@
                     event.eventId
                 )
                 pendingCharacterIntent = false
+            elseif event.type == "rule_effect_resolved" then
+                local expected = table.remove(pendingRules, 1)
+                if not expected or not dataEqual(payload, expected.payload)
+                    or event.phase ~= expected.phase or event.resolutionId ~= expected.resolutionId
+                    or event.source.kind ~= "system" or event.source.id ~= "rule_effect"
+                    or event.source.side ~= "player" or event.side ~= "player" then
+                    return failure({makeError("rule_effect_mismatch", path, "의미 효과 입력이 실제 적용 효과와 다릅니다.")})
+                end
+                ruleOrdinal = ruleOrdinal + 1
+                registerTriggerInput("rule_effect_resolved", event.phase, event.resolutionId,
+                    {type="rule_effect_resolved",side="player",ruleTerm=payload.ruleTerm,amount=payload.amount,mood=payload.mood},nil,event.eventId)
             elseif event.type == "effect_applied" then
                 local isMoodStateEffect = event.source.kind == "system"
                     and event.source.id == "mood_state"
@@ -1972,6 +2045,15 @@
                 if effectError then
                     return failure({ effectError })
                 end
+                if payload.ruleTerm then
+                    if payload.ruleMood ~= trackedMood then
+                        return failure({makeError("rule_mood_mismatch",path,"의미 효과 발생 시 무드가 다릅니다.")})
+                    end
+                    if event.source.side == "player" then
+                        pendingRules[#pendingRules+1] = {phase=event.phase,resolutionId=event.resolutionId,
+                            payload={ruleTerm=payload.ruleTerm,amount=payload.amount,mood=payload.ruleMood}}
+                    end
+                end
                 if event.source.kind == "card" and event.cause.kind == "card_followup" then
                     -- 출처는 직전 카드지만 resolutionId는 피해를 준 현재 카드다.
                     local declaration = pendingDeclarations[event.resolutionId]
@@ -2027,10 +2109,28 @@
                     end
                     trackedResistance = effect.after
                     local declaration = pendingDeclarations[event.resolutionId]
-                    if declaration and payload.op == "damage_resistance" and effect.changed == true then
+                    -- Match the resolver's card-local total; automatic triggers belong only to the turn total.
+                    if declaration and payload.op == "damage_resistance" and effect.changed == true
+                        and (event.source.kind == "card" or isPlanCallbackEffect) then
                         declaration.resistanceDamage = declaration.resistanceDamage + math.max(0, effect.before - effect.after)
                     end
+                elseif payload.op == "random_token_strike" then
+                    local replayState = select(1, cloneData(beforeState,"$.tokenReplay",{}))
+                    replayState.character.moodTokens = select(1,cloneData(trackedMoodTokens,"$.tokens",{}))
+                    replayState.character.resistance, replayState.rng = trackedResistance, trackedRng
+                    local replay, replayErrors = callModule("effectEngine","applyCommands",staticData,{state=replayState},
+                        { {op="random_token_strike",target="character",amount=payload.amount,cause=payload.cause} })
+                    if replayErrors then return failure({replayErrors}) end
+                    if not replay.ok then return failure(replay.errors) end
+                    if not dataEqual(replay.applied[1], payload) then
+                        return failure({makeError("token_strike_replay_mismatch",path,"토큰 추첨 결과가 결정적 재생과 다릅니다.")})
+                    end
+                    trackedResistance, trackedMoodTokens, trackedRng = replay.state.character.resistance, replay.state.character.moodTokens, replay.state.rng
                 elseif payload.op == "draw_cards" then
+                    if not dataEqual(trackedRng,payload.before.rng) then
+                        return failure({makeError("rng_discontinuity",path,"효과 드로우 RNG 시작점이 다릅니다.")})
+                    end
+                    trackedRng = payload.after.rng
                     trackedHandCount[effect.target] = trackedHandCount[effect.target] + effect.drawnCount
                 elseif payload.op == "skip_actions" then
                     if effect.before ~= trackedSkipRemaining[effect.target] then
@@ -2254,6 +2354,9 @@
                     }
                 end
                 pendingDeclarations[event.resolutionId] = nil
+                if event.side == "player" then
+                    for _, role in ipairs(card.roles) do if role == "pressure" then resolvedPressure=resolvedPressure+1 break end end
+                end
                 registerTriggerInput(
                     "card_resolved",
                     event.phase,
@@ -2957,6 +3060,7 @@
                         mood = trackedMood,
                         moodTokens = trackedMoodTokens,
                         forcedMoodRequests = trackedForcedMoodRequests,
+                        positiveTiebreak = positiveTiebreak,
                     }
                 )
                 if moodProjectionErrors then return failure(moodProjectionErrors) end
@@ -2979,6 +3083,12 @@
                 sawMoodEvaluation = true
                 trackedMood = payload.after
                 trackedMoodTokens = expectedMood.moodTokens
+                if latchedOutcome == nil then
+                    local consumed = 0
+                    for id, count in pairs(payload.tokensBefore) do consumed=consumed+math.max(0,count-payload.tokensAfter[id]) end
+                    registerTriggerInput("mood_resolved","turn_end",nil,
+                        {type="mood_resolved",before=payload.before,after=payload.after,consumed=consumed},nil,event.eventId)
+                end
                 expectedMoodStealthEffect = nil
                 if latchedOutcome == nil and expectedMood.stealthDelta ~= 0 then
                     local stealthDelta = expectedMood.stealthDelta
@@ -3000,6 +3110,7 @@
                 }
                 if payload.targetMood ~= nil then safe.targetMood = payload.targetMood end
                 if payload.tiedMoods ~= nil then safe.tiedMoods = payload.tiedMoods end
+                if payload.perkId ~= nil then safe.perkId = payload.perkId end
                 emit(publicResult, "mood_evaluated", safe)
                 if payload.applied == true then
                     emit(llmEvent, "mood_changed", {
@@ -3144,6 +3255,8 @@
         for _ in pairs(pendingDeclarations) do
             return failure({ makeError("unmatched_card_declaration", "$.turnResolution.events", "card_resolved와 짝이 없는 카드 선언이 있습니다.") })
         end
+        if #pendingRules > 0 then return failure({makeError("missing_rule_input","$.turnResolution.events","의미 효과 입력이 누락되었습니다.")}) end
+        if not dataEqual(trackedRng,resolution.afterState.rng) then return failure({makeError("rng_result_mismatch","$.turnResolution.afterState.rng","RNG 결과가 사건 재생과 다릅니다.")}) end
         for _, effects in pairs(pendingTriggerEffects) do
             if #effects > 0 then
                 return failure({ makeError("unmatched_trigger_effect", "$.turnResolution.events", "trigger_resolved와 짝이 없는 트리거 효과 사건이 있습니다.") })

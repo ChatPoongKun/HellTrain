@@ -276,6 +276,7 @@
     end
 
     local SUPPORTED_COMMANDS = {
+        random_token_strike = true,
         damage_resistance = true,
         recover_resistance = true,
         lose_stealth = true,
@@ -391,6 +392,9 @@
         if not isInteger(spec.turnNumber, 1) or type(moods[spec.mood]) ~= "table" then
             return failure({ makeError("invalid_mood_projection", "$.spec", "무드 투영 턴 또는 현재 무드가 올바르지 않습니다.") })
         end
+        if spec.positiveTiebreak ~= nil and type(spec.positiveTiebreak) ~= "boolean" then
+            return failure({makeError("invalid_tiebreak_policy","$.spec.positiveTiebreak","동률 정책은 불리언이어야 합니다.")})
+        end
 
         local order = {}
         local moodCount = 0
@@ -498,6 +502,13 @@
                 payload.applied = payload.before ~= payload.after
                 payload.resolution = "token"
                 payload.targetMood = payload.after
+                tokens[payload.after] = 0
+            elseif spec.positiveTiebreak == true then
+                payload.after = leaders[#leaders]
+                payload.applied = payload.before ~= payload.after
+                payload.resolution = "token"
+                payload.targetMood = payload.after
+                payload.perkId = "perk_positive_tiebreak"
                 tokens[payload.after] = 0
             else
                 for _, moodId in ipairs(leaders) do tokens[moodId] = tokens[moodId] - 1 end
@@ -684,6 +695,13 @@
                         addError(errors, "invalid_command_amount", path .. ".amount", "자원 효과 수치는 0 이상의 유한한 숫자여야 합니다.")
                     end
                     output.amount = command.amount
+                elseif command.op == "random_token_strike" then
+                    common.amount = true
+                    checkCommandKeys(command, common, path, errors)
+                    if command.target ~= "character" or not isInteger(command.amount, 1) then
+                        addError(errors, "invalid_random_token_strike", path, "토큰 흡수 명령이 올바르지 않습니다.")
+                    end
+                    output.amount = command.amount
                 elseif command.op == "draw_cards" then
                     common.amount = true
                     checkCommandKeys(command, common, path, errors)
@@ -707,6 +725,13 @@
                 elseif command.op == "add_mood_token" or command.op == "remove_mood_token" then
                     common.amount = true
                     common.mood = true
+                    common.ruleTerm = true
+                    if command.ruleTerm ~= nil then
+                        if command.op ~= "add_mood_token" or (command.ruleTerm ~= "manipulate" and command.ruleTerm ~= "backlash") then
+                            addError(errors, "invalid_rule_term", path, "농락·반발 표식이 올바르지 않습니다.")
+                        end
+                        output.ruleTerm = command.ruleTerm
+                    end
                     checkCommandKeys(command, common, path, errors)
                     if command.target ~= "character" then
                         addError(errors, "invalid_command_target", path .. ".target", "무드 토큰 대상은 character여야 합니다.")
@@ -1272,6 +1297,31 @@
                 entry.before = before
                 entry.after = drawReceipt(state, command.target)
                 entry.changed = #entry.drawnInstanceIds > 0
+            elseif command.op == "random_token_strike" then
+                local total, choices = 0, {}
+                for mood, def in pairs(normalizedStaticData.registry.moods) do
+                    choices[#choices+1] = {mood=mood, order=def.order, count=state.character.moodTokens[mood] or 0}
+                end
+                table.sort(choices, function(a,b) return a.order<b.order end)
+                local kinds, only = 0, nil
+                for _, v in ipairs(choices) do total=total+v.count if v.count>0 then kinds=kinds+1 only=v.mood end end
+                entry.amount = command.amount
+                entry.before = {moodTokens=select(1,cloneData(state.character.moodTokens)), resistance=state.character.resistance, rng=select(1,cloneData(state.rng))}
+                if total>0 then
+                    local chosen = only
+                    if kinds>1 then
+                        local ok, pick = pcall(runScript, triggerId, "deterministicRng", "nextInteger", state.rng, 1, total)
+                        if not ok or type(pick)~="table" or not pick.ok then return failure({makeError("token_rng_failed", "$.rng", "토큰 추첨에 실패했습니다.")}) end
+                        state.rng=pick.rng
+                        local index=pick.value
+                        for _, v in ipairs(choices) do index=index-v.count if index<=0 then chosen=v.mood break end end
+                    end
+                    entry.mood=chosen
+                    state.character.moodTokens[chosen]=state.character.moodTokens[chosen]-1
+                    state.character.resistance=state.character.resistance-command.amount
+                    entry.changed=true
+                end
+                entry.after = {moodTokens=select(1,cloneData(state.character.moodTokens)), resistance=state.character.resistance, rng=select(1,cloneData(state.rng))}
             elseif command.op == "skip_actions" then
                 if transient.skipRemaining == nil then
                     transient.skipRemaining = { player = false, character = false }
@@ -1334,6 +1384,8 @@
                 end
                 entry.mood = command.mood
                 entry.amount = command.amount
+                entry.ruleTerm = command.ruleTerm
+                if command.ruleTerm then entry.ruleMood = state.character.mood end
                 entry.before = before
                 entry.after = after
                 entry.changed = before ~= after

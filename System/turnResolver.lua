@@ -463,7 +463,9 @@
             end
             working.state = report.state
             working.transient = report.transient
+            local ruleRecords = {}
             for _, applied in ipairs(report.applied or {}) do
+                if applied.ruleTerm then ruleRecords[#ruleRecords+1]={type="effect_applied",source=eventSource,payload=applied} end
                 if currentResolutionStats ~= nil and applied.changed == true then
                     if applied.op == "damage_resistance" and applied.target == "character" then
                         currentResolutionStats.resistanceDamage = currentResolutionStats.resistanceDamage + math.max(0, applied.before - applied.after)
@@ -487,6 +489,15 @@
                         resolutionId = resolutionId,
                     }
                 )
+            end
+            if #ruleRecords>0 then
+                local reacted, reactionErrors = callModule("triggerPipeline", "react", staticData, working, ruleRecords, {phase=phase})
+                if reactionErrors then return false,reactionErrors end
+                working.state,working.transient=reacted.state,reacted.transient
+                for _, record in ipairs(reacted.records) do
+                    appendEvent(record.type,phase,record.source,record.payload,resolutionId,record.side,
+                        {kind=record.type=="effect_applied" and "perk_trigger" or (resolutionId and "card_resolution" or "turn_event"),resolutionId=resolutionId})
+                end
             end
             return true, nil
         end
@@ -676,6 +687,13 @@
             allowGameplayCommands
         )
             local pipelineOptions = { phase = phase }
+            local pressure = (buildHistoryContext(working.state.history).player.resolvedRoleCounts.pressure or 0)
+            for _, e in ipairs(events) do
+                if e.type=="card_resolved" and e.side=="player" then
+                    for _, role in ipairs(staticData.cards[e.payload.cardId].roles) do if role=="pressure" then pressure=pressure+1 end end
+                end
+            end
+            pipelineOptions.playerPressureCardsResolved=pressure
             if currentCard ~= nil and currentInstance ~= nil then
                 pipelineOptions.currentCard = {
                     id = currentCard.id,
@@ -1449,6 +1467,7 @@
         end
 
         local moodProjection, moodProjectionErrors = callModule("effectEngine", "projectMood", staticData, {
+            positiveTiebreak = (function() for _, id in ipairs(working.state.player.perkIds) do if staticData.perks[id].positiveTiebreak then return true end end return false end)(),
             turnNumber = resolvedTurnNumber,
             mood = working.state.character.mood,
             moodTokens = working.state.character.moodTokens,
@@ -1468,6 +1487,14 @@
             "character",
             { kind = "turn_rule" }
         )
+
+        if working.state.status == "active" then
+            local consumed = 0
+            for mood, before in pairs(moodPayload.tokensBefore) do consumed=consumed+math.max(0,before-moodPayload.tokensAfter[mood]) end
+            local input={type="mood_resolved",before=moodPayload.before,after=moodPayload.after,consumed=consumed}
+            local done, errors=applyTriggerPipeline(input,"turn_end")
+            if not done then return failure(errors) end
+        end
 
         if working.state.status == "active" and projectedMood.stealthDelta ~= 0 then
             local moodCommand = {

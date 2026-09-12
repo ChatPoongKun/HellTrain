@@ -258,6 +258,7 @@
 <h3>무드</h3>
 <span class="ht-current-mood">현재 · {{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::label}}</span>
 </div>
+<div class="ht-current-mood">{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::decisionNote}}</div>
 <div class="ht-mood-grid">
 <button type="button" class="ht-mood ht-tip-trigger {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::rejection}}}}is-current{{/if}} {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::previousId}}::rejection}}}}is-previous{{/if}}" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-mood-rejection" aria-haspopup="dialog" aria-label="거절 무드 {{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokens}}::rejection}}, 정보 보기" {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::id}}::rejection}}}}aria-current="true"{{/if}}>
 <i class="ht-mood-cell ht-mood-cell--5 ht-mood-cell--{{arrayelement::{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::mood}}::tokenCells}}::rejection}}::4}}" aria-hidden="true"></i>

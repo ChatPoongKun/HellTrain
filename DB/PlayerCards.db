@@ -8,8 +8,8 @@ local function addm(m,n)return cmd("add_mood_token","character",n,m)end
 local function remm(m,n)return cmd("remove_mood_token","character",n,m)end
 local function force(m)return cmd("force_mood","character",nil,m)end
 local function adj(m,d)local i=(MI[m]or 3)+d if i<1 then i=1 elseif i>5 then i=5 end return MOODS[i]end
-local function manip(c,n)return addm(adj(c.mood,1),n)end
-local function back(c,n)return addm(adj(c.mood,-1),n)end
+local function manip(c,n)local v=addm(adj(c.mood,1),n)v.ruleTerm="manipulate"return v end
+local function back(c,n)local v=addm(adj(c.mood,-1),n)v.ruleTerm="backlash"return v end
 local function calm(c,n)return remm(adj(c.mood,-1),n)end
 local function neg(m)return m=="rejection"or m=="suspicion"end
 local function pos(m)return m=="confusion"or m=="compliance"end

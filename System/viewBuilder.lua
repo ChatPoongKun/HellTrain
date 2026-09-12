@@ -793,6 +793,8 @@
 
         local turns = state.history and state.history.turns or {}
         local previousTurn = turns[#turns]
+        local decidingPerkId = previousTurn and previousTurn.mood and previousTurn.mood.perkId
+        local decidingPerk = decidingPerkId and data.perks and data.perks[decidingPerkId]
         local previousId = previousTurn and previousTurn.start.mood or ""
         -- Compare with the initialized state displayed on the previous turn.
         local previousTokens = lastCommitted and lastCommitted.beforeState.character.moodTokens or tokens
@@ -814,6 +816,7 @@
             id = moodId,
             label = mood.label,
             tokenThreshold = 3,
+            decisionNote = decidingPerk and ("직전 판정 · " .. decidingPerk.name .. "으로 긍정 동률 선택") or "",
             tokens = tokens,
             tokenCells = tokenCells,
             overflowLabels = overflowLabels,
@@ -2250,6 +2253,7 @@
                     id = true,
                     label = true,
                     tokenThreshold = true,
+                    decisionNote = true,
                     tokens = true,
                     tokenCells = true,
                     overflowLabels = true,
@@ -2271,6 +2275,7 @@
                         end
                     end
                 end
+                if type(mood.decisionNote) ~= "string" then addError(errors,"invalid_mood_note","$.character.mood.decisionNote","무드 판정 안내가 문자열이 아닙니다.") end
                 for _, field in ipairs({ "tokenCells", "overflowLabels" }) do
                     local values = mood[field]
                     local path = "$.character.mood." .. field
