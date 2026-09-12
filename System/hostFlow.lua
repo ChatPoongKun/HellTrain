@@ -161,7 +161,7 @@ animation: none;
 <div class="helltrain-approach-processing__body">
 <span class="helltrain-approach-processing__spinner" aria-hidden="true"></span>
 <p class="helltrain-approach-processing__label">처리중<span aria-hidden="true"><span class="helltrain-approach-processing__dot">.</span><span class="helltrain-approach-processing__dot">.</span><span class="helltrain-approach-processing__dot">.</span></span></p>
-<p class="helltrain-approach-processing__copy">{{approachCharacterName}}에게 접근하고 있습니다.</p>
+<p class="helltrain-approach-processing__copy">@@approachCharacterName@@에게 접근하고 있습니다.</p>
 </div>
 </section>]]
 
@@ -307,7 +307,7 @@ local function escapeApproachName(name)
 end
 
 local function showApproachProcessing(triggerId, characterName)
-    local markup = APPROACH_PROCESSING_MARKUP:gsub("{{approachCharacterName}}", function()
+    local markup = APPROACH_PROCESSING_MARKUP:gsub("@@approachCharacterName@@", function()
         return escapeApproachName(characterName)
     end)
     writeUiFragment(triggerId, UI_BODY_VAR, markup)
