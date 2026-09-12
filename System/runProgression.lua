@@ -6,6 +6,8 @@
     local RARITY_WEIGHTS = { common = 80, rare = 10, legendary = 1 }
     local RARITY_ORDER = { "common", "rare", "legendary" }
     local REWARD_OFFER_SIZE = 3
+    local REWARD_KIND_OFFER_SIZE = 3
+    local REWARD_KINDS = { "card", "remove_card", "perk" }
     local CHARACTER_OFFER_SIZE = 3
     local MAX_SESSIONS = 999
     local BATTLE_SEED_MAX = 2147483646
@@ -753,7 +755,7 @@
         return chooseOne(rng, tied)
     end
 
-    local function generateRewardOffer(
+    local function generateCardRewardOffer(
         setupId,
         sessionNumber,
         rng,
@@ -847,6 +849,60 @@
                 cardIds
             ),
         }, currentRng, nil
+    end
+
+    local function heldPerks(sessions)
+        local ids = {}
+        for _, session in ipairs(sessions) do
+            local choice = session.rewardChoice
+            if choice and choice.kind == "perk" then
+                if choice.replacedPerkId then
+                    for i,id in ipairs(ids) do if id == choice.replacedPerkId then table.remove(ids,i) break end end
+                end
+                ids[#ids+1] = choice.perkId
+            end
+        end
+        return ids
+    end
+
+    local function generateRewardOffer(setupId, sessionNumber, rng, settlement, deck, playerPool, perks, staticData)
+        local rewardKinds, nextRng, errors = pickWithoutReplacement(
+            rng,
+            REWARD_KINDS,
+            math.min(REWARD_KIND_OFFER_SIZE, #REWARD_KINDS)
+        )
+        if errors then return nil,nil,errors end
+        local offer = { kind = "none" }
+        if contains(rewardKinds, "card") then
+            offer, nextRng, errors = generateCardRewardOffer(setupId,sessionNumber,nextRng,settlement,deck,playerPool)
+            if errors then return nil,nil,errors end
+        end
+        local pool = {}
+        for id in pairs(staticData.perks) do if not contains(perks,id) then pool[#pool+1]=id end end
+        table.sort(pool)
+        local picked, finalRng = {}, nextRng
+        if contains(rewardKinds, "perk") then
+            local pickErrors
+            picked, finalRng, pickErrors = pickWithoutReplacement(nextRng,pool,math.min(3,#pool))
+            if pickErrors then return nil,nil,pickErrors end
+        end
+        local removable = {}
+        if contains(rewardKinds, "remove_card") then
+            for _, id in ipairs(deck) do
+                if not contains(removable, id) then removable[#removable + 1] = id end
+            end
+            table.sort(removable)
+        end
+        offer.rewardKinds = rewardKinds
+        offer.perkIds = picked
+        offer.removableCardIds = removable
+        local tokenIds = copyArray(rewardKinds)
+        for _,id in ipairs(offer.cardIds or {}) do tokenIds[#tokenIds+1]=id end
+        for _,id in ipairs(picked) do tokenIds[#tokenIds+1]=id end
+        for _,id in ipairs(removable) do tokenIds[#tokenIds+1]=id end
+        for _,id in ipairs(perks) do tokenIds[#tokenIds+1]=id end
+        offer.interactionToken=buildRewardToken(setupId,sessionNumber,finalRng,settlement,deck,offer.kind,tokenIds)
+        return offer,finalRng,nil
     end
 
     local function generateCharacterOffer(
@@ -1253,17 +1309,25 @@
             appendError(errors, "invalid_reward_choice", path, "보상 선택은 일반 객체여야 합니다.")
             return nil, errors
         end
-        checkAllowedKeys(choice, { kind = true, cardId = true }, path, errors)
-        if choice.kind == "card" then
+        checkAllowedKeys(choice, { kind = true, cardId = true, perkId=true, replacedPerkId=true }, path, errors)
+        if choice.kind ~= "perk" and (choice.perkId ~= nil or choice.replacedPerkId ~= nil) then
+            appendError(errors,"invalid_reward_fields",path,"퍽 보상에만 퍽 ID를 사용할 수 있습니다.")
+        end
+        if choice.kind == "card" or choice.kind == "remove_card" then
             if not isAsciiId(choice.cardId) then
-                appendError(errors, "invalid_reward_card", path .. ".cardId", "카드 보상 선택에는 cardId가 필요합니다.")
+                appendError(errors, "invalid_reward_card", path .. ".cardId", "카드 획득·제거 선택에는 cardId가 필요합니다.")
+            end
+        elseif choice.kind == "perk" then
+            if not isAsciiId(choice.perkId) or choice.cardId ~= nil
+                or (choice.replacedPerkId ~= nil and not isAsciiId(choice.replacedPerkId)) then
+                appendError(errors,"invalid_reward_perk",path,"퍽 보상 ID가 올바르지 않습니다.")
             end
         elseif choice.kind == "none" then
             if choice.cardId ~= nil then
                 appendError(errors, "unexpected_reward_card", path .. ".cardId", "none 보상 선택에는 cardId를 넣을 수 없습니다.")
             end
         else
-            appendError(errors, "invalid_reward_kind", path .. ".kind", "보상 선택 kind는 card 또는 none이어야 합니다.")
+            appendError(errors, "invalid_reward_kind", path .. ".kind", "보상 선택 kind는 card, remove_card, perk 또는 none이어야 합니다.")
         end
         if #errors > 0 then
             return nil, errors
@@ -1271,13 +1335,36 @@
         return choice, nil
     end
 
-    local function applyRewardChoice(offer, choice, deck, playerPool, path)
+    local function applyRewardChoice(offer, choice, deck, playerPool, path, perks)
         local counts, deckLength, deckErrors = countDeck(deck, playerPool, "$.playerCardIds")
         if deckErrors then
             return nil, deckErrors
         end
         if choice.kind == "none" then
             return copyArray(deck), nil
+        end
+        if not contains(offer.rewardKinds, choice.kind) then
+            return nil, { makeError("reward_kind_not_offered", path .. ".kind", "이번 승리에서 제시되지 않은 보상 종류입니다.") }
+        end
+        if choice.kind == "perk" then
+            if not contains(offer.perkIds,choice.perkId) or contains(perks,choice.perkId)
+                or (#perks == 3 and not contains(perks,choice.replacedPerkId))
+                or (#perks < 3 and choice.replacedPerkId ~= nil) then
+                return nil,{makeError("invalid_perk_reward",path,"제안된 미보유 퍽과 올바른 교체 대상을 선택해야 합니다.")}
+            end
+            return copyArray(deck),nil
+        end
+        if choice.kind == "remove_card" then
+            if deckLength <= MIN_DECK_SIZE or not contains(offer.removableCardIds, choice.cardId) then
+                return nil, { makeError("invalid_card_removal", path, "덱을 10장 이상 유지하며 보유 카드 한 장을 제거해야 합니다.") }
+            end
+            local nextDeck = copyArray(deck)
+            for index, cardId in ipairs(nextDeck) do
+                if cardId == choice.cardId then
+                    table.remove(nextDeck, index)
+                    return nextDeck, nil
+                end
+            end
         end
         if offer.kind == "none" then
             return nil, {
@@ -1379,7 +1466,7 @@
                 cursor = rng.cursor,
             },
             playerCardIds = copyArray(deck),
-            perkIds = {},
+            perkIds = heldPerks(sessions),
             stats = {
                 completed = stats.completed,
                 victories = stats.victories,
@@ -1511,7 +1598,9 @@
                     rng,
                     settlement,
                     deck,
-                    playerPool
+                    playerPool,
+                    heldPerks(canonicalSessions),
+                    staticData
                 )
                 if rewardErrors then
                     return nil, rewardErrors
@@ -1551,7 +1640,8 @@
                     rewardChoice,
                     deck,
                     playerPool,
-                    recordPath .. ".rewardChoice"
+                    recordPath .. ".rewardChoice",
+                    heldPerks(canonicalSessions)
                 )
                 if applyErrors then
                     return nil, applyErrors
@@ -1572,7 +1662,7 @@
                             makeError(
                                 "reward_not_allowed_after_defeat",
                                 recordPath .. ".rewardChoice",
-                                "패배한 세션에서는 카드 보상을 획득할 수 없습니다."
+                                "패배한 세션에서는 승리 보상을 획득할 수 없습니다."
                             ),
                         }
                     end
@@ -1653,6 +1743,7 @@
                 return nil, specErrors
             end
             currentSpec = nextSpec
+            currentSpec.perkIds = heldPerks(canonicalSessions)
 
             if sessionIndex == sessionCount then
                 return buildState(
@@ -1725,8 +1816,8 @@
         end
 
         local perkCount = denseArrayLength(state.perkIds, "$.state.perkIds", errors)
-        if perkCount ~= nil and perkCount ~= 0 then
-            appendError(errors, "unsupported_perks", "$.state.perkIds", "현재 progression 버전의 perkIds는 빈 배열이어야 합니다.")
+        if perkCount ~= nil and perkCount > 3 then
+            appendError(errors, "perk_limit", "$.state.perkIds", "퍽은 최대 3개까지 보유합니다.")
         end
 
         if type(state.stats) ~= "table" or getmetatable(state.stats) ~= nil then
@@ -1831,16 +1922,23 @@
         end
         checkAllowedKeys(
             command,
-            { cardId = true, interactionToken = true },
+            { cardId = true, removeCardId=true, perkId=true, replacedPerkId=true, interactionToken = true },
             "$.command",
             errors
         )
-        if not isAsciiId(command.cardId) then
+        local selectionCount = (command.cardId ~= nil and 1 or 0)
+            + (command.removeCardId ~= nil and 1 or 0)
+            + (command.perkId ~= nil and 1 or 0)
+        if selectionCount ~= 1
+            or (command.cardId ~= nil and not isAsciiId(command.cardId))
+            or (command.removeCardId ~= nil and not isAsciiId(command.removeCardId))
+            or (command.perkId ~= nil and not isAsciiId(command.perkId))
+            or (command.replacedPerkId ~= nil and (command.perkId == nil or not isAsciiId(command.replacedPerkId))) then
             appendError(
                 errors,
                 "invalid_command_card",
                 "$.command.cardId",
-                "보상 선택에는 플레이어 cardId 또는 continue가 필요합니다."
+                "보상 선택에는 카드 획득, 카드 제거, 퍽 획득 또는 continue 하나가 필요합니다."
             )
         end
         if type(command.interactionToken) ~= "string"
@@ -2004,7 +2102,11 @@
         end
 
         local choice
-        if command.cardId == "continue" then
+        if command.perkId then
+            choice = {kind="perk",perkId=command.perkId,replacedPerkId=command.replacedPerkId}
+        elseif command.removeCardId then
+            choice = {kind="remove_card",cardId=command.removeCardId}
+        elseif command.cardId == "continue" then
             choice = {
                 kind = "none",
             }
@@ -2019,7 +2121,8 @@
             choice,
             current.playerCardIds,
             playerPool,
-            "$.command"
+            "$.command",
+            current.perkIds
         )
         if applyErrors then
             return failure(applyErrors)

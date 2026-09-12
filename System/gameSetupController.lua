@@ -9,7 +9,7 @@
     local UI_NAME = "🔯🔯🔯"
     local UI_SHELL_NAME = "helltrainUiShellV1"
     local UI_SHELL_REVISION_NAME = "helltrainUiShellRevision"
-    local UI_SHELL_REVISION = "sidebar-character-journal-20260910"
+    local UI_SHELL_REVISION = "sidebar-a4db71bc3e86a329"
     local DIAGNOSTIC_SCOPE = "helltrain.gameSetupController"
     local arguments = { ... }
     local argumentCount = select("#", ...)
@@ -1312,6 +1312,11 @@
                     makeError("invalid_choose_arguments", "$.arguments", "cardId와 interactionToken은 문자열이어야 합니다."),
                 }
             end
+            local removeCardId = cardId:match("^remove:([a-z][a-z0-9_]*)$")
+            if removeCardId then return {removeCardId=removeCardId,interactionToken=interactionToken},nil end
+            local perkId, replacedPerkId = cardId:match("^(perk_[a-z0-9_]+):(perk_[a-z0-9_]+)$")
+            perkId = perkId or cardId:match("^(perk_[a-z0-9_]+)$")
+            if perkId then return {perkId=perkId,replacedPerkId=replacedPerkId,interactionToken=interactionToken},nil end
             return { cardId = cardId, interactionToken = interactionToken }, nil
         end
         if action == "chooseCharacter" then

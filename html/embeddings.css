@@ -2816,6 +2816,39 @@ font-weight: 700;
 color: #c4b5fd;
 }
 
+.run-flow .perk-grid {
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+gap: 0.75rem;
+padding: 0.75rem 0;
+}
+
+.run-flow .perk-slot {
+padding: 1rem;
+border: 1px solid rgba(139, 92, 246, 0.3);
+border-radius: 12px;
+background: rgba(15, 23, 42, 0.6);
+}
+
+.run-flow .perk-name {
+margin: 0 0 0.5rem;
+color: #e9d5ff;
+font-size: 1rem;
+}
+
+.run-flow .perk-desc {
+color: #cbd5e1;
+line-height: 1.6;
+font-size: 0.85rem;
+}
+
+.run-flow .perk-slot .run-continue {
+display: block;
+width: 100%;
+margin-top: 0.5rem;
+white-space: normal;
+}
+
 .popup-shell--deck .perk-grid {
 display: grid;
 grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -108,8 +108,32 @@
 {{settempvar::run_progression_reward::{{dictelement::{{tempvar::run_progression_view}}::rewardOffer}}}}
 <div class="run-section-head">
 <h3 class="run-section-title">전투 보상을 선택하세요</h3>
-<span class="run-instruction">카드 클릭: 상세 확인 · 아래 버튼: 선택 확정 · 원치 않으면 선택하지 않기</span>
+<span class="run-instruction">전체 승리 보상 중 무작위로 제시된 3종에서 하나를 선택합니다.</span>
 </div>
+{{#each::keep {{dictelement::{{tempvar::run_progression_reward}}::kinds}} as reward_kind}}
+<details class="run-battle-log run-reward-option">
+<summary>{{dictelement::{{slot::reward_kind}}::label}} · {{dictelement::{{slot::reward_kind}}::description}}</summary>
+{{#when::keep::{{dictelement::{{slot::reward_kind}}::kind}}::is::perk}}
+<div class="perk-grid">
+{{#each::keep {{dictelement::{{tempvar::run_progression_reward}}::perks}} as reward_perk}}
+<article class="perk-slot"><div class="perk-info">
+<h4 class="perk-name">{{dictelement::{{slot::reward_perk}}::name}}</h4>
+<p class="perk-desc">{{dictelement::{{slot::reward_perk}}::description}}</p>
+{{#when::keep::{{dictelement::{{tempvar::run_progression_reward}}::requiresReplacement}}::is::true}}
+<details><summary>교체 대상 선택</summary>
+{{#each::keep {{dictelement::{{tempvar::run_progression_view}}::perks}} as replace_perk}}
+<button class="run-continue" type="button" risu-btn="init|choose|{{dictelement::{{slot::reward_perk}}::perkId}}:{{dictelement::{{slot::replace_perk}}::perkId}}|{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}">{{dictelement::{{slot::replace_perk}}::name}} 대신 획득</button>
+{{/each}}
+<p>교체하지 않으려면 이 목록을 닫으세요. 버튼을 눌러야 확정됩니다.</p>
+</details>
+{{:else}}
+<button class="run-continue" type="button" risu-btn="init|choose|{{dictelement::{{slot::reward_perk}}::perkId}}|{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}">이 퍽 획득</button>
+{{/when}}
+</div></article>
+{{/each}}
+</div>
+{{/when}}
+{{#when::keep::{{dictelement::{{slot::reward_kind}}::kind}}::is::card}}
 {{#when::keep::{{dictelement::{{tempvar::run_progression_reward}}::kind}}::is::card}}
 <input class="draft-none" type="radio" name="run-reward-choice" id="run-reward-none" checked aria-hidden="true">
 <div class="draft-offers" role="list" aria-label="전투 보상 카드">
@@ -208,28 +232,46 @@ aria-label="{{dictelement::{{slot::run_reward_offer_card}}::name}} 카드를 전
 </div>
 {{/each}}
 </div>
-<div class="run-reward-skip">
-<button
-class="run-continue"
-type="button"
-risu-btn="init|choose|continue|{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}"
-aria-label="카드 보상을 선택하지 않고 현재 덱으로 계속"
->선택하지 않기</button>
-</div>
 {{/when}}
 {{#when::keep::{{dictelement::{{tempvar::run_progression_reward}}::kind}}::is::none}}
 <div class="run-none-reward" aria-live="polite">
 <div class="run-none-mark" aria-hidden="true">20</div>
 <h3 class="run-none-title">획득 가능한 카드가 없습니다</h3>
-<p class="run-none-copy">덱이 20장에 도달했거나 모든 카드가 보유 한도에 도달했습니다. 현재 덱을 유지하고 다음 상대 선택으로 이동합니다.</p>
+<p class="run-none-copy">덱이 20장이거나 모든 카드가 보유 한도에 도달했습니다. 다른 보상을 선택하세요.</p>
+</div>
+{{/when}}
+{{/when}}
+{{#when::keep::{{dictelement::{{slot::reward_kind}}::kind}}::is::remove_card}}
+{{#when::keep::{{dictelement::{{tempvar::run_progression_reward}}::canRemove}}::is::true}}
+<div class="perk-grid" role="list" aria-label="제거할 보유 카드">
+{{#each::keep {{dictelement::{{tempvar::run_progression_reward}}::removableCards}} as removable_card}}
+<article class="perk-slot" role="listitem">
+<div class="perk-info">
+<h4 class="perk-name">{{dictelement::{{slot::removable_card}}::name}}</h4>
+<p class="perk-desc">보유 {{dictelement::{{slot::removable_card}}::ownedCopies}}장 · 은폐 비용 {{dictelement::{{slot::removable_card}}::baseStealthCost}} · 저항 피해 {{dictelement::{{slot::removable_card}}::baseResistanceDamage}}</p>
+<button class="run-continue" type="button" risu-btn="init|choose|remove:{{dictelement::{{slot::removable_card}}::cardId}}|{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}">이 카드 1장 제거</button>
+</div>
+</article>
+{{/each}}
+</div>
+{{:else}}
+<div class="run-none-reward" aria-live="polite">
+<div class="run-none-mark" aria-hidden="true">10</div>
+<h3 class="run-none-title">카드를 제거할 수 없습니다</h3>
+<p class="run-none-copy">덱은 최소 10장을 유지해야 합니다. 다른 보상을 선택하세요.</p>
+</div>
+{{/when}}
+{{/when}}
+</details>
+{{/each}}
+<div class="run-reward-skip">
 <button
 class="run-continue"
 type="button"
 risu-btn="init|choose|continue|{{dictelement::{{tempvar::run_progression_reward}}::interactionToken}}"
-aria-label="카드 보상 없이 다음 상대 선택으로 이동"
->현재 덱으로 계속</button>
+aria-label="승리 보상을 받지 않고 계속"
+>선택하지 않기</button>
 </div>
-{{/when}}
 {{/when}}
 
 {{#when::keep::{{dictelement::{{tempvar::run_progression_view}}::phase}}::is::characterSelect}}

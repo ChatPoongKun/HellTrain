@@ -7,6 +7,11 @@
     local DECK_MAX = 20
     local CHARACTER_OFFER_SIZE = 3
     local REWARD_OFFER_MAX = 3
+    local REWARD_KINDS = {
+        card = { label = "카드 획득", description = "무작위 카드 3장 중 한 장을 획득합니다." },
+        remove_card = { label = "카드 제거", description = "보유 카드 한 장을 제거합니다." },
+        perk = { label = "퍽 획득", description = "무작위 퍽 3개 중 하나를 획득합니다." },
+    }
 
     local VALID_PHASES = {
         reward = true,
@@ -497,7 +502,28 @@
             kind = offer.kind,
             interactionToken = offer.interactionToken,
             cards = {},
+            removableCards = {},
+            perks = {},
+            kinds = {},
+            canRemove = false,
+            requiresReplacement = #runState.perkIds == 3,
         }
+        for slot, kind in ipairs(offer.rewardKinds) do
+            local definition = REWARD_KINDS[kind]
+            result.kinds[slot] = {
+                slot = slot,
+                kind = kind,
+                label = definition.label,
+                description = definition.description,
+            }
+            if kind == "remove_card" and #runState.playerCardIds > DECK_MIN then
+                result.canRemove = true
+            end
+        end
+        for _,id in ipairs(offer.perkIds) do
+            local perk=staticData.perks[id]
+            result.perks[#result.perks+1]={perkId=id,name=perk.name,description=perk.description}
+        end
         if offer.kind == "card" then
             local copies = {}
             for _, cardId in ipairs(runState.playerCardIds) do
@@ -514,6 +540,21 @@
                 )
                 if cardView ~= nil then result.cards[#result.cards + 1] = cardView end
             end
+        end
+        local copies = {}
+        for _, cardId in ipairs(runState.playerCardIds) do
+            copies[cardId] = (copies[cardId] or 0) + 1
+        end
+        for slot, cardId in ipairs(offer.removableCardIds) do
+            local cardView = buildCardView(
+                slot,
+                cardId,
+                copies[cardId],
+                staticData,
+                errors,
+                "$.rewardOffer.removableCards"
+            )
+            if cardView ~= nil then result.removableCards[#result.removableCards + 1] = cardView end
         end
         result.count = #result.cards
         return result
@@ -918,6 +959,50 @@
         end
     end
 
+    local function validatePerkItems(items, path, slots, errors)
+        local count=getArrayLength(items,path,errors)
+        if count == nil then return end
+        if (slots and count~=3) or count>3 then addError(errors,"invalid_perk_count",path,"퍽 목록은 최대 3개이며 보유 슬롯은 3칸이어야 합니다.") end
+        local seen={}
+        for i,item in ipairs(items) do
+            local p=path .. "[" .. i .. "]"
+            if type(item)~="table" then addError(errors,"invalid_perk_view",p,"퍽 표시가 객체가 아닙니다.")
+            else
+                checkAllowedKeys(item,{perkId=true,name=true,description=true,owned=slots},p,errors)
+                if not isAsciiId(item.perkId) or (item.perkId~="empty" and seen[item.perkId]) then addError(errors,"invalid_perk_id",p,"퍽 ID가 잘못되었거나 중복되었습니다.") end
+                seen[item.perkId or ""]=true
+                validateString(item.name,p .. ".name",errors)
+                validateString(item.description,p .. ".description",errors)
+                if slots and (type(item.owned)~="boolean" or item.owned~=(item.perkId~="empty")) then addError(errors,"invalid_perk_slot",p,"퍽 소유 여부가 올바르지 않습니다.") end
+            end
+        end
+    end
+
+    local function validateRewardKinds(items, path, errors)
+        local count = getArrayLength(items, path, errors)
+        if count == nil then return end
+        if count ~= REWARD_OFFER_MAX then
+            addError(errors, "invalid_reward_kind_count", path, "승리 보상 종류는 정확히 3개여야 합니다.")
+        end
+        local seen = {}
+        for index, item in ipairs(items) do
+            local itemPath = path .. "[" .. index .. "]"
+            if type(item) ~= "table" then
+                addError(errors, "invalid_reward_kind_view", itemPath, "보상 종류 View가 객체가 아닙니다.")
+            else
+                checkAllowedKeys(item, { slot=true, kind=true, label=true, description=true }, itemPath, errors)
+                if item.slot ~= index or type(item.kind) ~= "string"
+                    or REWARD_KINDS[item.kind] == nil or seen[item.kind] then
+                    addError(errors, "invalid_reward_kind", itemPath, "보상 종류의 순서, ID 또는 중복이 올바르지 않습니다.")
+                else
+                    seen[item.kind] = true
+                end
+                validateString(item.label, itemPath .. ".label", errors)
+                validateString(item.description, itemPath .. ".description", errors)
+            end
+        end
+    end
+
     local function validateRunProgressionView(view)
         local errors = {}
         validateJsonSafe(view, "$", errors)
@@ -937,7 +1022,13 @@
             rewardOffer = true,
             characterOffer = true,
             selectedCharacter = true,
+            perks = true,
+            perkCount = true,
         }, "$", errors)
+        validatePerkItems(view.perks,"$.perks",true,errors)
+        local ownedCount=0
+        for _,item in ipairs(type(view.perks)=="table" and view.perks or {}) do if type(item)=="table" and item.owned then ownedCount=ownedCount+1 end end
+        if view.perkCount~=ownedCount then addError(errors,"perk_count_mismatch","$.perkCount","보유 퍽 집계가 슬롯과 다릅니다.") end
         if view.schemaVersion ~= SCHEMA_VERSION then
             addError(errors, "unsupported_schema", "$.schemaVersion", "지원하지 않는 runProgressionView 스키마입니다.")
         end
@@ -1113,9 +1204,25 @@
                     interactionToken = true,
                     count = true,
                     cards = true,
+                    removableCards = true,
+                    perks = true,
+                    kinds = true,
+                    canRemove = true,
+                    requiresReplacement = true,
                 }, "$.rewardOffer", errors)
+                validateRewardKinds(view.rewardOffer.kinds, "$.rewardOffer.kinds", errors)
                 if view.rewardOffer.kind ~= "card" and view.rewardOffer.kind ~= "none" then
                     addError(errors, "invalid_reward_kind", "$.rewardOffer.kind", "보상 종류가 올바르지 않습니다.")
+                end
+                validatePerkItems(view.rewardOffer.perks,"$.rewardOffer.perks",false,errors)
+                if view.rewardOffer.requiresReplacement~=(view.perkCount==3) then addError(errors,"perk_replacement_mismatch","$.rewardOffer","퍽 교체 여부가 보유 수와 다릅니다.") end
+                local removeOffered = false
+                for _, item in ipairs(type(view.rewardOffer.kinds) == "table" and view.rewardOffer.kinds or {}) do
+                    if type(item) == "table" and item.kind == "remove_card" then removeOffered = true end
+                end
+                if type(view.rewardOffer.canRemove) ~= "boolean"
+                    or view.rewardOffer.canRemove ~= (removeOffered and view.deck.count > DECK_MIN) then
+                    addError(errors, "invalid_card_removal_availability", "$.rewardOffer.canRemove", "카드 제거 가능 여부가 덱 크기와 다릅니다.")
                 end
                 if not isInteractionToken(view.rewardOffer.interactionToken) then
                     addError(errors, "invalid_interaction_token", "$.rewardOffer.interactionToken", "보상 token이 올바르지 않습니다.")
@@ -1138,6 +1245,20 @@
                         if type(card) == "table" and type(card.cardId) == "string" then
                             if seenCards[card.cardId] then
                                 addError(errors, "duplicate_reward_card", "$.rewardOffer.cards[" .. index .. "]", "보상 카드가 중복되었습니다.")
+                            end
+                            seenCards[card.cardId] = true
+                        end
+                    end
+                end
+                local removableCount = getArrayLength(view.rewardOffer.removableCards, "$.rewardOffer.removableCards", errors)
+                if removableCount ~= nil then
+                    local seenCards = {}
+                    for index = 1, removableCount do
+                        local card = view.rewardOffer.removableCards[index]
+                        validateCardView(card, "$.rewardOffer.removableCards[" .. index .. "]", index, errors, true)
+                        if type(card) == "table" and type(card.cardId) == "string" then
+                            if seenCards[card.cardId] then
+                                addError(errors, "duplicate_removable_card", "$.rewardOffer.removableCards[" .. index .. "]", "제거 후보 카드가 중복되었습니다.")
                             end
                             seenCards[card.cardId] = true
                         end
@@ -1214,6 +1335,12 @@
             deck = buildDeckView(runState, staticData, errors),
             result = resultView,
         }
+        view.perks, view.perkCount = {}, #runState.perkIds
+        for i=1,3 do
+            local id=runState.perkIds[i]
+            local perk=id and staticData.perks[id]
+            view.perks[i]={perkId=id or "empty",name=perk and perk.name or "빈 슬롯",description=perk and perk.description or "승리 보상에서 퍽을 획득하세요.",owned=perk~=nil}
+        end
         if runState.phase == "reward" then
             view.rewardOffer = buildRewardOfferView(runState, staticData, errors)
         elseif runState.phase == "characterSelect" then
