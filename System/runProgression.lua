@@ -8,6 +8,7 @@
     local REWARD_OFFER_SIZE = 3
     local REWARD_KIND_OFFER_SIZE = 3
     local REWARD_KINDS = { "card", "remove_card", "perk" }
+    local CARD_REWARD_DRAFTS = 2
     local CHARACTER_OFFER_SIZE = 3
     local MAX_SESSIONS = 999
     local BATTLE_SEED_MAX = 2147483646
@@ -761,20 +762,27 @@
         rng,
         settlement,
         deck,
-        playerPool
+        playerPool,
+        requiredPicks
     )
         local counts, deckLength, deckErrors = countDeck(deck, playerPool, "$.playerCardIds")
         if deckErrors then
             return nil, nil, deckErrors
         end
         local eligibleCount = 0
+        local eligibleCapacity = 0
         if deckLength < MAX_DECK_SIZE then
             for _, cardId in ipairs(playerPool) do
-                if (counts[cardId] or 0) < playerPool[cardId].maxCopies then eligibleCount = eligibleCount + 1 end
+                local remaining = playerPool[cardId].maxCopies - (counts[cardId] or 0)
+                if remaining > 0 then
+                    eligibleCount = eligibleCount + 1
+                    eligibleCapacity = eligibleCapacity + remaining
+                end
             end
         end
 
-        if eligibleCount == 0 then
+        eligibleCapacity = math.min(eligibleCapacity, MAX_DECK_SIZE - deckLength)
+        if eligibleCapacity < (requiredPicks or 1) then
             return {
                 kind = "none",
                 interactionToken = buildRewardToken(
@@ -854,12 +862,13 @@
     local function heldPerks(sessions)
         local ids = {}
         for _, session in ipairs(sessions) do
-            local choice = session.rewardChoice
-            if choice and choice.kind == "perk" then
-                if choice.replacedPerkId then
-                    for i,id in ipairs(ids) do if id == choice.replacedPerkId then table.remove(ids,i) break end end
+            for _, choice in ipairs(session.rewardChoices or {}) do
+                if choice.kind == "perk" then
+                    if choice.replacedPerkId then
+                        for i,id in ipairs(ids) do if id == choice.replacedPerkId then table.remove(ids,i) break end end
+                    end
+                    ids[#ids+1] = choice.perkId
                 end
-                ids[#ids+1] = choice.perkId
             end
         end
         return ids
@@ -874,7 +883,15 @@
         if errors then return nil,nil,errors end
         local offer = { kind = "none" }
         if contains(rewardKinds, "card") then
-            offer, nextRng, errors = generateCardRewardOffer(setupId,sessionNumber,nextRng,settlement,deck,playerPool)
+            offer, nextRng, errors = generateCardRewardOffer(
+                setupId,
+                sessionNumber,
+                nextRng,
+                settlement,
+                deck,
+                playerPool,
+                CARD_REWARD_DRAFTS
+            )
             if errors then return nil,nil,errors end
         end
         local pool = {}
@@ -896,6 +913,8 @@
         offer.rewardKinds = rewardKinds
         offer.perkIds = picked
         offer.removableCardIds = removable
+        offer.cardDraftNumber = 1
+        offer.cardDraftTotal = CARD_REWARD_DRAFTS
         local tokenIds = copyArray(rewardKinds)
         for _,id in ipairs(offer.cardIds or {}) do tokenIds[#tokenIds+1]=id end
         for _,id in ipairs(picked) do tokenIds[#tokenIds+1]=id end
@@ -1547,7 +1566,7 @@
                     finalStealth = true,
                     finalResistance = true,
                     transit = true,
-                    rewardChoice = true,
+                    rewardChoices = true,
                     nextCharacterId = true,
                 },
                 recordPath,
@@ -1607,12 +1626,26 @@
                 end
                 rng = afterRewardRng
 
-                if inputRecord.rewardChoice == nil then
+                local choiceErrors = {}
+                local choiceCount = inputRecord.rewardChoices == nil
+                    and 0
+                    or denseArrayLength(inputRecord.rewardChoices, recordPath .. ".rewardChoices", choiceErrors)
+                if choiceCount ~= nil and choiceCount > CARD_REWARD_DRAFTS then
+                    appendError(
+                        choiceErrors,
+                        "too_many_reward_choices",
+                        recordPath .. ".rewardChoices",
+                        "카드 보상도 한 승리에서 최대 두 번까지만 선택할 수 있습니다."
+                    )
+                end
+                if #choiceErrors > 0 then return nil, choiceErrors end
+
+                if choiceCount == 0 then
                     if sessionIndex ~= sessionCount then
                         return nil, {
                             makeError(
                                 "incomplete_historical_session",
-                                recordPath .. ".rewardChoice",
+                                recordPath .. ".rewardChoices",
                                 "마지막 항목이 아닌 승리 정산 이력에는 보상 선택이 필요합니다."
                             ),
                         }
@@ -1628,47 +1661,134 @@
                     ), nil
                 end
 
-                local rewardChoice, choiceErrors = validateRewardChoice(
-                    inputRecord.rewardChoice,
-                    recordPath .. ".rewardChoice"
+                local rewardChoice, rewardChoiceErrors = validateRewardChoice(
+                    inputRecord.rewardChoices[1],
+                    recordPath .. ".rewardChoices[1]"
                 )
-                if choiceErrors then
-                    return nil, choiceErrors
+                if rewardChoiceErrors then
+                    return nil, rewardChoiceErrors
                 end
                 local nextDeck, applyErrors = applyRewardChoice(
                     rewardOffer,
                     rewardChoice,
                     deck,
                     playerPool,
-                    recordPath .. ".rewardChoice",
+                    recordPath .. ".rewardChoices[1]",
                     heldPerks(canonicalSessions)
                 )
                 if applyErrors then
                     return nil, applyErrors
                 end
                 deck = nextDeck
-                canonicalRecord.rewardChoice = rewardChoice
-            else
-                if inputRecord.rewardChoice ~= nil then
-                    local rewardChoice, choiceErrors = validateRewardChoice(
-                        inputRecord.rewardChoice,
-                        recordPath .. ".rewardChoice"
+                canonicalRecord.rewardChoices = { rewardChoice }
+
+                if rewardChoice.kind == "card" then
+                    local secondOffer, afterSecondRng, secondErrors = generateCardRewardOffer(
+                        setup.setupId,
+                        sessionIndex,
+                        rng,
+                        settlement,
+                        deck,
+                        playerPool
                     )
-                    if choiceErrors then
-                        return nil, choiceErrors
+                    if secondErrors then return nil, secondErrors end
+                    if secondOffer.kind ~= "card" then
+                        return nil, {
+                            makeError(
+                                "missing_second_card_draft",
+                                recordPath .. ".rewardChoices",
+                                "카드 보상을 선택했지만 두 번째 드래프트를 만들 수 없습니다."
+                            ),
+                        }
                     end
+                    secondOffer.rewardKinds = { "card" }
+                    secondOffer.perkIds = {}
+                    secondOffer.removableCardIds = {}
+                    secondOffer.cardDraftNumber = 2
+                    secondOffer.cardDraftTotal = CARD_REWARD_DRAFTS
+                    rng = afterSecondRng
+
+                    if choiceCount == 1 then
+                        if sessionIndex ~= sessionCount then
+                            return nil, {
+                                makeError(
+                                    "incomplete_historical_session",
+                                    recordPath .. ".rewardChoices[2]",
+                                    "마지막 항목이 아닌 카드 보상 이력에는 두 번째 드래프트 선택이 필요합니다."
+                                ),
+                            }
+                        end
+                        return buildState(
+                            setup.setupId,
+                            "reward",
+                            canonicalSessions,
+                            rng,
+                            deck,
+                            stats,
+                            secondOffer
+                        ), nil
+                    end
+
+                    local secondChoice, secondChoiceErrors = validateRewardChoice(
+                        inputRecord.rewardChoices[2],
+                        recordPath .. ".rewardChoices[2]"
+                    )
+                    if secondChoiceErrors then return nil, secondChoiceErrors end
+                    local finalDeck, secondApplyErrors = applyRewardChoice(
+                        secondOffer,
+                        secondChoice,
+                        deck,
+                        playerPool,
+                        recordPath .. ".rewardChoices[2]",
+                        heldPerks(canonicalSessions)
+                    )
+                    if secondApplyErrors then return nil, secondApplyErrors end
+                    deck = finalDeck
+                    canonicalRecord.rewardChoices[2] = secondChoice
+                elseif choiceCount ~= 1 then
+                    return nil, {
+                        makeError(
+                            "unexpected_extra_reward_choice",
+                            recordPath .. ".rewardChoices[2]",
+                            "카드 보상 외의 보상은 한 번만 선택합니다."
+                        ),
+                    }
+                end
+            else
+                if inputRecord.rewardChoices ~= nil then
+                    local choiceErrors = {}
+                    local choiceCount = denseArrayLength(
+                        inputRecord.rewardChoices,
+                        recordPath .. ".rewardChoices",
+                        choiceErrors
+                    )
+                    if #choiceErrors > 0 then return nil, choiceErrors end
+                    if choiceCount ~= 1 then
+                        return nil, {
+                            makeError(
+                                "invalid_defeat_reward_choices",
+                                recordPath .. ".rewardChoices",
+                                "패배한 세션의 보상 이력은 선택하지 않기 한 건이어야 합니다."
+                            ),
+                        }
+                    end
+                    local rewardChoice, rewardChoiceErrors = validateRewardChoice(
+                        inputRecord.rewardChoices[1],
+                        recordPath .. ".rewardChoices[1]"
+                    )
+                    if rewardChoiceErrors then return nil, rewardChoiceErrors end
                     if rewardChoice.kind ~= "none" then
                         return nil, {
                             makeError(
                                 "reward_not_allowed_after_defeat",
-                                recordPath .. ".rewardChoice",
+                                recordPath .. ".rewardChoices[1]",
                                 "패배한 세션에서는 승리 보상을 획득할 수 없습니다."
                             ),
                         }
                     end
                 end
-                canonicalRecord.rewardChoice = {
-                    kind = "none",
+                canonicalRecord.rewardChoices = {
+                    { kind = "none" },
                 }
             end
 
@@ -2132,7 +2252,8 @@
         if sessionsError then
             return failure({ sessionsError })
         end
-        sessions[#sessions].rewardChoice = choice
+        sessions[#sessions].rewardChoices = sessions[#sessions].rewardChoices or {}
+        sessions[#sessions].rewardChoices[#sessions[#sessions].rewardChoices + 1] = choice
         local nextState, replayErrors = replaySessions(
             setup,
             staticData,

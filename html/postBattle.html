@@ -107,8 +107,13 @@
 {{#when::keep::{{dictelement::{{tempvar::run_progression_view}}::phase}}::is::reward}}
 {{settempvar::run_progression_reward::{{dictelement::{{tempvar::run_progression_view}}::rewardOffer}}}}
 <div class="run-section-head">
+{{#when::keep::{{dictelement::{{tempvar::run_progression_reward}}::cardDraftNumber}}::is::2}}
+<h3 class="run-section-title">카드 드래프트 · 2 / 2</h3>
+<span class="run-instruction">첫 번째 카드가 추가되었습니다. 두 번째 카드를 선택하세요.</span>
+{{:else}}
 <h3 class="run-section-title">전투 보상을 선택하세요</h3>
-<span class="run-instruction">전체 승리 보상 중 무작위로 제시된 3종에서 하나를 선택합니다.</span>
+<span class="run-instruction">카드 드래프트를 선택하면 카드를 두 번 획득합니다.</span>
+{{/when}}
 </div>
 {{#each::keep {{dictelement::{{tempvar::run_progression_reward}}::kinds}} as reward_kind}}
 <details class="run-battle-log run-reward-option">

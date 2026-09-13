@@ -8,7 +8,7 @@
     local CHARACTER_OFFER_SIZE = 3
     local REWARD_OFFER_MAX = 3
     local REWARD_KINDS = {
-        card = { label = "카드 획득", description = "무작위 카드 3장 중 한 장을 획득합니다." },
+        card = { label = "카드 드래프트", description = "카드 드래프트를 두 번 진행해 두 장을 획득합니다." },
         remove_card = { label = "카드 제거", description = "보유 카드 한 장을 제거합니다." },
         perk = { label = "퍽 획득", description = "무작위 퍽 3개 중 하나를 획득합니다." },
     }
@@ -501,6 +501,8 @@
         local result = {
             kind = offer.kind,
             interactionToken = offer.interactionToken,
+            cardDraftNumber = offer.cardDraftNumber,
+            cardDraftTotal = offer.cardDraftTotal,
             cards = {},
             removableCards = {},
             perks = {},
@@ -978,11 +980,12 @@
         end
     end
 
-    local function validateRewardKinds(items, path, errors)
+    local function validateRewardKinds(items, draftNumber, path, errors)
         local count = getArrayLength(items, path, errors)
         if count == nil then return end
-        if count ~= REWARD_OFFER_MAX then
-            addError(errors, "invalid_reward_kind_count", path, "승리 보상 종류는 정확히 3개여야 합니다.")
+        local expectedCount = draftNumber == 2 and 1 or REWARD_OFFER_MAX
+        if count ~= expectedCount then
+            addError(errors, "invalid_reward_kind_count", path, "현재 드래프트 단계의 보상 종류 수가 올바르지 않습니다.")
         end
         local seen = {}
         for index, item in ipairs(items) do
@@ -992,7 +995,8 @@
             else
                 checkAllowedKeys(item, { slot=true, kind=true, label=true, description=true }, itemPath, errors)
                 if item.slot ~= index or type(item.kind) ~= "string"
-                    or REWARD_KINDS[item.kind] == nil or seen[item.kind] then
+                    or REWARD_KINDS[item.kind] == nil or seen[item.kind]
+                    or (draftNumber == 2 and item.kind ~= "card") then
                     addError(errors, "invalid_reward_kind", itemPath, "보상 종류의 순서, ID 또는 중복이 올바르지 않습니다.")
                 else
                     seen[item.kind] = true
@@ -1209,8 +1213,19 @@
                     kinds = true,
                     canRemove = true,
                     requiresReplacement = true,
+                    cardDraftNumber = true,
+                    cardDraftTotal = true,
                 }, "$.rewardOffer", errors)
-                validateRewardKinds(view.rewardOffer.kinds, "$.rewardOffer.kinds", errors)
+                if not isInteger(view.rewardOffer.cardDraftNumber, 1, 2)
+                    or view.rewardOffer.cardDraftTotal ~= 2 then
+                    addError(errors, "invalid_card_draft_progress", "$.rewardOffer", "카드 드래프트 진행도는 1/2 또는 2/2여야 합니다.")
+                end
+                validateRewardKinds(
+                    view.rewardOffer.kinds,
+                    view.rewardOffer.cardDraftNumber,
+                    "$.rewardOffer.kinds",
+                    errors
+                )
                 if view.rewardOffer.kind ~= "card" and view.rewardOffer.kind ~= "none" then
                     addError(errors, "invalid_reward_kind", "$.rewardOffer.kind", "보상 종류가 올바르지 않습니다.")
                 end

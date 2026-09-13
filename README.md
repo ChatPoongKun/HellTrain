@@ -15,6 +15,15 @@
 3. **실행 가능한 Lua 로어는 완전한 모듈입니다.** 여러 조각을 이어 붙이는 파일이 아니며 익명 함수 표현식 래퍼를 유지해야 합니다.
 4. **런타임 코드나 정적 DB를 변경하면 캐시 revision도 갱신합니다.** 자세한 내용은 [캐시와 배포 revision](#캐시와-배포-revision)을 참고하십시오.
 
+현재 계약 문서는 다음 네 개만 사용합니다.
+
+- [전투·호스트 계약](.agents/Docs/BattleControllerContract.md)
+- [카드·정적 데이터 계약](.agents/Docs/CardDataContract.md)
+- [상태·View·CBS 계약](.agents/Docs/StateViewContract.md)
+- [RisuAI 배포 전 검사](.agents/Docs/RisuSetupBattleTest.md)
+
+`.agents/legacy/`는 폐기된 사양과 과거 결과를 보존하는 영역이며 현재 구현의 근거로 사용하지 않습니다.
+
 ## 실행 환경
 
 HellTrain은 다음 RisuAI 호스트 기능을 전제로 합니다.
@@ -90,6 +99,7 @@ end)
 | `PlayerCards.db` | 플레이어 카드 정의 |
 | `CharacterCards.db` | 캐릭터 카드 정의 |
 | `CharTraits.db` | 캐릭터 특성 정의 |
+| `Perks.db` | 플레이어 퍽 정의 |
 | `TokyoSubwayLines.db` | 노선과 역 정보 |
 | `CharacterList.db` | 캐릭터 프로필 목록 |
 
@@ -302,10 +312,13 @@ battleLogView
 | `cancelCard` | 등록 취소 |
 | `selectCardEffect` | 선택형 카드 효과 결정 |
 | `armSubmission` | 무선택 패스 또는 리롤 뒤 보존된 선택을 전송 준비 상태로 설정 |
+| `surrender` | 현재 전투 포기와 종료 흐름 준비 |
 | `prepareGeneration` | 현재 턴을 생성 요청 직전 상태로 준비 |
 | `injectRequest` | 모델 프롬프트에 전투 사건과 출력 지시 주입 |
 | `commitOutput` | 도착한 출력을 검증하고 턴 확정 |
+| `skipAftermath` | 허용된 시점의 승리 후 자유행동 건너뛰기 |
 | `publishCurrentView` | 현재 권위 상태에서 View 재생성 |
+| `getRequestContext` | 현재 생성 요청에 필요한 검증된 문맥 조회 |
 | `getSnapshot` | 전투 런타임 진단 snapshot 조회 |
 | `getTerminalSummary` | 종료 전투 요약 조회 |
 
