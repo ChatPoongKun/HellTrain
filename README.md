@@ -51,6 +51,16 @@ json.encode / json.decode
 
 저장소에는 현재 지원하는 RisuAI의 정확한 최소 버전이 명시되어 있지 않습니다. 배포 환경을 변경할 때는 위 API가 동일한 형태로 제공되는지 먼저 확인하십시오.
 
+### 빌드 명령
+
+- 최초 설정 또는 의존성 변경: `.\build\setup.bat`
+- 빠른 핵심 검사: `.\build\test.bat`
+- CHARX만 생성: `.\build\build.bat`
+- 전체 검사 후 배포본 생성: `.\build\release.bat`
+
+`PYTHON_EXE` 환경 변수가 있으면 해당 Python을 사용하고, 없으면 프로젝트 `.venv`, 사용자 설치 Python, PATH 순서로 찾습니다.
+`build` 폴더 안에서 실행할 때도 PowerShell에서는 반드시 `.\release.bat`처럼 `.\`를 붙입니다.
+
 ## RisuAI 등록 원칙
 
 ### 메인 스크립트

@@ -1761,6 +1761,7 @@
                 mode = validatedProjection.mode,
                 authority = sourceAuthority,
                 projectedRng = projectedRng,
+                effectChoiceByInstanceId = playerChoices,
             },
             selectedCards = {
                 player = playerSelection,

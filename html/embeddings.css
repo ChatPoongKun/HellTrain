@@ -1085,6 +1085,16 @@ border-radius: 50%;
 background: #fff;
 box-shadow: 0 0 0 2px rgba(255, 255, 255, .08);
 }
+.ht-mood-note {
+grid-column: 1 / -1;
+color: var(--muted);
+font-size: 8px;
+line-height: 1.4;
+word-break: keep-all;
+}
+.ht-mood-note:empty {
+display: none;
+}
 .ht-mood-grid {
 display: grid;
 grid-template-columns: repeat(5, 1fr);

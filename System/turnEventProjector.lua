@@ -702,6 +702,7 @@
                 mode = true,
                 authority = true,
                 projectedRng = true,
+                effectChoiceByInstanceId = true,
             }, "$.turnResolution.source", errors)
             if resolutionCopy.source.kind ~= "turnDraftProjection"
                 or (resolutionCopy.source.mode ~= "pass"
@@ -1022,6 +1023,18 @@
         local publicResult = newEnvelope()
         local llmEvent = newEnvelope()
         local mode = resolution.source.mode
+        local selectionReplay, selectionError = callModule("turnDraft", "validateProjectionReceipt", beforeState, staticData, {
+            schemaVersion = SCHEMA_VERSION,
+            kind = "turnDraftProjectionReceipt",
+            mode = mode,
+            source = resolution.source.authority,
+            selectedCardInstanceIds = resolution.selectedCards.player,
+            effectChoiceByInstanceId = resolution.source.effectChoiceByInstanceId or {},
+            projectedRng = resolution.source.projectedRng,
+        })
+        if selectionError then return failure({ selectionError }) end
+        if selectionReplay.ok ~= true then return failure(selectionReplay.errors) end
+        local projectedState = selectionReplay.projection.workingState
         emit(publicResult, "turn_mode", { mode = mode })
         emit(llmEvent, "turn_mode", { mode = mode })
 
@@ -1791,6 +1804,7 @@
                     or not dataEqual(trackers.character.slots, beforeState.character.planSlots)
                     or trackedStealth ~= beforeState.player.stealth
                     or trackedResistance ~= beforeState.character.resistance
+                    or not dataEqual(trackedRng, beforeState.rng)
                     or trackedMood ~= beforeState.character.mood
                     or not dataEqual(trackedMoodTokens, normalizedMoodTokens(beforeState.character.moodTokens))
                     or not dataEqual(trackedForcedMoodRequests, expectedForcedMoodRequests)
@@ -1799,10 +1813,12 @@
                     or trackedHandCount.character ~= countAuthorityHand("character") then
                     return failure({ makeError("turn_start_replay_mismatch", path, "턴 시작 사건 재생 결과가 beforeState와 다릅니다.") })
                 end
-                for _, instanceId in ipairs(resolution.selectedCards.player) do
-                    local instance = findBeforeInstance(instanceId)
-                    if instance ~= nil and instance.zone == "hand" then
-                        trackedHandCount.player = trackedHandCount.player - 1
+                -- Selection preview draws happen after turn-start events and before resolution.
+                trackedRng = projectedState.rng
+                trackedHandCount.player = 0
+                for _, instance in ipairs(projectedState.cardInstances) do
+                    if instance.owner == "player" and instance.zone == "hand" then
+                        trackedHandCount.player = trackedHandCount.player + 1
                     end
                 end
                 turnStartSettled = true
