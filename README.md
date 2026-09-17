@@ -61,6 +61,8 @@ json.encode / json.decode
 `PYTHON_EXE` 환경 변수가 있으면 해당 Python을 사용하고, 없으면 프로젝트 `.venv`, 사용자 설치 Python, PATH 순서로 찾습니다.
 `build` 폴더 안에서 실행할 때도 PowerShell에서는 반드시 `.\release.bat`처럼 `.\`를 붙입니다.
 
+필수 회귀 테스트와 fixture는 Git에 포함되는 [`build/tests/`](build/tests/README.md)에 둡니다. `setup.bat`은 빌드용 Pillow와 테스트용 Lupa를 설치하며, 테스트는 로컬 `.agents/` 자료에 의존하지 않습니다. 전체 검사만 실행하려면 프로젝트 루트에서 `python build/tests/RuntimeRegression/check_runtime_regressions.py`를 사용합니다.
+
 ## RisuAI 등록 원칙
 
 ### 메인 스크립트
