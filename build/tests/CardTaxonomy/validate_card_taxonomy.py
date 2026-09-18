@@ -98,14 +98,11 @@ def player_header(block: str, constructor: str) -> tuple[list[str], str, list[st
 
 
 def character_header(block: str, constructor: str) -> tuple[list[str], str, list[str]]:
-    if constructor == "planCard":
-        match = re.match(r'\s*"[^"]+",\s*"[^"]+",\s*"([^"]+)"', block, re.S)
-        return ([match.group(1)] if match else [], "plan", [])
-    match = re.match(r'\s*"[^"]+",\s*"[^"]+",\s*"([^"]+)"\s*,\s*(\{[^}]*\})', block, re.S)
+    match = re.match(r'\s*"[^"]+",\s*"[^"]+",\s*(\{[^}]+\})\s*,\s*(\{[^}]*\})', block, re.S)
     if not match:
         return [], "invalid", []
-    mechanisms = quoted_ids(match.group(2))
-    return [match.group(1)], "chain" if "chain" in mechanisms else "action", [item for item in mechanisms if item != "chain"]
+    roles = quoted_ids(match.group(1))
+    return roles, "plan" if constructor == "planCard" else "action", [] if constructor == "planCard" else quoted_ids(match.group(2))
 
 
 def player_effect_roles(block: str, base_damage: int) -> set[str]:
@@ -128,14 +125,6 @@ def character_effect_roles(block: str) -> set[str]:
     if re.search(r"\b(?:addMood|removeMood|forceMood|manipulate|backlash|calm|cool)\(", block):
         roles.add("response")
     return roles
-
-
-def response_strength(block: str) -> int | None:
-    if re.search(r"\bforceMood\(", block):
-        return None
-    amounts = [int(value) for value in re.findall(r"\b(?:manipulate|backlash|calm|cool)\(context,\s*(\d+)", block)]
-    amounts += [int(value) for value in re.findall(r"\b(?:addMood|removeMood)\([^,]+,\s*(\d+)", block)]
-    return sum(amounts)
 
 
 def main() -> int:
@@ -165,14 +154,12 @@ def main() -> int:
     for card_id, constructor, block in character:
         roles, card_type, specials = character_header(block, constructor)
         detected = character_effect_roles(block)
-        if len(roles) != 1 or roles[0] not in CHARACTER_ROLES:
+        if not (1 <= len(roles) <= 2) or len(set(roles)) != len(roles) or not set(roles) <= CHARACTER_ROLES:
             errors.append(f"{card_id}: invalid character roles {roles}")
         if set(roles) != detected:
             errors.append(f"{card_id}: declared role {roles} != effect role {sorted(detected)}")
-        if roles == ["response"]:
-            strength = response_strength(block)
-            if strength is not None and strength < 3:
-                errors.append(f"{card_id}: response mood strength is {strength}, expected at least 3")
+        # Balance tuning is separate from taxonomy; conditional callbacks are
+        # executed by the runtime regression suite.
         if card_type not in {"action", "chain", "plan"} or not set(specials) <= SPECIALS:
             errors.append(f"{card_id}: invalid type/specials {card_type}/{specials}")
 

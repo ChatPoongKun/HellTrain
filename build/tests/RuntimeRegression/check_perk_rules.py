@@ -158,7 +158,19 @@ local initialized=prepare(s)
 local token=checked('turnDraft','inspect',initialized.state,data,initialized.draft).interactionToken
 local chosen=checked('turnDraft','applyInteraction',initialized.state,data,initialized.draft,{action='choose',instanceId=s.cardInstances[1].instanceId,choiceId='character_plan',expectedInteractionToken=token}).draft
 local completed,pending=finish(initialized,chosen)
-assert(#completed.character.planSlots==0)
+-- The character may place a new plan after the player's removal resolves.
+-- Verify the targeted instance, independently of the selector's current weights.
+for _,slot in ipairs(completed.character.planSlots) do
+ assert(slot.cardInstanceId~='hidden-plan','removed plan remains active')
+end
+local removed=false
+for _,instance in ipairs(completed.cardInstances) do
+ if instance.instanceId=='hidden-plan' then
+  assert(instance.zone=='discard','removed plan was not discarded')
+  removed=true
+ end
+end
+assert(removed,'removed plan instance was lost')
 local strike=false
 for _,event in ipairs(pending.turnResult.publicResult.events) do
  if event.type=='effect_applied' and event.payload.source and event.payload.source.id=='perk_insight_strike' then assert(event.payload.amount==3);strike=true end

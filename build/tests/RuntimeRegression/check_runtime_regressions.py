@@ -40,6 +40,8 @@ if not fast:
         [HERE / 'check_character_journal.py', 'jit'],
         [HERE / 'check_card_effect_contracts.py'],
         [HERE / 'check_card_effect_contracts.py', 'jit'],
+        [HERE / 'check_character_card_pipeline.py'],
+        [HERE / 'check_character_card_pipeline.py', 'jit'],
         [HERE / 'check_mood_presentation.py', 'jit'],
         [HERE / 'check_skip_scope.py', 'jit'],
         [HERE / 'check_terminal_settlement.py', 'jit'],
