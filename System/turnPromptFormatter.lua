@@ -140,7 +140,7 @@
     end
 
     local function rolesMatch(staticData, roles, actor, expected)
-        if not isDenseArray(roles) or #roles < 1 or #roles > 2 or (actor == "character" and #roles ~= 1) then
+        if not isDenseArray(roles) or #roles < 1 or #roles > 2 then
             return false
         end
         if expected ~= nil and (not isDenseArray(expected) or #expected ~= #roles) then return false end
@@ -343,7 +343,7 @@
             end
             local expectedRole = pending.beforeState.characterIntent.publicRole
             if payload.selected == true then
-                if not roleMatches(staticData, payload.role, "character") or payload.role ~= expectedRole then
+                if (payload.role ~= "unknown" and not roleMatches(staticData, payload.role, "character")) or payload.role ~= expectedRole then
                     return nil, makeError("character_intent_mismatch", path, "캐릭터 공개 역할 태그가 권위 상태와 다릅니다.")
                 end
                 return { selected = true, role = payload.role }, nil

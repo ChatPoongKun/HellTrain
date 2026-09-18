@@ -1898,7 +1898,7 @@
                     or pendingCharacterIntent ~= true
                     or not isAsciiId(role)
                     or role ~= expectedCharacterRole
-                    or type(tag) ~= "table" or tag.owner ~= "character" then
+                    or (role ~= "unknown" and (type(tag) ~= "table" or tag.owner ~= "character")) then
                     return failure({ makeError("invalid_role_reveal", path .. ".payload.role", "캐릭터 공개 역할 태그가 beforeState·정적 레지스트리와 다릅니다.") })
                 end
                 emit(publicResult, "character_intent", { selected = true, role = role })

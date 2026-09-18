@@ -132,10 +132,13 @@
 <div class="ht-encounter-head">
 <h3>교전 현황</h3>
 <div class="ht-intent">
-<span>예고 역할</span>
+<span>예고 행동</span>
 <i class="ht-intent-dot" aria-hidden="true"></i>
 {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::status}}::roleRevealed}}}}
 <button type="button" class="ht-intent-trigger ht-tip-trigger" popovertarget="htp-{{tempvar::battle_view_battle_id}}-{{tempvar::battle_view_turn_id}}-tag-{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::role}}::id}}" aria-haspopup="dialog" aria-label="{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::role}}::label}} 역할 정보 보기">{{dict_element::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::role}}::label}}</button>
+{{/if}}
+{{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::status}}::unknown}}}}
+<strong aria-label="복합 역할 행동">?</strong>
 {{/if}}
 {{#if {{equal::{{dict_element::{{dict_element::{{tempvar::battle_view_character}}::publicAction}}::status}}::none}}}}
 <strong>행동 없음</strong>

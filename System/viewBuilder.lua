@@ -1465,7 +1465,9 @@
         end
 
         local publicAction = { status = "none" }
-        if displayState.characterIntent.publicRole ~= nil then
+        if displayState.characterIntent.publicRole == "unknown" then
+            publicAction = { status = "unknown" }
+        elseif displayState.characterIntent.publicRole ~= nil then
             local role = lookupTag(data.registry, displayState.characterIntent.publicRole, "$.character.publicAction.role", errors)
             if role then
                 publicAction = {
@@ -2307,7 +2309,7 @@
             local publicAction = view.character.publicAction
             if type(publicAction) ~= "table" then
                 addError(errors, "invalid_public_action", "$.character.publicAction", "공개 행동 View가 테이블이 아닙니다.")
-            elseif publicAction.status == "none" then
+            elseif publicAction.status == "none" or publicAction.status == "unknown" then
                 checkAllowedKeys(publicAction, { status = true }, "$.character.publicAction", errors)
             elseif publicAction.status == "roleRevealed" then
                 checkAllowedKeys(publicAction, { status = true, role = true }, "$.character.publicAction", errors)

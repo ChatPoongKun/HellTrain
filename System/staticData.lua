@@ -944,7 +944,7 @@
                 if not isArray(card.roles) then
                     addError(errors, "invalid_roles", path .. ".roles", "카드 역할이 배열이 아닙니다.")
                 else
-                    local maximum = card.owner == "player" and 2 or 1
+                    local maximum = 2
                     if #card.roles < 1 or #card.roles > maximum then
                         addError(errors, "invalid_role_count", path .. ".roles", "카드 역할 수가 소유자 규칙과 맞지 않습니다.")
                     end

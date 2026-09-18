@@ -1324,7 +1324,7 @@
             characterHand[index] = {
                 instanceId = instance.instanceId,
                 cardId = instance.cardId,
-                role = type(card) == "table" and card.roles[1] or nil,
+                role = type(card) == "table" and (#card.roles > 1 and "unknown" or card.roles[1]) or nil,
                 handPosition = instance.position,
             }
         end
@@ -1855,7 +1855,7 @@
             local card = staticData.cards[selection.selectedCardId]
             if type(card) ~= "table"
                 or card.owner ~= "character"
-                or card.roles[1] ~= selection.publicRole then
+                or (#card.roles > 1 and "unknown" or card.roles[1]) ~= selection.publicRole then
                 addError(errors, "selected_static_card_mismatch", path .. ".selectedCardId", "선택 카드와 정적 카드 역할이 일치하지 않습니다.")
             end
         end
@@ -2638,7 +2638,7 @@
                     addError(errors, "invalid_character_main_action", "$.characterIntent.cardInstanceIds", "캐릭터 선택에는 주 행동 카드가 정확히 하나 있어야 합니다.")
                 elseif mainCardIndex ~= intentCount then
                     addError(errors, "character_main_action_not_last", "$.characterIntent.cardInstanceIds", "캐릭터 연계 카드는 주 행동보다 앞에 있어야 합니다.")
-                elseif mainCards[1].roles[1] ~= state.characterIntent.publicRole then
+                elseif (#mainCards[1].roles > 1 and "unknown" or mainCards[1].roles[1]) ~= state.characterIntent.publicRole then
                     addError(errors, "public_role_mismatch", "$.characterIntent.publicRole", "공개 역할이 실제 주 행동과 다릅니다.")
                 end
             end
@@ -2646,7 +2646,7 @@
             local registry = type(staticData) == "table" and staticData.registry or nil
             local roles = type(registry) == "table" and registry.roles or nil
             local publicRole = type(roles) == "table" and roles[state.characterIntent.publicRole] or nil
-            if state.characterIntent.publicRole ~= nil and type(roles) == "table" then
+            if state.characterIntent.publicRole ~= nil and state.characterIntent.publicRole ~= "unknown" and type(roles) == "table" then
                 if not publicRole then
                     addError(errors, "unknown_public_role", "$.characterIntent.publicRole", "등록되지 않은 역할입니다.")
                 elseif publicRole.owner ~= "character" then

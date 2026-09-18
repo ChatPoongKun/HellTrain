@@ -246,7 +246,7 @@
 
     local function lookupRoleLabels(staticData, roles, owner, path)
         local count = getArrayLength(roles)
-        if count == nil or count < 1 or (owner == "character" and count ~= 1) or count > 2 then
+        if count == nil or count < 1 or count > 2 then
             return nil, makeError("invalid_roles", path, "공개 역할 태그 목록이 올바르지 않습니다.")
         end
         local labels = {}
@@ -623,6 +623,9 @@
             end
             if payload.selected == false then
                 return summary(index, event.type, "상대는 이번 턴에 카드 행동을 준비하지 못했습니다."), nil
+            end
+            if payload.role == "unknown" then
+                return summary(index, event.type, "상대의 예고 행동은 ?입니다."), nil
             end
             local label, labelError = lookupRoleLabel(staticData, payload.role, "character", payloadPath .. ".role")
             if labelError then return nil, labelError end

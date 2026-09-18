@@ -196,7 +196,7 @@
         if not isRuntimeId(record.instanceId) then
             addError(errors, "invalid_history_instance_id", path .. ".instanceId", "카드 이력 인스턴스 ID가 올바르지 않습니다.")
         end
-        if not isDenseArray(record.roles) or #record.roles < 1 or #record.roles > 2 or (side == "character" and #record.roles ~= 1) then
+        if not isDenseArray(record.roles) or #record.roles < 1 or #record.roles > 2 then
             addError(errors, "invalid_history_roles", path .. ".roles", "카드 이력 역할 태그 목록이 올바르지 않습니다.")
         else
             local seenRoles = {}

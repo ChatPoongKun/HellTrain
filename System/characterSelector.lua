@@ -198,7 +198,7 @@
             characterHand[index] = {
                 instanceId = instance.instanceId,
                 cardId = instance.cardId,
-                role = type(card) == "table" and card.roles[1] or nil,
+                role = type(card) == "table" and (#card.roles > 1 and "unknown" or card.roles[1]) or nil,
                 handPosition = instance.position,
             }
         end
@@ -442,7 +442,7 @@
         return {
             instanceId = instance.instanceId,
             cardId = card.id,
-            role = card.roles[1],
+            role = (#card.roles > 1 and "unknown" or card.roles[1]),
             handPosition = instance.position,
             score = score,
             projectedPlayerStealth = projectedStealth,
@@ -502,7 +502,7 @@
         for index, handEntry in ipairs(context.characterHand) do
             local candidate = receipt.candidates[index]
             local card = type(staticData.cards) == "table" and staticData.cards[handEntry.cardId] or nil
-            if type(card) ~= "table" or card.owner ~= "character" or card.roles[1] ~= handEntry.role then
+            if type(card) ~= "table" or card.owner ~= "character" or (#card.roles > 1 and "unknown" or card.roles[1]) ~= handEntry.role then
                 return failure({ makeError("selection_hand_static_mismatch", "$.receipt.selectionContext.characterHand[" .. index .. "]", "선택 시점 손패가 정적 캐릭터 카드와 일치하지 않습니다.") })
             end
             local instance = {

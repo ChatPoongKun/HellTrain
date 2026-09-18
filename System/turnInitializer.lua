@@ -924,7 +924,7 @@
             local card = staticData.cards[selectedInstance.cardId]
             if type(card) ~= "table"
                 or card.id ~= selectionReceipt.selectedCardId
-                or card.roles[1] ~= selectionReceipt.publicRole then
+                or (#card.roles > 1 and "unknown" or card.roles[1]) ~= selectionReceipt.publicRole then
                 return failure({
                     makeError(
                         "selected_role_mismatch",
@@ -937,7 +937,7 @@
                 "role_revealed",
                 source("system", "character_selector", "character"),
                 {
-                    role = card.roles[1],
+                    role = (#card.roles > 1 and "unknown" or card.roles[1]),
                 },
                 "character",
                 { kind = "turn_rule" }
@@ -947,7 +947,7 @@
                 side = "character",
                 cardId = card.id,
                 cardInstanceId = selectedInstance.instanceId,
-                role = card.roles[1],
+                role = (#card.roles > 1 and "unknown" or card.roles[1]),
             }
             if state.turnStartOutcome == nil then
                 local revealPipeline, revealPipelineErrors = callModule(
