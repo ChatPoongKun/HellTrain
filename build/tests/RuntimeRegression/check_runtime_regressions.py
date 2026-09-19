@@ -29,12 +29,14 @@ checks = [
         [HERE / 'check_surrender.py'],
         [HERE / 'check_terminal_settlement.py'],
         [HERE / 'check_reroll_recovery.py'],
+        [HERE / 'check_aftermath_reroll.py'],
         [HERE / 'check_plan_choices.py'],
     ]],
 ]
 if not fast:
     checks += [(Path(args[0]).name, [sys.executable, *args]) for args in [
         [HERE / 'check_character_switch.py', 'jit'],
+        [HERE / 'check_aftermath_reroll.py', 'jit'],
         [HERE / 'check_preview_rng.py', 'luajit21'],
         [HERE / 'check_character_journal.py'],
         [HERE / 'check_character_journal.py', 'jit'],

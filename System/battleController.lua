@@ -2708,6 +2708,24 @@
 
         local chat, chatErrors = readChat()
         if chatErrors then return failure(chatErrors) end
+        local receipt = aftermath.lastCommitted
+        if aftermath.phase == "ready"
+            and aftermath.completedTurnNumber > aftermath.victoryTurnNumber
+            and #chat == receipt.responseLuaIndex - 1
+            and type(chat[#chat]) == "table" and chat[#chat].role == "user" then
+            -- Risu removes the last response before reroll. Preserve the original input
+            -- and replay this turn only when the entire preceding chat is unchanged.
+            local prefix, prefixError = fingerprintChatRange(chat, 1, #chat, "$.aftermath.reroll.prefix")
+            if prefixError then return failure({ prefixError }) end
+            if fingerprintsEqual(prefix, receipt.prefixFingerprint) then
+                local previous, previousErrors = buildAftermathCommitted(
+                    chat, aftermath.completedTurnNumber - 1, receipt.responseLuaIndex - 2
+                )
+                if previousErrors then return failure(previousErrors) end
+                aftermath.completedTurnNumber = aftermath.completedTurnNumber - 1
+                aftermath.lastCommitted = previous
+            end
+        end
         local committedErrors = validateAftermathCommittedChat(aftermath, chat)
         if committedErrors then return failure(committedErrors) end
         local removedFillers = 0
