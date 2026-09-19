@@ -22,6 +22,7 @@ checks = [
     ('html-indent-check.ps1', [powershell, '-NoProfile', '-File', ROOT / 'build/tests/html-indent-check.ps1']),
     *[(Path(args[0]).name, [sys.executable, *args]) for args in [
         [HERE / 'check_character_switch.py'],
+        [HERE / 'check_validation_reuse.py'],
         [HERE / 'check_preview_rng.py'],
         [HERE / 'check_mood_presentation.py'],
         [HERE / 'check_skip_scope.py'],
@@ -36,6 +37,7 @@ checks = [
 if not fast:
     checks += [(Path(args[0]).name, [sys.executable, *args]) for args in [
         [HERE / 'check_character_switch.py', 'jit'],
+        [HERE / 'check_validation_reuse.py', 'jit'],
         [HERE / 'check_aftermath_reroll.py', 'jit'],
         [HERE / 'check_preview_rng.py', 'luajit21'],
         [HERE / 'check_character_journal.py'],

@@ -233,6 +233,8 @@ local runScriptCacheStats = {
     loadFailures = 0,
     invalidHandlers = 0,
     executionFailures = 0,
+    validationHits = 0,
+    validationMisses = 0,
 }
 
 local function fingerprintRunScriptIdentity(source)
@@ -333,6 +335,7 @@ function beginRunScriptEvent(triggerId, mode)
         cacheEpoch = runScriptCacheEpoch,
         handlers = {},
         handlerCount = 0,
+        validationResults = {},
     }
     runScriptCacheStats.events = runScriptCacheStats.events + 1
     return currentRuntimeMode
@@ -644,6 +647,8 @@ function getRunScriptCacheDiagnostics()
         loadFailures = runScriptCacheStats.loadFailures,
         invalidHandlers = runScriptCacheStats.invalidHandlers,
         executionFailures = runScriptCacheStats.executionFailures,
+        validationHits = runScriptCacheStats.validationHits,
+        validationMisses = runScriptCacheStats.validationMisses,
         sources = {},
         warm = {},
     }
@@ -698,6 +703,84 @@ local function invokeRunScriptHandler(handler, triggerId, ...)
     return table.unpack(packed, 2, packed.n)
 end
 
+-- Only pure reports belong here. State transitions and host writes must always run.
+-- Values are the static-data argument index (including the action argument).
+local VALIDATION_STATIC_ARGUMENT = {
+    stateSchema = { validateBattleState = 3, validatePendingTurn = 3 },
+    turnDraft = { inspect = 3, validateProjection = 3, validateProjectionReceipt = 3 },
+    characterSelector = { validateReceipt = 2 },
+    turnPresentation = { build = 3 },
+    turnPromptFormatter = { formatPending = 3 },
+}
+
+local function copyValidationValue(value, seen)
+    if type(value) ~= "table" then return value end
+    seen = seen or {}
+    if seen[value] then return seen[value] end
+    local copy = {}
+    seen[value] = copy
+    for key, item in pairs(value) do copy[key] = copyValidationValue(item, seen) end
+    return copy
+end
+
+local function equalValidationValue(left, right, seen)
+    if type(left) ~= "table" or type(right) ~= "table" then return left == right end
+    if getmetatable(left) ~= nil or getmetatable(right) ~= nil then return false end
+    seen = seen or {}
+    if seen[left] then return seen[left] == right end
+    seen[left] = right
+    for key, value in pairs(left) do
+        if not equalValidationValue(value, right[key], seen) then return false end
+    end
+    for key in pairs(right) do if left[key] == nil then return false end end
+    return true
+end
+
+local function invokeWithValidationReuse(handler, triggerId, script, arguments)
+    local actions = VALIDATION_STATIC_ARGUMENT[script]
+    local staticIndex = actions and actions[arguments[1]]
+    local event = activeRuntimeEvent
+    if staticIndex == nil or event == nil or event.mode == "unscoped"
+        or type(arguments[staticIndex]) ~= "table" then
+        return invokeRunScriptHandler(handler, triggerId, table.unpack(arguments, 1, arguments.n))
+    end
+    local key = script .. "." .. arguments[1]
+    local entries = event.validationResults[key] or {}
+    for _, entry in ipairs(entries) do
+        local matches = entry.staticData == arguments[staticIndex]
+            and entry.depth == turnInitializationDepth and entry.arguments.n == arguments.n
+        if matches then
+            for index = 2, arguments.n do
+                if index ~= staticIndex and not equalValidationValue(arguments[index], entry.arguments[index]) then
+                    matches = false
+                    break
+                end
+            end
+        end
+        if matches then
+            runScriptCacheStats.validationHits = runScriptCacheStats.validationHits + 1
+            return copyValidationValue(entry.result)
+        end
+    end
+    runScriptCacheStats.validationMisses = runScriptCacheStats.validationMisses + 1
+    local result = invokeRunScriptHandler(handler, triggerId, table.unpack(arguments, 1, arguments.n))
+    if type(result) == "table" and result.ok == true then
+        local snapshot = { n = arguments.n }
+        for index = 2, arguments.n do
+            if index ~= staticIndex then snapshot[index] = copyValidationValue(arguments[index]) end
+        end
+        -- Static DB snapshots are read-only during an event. Never retain a report
+        -- across events, and never expose cached mutable tables to a caller.
+        table.insert(entries, 1, {
+            staticData = arguments[staticIndex], depth = turnInitializationDepth,
+            arguments = snapshot, result = copyValidationValue(result),
+        })
+        if #entries > 4 then table.remove(entries) end
+        event.validationResults[key] = entries
+    end
+    return result
+end
+
 local function invokeRunScriptWithPolicy(handler, triggerId, script, ...)
     local arguments = table.pack(...)
     local action = arguments[1]
@@ -720,10 +803,11 @@ local function invokeRunScriptWithPolicy(handler, triggerId, script, ...)
                 arguments[3] = projected
             end
         end
-        return invokeRunScriptHandler(
+        return invokeWithValidationReuse(
             handler,
             triggerId,
-            table.unpack(arguments, 1, arguments.n)
+            script,
+            arguments
         )
     end))
 

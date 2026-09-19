@@ -23,4 +23,6 @@ python build/tests/RuntimeRegression/check_runtime_regressions.py
 
 `check_player_card_pipeline.py`는 정적 DB의 플레이어 카드 ID와 선택지 ID를 기대 집합으로 삼아 실제 카드 사용·출력 투영·commit 성공 집합과 비교한다. 활성 계획이 필요한 카드에는 계획 fixture를 제공한다. 누락 시 해당 카드/선택지 ID로 실패하며, 성공 횟수는 진단 출력에만 사용한다.
 
+`check_validation_reuse.py`는 실제 `runtime.lua` 디스패처로 카드 클릭·오래된 클릭 거부·전송·commit·프리뷰 셔플 취소를 검사한다. 이벤트 내부의 동일 검증 재사용, 변경된 상태·draft·정적 DB와 다음 이벤트의 캐시 분리, 반환값 변경의 격리를 확인한다. 실행 시간은 7회 중앙값을 출력하며 기기별 시간 임계값으로 성공 여부를 결정하지 않는다. `--baseline <이전 runtime.lua 경로> --snapshot <JSON 경로>`로 이전 구현의 결과와 비교할 수 있다.
+
 fixture 공급 PS1 두 개는 단독 실행 대상이 아니다. 과거 테스트와 결과는 `.agents/legacy/tests/`에 있으며 실행·검색·현재 판단에서 제외한다.

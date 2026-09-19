@@ -438,6 +438,8 @@ helltrainUiTargetIndexV1
 
 `main.lua`는 로어 모듈의 source와 compiled handler를 캐시합니다. `staticData.lua`도 정적 DB snapshot을 캐시합니다.
 
+`runtime.lua`는 한 호스트 이벤트 안에서 입력이 같은 성공한 전투 검증·표시 결과를 재사용합니다. 상태와 선택의 내용이 바뀌면 다시 검증하며, 다음 이벤트·채팅·bundle revision에서는 결과 캐시를 비웁니다. 정적 DB는 이벤트 동안 읽기 전용으로 취급합니다. 반환값은 복사해 전달하며, 저장 쓰기·턴 계산·commit은 재사용 대상이 아닙니다. 작업별 최대 4개 결과만 보관하고, 진단의 `validationHits`와 `validationMisses`로 재사용 횟수를 확인할 수 있습니다.
+
 프로덕션 warm path는 다음 값이 변경되었는지를 기준으로 오래된 캐시를 무효화합니다.
 
 ```lua
