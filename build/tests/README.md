@@ -25,4 +25,8 @@ python build/tests/RuntimeRegression/check_runtime_regressions.py
 
 `check_validation_reuse.py`는 실제 `runtime.lua` 디스패처로 카드 클릭·오래된 클릭 거부·전송·commit·프리뷰 셔플 취소를 검사한다. 이벤트 내부의 동일 검증 재사용, 변경된 상태·draft·정적 DB와 다음 이벤트의 캐시 분리, 반환값 변경의 격리를 확인한다. 실행 시간은 7회 중앙값을 출력하며 기기별 시간 임계값으로 성공 여부를 결정하지 않는다. `--baseline <이전 runtime.lua 경로> --snapshot <JSON 경로>`로 이전 구현의 결과와 비교할 수 있다.
 
+선택 경량화 검사에서는 일반 카드 클릭의 전체 상태 검증·이력 스캔·HTML 로어 조회가 없는지, 상태 읽기가 6회 이하인지 확인한다. UI 쓰기 실패 후 오래된 클릭으로 복구할 때의 도감 기록, 선택 취소 후 발견 유지, 전송 시 잘못된 프리뷰 거부도 검사한다. `--baseline`은 디스패처만 교체하므로 다른 모듈까지 변경한 전후 비교에는 각 버전에서 저장한 `--snapshot` 결과를 사용한다.
+
+`check_player_card_pipeline.py`는 모든 카드·효과 선택지의 경량 선택·취소 결과를 기존 엄격 경로와 비교한다. `check_preview_rng.py`는 프리뷰로 뽑힌 카드를 선택한 뒤 원본 드로우 카드를 취소하는 경우도 비교한다. `check_interaction_ui.py`는 Lua 렌더러의 선택·팝오버·잠금·종료 상태와 HTML 이스케이프를 Lua 5.4와 LuaJIT에서 검사한다.
+
 fixture 공급 PS1 두 개는 단독 실행 대상이 아니다. 과거 테스트와 결과는 `.agents/legacy/tests/`에 있으며 실행·검색·현재 판단에서 제외한다.

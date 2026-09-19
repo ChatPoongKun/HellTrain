@@ -942,8 +942,9 @@
         }, nil
     end
 
-    local function buildDraft(state, registeredIds, effectChoiceByInstanceId, focusedInstanceId, replay)
-        local source, sourceError = buildSource(state)
+    local function buildDraft(state, registeredIds, effectChoiceByInstanceId, focusedInstanceId, replay, source)
+        local sourceError
+        if source == nil then source, sourceError = buildSource(state) end
         if sourceError then
             return nil, sourceError
         end
@@ -1010,6 +1011,27 @@
         return success(validated.draft, nil, nil, token)
     end
 
+    -- Selection is a provisional edit. Full authority/history/fingerprint and
+    -- preview integrity checks remain in project() at the send boundary.
+    local function inspectSelection(state, staticData, draft)
+        if type(state) ~= "table" or state.status ~= "active" or type(state.rng) ~= "table" then
+            return failure({ makeError("battle_not_active", "$.state", "진행 중인 전투의 선택만 편집할 수 있습니다.") })
+        end
+        local copy, cloneError = cloneValue(draft, "$.draft")
+        if cloneError then return failure({ cloneError }) end
+        local errors = validateDraftShape(copy)
+        if #errors > 0 then return failure(errors) end
+        local source = copy.source
+        if source.battleId ~= state.battleId or source.turnNumber ~= state.turnNumber
+            or source.status ~= state.status or source.lastCommittedTurnId ~= state.lastCommittedTurnId
+            or not deepEqual(source.rng, state.rng) then
+            return failure({ makeError("draft_stale", "$.draft.source", "현재 전투 턴의 선택이 아닙니다.") })
+        end
+        local token, tokenError = interactionTokenForDraft(copy)
+        if tokenError then return failure({ tokenError }) end
+        return success(copy, nil, nil, token)
+    end
+
     local function focusValidated(validated, instanceId)
         if not isRuntimeId(instanceId) then
             return nil, {
@@ -1032,7 +1054,8 @@
             validated.draft.registeredCardInstanceIds,
             validated.draft.effectChoiceByInstanceId or {},
             instanceId,
-            validated.replay
+            validated.replay,
+            validated.draft.source
         )
         if draftError then
             return nil, { draftError }
@@ -1165,7 +1188,7 @@
         if replayErrors then
             return nil, replayErrors
         end
-        local nextDraft, draftError = buildDraft(validated.state, nextIds, replay.effectChoiceByInstanceId, instanceId, replay)
+        local nextDraft, draftError = buildDraft(validated.state, nextIds, replay.effectChoiceByInstanceId, instanceId, replay, validated.draft.source)
         if draftError then
             return nil, { draftError }
         end
@@ -1213,7 +1236,8 @@
             replay.registeredCardInstanceIds,
             replay.effectChoiceByInstanceId,
             focusedInstanceId,
-            replay
+            replay,
+            validated.draft.source
         )
         if draftError then
             return nil, { draftError }
@@ -1253,7 +1277,7 @@
         }
     end
 
-    local function applyInteraction(state, staticData, draft, interaction)
+    local function applyInteraction(state, staticData, draft, interaction, selectionOnly)
         if type(interaction) ~= "table" or getmetatable(interaction) ~= nil then
             return failure({
                 makeError("invalid_interaction", "$.interaction", "카드 상호작용 요청은 일반 객체여야 합니다."),
@@ -1305,7 +1329,20 @@
             return failure(requestErrors)
         end
 
-        local validated, errors = validateInternal(state, staticData, draft)
+        local validated, errors
+        if selectionOnly then
+            local inspected = inspectSelection(state, staticData, draft)
+            if not inspected.ok then return inspected end
+            validated = {
+                state = state, staticData = normalizeStaticData(staticData), draft = inspected.draft,
+                -- Preview supports draws only: cost/choice contexts do not change.
+                -- The new selection is replayed by register/cancel below; the old
+                -- preview only supplies visibility and need not be replayed first.
+                replay = { workingState = state, preview = inspected.draft.preview },
+            }
+        else
+            validated, errors = validateInternal(state, staticData, draft)
+        end
         if errors then
             return failure(errors)
         end
@@ -1800,6 +1837,10 @@
         newDraft = newDraft,
         validate = validateDraft,
         inspect = inspectDraft,
+        inspectSelection = inspectSelection,
+        applySelection = function(state, data, draft, interaction)
+            return applyInteraction(state, data, draft, interaction, true)
+        end,
         interactionToken = inspectDraft,
         applyInteraction = applyInteraction,
         focusCard = focusCard,

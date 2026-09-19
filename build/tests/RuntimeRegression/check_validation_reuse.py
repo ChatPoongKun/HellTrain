@@ -23,7 +23,8 @@ table.unpack = table.unpack or unpack
 table.pack = table.pack or function(...) return {n=select('#',...),...} end
 json = dofile('build/tests/fixtures/json.lua')
 local store, vars, chat = {}, {}, {}
-function getState(_, k) return clone(store[k]) end
+local stateReads, htmlReads, moduleCalls = 0, 0, {}
+function getState(_, k) stateReads=stateReads+1;return clone(store[k]) end
 function setState(_, k, v) store[k] = clone(v) end
 function getChatVar(_, k) return vars[k] end
 function setChatVar(_, k, v) vars[k] = v end
@@ -33,6 +34,7 @@ function removeChat(_, i) table.remove(chat,i+1) end
 function refreshGameUi() end
 function reloadChat() end
 function getLoreBooks(_, name)
+    if name:match('%.html$') then htmlReads=htmlReads+1 end
     local path = lorePaths[name]
         or (name:match('%.lua$') and ('System/'..name))
         or (name:match('%.html$') and ('html/'..name))
@@ -41,6 +43,11 @@ end
 assert(load('return '..runtime_source))()
 DEBUG = 0
 assert(runScript('test','hostCompat','install'))
+local dispatch = runScript
+function runScript(t,m,a,...)
+    local key=m..'.'..tostring(a);moduleCalls[key]=(moduleCalls[key] or 0)+1
+    return dispatch(t,m,a,...)
+end
 local function call(m,a,...) return assertOk(m..'.'..a,runScript('test',m,a,...)) end
 beginRunScriptEvent('test','buttonClick')
 local data = call('staticData','loadAll').data
@@ -104,8 +111,15 @@ assert(event('prepareGeneration').generationReady,'failed write could not retry'
 local timings = {clickCard={},armSubmission={},prepareGeneration={},injectRequest={},commitOutput={}}
 local snapshots = {}
 local function measure(a,...)
+    stateReads,htmlReads,moduleCalls=0,0,{}
     local start = os.clock()
     local result = event(a,...)
+    if check_reuse and a=='clickCard' then
+        assert(not moduleCalls['stateSchema.validateBattleState'],'click still fully validates authority')
+        assert(not moduleCalls['cardCodex.record'],'click still scans codex/history')
+        assert(htmlReads==0,'click still evaluates HTML lore through CBS')
+        assert(stateReads<=6,'click still rereads persistent battle context')
+    end
     timings[a][#timings[a]+1] = (os.clock()-start)*1000
     return result
 end
@@ -151,6 +165,37 @@ for _,cardId in ipairs({'pc_glutton_011','pc_predator_010'}) do
     end
     state.player.baseDrawCount=1
     local initialized=call('turnInitializer','prepareTurn',state,data,{turnId='preview-turn-001'})
+    store = {['battleRuntimeV1.authority']=clone(initialized.state),['battleRuntimeV1.draft']=clone(initialized.draft)}
+    chat = {{role='char',data='scene'}}
+    local initialView=event('publishCurrentView').view
+    local uiWriter=HostCompat.writeChatVar
+    HostCompat.writeChatVar=function(t,k,v)
+        if k=='helltrainBattleInteractionV1' then error('injected UI write failure') end
+        return uiWriter(t,k,v)
+    end
+    beginRunScriptEvent('test','buttonClick')
+    local failedUi=runScript('test','battleController','clickCard',id,initialView.interactionToken)
+    assert(not failedUi.ok and failedUi.errors[1].code=='ui_write_failed','UI fault not exercised')
+    HostCompat.writeChatVar=uiWriter
+    local selected=event('clickCard',id,initialView.interactionToken)
+    assert(selected.stale and not selected.applied,'UI retry changed selection twice')
+    local seen={}
+    for _,card in ipairs(store.cardCodexV1.playerCardIds) do seen[card]=true end
+    for _,drawn in ipairs(selected.draft.preview.availableDrawnInstanceIds) do
+        for _,instance in ipairs(initialized.state.cardInstances) do
+            if instance.instanceId==drawn then assert(seen[instance.cardId],'preview discovery lost') end
+        end
+    end
+    local saved=clone(store['battleRuntimeV1.draft'])
+    store['battleRuntimeV1.draft'].preview.rng.cursor=store['battleRuntimeV1.draft'].preview.rng.cursor+1
+    beginRunScriptEvent('test','onStart')
+    assert(not runScript('test','battleController','prepareGeneration').ok,'send accepted invalid preview')
+    assert(store['battleRuntimeV1.pending']==nil,'invalid send created a pending turn')
+    store['battleRuntimeV1.draft']=saved
+    event('cancelCard',id,selected.interactionToken)
+    local retained={}
+    for _,card in ipairs(store.cardCodexV1.playerCardIds) do retained[card]=true end
+    for card in pairs(seen) do assert(retained[card],'cancel removed a discovery') end
     beginRunScriptEvent('test','buttonClick')
     local draft=call('turnDraft','registerCard',initialized.state,data,initialized.draft,id).draft
     local projection=call('turnDraft','project',initialized.state,data,draft).projection

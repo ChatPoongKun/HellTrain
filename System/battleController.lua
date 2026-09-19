@@ -1122,10 +1122,10 @@
         return copy, nil
     end
 
-    local function inspectDraftInteractionToken(authority, staticData, draft)
+    local function inspectDraftInteractionToken(authority, staticData, draft, selectionOnly)
         local inspected, inspectErrors = callModule(
             "turnDraft",
-            "inspect",
+            selectionOnly and "inspectSelection" or "inspect",
             authority,
             staticData,
             draft
@@ -3553,6 +3553,46 @@
         })
     end
 
+    local function publishSelectionView(authority, staticData, interacted, previousDraft)
+        local armed = interacted.applied == true
+        if not armed then
+            local submission, errors = readStored(KEYS.submission, false)
+            if errors then return nil, errors end
+            armed = submission == interacted.interactionToken
+        end
+        local built, errors = callModule("viewBuilder", "buildSelectionView", authority, staticData, {
+            draft = interacted.draft,
+            submissionArmed = armed and true or nil,
+        })
+        if errors then return nil, errors end
+        -- A newly revealed draw preview counts as a discovery even if cancelled.
+        -- Ordinary selections do not need a codex read or a scan of old history.
+        local previouslyVisible, newlyVisible = {}, {}
+        for _, id in ipairs(previousDraft and previousDraft.preview.availableDrawnInstanceIds or {}) do previouslyVisible[id] = true end
+        for _, id in ipairs(interacted.draft.preview.availableDrawnInstanceIds) do
+            if not previouslyVisible[id] then newlyVisible[id] = true end
+        end
+        if next(newlyVisible) ~= nil then
+            local cards = {}
+            for _, instance in ipairs(authority.cardInstances) do
+                if newlyVisible[instance.instanceId] then cards[#cards + 1] = { cardId = instance.cardId } end
+            end
+            pcall(runScript, triggerId, "cardCodex", "record", cards, staticData)
+        end
+        local rendered, renderErrors = callModule("battleInteractionUi", "render", built.view)
+        if renderErrors then return nil, renderErrors end
+        local _, publishErrors = callModule("dataBridge", "_publishCanonical",
+            INTERACTION_VIEW_NAME, built.view, permitCanonicalBattleView)
+        if publishErrors then return nil, publishErrors end
+        local ok, detail = pcall(HostCompat.writeChatVar, triggerId, UI_INTERACTION_NAME, rendered.html)
+        if not ok then
+            return nil, { makeError("ui_write_failed", "$.chatVar.battleUiInteraction", tostring(detail)) }
+        end
+        -- The host refreshes the clicked message. No lore/CBS evaluation, history
+        -- scan or reload is needed; only newly visible preview cards update the codex.
+        return { view = built.view }, nil
+    end
+
     local function interactCard(interactionAction, instanceId, expectedInteractionToken, choiceId)
         if interactionAction ~= "click"
             and interactionAction ~= "register"
@@ -3588,13 +3628,7 @@
             return failure(requestErrors)
         end
         if activeRequest ~= nil then
-            local activeErrors = validateBinding(activeRequest, nil)
-            if #activeErrors > 0 then
-                return failure(activeErrors)
-            end
-            if activeRequest.phase == "preparing"
-                or activeRequest.phase == "inFlight"
-                or activeRequest.phase == "requestInjected" then
+            if activeRequest.phase ~= "committed" then
                 return failure({
                     makeError("battle_view_locked", "$.activeRequest.phase", "생성 요청 처리 중에는 카드 선택을 변경할 수 없습니다."),
                 })
@@ -3620,7 +3654,7 @@
         end
         local interacted, interactionErrors = callModule(
             "turnDraft",
-            "applyInteraction",
+            "applySelection",
             authority,
             staticData,
             draft,
@@ -3643,7 +3677,7 @@
             return failure({
                 makeError(
                     "invalid_interaction_result",
-                    "$.runtime.turnDraft.applyInteraction",
+                    "$.runtime.turnDraft.applySelection",
                     "검증된 카드 상호작용 결과와 다음 interaction token이 없습니다."
                 ),
             })
@@ -3653,14 +3687,14 @@
                 return failure({
                     makeError(
                         "invalid_stale_interaction_result",
-                        "$.runtime.turnDraft.applyInteraction",
+                        "$.runtime.turnDraft.applySelection",
                         "stale 카드 상호작용은 전이를 적용할 수 없습니다."
                     ),
                 })
             end
             -- risu-btn host가 클릭 message를 자동 remount하므로 수동
             -- refresh를 중복하지 않는다.
-            local published, publishErrors = publishCurrentViewInternal(staticData, true, false, true)
+            local published, publishErrors = publishSelectionView(authority, staticData, interacted)
             if publishErrors then
                 return failure(publishErrors)
             end
@@ -3689,7 +3723,7 @@
             )
             if submissionWriteErrors then return failure(submissionWriteErrors) end
         end
-        local published, publishErrors = publishCurrentViewInternal(staticData, true, false, true)
+        local published, publishErrors = publishSelectionView(authority, staticData, interacted, draft)
         if publishErrors then
             return failure(publishErrors)
         end
@@ -3757,16 +3791,14 @@
         local interactionToken, tokenErrors = inspectDraftInteractionToken(
             authority,
             staticData,
-            draft
+            draft,
+            not surrender
         )
         if tokenErrors then return failure(tokenErrors) end
         if interactionToken ~= expectedInteractionToken then
-            local published, publishErrors = publishCurrentViewInternal(
-                staticData,
-                true,
-                false,
-                true
-            )
+            local published, publishErrors = publishSelectionView(authority, staticData, {
+                draft = draft, interactionToken = interactionToken, applied = false,
+            })
             if publishErrors then return failure(publishErrors) end
             return success({
                 applied = false,
@@ -3795,12 +3827,9 @@
         end
         local writeErrors = writeStored(KEYS.submission, interactionToken)
         if writeErrors then return failure(writeErrors) end
-        local published, publishErrors = publishCurrentViewInternal(
-            staticData,
-            true,
-            false,
-            true
-        )
+        local published, publishErrors = publishSelectionView(authority, staticData, {
+            draft = draft, interactionToken = interactionToken, applied = true,
+        })
         if publishErrors then return failure(publishErrors) end
         return success({
             applied = true,

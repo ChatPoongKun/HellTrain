@@ -5,6 +5,13 @@ from simulate_balance import runtime
 lua,_=runtime(sys.argv[1] if len(sys.argv)>1 else 'lua54')
 lua.execute(r'''
 json=dofile('build/tests/fixtures/json.lua')
+local function equal(a,b)
+ if type(a)~=type(b) then return false end
+ if type(a)~='table' then return a==b end
+ for k,v in pairs(a) do if not equal(v,b[k]) then return false end end
+ for k in pairs(b) do if a[k]==nil then return false end end
+ return true
+end
 for _,id in ipairs({'pc_glutton_011','pc_predator_010'}) do
  local deck={id,'pc_predator_001','pc_predator_002','pc_predator_003','pc_predator_004','pc_predator_005','pc_deceiver_003','pc_harmonizer_001','pc_glutton_002','pc_glutton_003'}
  local state=checked('battleBootstrap','fromSetup',{battleId='preview-rng',seed=12345,playerCardIds=deck,characterId='yoo_jiyoung'},data).state
@@ -21,6 +28,25 @@ for _,id in ipairs({'pc_glutton_011','pc_predator_010'}) do
  local draft=checked('turnDraft','registerCard',initialized.state,data,initialized.draft,instanceId).draft
  local projection=checked('turnDraft','project',initialized.state,data,draft).projection
  assert(projection.projectedRng.cursor>initialized.state.rng.cursor,'fixture did not shuffle')
+ -- Compare both paths when editing cards revealed by another selected card.
+ for _,drawn in ipairs(draft.preview.availableDrawnInstanceIds) do
+  local card
+  for _,instance in ipairs(initialized.state.cardInstances) do
+   if instance.instanceId==drawn then card=data.cards[instance.cardId] end
+  end
+  local choice=card.effectChoices and card.effectChoices[1].id or nil
+  local token=checked('turnDraft','inspect',initialized.state,data,draft).interactionToken
+  local request={action=choice and 'choose' or 'register',instanceId=drawn,choiceId=choice,expectedInteractionToken=token}
+  local normal=runScript('test','turnDraft','applyInteraction',initialized.state,data,draft,request)
+  local fast=runScript('test','turnDraft','applySelection',initialized.state,data,draft,request)
+  assert(equal(normal,fast),'fast drawn-card selection differs')
+  if fast.ok then
+   local cancel={action='cancel',instanceId=instanceId,expectedInteractionToken=fast.interactionToken}
+   assert(equal(runScript('test','turnDraft','applyInteraction',initialized.state,data,fast.draft,cancel),
+    runScript('test','turnDraft','applySelection',initialized.state,data,fast.draft,cancel)),
+    'cancelling the source draw leaves a different selection')
+  end
+ end
  local cancelled=checked('turnDraft','cancelCard',initialized.state,data,draft,instanceId).draft
  local reset=checked('turnDraft','project',initialized.state,data,cancelled).projection
  assert(reset.projectedRng.cursor==initialized.state.rng.cursor,'cancel consumed RNG')

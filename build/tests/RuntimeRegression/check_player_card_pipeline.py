@@ -6,6 +6,13 @@ from simulate_balance import runtime
 lua,_=runtime(sys.argv[1] if len(sys.argv)>1 else 'lua54')
 lua.execute(r'''
 json=dofile('build/tests/fixtures/json.lua')
+local function equal(a,b)
+ if type(a)~=type(b) then return false end
+ if type(a)~='table' then return a==b end
+ for k,v in pairs(a) do if not equal(v,b[k]) then return false end end
+ for k in pairs(b) do if a[k]==nil then return false end end
+ return true
+end
 local ids={} for id,card in pairs(data.cards) do if card.owner=='player' then ids[#ids+1]=id end end table.sort(ids)
 local moods={'rejection','suspicion','ignore','confusion','compliance'}
 local passed,skipped,seen=0,0,{}
@@ -35,6 +42,15 @@ for _,mood in ipairs(moods) do
   for _,choice in ipairs(card.effectChoices or {{}}) do
    local token=checked('turnDraft','inspect',initialized.state,data,initialized.draft).interactionToken
    local selected=runScript('audit','turnDraft','applyInteraction',initialized.state,data,initialized.draft,{action=choice.id and 'choose' or 'register',instanceId=instance,choiceId=choice.id,expectedInteractionToken=token})
+   local fast=runScript('audit','turnDraft','applySelection',initialized.state,data,initialized.draft,{action=choice.id and 'choose' or 'register',instanceId=instance,choiceId=choice.id,expectedInteractionToken=token})
+   assert(equal(selected,fast),'fast selection differs: '..id..'/'..mood..'/'..(choice.id or 'default'))
+   if fast.ok then
+    local cancel={action='cancel',instanceId=instance,expectedInteractionToken=fast.interactionToken}
+    local normalCancel=runScript('audit','turnDraft','applyInteraction',initialized.state,data,fast.draft,cancel)
+    local fastCancel=runScript('audit','turnDraft','applySelection',initialized.state,data,fast.draft,cancel)
+    assert(equal(normalCancel,fastCancel),'fast cancellation differs: '..id)
+   end
+   selected=fast
    if not selected.ok then
     local e=selected.errors[1]
     assert(e.code=='card_not_playable' or e.code=='effect_choice_unavailable',id..'/'..mood..': '..e.code..' '..e.message)

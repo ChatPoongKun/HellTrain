@@ -964,7 +964,7 @@
         }
     end
 
-    local function buildBattleView(state, staticData, context, interactionOnly)
+    local function buildBattleView(state, staticData, context, interactionOnly, selectionOnly)
         local errors = {}
         local data = normalizeStaticData(staticData)
         if type(data) ~= "table"
@@ -977,14 +977,16 @@
             return failure(errors)
         end
 
-        local stateValidation, stateCallError = callRuntime("stateSchema", "validateBattleState", state, data)
-        if stateCallError then
-            table.insert(errors, stateCallError)
-            return failure(errors)
-        end
-        if stateValidation.ok ~= true then
-            appendNestedErrors(errors, "$.state", stateValidation)
-            return failure(errors)
+        if not selectionOnly then
+            local stateValidation, stateCallError = callRuntime("stateSchema", "validateBattleState", state, data)
+            if stateCallError then
+                table.insert(errors, stateCallError)
+                return failure(errors)
+            end
+            if stateValidation.ok ~= true then
+                appendNestedErrors(errors, "$.state", stateValidation)
+                return failure(errors)
+            end
         end
 
         if context ~= nil and (type(context) ~= "table" or getmetatable(context) ~= nil) then
@@ -1121,7 +1123,7 @@
             -- 정규 draft와 interaction token을 함께 반환한다.
             local draftInspection, draftCallError = callRuntime(
                 "turnDraft",
-                "inspect",
+                selectionOnly and "inspectSelection" or "inspect",
                 state,
                 data,
                 draftInput
@@ -2609,6 +2611,8 @@
         return validateBattleView(arguments[1])
     elseif action == "buildBattleInteractionView" then
         return buildBattleView(arguments[1], arguments[2], arguments[3], true)
+    elseif action == "buildSelectionView" then
+        return buildBattleView(arguments[1], arguments[2], arguments[3], true, true)
     elseif action == "buildBattleView" then
         local built = buildBattleView(arguments[1], arguments[2], arguments[3])
         if type(built) ~= "table" or built.ok ~= true then
