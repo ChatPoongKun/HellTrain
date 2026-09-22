@@ -637,6 +637,24 @@
         return "{" .. table.concat(parts, ",") .. "}"
     end
 
+    local function resistanceGuidance(resistance)
+        if resistance < 10 then
+            return "[저항 상태: 거의 붕괴] 캐릭터의 저항이 거의 무너졌습니다. 판단과 행동 통제가 흐트러지고 쾌락에 굴복해 가는 심리와 몸짓을 장면에 반영하십시오. 저항이 0 이하라면 완전히 무너진 상태로 묘사하십시오."
+        elseif resistance < 20 then
+            return "[저항 상태: 동요] 캐릭터가 크게 동요하고 쾌락의 영향을 뚜렷이 받지만 아직 버티려는 심리와 행동을 장면에 반영하십시오."
+        end
+        return "[저항 상태: 완강] 캐릭터의 경계와 거부 의지가 아직 강합니다. 상황을 통제하려 하며 적극적으로 방어하거나 저항하는 심리와 행동을 장면에 반영하십시오."
+    end
+
+    local function stealthGuidance(stealth)
+        if stealth < 10 then
+            return "[은폐 상태: 발각 임박] 주변 승객의 시선과 의심이 집중되어 발각이 임박한 분위기와 구체적인 주변 반응을 함께 묘사하십시오. 은폐가 0 이하라면 이미 발각된 상태로 묘사하십시오."
+        elseif stealth < 20 then
+            return "[은폐 상태: 경계받음] 일부 승객이 이상함을 감지해 간헐적으로 주시하는 분위기와 주변 반응을 함께 묘사하십시오."
+        end
+        return "[은폐 상태: 안전] 플레이어가 군중 속에 자연스럽게 묻혀 주변의 관심을 거의 받지 않는 분위기를 함께 묘사하십시오."
+    end
+
     local function formatPending(pendingTurn, staticInput)
         local staticData = normalizeStaticData(staticInput)
         if type(staticData) ~= "table"
@@ -705,6 +723,8 @@
             pending.afterState.surrendered == true
                 and "이번 응답은 전투를 포기하고 하차하는 장면이며, 마지막에 시야가 암전됩니다."
                 or "이미 조우 장면이 끝난 뒤의 전투 턴이므로 이전 이동, 암전, 의식 상실, 대상 등장 장면을 되풀이하지 마십시오.",
+            resistanceGuidance(pending.afterState.character.resistance),
+            stealthGuidance(pending.afterState.player.stealth),
             "이 지침은 기존 프리셋을 대체하지 않고 이번 턴의 확정 사실만 추가합니다.",
         }
         if pending.afterState.status == "victory" then

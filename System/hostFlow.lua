@@ -1,12 +1,12 @@
 (function()
-local function alertTurnFailure(triggerId, detail)
+local function alertTurnFailure(triggerId, detail, inputGuidance)
     if type(alertError) == "function" then
         pcall(
             alertError,
             triggerId,
-            "치명적인 오류로 턴을 진행할 수 없습니다.\n\n"
+            (inputGuidance and "입력을 확인해 주세요.\n\n" or "치명적인 오류로 턴을 진행할 수 없습니다.\n\n")
                 .. detail
-                .. "\n\n위 오류 내용을 복사하여 개발자에게 제보해 주세요."
+                .. (inputGuidance and ("\n\n" .. inputGuidance) or "\n\n위 오류 내용을 복사하여 개발자에게 제보해 주세요.")
         )
     end
 end
@@ -43,7 +43,13 @@ local function controllerSucceeded(triggerId, label, report)
         debug(1, detail)
         details[#details + 1] = detail
     end
-    alertTurnFailure(triggerId, table.concat(details, "\n"))
+    local inputGuides = {
+        missing_aftermath_input = "자유행동 내용을 입력한 뒤 전송하세요. 바로 다음 단계로 가려면 ‘남은 자유행동 건너뛰기’를 누르세요.",
+        aftermath_automatic_continue_rejected = "자유행동은 빈 전송이나 Continue로 진행할 수 없습니다. 행동 내용을 직접 입력해 전송하거나 ‘남은 자유행동 건너뛰기’를 누르세요.",
+        recovery_filler_missing = "현재 요청을 재시도하려면 입력창을 비운 채 전송해 주세요.",
+    }
+    local guide = #errors == 1 and inputGuides[errors[1].code] or nil
+    alertTurnFailure(triggerId, table.concat(details, "\n"), guide)
     return false
 end
 
@@ -161,7 +167,7 @@ animation: none;
 <div class="helltrain-approach-processing__body">
 <span class="helltrain-approach-processing__spinner" aria-hidden="true"></span>
 <p class="helltrain-approach-processing__label">처리중<span aria-hidden="true"><span class="helltrain-approach-processing__dot">.</span><span class="helltrain-approach-processing__dot">.</span><span class="helltrain-approach-processing__dot">.</span></span></p>
-<p class="helltrain-approach-processing__copy">@@approachCharacterName@@에게 접근하고 있습니다.</p>
+<p class="helltrain-approach-processing__copy">@@processingMessage@@</p>
 </div>
 </section>]]
 
@@ -306,9 +312,77 @@ local function escapeApproachName(name)
     return (name:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
 end
 
-local function showApproachProcessing(triggerId, characterName)
-    local markup = APPROACH_PROCESSING_MARKUP:gsub("@@approachCharacterName@@", function()
-        return escapeApproachName(characterName)
+-- Only live calls own locks. A saved/branched chat or a reloaded Lua runtime
+-- cannot remain locked by an abandoned request marker.
+local SCENE_REQUEST_VAR = "helltrainSceneRequestV1"
+local liveSceneRequests = {}
+local sceneRequestSerial = 0
+
+local function currentSceneRequest(triggerId)
+    return liveSceneRequests[getChatVar(triggerId, SCENE_REQUEST_VAR)]
+end
+
+local function withSceneRequest(triggerId, operation)
+    sceneRequestSerial = sceneRequestSerial + 1
+    local token = tostring(triggerId) .. ":" .. tostring(sceneRequestSerial)
+    local request = { chat = getFullChat(triggerId) }
+    liveSceneRequests[token] = request
+    local ok, result = pcall(function()
+        writeUiFragment(triggerId, SCENE_REQUEST_VAR, token)
+        if getChatVar(triggerId, SCENE_REQUEST_VAR) ~= token then
+            error("scene request marker was not persisted")
+        end
+        return operation()
+    end)
+    liveSceneRequests[token] = nil
+    pcall(function()
+        if getChatVar(triggerId, SCENE_REQUEST_VAR) == token then
+            writeUiFragment(triggerId, SCENE_REQUEST_VAR, "")
+        end
+    end)
+    if not ok then error(result) end
+    return result
+end
+
+local function sceneLLM(triggerId, prompt)
+    local request = currentSceneRequest(triggerId)
+    if request then request.chat = getFullChat(triggerId) end
+    return LLM(triggerId, prompt, false, { streaming = true })
+end
+
+local function blockSceneInput(triggerId, request, isSend)
+    local notice = "[scene_request_in_progress] 아직 장면을 생성하고 있습니다. 응답이 끝난 뒤 다시 시도해 주세요."
+    if isSend then
+        local ok, detail = pcall(function()
+            local chat = getFullChat(triggerId)
+            if #chat < #request.chat then error("진행 중인 요청의 대화가 변경되었습니다.") end
+            for index, original in ipairs(request.chat) do
+                local current = chat[index]
+                if current.role ~= original.role or current.data ~= original.data or current.time ~= original.time then
+                    error("진행 중인 요청의 대화가 변경되었습니다.")
+                end
+            end
+            local cancelled = {}
+            for index = #request.chat + 1, #chat do
+                if chat[index].role ~= "user" then error("추가 입력의 위치를 확인하지 못했습니다.") end
+                if chat[index].data ~= "*says nothing*" then cancelled[#cancelled + 1] = chat[index].data end
+            end
+            -- Remove only inputs appended by the rejected send, never the request's anchor.
+            for index = #chat, #request.chat + 1, -1 do removeChat(triggerId, index - 1) end
+            if #getFullChat(triggerId) ~= #request.chat then error("추가 전송 취소를 완료하지 못했습니다.") end
+            if #cancelled > 0 then
+                notice = notice .. "\n\n전송되지 않은 입력(복사 후 다시 입력해 주세요):\n" .. table.concat(cancelled, "\n")
+            end
+        end)
+        if not ok then notice = notice .. "\n" .. tostring(detail) end
+    end
+    if type(alertError) == "function" then pcall(alertError, triggerId, notice) end
+    return false
+end
+
+local function showSceneProcessing(triggerId, message)
+    local markup = APPROACH_PROCESSING_MARKUP:gsub("@@processingMessage@@", function()
+        return escapeApproachName(message)
     end)
     writeUiFragment(triggerId, UI_BODY_VAR, markup)
     writeUiFragment(triggerId, UI_POPUP_VAR, "")
@@ -463,6 +537,10 @@ local function addRequestContext(triggerId, prompt)
     return normalized
 end
 
+local function showApproachProcessing(triggerId, characterName)
+    showSceneProcessing(triggerId, characterName .. "에게 접근하고 있습니다.")
+end
+
 local function generateApproachScene(triggerId, report, characterId)
     if type(LLM) ~= "function" then
         return nil, "LLM 함수를 사용할 수 없습니다. Lua 스크립트의 low-level access를 활성화해야 합니다."
@@ -472,7 +550,7 @@ local function generateApproachScene(triggerId, report, characterId)
     local prompt = addRequestContext(triggerId, buildApproachPrompt(characterName, profile, encounters))
     local lastError = "알 수 없는 LLM 오류"
     for _ = 1, APPROACH_REQUEST_ATTEMPTS do
-        local requestOk, response = pcall(LLM, triggerId, prompt, false, { streaming = true })
+        local requestOk, response = pcall(sceneLLM, triggerId, prompt)
         if requestOk
             and type(response) == "table"
             and response.success == true
@@ -685,9 +763,18 @@ local function handleButtonClick(triggerId, data)
     end
 
     local report = runScript(triggerId, script, table.unpack(parts))
+    if type(report) == "table" and report.ok == true and report.draftRecovered == true then
+        syncGameUiTarget(triggerId)
+        if type(alertError) == "function" then
+            alertError(triggerId, "카드 선택 저장 상태가 없어 선택 화면을 복구했습니다. 카드 선택을 확인하거나 ‘포기하고 내리기’를 다시 눌러 주세요.")
+        end
+        return
+    end
     if script == "battleController" and parts[1] == "surrender" then
         if not controllerSucceeded(triggerId, "surrender", report) or report.applied ~= true then return end
+        local completed = false
         local ok, detail = pcall(function()
+            showSceneProcessing(triggerId, "선택한 카드를 초기화했습니다. 이번 역에서 내리고 있습니다.")
             local prepared = runScript(triggerId, "battleController", "prepareGeneration")
             if not controllerSucceeded(triggerId, "surrender.prepare", prepared) or prepared.generationReady ~= true then return end
             local prompt = {}
@@ -699,7 +786,7 @@ local function handleButtonClick(triggerId, data)
             end
             local injected = runScript(triggerId, "battleController", "injectRequest", prompt)
             if not controllerSucceeded(triggerId, "surrender.inject", injected) then return end
-            local response = LLM(triggerId, addRequestContext(triggerId, injected.promptArray), false, { streaming = true })
+            local response = sceneLLM(triggerId, addRequestContext(triggerId, injected.promptArray))
             if type(response) ~= "table" or response.success ~= true
                 or type(response.result) ~= "string" or not response.result:match("%S") then
                 error(type(response) == "table" and tostring(response.result) or "빈 LLM 응답")
@@ -707,9 +794,19 @@ local function handleButtonClick(triggerId, data)
             appendChatVerified(triggerId, "char", response.result)
             local committed = runScript(triggerId, "battleController", "commitOutput")
             if controllerSucceeded(triggerId, "surrender.commit", committed) then
+                completed = true
                 syncGameUiTarget(triggerId, committed.uiTargetIndex)
             end
         end)
+        if not completed then
+            local restored, restoreReport = pcall(runScript, triggerId, "battleController", "publishCurrentView")
+            if not restored or type(restoreReport) ~= "table" or restoreReport.ok ~= true then
+                pcall(function()
+                    writeUiFragment(triggerId, UI_BODY_VAR, '<section role="status"><p>하차 요청을 완료하지 못했습니다. 입력창을 비운 채 전송하여 다시 시도해 주세요.</p></section>')
+                    refreshGameUi(triggerId)
+                end)
+            end
+        end
         if not ok then
             alertTurnFailure(triggerId, "포기 장면 전송에 실패했습니다. 입력창을 비운 채 전송하여 재시도하세요.\n" .. tostring(detail))
         end
@@ -768,6 +865,30 @@ local function handleEditRequest(triggerId, data)
 end
 
 --수동 전송의 턴 준비·실패 복구·commit-only 복구
+local function showSendGuidance(triggerId, code, guidance)
+    if type(alertError) == "function" then
+        pcall(alertError, triggerId, "지금은 전송으로 진행할 수 없습니다.\n\n[" .. code .. "]\n" .. guidance)
+    end
+    return false
+end
+
+local function selectionSendGuidance(triggerId)
+    local run = HostCompat.readState(triggerId, "runProgressionV1.authority")
+    local setup = HostCompat.readState(triggerId, "gameSetupV1.authority")
+    local phase = type(run) == "table" and run.phase or type(setup) == "table" and setup.phase
+    if phase == "deckDraft" then
+        return "draft_selection_required", "카드 드래프트 중입니다. 원하는 카드를 열고 ‘이 카드를 초기 덱에 추가’를 누르세요. 덱 구성을 마치면 상대 선택으로 진행합니다."
+    elseif phase == "deckComplete" then
+        return "setup_transition_pending", "덱 구성이 완료되어 상대 선택 화면으로 전환 중입니다. 잠시 기다린 뒤, 화면이 그대로라면 ‘게임 시작’ 버튼을 다시 눌러 저장된 진행 화면을 여세요."
+    elseif phase == "characterSelect" then
+        return "character_selection_required", "상대 캐릭터를 선택할 차례입니다. 캐릭터 카드를 열고 아래의 캐릭터 선택 확정 버튼을 누르세요. 접근 장면 응답이 끝나면 전투를 진행할 수 있습니다."
+    elseif phase == "reward" then
+        return "reward_selection_required", "전투 보상을 선택할 차례입니다. 보상 화면에서 원하는 보상을 확정하거나 ‘선택하지 않기’를 누르세요. 카드 드래프트 보상은 두 번 선택해야 완료됩니다."
+    elseif setup == nil and run == nil and HostCompat.readState(triggerId, "battleRuntimeV1.authority") == nil then
+        return "game_not_started", "먼저 ‘게임 시작’ 버튼을 누르고 카드 드래프트와 상대 선택을 완료해 주세요."
+    end
+end
+
 local function handleStart(triggerId)
     local retryReadOk, retryPhase, retryCharacterId = pcall(
         readApproachRetry,
@@ -781,14 +902,22 @@ local function handleStart(triggerId)
         return false
     end
     if retryPhase ~= nil then
-        resumeApproachWithAlert(
+        withSceneRequest(triggerId, function() return resumeApproachWithAlert(
             triggerId,
             nil,
             retryCharacterId,
             retryPhase
-        )
+        ) end)
         return false
     end
+    -- Setup/reward sends must never enter a battle controller requiring a draft.
+    -- Approach recovery above remains available even while selection is pending.
+    local guidanceOk, code, guidance = pcall(selectionSendGuidance, triggerId)
+    if not guidanceOk then
+        alertTurnFailure(triggerId, "onStart: [send_phase_read_failed] 진행 상태를 읽지 못했습니다.\n" .. tostring(code))
+        return false
+    end
+    if code then return showSendGuidance(triggerId, code, guidance) end
     local report = runScript(
         triggerId,
         "battleController",
@@ -806,6 +935,15 @@ local function handleStart(triggerId)
         end
     end
 
+    if report.generationReady ~= true and report.commitRecovered ~= true then
+        if report.idle == true then
+            return showSendGuidance(triggerId, "turn_not_prepared", "전투 화면에서 카드를 고르고 ‘선택 확정’을 누르거나, 카드 선택 없이 ‘턴 넘기기 준비’를 누르세요. ‘전송 준비됨’ 표시를 확인한 뒤 입력창을 비우고 전송해 주세요.")
+        elseif report.aftermathComplete == false then
+            return showSendGuidance(triggerId, "aftermath_input_required", "자유행동 내용을 입력한 뒤 전송하세요. 바로 다음 단계로 가려면 ‘남은 자유행동 건너뛰기’를 눌러 주세요.")
+        elseif report.aftermathComplete == true then
+            return showSendGuidance(triggerId, "aftermath_complete", "자유행동이 종료되었습니다. 게임 화면에서 보상을 선택한 뒤 다음 상대를 확정해 주세요.")
+        end
+    end
     -- 관측된 출력을 보존하고 commit만 복구한 경우 새 HTTP 요청은 취소한다.
     return report.generationReady == true
 end
@@ -820,10 +958,19 @@ local function handleOutput(triggerId)
 end
 
     return function(triggerId, action, ...)
+        if action == "start" or action == "buttonClick" then
+            local request = currentSceneRequest(triggerId)
+            if request then return blockSceneInput(triggerId, request, action == "start") end
+        end
         if action == "editDisplay" then
             return handleEditDisplay(triggerId, ...)
         elseif action == "buttonClick" then
-            return handleButtonClick(triggerId, ...)
+            local route = ...
+            if type(route) == "string" and (route:match("^init|chooseCharacter|")
+                or route:match("^battleController|surrender|") or route == "hostFlow|retryApproach") then
+                return withSceneRequest(triggerId, function() return handleButtonClick(triggerId, route) end)
+            end
+            return handleButtonClick(triggerId, route)
         elseif action == "editRequest" then
             return handleEditRequest(triggerId, ...)
         elseif action == "start" then

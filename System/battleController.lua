@@ -3768,6 +3768,9 @@
         if staticErrors then return failure(staticErrors) end
         local authority, authorityErrors = readStored(KEYS.authority, true)
         if authorityErrors then return failure(authorityErrors) end
+        if authority.status == "victory" or authority.status == "defeat" then
+            return success({ applied = false, stale = true, battleEnded = true })
+        end
         local pending, pendingErrors = readStored(KEYS.pending, false)
         if pendingErrors then return failure(pendingErrors) end
         if pending ~= nil then
@@ -3786,8 +3789,18 @@
                 })
             end
         end
-        local draft, draftErrors = readStored(KEYS.draft, true)
+        local draft, draftErrors = readStored(KEYS.draft, false)
         if draftErrors then return failure(draftErrors) end
+        local draftRecovered = draft == nil
+        if draftRecovered then
+            local fresh, freshErrors = callModule("turnDraft", "newDraft", authority, staticData)
+            if freshErrors then return failure(freshErrors) end
+            draft = fresh.draft
+            local writeErrors = writeStored(KEYS.draft, draft)
+            if writeErrors then return failure(writeErrors) end
+            local clearErrors = clearSubmission()
+            if clearErrors then return failure(clearErrors) end
+        end
         local interactionToken, tokenErrors = inspectDraftInteractionToken(
             authority,
             staticData,
@@ -3795,7 +3808,7 @@
             not surrender
         )
         if tokenErrors then return failure(tokenErrors) end
-        if interactionToken ~= expectedInteractionToken then
+        if draftRecovered or interactionToken ~= expectedInteractionToken then
             local published, publishErrors = publishSelectionView(authority, staticData, {
                 draft = draft, interactionToken = interactionToken, applied = false,
             })
@@ -3803,6 +3816,7 @@
             return success({
                 applied = false,
                 stale = true,
+                draftRecovered = draftRecovered,
                 interactionToken = interactionToken,
                 view = published.view,
             })
@@ -4282,6 +4296,12 @@
             selectedPending = reuse.pendingTurn
             sourceName = "pending"
             reused = true
+        elseif authority.status == "victory" or authority.status == "defeat" then
+            local committed = commitOutput()
+            if type(committed) == "table" and committed.ok == true then
+                committed.generationReady = false
+            end
+            return committed
         else
             local draft, draftErrors = readStored(KEYS.draft, true)
             if draftErrors then return failure(draftErrors) end

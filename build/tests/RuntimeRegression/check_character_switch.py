@@ -44,8 +44,18 @@ for _,character in ipairs(offer.characters)do
 end
 assert(nextId,'fixture needs a different character')
 local failGeneration=true
+local probing=false
 function LLM(_,prompt)
  requests=requests+1
+ assert(not probing,'concurrent approach generated a second request')
+ probing=true
+ local count,chatCount=requests,#chat
+ addChat('test','user','*says nothing*')
+ assert(runScript('second-event','hostFlow','start')==false)
+ assert(requests==count and #chat==chatCount,'concurrent approach was not blocked cleanly')
+ runScript('third-event','hostFlow','buttonClick','hostFlow|retryApproach')
+ assert(requests==count,'retry button generated a concurrent approach')
+ probing=false
  assert(prompt[1].content:find('대상 캐릭터: '..data.characters[nextId].name,1,true))
  assert(not prompt[1].content:find('대상 캐릭터: '..data.characters[oldId].name,1,true))
  if failGeneration then return {success=false,result='temporary failure'} end
@@ -55,7 +65,19 @@ local route='init|chooseCharacter|'..nextId..'|'..offer.interactionToken
 runScript('test','hostFlow','buttonClick',route)
 assert(requests>1,'BUG: previous time=0 departure skipped the new approach request')
 assert(chatVars.helltrainApproachRetryV1=='pending|'..nextId)
+assert(chatVars.helltrainSceneRequestV1=='','failed approach retained lock')
 assert(chat[#chat].data=='Departure of '..oldId)
+local originalWrite=HostCompat.writeChatVar
+HostCompat.writeChatVar=function(id,key,value)
+ if key=='helltrainSceneRequestV1' and value~='' then return end
+ return originalWrite(id,key,value)
+end
+local previousRequests=requests
+assert(not pcall(runScript,'test','hostFlow','buttonClick','hostFlow|retryApproach'))
+assert(requests==previousRequests,'unpersisted marker allowed a request')
+HostCompat.writeChatVar=originalWrite
+-- A persisted marker without a live owner (e.g. reload) must never lock retries.
+chatVars.helltrainSceneRequestV1='abandoned-request'
 failGeneration=false
 local originalRun=runScript
 local failTransition=true
@@ -71,6 +93,7 @@ failTransition=false
 runScript('test','hostFlow','buttonClick','hostFlow|retryApproach')
 assert(requests==count and #chat==chatCount,'transition retry duplicated scene')
 assert(chatVars.helltrainApproachRetryV1=='')
+assert(chatVars.helltrainSceneRequestV1=='','successful approach retained lock')
 local current=states['battleRuntimeV1.authority']
 assert(current.character.characterId==nextId)
 runScript('test','hostFlow','buttonClick',route)
