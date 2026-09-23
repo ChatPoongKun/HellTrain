@@ -32,5 +32,12 @@ return {
             name = "아그네스 수녀",
             turnLimit = 12,
         },
+        hakurei_reimu = {
+            id = "hakurei_reimu",
+            database = "HakureiReimu.db",
+            name = "하쿠레이 레이무",
+            turnLimit = 9,
+            cardPool = "common",
+        },
     },
 }

@@ -1,0 +1,65 @@
+local card = characterCardSupport.card
+local recoverResistance = characterCardSupport.recoverResistance
+local backlash = characterCardSupport.backlash
+
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        hakurei_reimu = {
+            id = "hakurei_reimu",
+            name = "하쿠레이 레이무",
+            -- 더미 이미지 동작을 확인하기 위해 두 파일명을 의도적으로 비워 둡니다.
+            portraitImage = "",
+            fallenImage = "",
+
+            publicProfile = {
+                age = 25,
+                occupation = "하쿠레이 신사의 무녀",
+                appearance = {
+                    hairColor = "짙은 갈색",
+                    eyeColor = "갈색",
+                    skin = "밝은 피부",
+                    height = 163,
+                    style = "커다란 붉은 리본과 붉고 흰 무녀복",
+                },
+                personality = {
+                    traits = { "직감이 빠름", "독립적임", "이변을 지나치지 않음" },
+                    likes = { "차", "평온한 신사", "익숙한 일상" },
+                },
+                background = {
+                    family = "하쿠레이 신사에서 지냄",
+                    hobbies = "차 마시기와 신사 정리",
+                    boardingReason = "낯선 지하철에 나타난 이변의 원인을 찾는 중",
+                },
+            },
+            privateProfile = {
+                hiddenDesire = "낯선 공간에서도 침착하게 이변을 해결하고 돌아가고 싶어 함",
+            },
+            battle = {
+                startingResistance = 30,
+                turnLimit = 9,
+                startingMood = "suspicion",
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                planCapacity = 1,
+                traitIds = {},
+                extraDeck = { "reimu_boundary_guard" },
+            },
+        },
+    },
+    cards = {
+        reimu_boundary_guard = card(
+            "reimu_boundary_guard", "하쿠레이 결계", { "recovery", "response" }, {},
+            { "저항 2 회복. 반발 1." },
+            "부적을 쥐고 스스로의 공간을 지키는 결계를 펼칩니다.",
+            {
+                actorAction = "부적을 들어 주변의 기척을 살피며 한 걸음 물러선다.",
+                actorThought = "이런 이변에 휘말릴 생각은 없어.",
+            },
+            function(context)
+                return { recoverResistance(2), backlash(context, 1) }
+            end
+        ),
+    },
+}

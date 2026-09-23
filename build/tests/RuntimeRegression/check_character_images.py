@@ -7,6 +7,12 @@ from simulate_balance import runtime
 
 lua, _ = runtime('jit' if 'jit' in sys.argv else 'lua54')
 lua.execute(r'''
+local sample = checked('staticData', 'loadCharacters', {'hakurei_reimu'}).data.characters.hakurei_reimu
+assert(sample.portraitImage == 'dummy.png' and sample.fallenImage == 'dummy.png',
+    'Reimu sample must exercise the paired dummy fallback')
+assert(#sample.battle.deck == 11 and sample.battle.deck[11] == 'reimu_boundary_guard',
+    'Reimu sample must append its own card to the common deck')
+
 local listing = sources['CharacterList.db']
 sources['CharacterList.db'] = listing:gsub('characters = {', [[characters = {
     image_probe = {id='image_probe', database='ImageProbe.db', name='파일명과 다른 표시 이름', turnLimit=8, cardPool='common'},
@@ -32,6 +38,14 @@ local playerDeck = {
     'pc_predator_001','pc_predator_002','pc_predator_003','pc_predator_004','pc_predator_005',
     'pc_predator_006','pc_predator_007','pc_predator_008','pc_predator_009','pc_predator_010',
 }
+local sampleData = checked('staticData', 'loadCharacters', {'hakurei_reimu'}).data
+local sampleState = checked('battleBootstrap', 'fromSetup', {
+    battleId='reimu-dummy',seed=12345,playerCardIds=playerDeck,characterId='hakurei_reimu',
+}, sampleData).state
+local sampleTurn = checked('turnInitializer', 'prepareTurn', sampleState, sampleData, {turnId='reimu-turn-001'})
+local sampleView = checked('viewBuilder', 'buildBattleView', sampleTurn.state, sampleData, {draft=sampleTurn.draft}).view
+assert(sampleView.character.portraitImage == 'dummy.png' and sampleView.character.fallenImage == 'dummy.png',
+    'Reimu battle view must use both dummy images')
 local state = checked('battleBootstrap', 'fromSetup', {
     battleId='image-probe',seed=12345,playerCardIds=playerDeck,characterId='image_probe',
 }, explicit).state
