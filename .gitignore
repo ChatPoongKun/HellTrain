@@ -2,6 +2,7 @@
 .vscode/settings.json
 .agents/
 /build/*.jpg
+/build/__pycache__/
 /build/tests/**/__pycache__/
 /build/tests/**/results/
 /build/tests/.verification/
