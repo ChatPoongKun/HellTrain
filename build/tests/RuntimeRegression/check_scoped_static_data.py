@@ -70,11 +70,14 @@ sources['CharacterList.db'] = listing:gsub('characters = {', 'characters = {'..t
 reads = {}
 local expanded = checked('staticData','loadCharacters',{'han_jenny'})
 assert(expanded.counts.characters == 1)
-assert(expanded.counts.cards == 66)
+local scopedCardCount = 0
+for _ in pairs(jenny.cards) do scopedCardCount = scopedCardCount + 1 end
+assert(expanded.counts.cards == scopedCardCount,
+    'expanded scope changed card count: expected '..scopedCardCount..', got '..expanded.counts.cards)
 for name in pairs(reads) do assert(not name:match('^Extra'), 'catalog expansion loaded an unrelated DB') end
 sources['CharacterList.db'] = listing
 -- Isolate journal rendering/cache behavior from session replay (covered by the
--- character journal regression). Five encountered characters exceed the LRU.
+-- character journal regression). All encountered characters exceed the LRU.
 local dispatch = runScript
 local sessions = {}
 for id in pairs(full.characters) do
@@ -92,7 +95,8 @@ for pass=1,3 do
     local before = checked('staticData','cacheStats').cache.validations
     local input = checked('staticData','loadCatalog').data
     local view = checked('runProgressionView','buildCharacterJournal',{runState={}},input).view
-    assert(view.count == 5)
+    assert(view.count == #sessions,
+        'journal count mismatch: expected '..#sessions..', got '..view.count)
     local validations = checked('staticData','cacheStats').cache.validations - before
     assert(validations <= (pass == 1 and 2 or 0), 'journal scopes thrash the static cache: '..validations)
     assert(input.characters.han_jenny.publicProfile == nil, 'journal mutated the caller catalog')
