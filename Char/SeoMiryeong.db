@@ -13,6 +13,8 @@ return {
         seo_miryeong = {
             id = "seo_miryeong",
             name = "서미령",
+            portraitImage = "서미령.png",
+            fallenImage = "서미령_함락.png",
 
             publicProfile = {
                 age = 41,

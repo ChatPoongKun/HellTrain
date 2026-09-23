@@ -15,6 +15,8 @@ return {
         yoo_jiyoung = {
             id = "yoo_jiyoung",
             name = "유지영",
+            portraitImage = "유지영.png",
+            fallenImage = "유지영_함락.png",
 
             publicProfile = {
                 age = 20,

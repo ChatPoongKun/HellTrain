@@ -15,6 +15,8 @@ return {
         sister_agnes = {
             id = "sister_agnes",
             name = "아그네스 수녀",
+            portraitImage = "아그네스.png",
+            fallenImage = "아그네스_함락.png",
 
             publicProfile = {
                 age = 29,

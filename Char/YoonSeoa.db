@@ -12,6 +12,8 @@ return {
         yoon_seoa = {
             id = "yoon_seoa",
             name = "윤서아",
+            portraitImage = "윤서아.png",
+            fallenImage = "윤서아_함락.png",
 
             publicProfile = {
                 age = 32,

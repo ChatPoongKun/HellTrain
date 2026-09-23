@@ -696,6 +696,20 @@
                         elseif characters[characterId] == nil then
                             characters[characterId] = definition
                             if type(definition) == "table" then
+                                local portrait = definition.portraitImage
+                                local fallen = definition.fallenImage
+                                if type(portrait) ~= "string" or portrait:match("^%s*$")
+                                    or type(fallen) ~= "string" or fallen:match("^%s*$") then
+                                    definition.portraitImage = "dummy.png"
+                                    definition.fallenImage = "dummy.png"
+                                else
+                                    for _, field in ipairs({"portraitImage", "fallenImage"}) do
+                                        local filename = definition[field]
+                                        if not filename:match("^[^/\\{}<>%c]+%.[%a%d]+$") then
+                                            addError(errors, "invalid_character_image", modulePath .. ".characters." .. characterId .. "." .. field, "이미지는 경로 없이 파일명만 지정해야 합니다.")
+                                        end
+                                    end
+                                end
                                 if definition.name ~= entry.name or type(definition.battle) ~= "table"
                                     or definition.battle.turnLimit ~= entry.turnLimit then
                                     addError(errors, "character_catalog_mismatch", modulePath, "캐릭터 목록 요약과 개별 DB가 일치하지 않습니다.")

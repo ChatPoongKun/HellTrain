@@ -25,6 +25,7 @@ local view=journal(input)
 assert(view.count==1 and view.selected.encounters==1 and view.selected.active==1)
 assert(view.selected.victories==0 and view.selected.defeats==0)
 assert(view.selected.profile.name==data.characters[id].name)
+assert(view.selected.profile.portraitImage==data.characters[id].portraitImage)
 assert(view.selected.profile.appearanceSummary and #view.selected.profile.traits>0)
 assert(not view.selected.profile.privateProfile and not view.selected.profile.deck)
 local before=canonical(input)
@@ -50,6 +51,11 @@ local wonSummary=clone(summary)
 wonSummary.status='victory';wonSummary.reasonCode='turn_start_checkpoint'
 wonSummary.finalResistance=0;wonSummary.finalStealth=1
 local wonRun=call('runProgression','settle',nil,receipt,wonSummary,data).state
+local resultView=call('runProgressionView','build',wonRun,receipt,data).view
+assert(resultView.result.character.fallenImage==data.characters[id].fallenImage)
+local catalog=call('staticData','loadCatalog').data
+local partialResult=call('runProgressionView','build',wonRun,receipt,catalog).view
+assert(partialResult.result.character.fallenImage==data.characters[id].fallenImage)
 local won=journal({setupState=receipt,runState=wonRun,characterId=id})
 assert(won.selected.encounters==1 and won.selected.victories==1 and won.selected.defeats==0)
 -- A later battle against the same character adds a single active encounter.
@@ -70,6 +76,7 @@ for characterId in pairs(data.characters) do
  local state=call('battleBootstrap','fromSetup',{battleId='journal-profile',seed=7,playerCardIds=receipt.selectedCardIds,characterId=characterId},data).state
  local profile=journal({battleState=state,characterId=characterId})
  assert(profile.count==1 and profile.selected.profile.characterId==characterId)
+ assert(profile.selected.profile.portraitImage==data.characters[characterId].portraitImage)
 end
 -- Real popup root -> detail -> back -> close, without changing authority.
 function debug(_,message) if message:find('조회 실패',1,true) then error(message) end end

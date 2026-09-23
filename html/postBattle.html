@@ -40,7 +40,7 @@
 <article class="run-result{{#when::keep::{{dictelement::{{tempvar::run_progression_result}}::status}}::is::victory}} run-is-victory{{/when}}{{#when::keep::{{dictelement::{{tempvar::run_progression_result}}::status}}::is::defeat}} run-is-defeat{{/when}}" aria-label="최근 전투 결과">
 {{#when::keep::{{dictelement::{{tempvar::run_progression_result}}::status}}::is::victory}}
 <figure class="run-result-portrait">
-<img src="{{raw::{{dictelement::{{tempvar::run_progression_character}}::name}}_함락}}" alt="{{dictelement::{{tempvar::run_progression_character}}::name}} 함락" />
+<img src="{{raw::{{dictelement::{{tempvar::run_progression_character}}::fallenImage}}}}" alt="{{dictelement::{{tempvar::run_progression_character}}::name}} 함락" />
 <figcaption>CONQUERED · {{dictelement::{{tempvar::run_progression_character}}::name}}</figcaption>
 </figure>
 {{/when}}

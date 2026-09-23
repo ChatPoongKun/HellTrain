@@ -1523,6 +1523,8 @@
             character = {
                 id = characterDefinition.id,
                 name = characterDefinition.name,
+                portraitImage = characterDefinition.portraitImage,
+                fallenImage = characterDefinition.fallenImage,
                 resistance = displayState.character.resistance,
                 startingResistance = characterDefinition.battle.startingResistance,
                 mood = buildMoodView(displayState, data, errors, lastCommittedInput),
@@ -2233,6 +2235,8 @@
             checkAllowedKeys(view.character, {
                 id = true,
                 name = true,
+                portraitImage = true,
+                fallenImage = true,
                 resistance = true,
                 startingResistance = true,
                 mood = true,
@@ -2243,6 +2247,10 @@
             }, "$.character", errors)
             if not isAsciiId(view.character.id) or type(view.character.name) ~= "string" then
                 addError(errors, "invalid_character_value", "$.character", "캐릭터 표시 값이 올바르지 않습니다.")
+            end
+            if type(view.character.portraitImage) ~= "string" or view.character.portraitImage == ""
+                or type(view.character.fallenImage) ~= "string" or view.character.fallenImage == "" then
+                addError(errors, "invalid_character_image", "$.character", "캐릭터 이미지 파일명이 필요합니다.")
             end
             if not isFinite(view.character.resistance) or not isFinite(view.character.startingResistance) then
                 addError(errors, "invalid_resistance", "$.character", "저항 표시값이 올바르지 않습니다.")

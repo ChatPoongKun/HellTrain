@@ -23,6 +23,7 @@ checks = [
     *[(Path(args[0]).name, [sys.executable, *args]) for args in [
         [HERE / 'check_scoped_static_data.py'],
         [HERE / 'check_common_character_deck.py'],
+        [HERE / 'check_character_images.py'],
         [HERE / 'check_character_switch.py'],
         [HERE / 'check_send_guidance.py'],
         [HERE / 'check_narrative_state_guidance.py'],
@@ -43,6 +44,7 @@ if not fast:
     checks += [(Path(args[0]).name, [sys.executable, *args]) for args in [
         [HERE / 'check_scoped_static_data.py', 'jit'],
         [HERE / 'check_common_character_deck.py', 'jit'],
+        [HERE / 'check_character_images.py', 'jit'],
         [HERE / 'check_character_switch.py', 'jit'],
         [HERE / 'check_surrender.py', 'jit'],
         [HERE / 'check_validation_reuse.py', 'jit'],

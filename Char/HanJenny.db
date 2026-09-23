@@ -13,6 +13,8 @@ return {
         han_jenny = {
             id = "han_jenny",
             name = "한제니",
+            portraitImage = "한제니.png",
+            fallenImage = "한제니_함락.png",
 
             publicProfile = {
                 age = 24,

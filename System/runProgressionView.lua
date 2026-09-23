@@ -419,6 +419,14 @@
     local function buildResultView(runState, staticData, errors)
         local settlement = runState.lastSettlement
         local character = staticData.characters[settlement.characterId]
+        if staticData.partial == true and type(character) == "table" and character.fallenImage == nil then
+            local ok, report = pcall(runScript, triggerId, "staticData", "loadCharacters", {settlement.characterId})
+            if not ok or type(report) ~= "table" or report.ok ~= true then
+                addError(errors, "character_load_failed", "$.result.character", "결과 캐릭터 정보를 불러오지 못했습니다.")
+                return nil
+            end
+            character = report.data.characters[settlement.characterId]
+        end
         if type(character) ~= "table" then
             addError(errors, "missing_result_reference", "$.result", "최근 세션의 공개 참조를 찾을 수 없습니다.")
             return nil
@@ -440,6 +448,7 @@
             character = {
                 id = character.id,
                 name = character.name,
+                fallenImage = character.fallenImage or "dummy.png",
             },
             turnNumber = settlement.turnNumber,
             turnLimit = settlement.turnLimit,
@@ -691,6 +700,7 @@
             slot = slot,
             characterId = character.id,
             name = character.name,
+            portraitImage = character.portraitImage or "dummy.png",
             age = profile.age,
             occupation = profile.occupation,
             appearanceSummary = appearanceSummary,
@@ -901,6 +911,7 @@
             slot = true,
             characterId = true,
             name = true,
+            portraitImage = true,
             age = true,
             occupation = true,
             appearanceSummary = true,
@@ -918,6 +929,7 @@
             addError(errors, "invalid_character_id", path .. ".characterId", "캐릭터 ID가 올바르지 않습니다.")
         end
         validateString(character.name, path .. ".name", errors)
+        validateString(character.portraitImage, path .. ".portraitImage", errors)
         if not isInteger(character.age, 1) then
             addError(errors, "invalid_character_age", path .. ".age", "캐릭터 나이가 올바르지 않습니다.")
         end
@@ -1165,11 +1177,12 @@
             if type(view.result.character) ~= "table" then
                 addError(errors, "invalid_result_character", "$.result.character", "결과 상대 View가 필요합니다.")
             else
-                checkAllowedKeys(view.result.character, { id = true, name = true }, "$.result.character", errors)
+                checkAllowedKeys(view.result.character, { id = true, name = true, fallenImage = true }, "$.result.character", errors)
                 if not isAsciiId(view.result.character.id) then
                     addError(errors, "invalid_character_id", "$.result.character.id", "결과 상대 ID가 올바르지 않습니다.")
                 end
                 validateString(view.result.character.name, "$.result.character.name", errors)
+                validateString(view.result.character.fallenImage, "$.result.character.fallenImage", errors)
             end
             if not isInteger(view.result.turnNumber, 1)
                 or not isInteger(view.result.turnLimit, 1)

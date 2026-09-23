@@ -13,7 +13,7 @@
 {{#each::keep {{dictelement::{{tempvar::journal}}::items}} as journal_item}}
 {{settempvar::journal_profile::{{dictelement::{{slot::journal_item}}::profile}}}}
 <button type="button" class="char-card" risu-btn="popupManage|push|캐릭터 프로필|{{dictelement::{{tempvar::journal_profile}}::characterId}}" aria-label="{{dictelement::{{tempvar::journal_profile}}::name}} 상세 정보 보기">
-<img src="{{raw::{{dictelement::{{tempvar::journal_profile}}::name}}}}" alt="" class="char-avatar">
+<img src="{{raw::{{dictelement::{{tempvar::journal_profile}}::portraitImage}}}}" alt="" class="char-avatar">
 <span class="char-info">
 <span class="char-name">{{dictelement::{{tempvar::journal_profile}}::name}}<span class="char-role">{{dictelement::{{tempvar::journal_profile}}::occupation}}</span></span>
 <span class="char-desc">{{dictelement::{{tempvar::journal_profile}}::age}}세 · {{dictelement::{{dictelement::{{tempvar::journal_profile}}::startingMood}}::label}}</span>
