@@ -33,12 +33,14 @@ function addChat(_, r, t) chat[#chat+1] = {role=r,data=t} end
 function removeChat(_, i) table.remove(chat,i+1) end
 function refreshGameUi() end
 function reloadChat() end
-function getLoreBooks(_, name)
+local fixtureGetLoreBooks = getLoreBooks
+function getLoreBooks(triggerId, name)
     if name:match('%.html$') then htmlReads=htmlReads+1 end
     local path = lorePaths[name]
         or (name:match('%.lua$') and ('System/'..name))
         or (name:match('%.html$') and ('html/'..name))
-    return path and {{content=readFile(path)}} or {}
+    if path then return {{content=readFile(path)}} end
+    return fixtureGetLoreBooks(triggerId, name)
 end
 assert(load('return '..runtime_source))()
 DEBUG = 0
