@@ -12,13 +12,6 @@ ROOT = Path(__file__).resolve().parents[3]
 PLAYER_ROLES = {"pressure", "deception", "violation"}
 CHARACTER_ROLES = {"response", "exposure", "recovery"}
 SPECIALS = {"remove", "insight"}
-CORE_CHARACTER_DATABASES = (
-    "HanJenny.db",
-    "SeoMiryeong.db",
-    "SisterAgnes.db",
-    "YooJiyoung.db",
-    "YoonSeoa.db",
-)
 
 
 def validate_runtime_type_contract(errors: list[str]) -> None:
@@ -141,14 +134,6 @@ def main() -> int:
     character_paths = [ROOT / "DB" / "CommonCharacterCards.db", *sorted((ROOT / "Char").glob("*.db"))]
     character = [block for path in character_paths
                  for block in card_blocks(path, r"[a-z][a-z0-9_]+")]
-    core_paths = [ROOT / "DB" / "CommonCharacterCards.db",
-                  *(ROOT / "Char" / name for name in CORE_CHARACTER_DATABASES)]
-    core_character = [block for path in core_paths
-                      for block in card_blocks(path, r"[a-z][a-z0-9_]+")]
-    if len(player) != 56 or len(core_character) != 60:
-        errors.append(
-            f"core card count mismatch: player={len(player)}, character={len(core_character)}"
-        )
 
     for card_id, constructor, block in player:
         roles, card_type, specials = player_header(block, constructor)

@@ -736,6 +736,11 @@
                                             seen[cardId] = true
                                         end
                                     end
+                                    for _, cardId in ipairs(sortedAsciiKeys(module.cards)) do
+                                        if not seen[cardId] then
+                                            addError(errors, "unlisted_extra_card", modulePath .. ".cards." .. cardId, "전용 카드를 사용하려면 battle.extraDeck에 카드 ID를 추가해야 합니다.")
+                                        end
+                                    end
                                     battle.deck = deck
                                 else
                                     for _, cardId in ipairs(type(definition.battle) == "table" and type(definition.battle.deck) == "table" and definition.battle.deck or {}) do

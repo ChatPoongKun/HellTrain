@@ -44,6 +44,7 @@ return {
 }
 ]]
 local fixtureCommon = sources['CommonCharacterCards.db']
+local customWithExtra = sources['CustomProbe.db']
 
 local reads = {}
 local original = getLoreBooks
@@ -77,14 +78,36 @@ assert(started.state.character.characterId == 'custom_probe', 'composed deck cou
 assert(checked('staticData', 'loadAll').data.characters.custom_probe.battle.deck[3] == 'probe_defend')
 
 sources['CommonCharacterCards.db'] = common
-sources['CustomProbe.db'] = sources['CustomProbe.db']:gsub("extraDeck={'probe_defend'}", 'extraDeck={}', 1)
+sources['CustomProbe.db'] = [[
+return {
+    schemaVersion=1, kind='characterDatabase',
+    characters={custom_probe={
+        id='custom_probe', name='공용 덱 검사', publicProfile={},
+        battle={startingResistance=30, turnLimit=8, startingMood='suspicion',
+            baseDrawCount=3, maxHandSize=5, planCapacity=1, traitIds={}, extraDeck={}},
+    }}, cards={},
+}
+]]
 local defaultOnly = checked('staticData', 'loadCharacters', {'custom_probe'}).data
-assert(#defaultOnly.characters.custom_probe.battle.deck == 10, 'empty extra deck lost the shipped default')
-assert(defaultOnly.characters.custom_probe.battle.deck[1] == 'common_stand_firm')
+local shippedCommonDeck = assert(load('return ' .. assert(common:match('deck%s*=%s*(%b{})'))))()
+assert(#defaultOnly.characters.custom_probe.battle.deck == #shippedCommonDeck,
+    'empty extra deck changed the shared deck length')
+for index, cardId in ipairs(shippedCommonDeck) do
+    assert(defaultOnly.characters.custom_probe.battle.deck[index] == cardId,
+        'empty extra deck changed the shared deck order')
+end
 checked('battleBootstrap', 'fromSetup', {
     battleId='default-only-probe', seed=12345, playerCardIds=playerDeck, characterId='custom_probe',
 }, defaultOnly)
-sources['CustomProbe.db'] = sources['CustomProbe.db']:gsub('extraDeck={}', "extraDeck={'probe_defend'}", 1)
+sources['CustomProbe.db'] = customWithExtra:gsub("extraDeck={'probe_defend'}", 'extraDeck={}', 1)
+local orphan = runScript('test', 'staticData', 'loadCharacters', {'custom_probe'})
+assert(not orphan.ok, 'defined but unlisted custom card was silently omitted')
+local orphanReported = false
+for _, issue in ipairs(orphan.errors or {}) do
+    if issue.code == 'unlisted_extra_card' then orphanReported = true end
+end
+assert(orphanReported, 'unlisted custom card had no actionable validation error')
+sources['CustomProbe.db'] = customWithExtra
 sources['CommonCharacterCards.db'] = fixtureCommon
 
 sources['CustomProbe.db'] = sources['CustomProbe.db']:gsub("extraDeck={'probe_defend'}", "extraDeck={'missing_card'}", 1)
