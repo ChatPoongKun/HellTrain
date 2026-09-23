@@ -670,8 +670,25 @@
         return report, nil
     end
 
-    local function loadStaticData()
-        local report, errors = callModule("staticData", "loadAll")
+    -- Reuse only this invocation's first authority read; never retain saved state
+    -- in the warm handler or reuse it after a write.
+    local prefetchedAuthority
+    local function loadStaticData(additionalCharacterId)
+        if type(HostCompat) ~= "table" or type(HostCompat.readState) ~= "function" then
+            return nil, {makeError("state_read_unavailable", "$.host.getState", "상태 읽기 호환 함수를 찾을 수 없습니다.")}
+        end
+        local ok, authority = pcall(HostCompat.readState, triggerId, KEYS.authority)
+        if not ok then
+            return nil, {makeError("state_read_failed", "$.state.authority", "현재 전투 상태를 읽지 못했습니다.")}
+        end
+        prefetchedAuthority = {value = authority}
+        local ids = {}
+        if type(authority) == "table" and type(authority.character) == "table"
+            and type(authority.character.characterId) == "string" then
+            ids[#ids + 1] = authority.character.characterId
+        end
+        if type(additionalCharacterId) == "string" then ids[#ids + 1] = additionalCharacterId end
+        local report, errors = callModule("staticData", "loadCharacters", ids)
         if errors then
             return nil, errors
         end
@@ -689,7 +706,13 @@
                 makeError("state_read_unavailable", "$.host.getState", "상태 읽기 호환 함수를 찾을 수 없습니다."),
             }
         end
-        local ok, value = pcall(HostCompat.readState, triggerId, key)
+        local ok, value
+        if key == KEYS.authority and prefetchedAuthority ~= nil then
+            ok, value = true, prefetchedAuthority.value
+            prefetchedAuthority = nil
+        else
+            ok, value = pcall(HostCompat.readState, triggerId, key)
+        end
         if not ok then
             return nil, {
                 makeError("state_read_failed", "$.state[" .. string.format("%q", key) .. "]", "저장 상태를 읽지 못했습니다: " .. tostring(value)),
@@ -711,6 +734,7 @@
     end
 
     local function writeStored(key, value, verify)
+        if key == KEYS.authority then prefetchedAuthority = nil end
         -- A host write may return normally without persisting. Verify before
         -- later writes retire the draft, pending turn, or recovery receipt.
         if verify == nil then verify = true end
@@ -3034,7 +3058,7 @@
     end
 
     local function startFromSetup(setupState, canonicalInput)
-        local staticData, staticErrors = loadStaticData()
+        local staticData, staticErrors = loadStaticData(type(setupState) == "table" and setupState.selectedCharacterId)
         if staticErrors then
             return failure(staticErrors)
         end
@@ -3353,7 +3377,7 @@
     end
 
     local function startFromRun(runState, setupState, canonicalInput)
-        local staticData, staticErrors = loadStaticData()
+        local staticData, staticErrors = loadStaticData(type(runState) == "table" and type(runState.battleSpec) == "table" and runState.battleSpec.characterId)
         if staticErrors then return failure(staticErrors) end
         local canonicalRun, canonicalSetup, spec, runErrors
         if canonicalInput == true then
@@ -3488,7 +3512,7 @@
     end
 
     local function startVerticalSlice(battleId, seed)
-        local staticData, staticErrors = loadStaticData()
+        local staticData, staticErrors = loadStaticData("yoo_jiyoung")
         if staticErrors then
             return failure(staticErrors)
         end

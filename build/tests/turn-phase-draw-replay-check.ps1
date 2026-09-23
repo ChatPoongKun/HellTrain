@@ -48,7 +48,8 @@ end
 local lorePaths = {
     ["GameRegistry.db"] = "DB/GameRegistry.db",
     ["PlayerCards.db"] = "DB/PlayerCards.db",
-    ["CharacterCards.db"] = "DB/CharacterCards.db",
+    ["CharacterCardSupport.db"] = "DB/CharacterCardSupport.db",
+    ["CommonCharacterCards.db"] = "DB/CommonCharacterCards.db",
     ["CharTraits.db"] = "DB/CharTraits.db",
     ["Perks.db"] = "DB/Perks.db",
     ["TokyoSubwayLines.db"] = "DB/TokyoSubwayLines.db",

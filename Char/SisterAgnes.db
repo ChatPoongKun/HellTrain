@@ -1,3 +1,13 @@
+local recoverResistance = characterCardSupport.recoverResistance
+local loseStealth = characterCardSupport.loseStealth
+local addMood = characterCardSupport.addMood
+local removeMood = characterCardSupport.removeMood
+local forceMood = characterCardSupport.forceMood
+local backlash = characterCardSupport.backlash
+local cool = characterCardSupport.cool
+local card = characterCardSupport.card
+local planCard = characterCardSupport.planCard
+
 return {
     schemaVersion = 1,
     kind = "characterDatabase",
@@ -63,5 +73,131 @@ return {
                 },
             },
         },
+    },
+    cards = {
+        agnes_cover_with_sleeves = card(
+            "agnes_cover_with_sleeves", "수도복 소매로 가리기", { "response", "recovery" }, {}, { "저항 2 회복. 냉각 1, 혼란·순응이면 대신 2." },
+            "넓은 검은 수도복 소매로 하체와 가슴을 덮어 가리고 성호를 그으며, 육체에 번지던 불경한 열기를 차갑게 식히는 행동입니다.",
+            {
+                actorAction = "넓고 긴 검은 수도복 소매를 양손으로 맞잡아 하체 쪽으로 길게 늘어뜨려 가리고는, 입술을 깨물며 성호를 긋는다.",
+                actorThought = "주님, 시험에 들지 말게 하옵시며… 수도복 너머로 파고드는 이 더럽고 뜨거운 감각을 지워 주소서…",
+            },
+            function(context, event)
+                return { recoverResistance(2), cool(context, (context.mood == "confusion" or context.mood == "compliance") and 2 or 1) }
+            end
+        ),
+        agnes_quiet_admonition = card(
+            "agnes_quiet_admonition", "나직한 훈계", { "response" }, {}, { "반발 3. 무시면 의심 토큰 1 추가." },
+            "\"형제님, 죄를 짓지 마십시오\"라며 조용하지만 엄중한 목소리로 타일러, 치한의 마음에 깊은 가책과 반발을 일으키는 행동입니다.",
+            {
+                actorAction = "고개를 반쯤 돌려 나직하지만 가슴을 찌르는 엄숙한 어조로 형제님, 하느님 앞에서 부끄러운 죄를 짓지 마십시오 라고 읊조린다.",
+                actorThought = "악마의 정욕에 눈이 먼 가련한 영혼… 하지만 당신의 죄악이 제 정결까지 더럽히게 둘 순 없습니다.",
+            },
+            function(context, event)
+                local commands = { backlash(context, 3) }
+                if context.mood == "ignore" then commands[#commands + 1] = addMood("suspicion", 1) end
+                return commands
+            end
+        ),
+        agnes_change_carriage = card(
+            "agnes_change_carriage", "다른 칸으로 이동", { "recovery" }, {}, { "저항 3 회복. 혼란·순응이면 대신 4." },
+            "흔들리는 열차의 연결 통로를 건너 옆 칸으로 자리를 옮겨 유혹을 물리치고, 흐트러졌던 마음의 평화를 되찾는 행동입니다.",
+            {
+                actorAction = "묵주를 쥔 손을 가슴에 얹고 빠르게 걸음을 옮겨 전동차 연결 통로 문을 열고 옆 칸으로 피해 숨을 고른다.",
+                actorThought = "주님께서 제게 피할 길을 주셨으니… 더는 그 불경한 손길이 제 몸을 더럽히지 못할 것입니다.",
+            },
+            function(context, event)
+                return { recoverResistance((context.mood == "confusion" or context.mood == "compliance") and 4 or 3) }
+            end
+        ),
+        agnes_ask_nearby_passenger = planCard(
+            "agnes_ask_nearby_passenger", "이웃에게 도움 청하기", { "exposure" }, { "다음 유린 카드 선언 시 은폐 피해 4." }, 2, "violation",
+            "곁에 선 정직해 보이는 승객 곁으로 다가가 시선을 두며, 치한이 거칠게 손을 뻗쳐올 때 즉시 주위의 도움을 요청할 ::tag[plan]::을 배치합니다.",
+            {
+                planPlaced = {
+                    actorAction = "단정해 보이는 승객 곁으로 몸을 바싹 옮겨 서며, 도움을 요청할 수 있도록 눈빛으로 무언의 신호를 보낸다.",
+                    actorThought = "주변의 선량한 이웃들이 보고 있습니다. 당신의 파렴치한 손길이 드러나는 건 시간문제일 뿐입니다.",
+                },
+                planTriggered = {
+                    actorAction = "옆 승객의 옷자락을 붙잡으며 도와주십시오, 이 사람이…! 하고 주변이 울리도록 또렷하게 외친다.",
+                    actorThought = "이 손길을 보십시오! 하느님의 눈을 피할 수 없듯, 사람들의 눈 또한 결코 피할 수 없습니다!",
+                },
+            },
+            function(context, event)
+                return { loseStealth(4) }
+            end
+        ),
+        agnes_complete_break = card(
+            "agnes_complete_break", "단호한 결별", { "response" }, { "remove" }, { "소멸. 턴 종료 시 거절 무드 강제." },
+            "십자가를 높이 들며 악의 유혹을 단호하게 뿌리치고 완전한 거절을 선언하여, 더 이상의 농락을 원천 차단하는 소멸성 결별 행동입니다.",
+            {
+                actorAction = "가슴팍의 작은 은색 십자가를 쥐어뜯듯 쥐고 상대를 매섭게 쳐다보며, 사탄의 유혹에 굴복하지 않겠다는 거룩한 단절을 선포한다.",
+                actorThought = "주님께 바친 정결을 더럽히려는 악의 굴레를 끊어내겠습니다. 영원히 제 몸에서 손을 떼십시오!",
+            },
+            function(context, event)
+                return { forceMood("rejection") }
+            end
+        ),
+        agnes_center_in_prayer = card(
+            "agnes_center_in_prayer", "기도로 중심 잡기", { "response", "recovery" }, {}, { "저항 2 회복. 냉각 1, 순응이면 대신 2." },
+            "두 손을 모아 가슴에 얹고 주님의 기도를 읊조리며, 약해지려던 육신의 순응을 씻어내고 영혼의 정결을 지키는 행동입니다.",
+            {
+                actorAction = "두 손을 모아 가슴에 꼭 얹은 채 눈을 감고, 떨리는 입술로 조용히 성모송을 되뇌며 흔들리는 마음을 기도로 다잡는다.",
+                actorThought = "은총이 가득하신 마리아님… 제 나약한 육신이 타락의 쾌락에 물들지 않도록 저를 지켜주소서…",
+            },
+            function(context, event)
+                return { recoverResistance(2), cool(context, context.mood == "compliance" and 2 or 1) }
+            end
+        ),
+        agnes_lower_eyes = card(
+            "agnes_lower_eyes", "눈 내리깔기", { "response" }, {}, { "냉각 3. 추가로 순응 토큰 1 제거." },
+            "정욕 어린 시선을 피해 시선을 발끝으로 내리깔고 침묵을 지키며, 쾌락에 취해가던 감각을 얼어붙게 만드는 행동입니다.",
+            {
+                actorAction = "흰 베일 아래로 고개를 깊이 숙여 시선을 완전히 바닥에 묻고, 모든 접근을 침묵과 차가운 무반응으로 일관하며 차단한다.",
+                actorThought = "보지도, 듣지도, 느끼지도 않겠습니다. 육체의 불결한 충동은 오직 얼어붙은 침묵으로 정화될 것입니다.",
+            },
+            function(context, event)
+                return { cool(context, 3), removeMood("compliance", 1) }
+            end
+        ),
+        agnes_firm_rebuke = card(
+            "agnes_firm_rebuke", "단호한 꾸짖음", { "response", "exposure" }, {}, { "반발 2. 은폐 피해 1." },
+            "\"부끄러운 줄 아십시오!\"라며 엄숙한 목소리로 꾸짖어, 치한의 파렴치한 죄악을 들추어내고 물러서게 만드는 행동입니다.",
+            {
+                actorAction = "맑고 단호한 눈빛으로 상대를 쏘아보며 부끄러운 줄 아십시오! 라고 준엄하게 꾸짖어 물러서게 만든다.",
+                actorThought = "거룩한 침묵을 나약함으로 착각하지 마십시오. 당신의 짐승 같은 음욕을 용납하지 않을 것입니다.",
+            },
+            function(context, event)
+                return { backlash(context, 2), loseStealth(1) }
+            end
+        ),
+        agnes_invoke_conscience = card(
+            "agnes_invoke_conscience", "양심의 호소", { "exposure" }, {}, { "은폐 피해 2. 의심·거절이면 대신 3." },
+            "가슴팍의 십자가를 쥔 채 상대의 눈을 흔들림 없이 바라보며 양심의 고통을 일깨워, 음험한 은폐를 무너뜨리는 행동입니다.",
+            {
+                actorAction = "가슴에 품은 성경과 십자가를 상대의 눈앞에 드러내며, 영혼 깊은 곳의 양심을 일깨우듯 흔들림 없는 눈빛으로 응시한다.",
+                actorThought = "당신의 양심은 정녕 이 죄악 앞에 침묵하고 있습니까? 스스로의 타락을 직시하십시오.",
+            },
+            function(context, event)
+                return { loseStealth((context.mood == "suspicion" or context.mood == "rejection") and 3 or 2) }
+            end
+        ),
+        agnes_seek_station_staff = planCard(
+            "agnes_seek_station_staff", "역무원 시선 탐색", { "response", "exposure" }, { "다음 유린 카드 선언 시 은폐 피해 3. 반발 1." }, 2, "violation",
+            "플랫폼과 열차 순찰 승무원의 위치를 눈여겨보며 대기하다가, 치한이 비열하게 덮쳐올 때 일제히 도움을 요청할 ::tag[plan]::을 배치합니다.",
+            {
+                planPlaced = {
+                    actorAction = "열차가 정차할 플랫폼 방향을 눈여겨보며, 승강장에 서 있을 역무원과 경찰관의 위치를 미리 가늠해 둔다.",
+                    actorThought = "다음 역 문이 열리는 순간, 즉시 도움을 청하겠습니다. 그 더러운 손길이 이어질 시간은 얼마 남지 않았습니다.",
+                },
+                planTriggered = {
+                    actorAction = "열차 문 쪽을 향해 몸을 홱 틀며 역무원님! 여기 치한이 있습니다! 하고 단호하게 외친다.",
+                    actorThought = "더 이상의 방관은 죄악을 키울 뿐입니다. 공권력의 심판 앞에 당신의 죄를 고백하십시오!",
+                },
+            },
+            function(context, event)
+                return { loseStealth(3), backlash(context, 1) }
+            end
+        ),
     },
 }

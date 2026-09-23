@@ -81,7 +81,7 @@
     "hostFlow.lua",
     "GameRegistry.db",
     "PlayerCards.db",
-    "CharacterCards.db",
+    "CharacterCardSupport.db",
     "CharTraits.db",
     "TokyoSubwayLines.db",
     "CharacterList.db",

@@ -402,7 +402,8 @@ local function selectedApproachCharacter(triggerId, report, characterId)
         runScript,
         triggerId,
         "staticData",
-        "loadAll"
+        "loadCharacters",
+        {characterId}
     )
     if staticOk
         and type(staticReport) == "table"

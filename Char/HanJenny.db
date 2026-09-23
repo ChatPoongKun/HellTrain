@@ -1,3 +1,11 @@
+local recoverResistance = characterCardSupport.recoverResistance
+local loseStealth = characterCardSupport.loseStealth
+local addMood = characterCardSupport.addMood
+local forceMood = characterCardSupport.forceMood
+local backlash = characterCardSupport.backlash
+local card = characterCardSupport.card
+local planCard = characterCardSupport.planCard
+
 return {
     schemaVersion = 1,
     kind = "characterDatabase",
@@ -63,5 +71,130 @@ return {
                 },
             },
         },
+    },
+    cards = {
+        jenny_slip_away_laughing = card(
+            "jenny_slip_away_laughing", "웃으며 흘려내기", { "response", "recovery" }, {}, { "저항 2 회복. 무시 토큰 1 추가." },
+            "가벼운 헛웃음을 흘리며 요염하게 허리를 비틀어 밀착을 피하고, 능숙하게 페이스를 되찾아 상황을 무시로 넘기는 행동입니다.",
+            {
+                actorAction = "아하하, 하고 가벼운 콧웃음을 치며 살랑살랑 허리를 비틀어 빠져나온 뒤, 짧은 스커트 자락을 톡톡 털어낸다.",
+                actorThought = "어머, 아저씨 너무 노골적이다~ 근데 나 그렇게 쉽게 엉덩이 대주는 쉬운 여자 아니거든요?",
+            },
+            function(context, event)
+                return { recoverResistance(2), addMood("ignore", 1) }
+            end
+        ),
+        jenny_phone_camera_feint = card(
+            "jenny_phone_camera_feint", "셀카 렌즈 페인트", { "exposure" }, {}, { "은폐 피해 3. 무시면 대신 4." },
+            "\"어머, 조명 예쁘다~\"라며 스마트폰 카메라를 켜 화면을 비추어, 치한이 화들짝 놀라 몸을 물리게 만드는 행동입니다.",
+            {
+                actorAction = "화려한 네일아트가 반짝이는 손으로 스마트폰을 치켜들고는, 셀카를 찍는 척 카메라 앵글을 상대의 얼굴 쪽으로 돌린다.",
+                actorThought = "쫄았지? 어디서 능구렁이처럼 비벼대. 한 번만 더 손대면 10만 팔로워한테 실시간 박제 들어간다?",
+            },
+            function(context, event)
+                return { loseStealth(context.mood == "ignore" and 4 or 3) }
+            end
+        ),
+        jenny_crossed_joke = card(
+            "jenny_crossed_joke", "선 넘는 농담", { "response" }, {}, { "반발 2. 무시 토큰 1 추가." },
+            "\"아저씨, 아침부터 되게 적극적이시네?\"라며 능글맞은 핀잔을 던져, 상대의 음흉한 손길을 수치스러운 농담거리로 전락시키는 행동입니다.",
+            {
+                actorAction = "눈을 동그랗게 뜨고 뒤를 돌아보며 와, 아저씨 바지 앞섶이 되게 화나 계시네? 하고 장난치듯 속삭인다.",
+                actorThought = "흥, 음란한 티 팍팍 내면서 달려드는데 내가 당황할 줄 알았어? 웃음거리로 만들어 주겠어.",
+            },
+            function(context, event)
+                return { backlash(context, 2), addMood("ignore", 1) }
+            end
+        ),
+        jenny_fake_livestream = planCard(
+            "jenny_fake_livestream", "페이크 라방 선언", { "exposure" }, { "다음 유린 카드 선언 시 은폐 피해 4." }, 1, "violation",
+            "스마트폰의 라이브 스트리밍 앱을 켜두는 시늉을 하며, 상대가 과감하게 유린을 시도할 때 일제히 카메라 화면을 비출 ::tag[plan]::을 배치합니다.",
+            {
+                planPlaced = {
+                    actorAction = "스마트폰 화면에 라이브 방송 대기 모드를 띄워둔 채 가방 끈을 고쳐 매며, 샐쭉한 미소로 뒤를 흘겨본다.",
+                    actorThought = "어디까지 기어오르나 보자. 속옷 안으로 손가락 들어오는 순간 라이브 시작 버튼 누를 줄 알아.",
+                },
+                planTriggered = {
+                    actorAction = "꺄악 하고 날카로운 비명을 지르며 스마트폰 화면을 뒤로 홱 꺾어 상대의 얼굴 바로 앞에 들이민다.",
+                    actorThought = "잡았다! 이제 어쩔 건데? 손 안 빼면 전국의 팔로워들이 네 변태 낯짝을 다 볼 텐데?",
+                },
+            },
+            function(context, event)
+                return { loseStealth(4) }
+            end
+        ),
+        jenny_redirect_attention = card(
+            "jenny_redirect_attention", "시선 돌리기", { "response" }, {}, { "의심·혼란이면 턴 종료 시 무시 무드 강제. 그 외에는 무시 토큰 2 추가." },
+            "주변 승객의 옷차림이나 차내 광고를 가리키며 화제를 돌려, 당혹스러웠던 분위기를 털어내고 태연한 무시 상태로 리셋하는 행동입니다.",
+            {
+                actorAction = "아, 저기 저 광고 대박이다! 라며 혼잣말을 크게 치고는 다른 쪽으로 시선을 홱 돌려 끈적했던 분위기를 산산조각 낸다.",
+                actorThought = "후우… 방금 닿은 건 솔직히 좀 위험했어. 일단 바람 좀 잡아서 아무 일도 아닌 척 넘겨야지.",
+            },
+            function(context, event)
+                if context.mood == "suspicion" or context.mood == "confusion" then return { forceMood("ignore") } end; return { addMood("ignore", 2) }
+            end
+        ),
+        jenny_smirk_and_sidstep = card(
+            "jenny_smirk_and_sidstep", "비웃으며 옆걸음", { "response", "recovery" }, {}, { "반발 2. 저항 1 회복." },
+            "입꼬리를 올리며 비웃음을 날리고 가볍게 옆으로 스텝을 밟아 사각에서 빠져나와, 반발심과 함께 여유를 찾는 행동입니다.",
+            {
+                actorAction = "입술을 삐죽이며 얄미운 콧방귀를 뀌고는, 열차가 덜컹거리는 틈을 타 잽싸게 두 걸음 옆으로 빠져나간다.",
+                actorThought = "아저씨 손놀림 너무 뻔해~ 클럽에서 찝쩍대는 찌질이들보다도 못하거든?",
+            },
+            function(context, event)
+                return { backlash(context, 2), recoverResistance(1) }
+            end
+        ),
+        jenny_fix_makeup = card(
+            "jenny_fix_makeup", "쿠션 팩트 수정", { "recovery" }, {}, { "저항 3 회복. 무시면 대신 4." },
+            "쿠션 팩트를 꺼내 거울을 보며 립을 덧바르고 호흡을 정돈하여, 치한 따위는 안중에도 없다는 듯 페이스를 완벽히 회복하는 행동입니다.",
+            {
+                actorAction = "명품 쿠션 팩트를 탁 열어 거울을 비추며 립글로스를 덧바르고, 태연자약한 표정으로 잔머리를 매만진다.",
+                actorThought = "치한 따위한테 말려들어서 메이크업 망치면 손해지. 난 오늘도 완벽해야 하니까.",
+            },
+            function(context, event)
+                return { recoverResistance(context.mood == "ignore" and 4 or 3) }
+            end
+        ),
+        jenny_turn_joke_back = card(
+            "jenny_turn_joke_back", "역공의 한마디", { "response", "exposure" }, {}, { "은폐 피해 2. 반발 1." },
+            "살짝 찡그린 얼굴로 뒤를 돌아보며 \"거기 뭐 닿는데요, 아저씨?\"라고 주변에 들리도록 쏘아붙여 은폐를 깎아내는 행동입니다.",
+            {
+                actorAction = "눈썹을 찡긋거리며 뒤를 돌아보고는 아저씨, 가방에 뾰족한 거라도 넣으셨어요? 엄청 딱딱하게 닿는데? 라며 은근히 쏘아붙인다.",
+                actorThought = "창피해서 얼굴 빨개지는 꼴 좀 봐. 어디 계속 들이대 보시지, 더 크게 떠들어 줄 테니까!",
+            },
+            function(context, event)
+                return { loseStealth(2), backlash(context, 1) }
+            end
+        ),
+        jenny_call_out_behavior = card(
+            "jenny_call_out_behavior", "공개 저격", { "exposure" }, {}, { "은폐 피해 3. 무시면 4, 순응이면 2." },
+            "\"지하철 매너 좀 지키시죠?\"라며 승객들 앞에서 또렷한 목소리로 지적해, 치한의 뻔뻔한 행위를 백일하에 드러내는 행동입니다.",
+            {
+                actorAction = "또렷하고 낭랑한 목소리로 저기요, 공공장소에서 너무 바싹 붙지 마시죠? 하고 선을 그어 주변 이목을 단숨에 집중시킨다.",
+                actorThought = "선 넘지 말라고 경고했잖아? 사람들 눈이 쏠려야 손버릇을 고치지.",
+            },
+            function(context, event)
+                return { loseStealth(context.mood == "ignore" and 4 or (context.mood == "compliance" and 2 or 3)) }
+            end
+        ),
+        jenny_record_button_hover = planCard(
+            "jenny_record_button_hover", "녹화 버튼 대기", { "response", "exposure" }, { "다음 압박 카드 선언 시 은폐 피해 2. 의심 토큰 1 추가." }, 2, "pressure",
+            "엄지손가락을 녹화 버튼 위에 얹어두고 대기하다가, 상대가 강하게 몸을 압박해 오는 순간 즉시 증거 영상을 남길 ::tag[plan]::을 배치합니다.",
+            {
+                planPlaced = {
+                    actorAction = "스마트폰 동영상 녹화 화면을 띄운 채 엄지손가락을 붉은색 셔터 버튼 위에 올려두고 은밀히 타이밍을 잰다.",
+                    actorThought = "자, 어디 한 번만 더 골반 비벼봐. 누르는 순간 4K 고화질로 증거 수집 끝이니까.",
+                },
+                planTriggered = {
+                    actorAction = "녹화 버튼을 탁 누르며 스마트폰 카메라를 뒤편으로 비스듬히 기울여 현장 앵글을 적나라하게 담아낸다.",
+                    actorThought = "찍혔다! 손 위치 딱 걸렸죠? 이제 이 영상 경찰서에 보낼지 변호사한테 보낼지만 정하면 되겠네!",
+                },
+            },
+            function(context, event)
+                return { loseStealth(2), addMood("suspicion", 1) }
+            end
+        ),
+
     },
 }

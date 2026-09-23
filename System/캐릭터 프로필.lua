@@ -1,11 +1,16 @@
 (function(triggerId, characterId)
     local function execute()
-        local data = runScript(triggerId, "staticData", "loadAll")
+        local battle = HostCompat.readState(triggerId, "battleRuntimeV1.authority")
+        local ids = {}
+        if type(battle) == "table" and type(battle.character) == "table" then
+            ids[1] = battle.character.characterId
+        end
+        local data = runScript(triggerId, "staticData", "loadCharacters", ids)
         if not data.ok then return data end
         local built = runScript(triggerId, "runProgressionView", "buildCharacterJournal", {
             setupState = HostCompat.readState(triggerId, "gameSetupV1.authority"),
             runState = HostCompat.readState(triggerId, "runProgressionV1.authority"),
-            battleState = HostCompat.readState(triggerId, "battleRuntimeV1.authority"),
+            battleState = battle,
             characterId = characterId ~= "list" and characterId or nil,
         }, data.data)
         if not built.ok then return built end

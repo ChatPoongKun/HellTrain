@@ -5,7 +5,7 @@
     local STATIC_BASE_LORE_ORDER = {
         "GameRegistry.db",
         "PlayerCards.db",
-        "CharacterCards.db",
+        "CharacterCardSupport.db",
         "CharTraits.db",
         "Perks.db",
         "TokyoSubwayLines.db",
@@ -160,7 +160,8 @@
     end
 
     local function sameStaticLoreCapture(left, right)
-        if type(left.order) ~= "table"
+        if left.scope ~= right.scope
+            or type(left.order) ~= "table"
             or type(right.order) ~= "table"
             or #left.order ~= #right.order then
             return false
@@ -172,26 +173,6 @@
             end
         end
         return true
-    end
-
-    local function findCachedDynamicLoreOrder(captured)
-        for _, entry in ipairs(staticCacheEntries) do
-            local sameBase = true
-            for _, loreName in ipairs(STATIC_BASE_LORE_ORDER) do
-                if not sameStaticLoreSource(entry.sources[loreName], captured[loreName]) then
-                    sameBase = false
-                    break
-                end
-            end
-            if sameBase then
-                local dynamicOrder = {}
-                for index = #STATIC_BASE_LORE_ORDER + 1, #entry.sources.order do
-                    table.insert(dynamicOrder, entry.sources.order[index])
-                end
-                return dynamicOrder
-            end
-        end
-        return nil
     end
 
     local function findStaticCacheEntry(captured)
@@ -259,10 +240,13 @@
         return diagnostics
     end
 
-    return function(triggerId, action)
+    return function(triggerId, action, ...)
     local SUPPORTED_SCHEMA_VERSION = 1
 
+    local characterCardSupport
     local SOURCES = {
+        characterCardSupport = {kind = "characterCardSupport", lores = {"CharacterCardSupport.db"}},
+        commonCharacterCards = {kind = "commonCharacterCards", lores = {"CommonCharacterCards.db"}},
         perks = {kind = "perkDatabase", collection = "perks", lores = {"Perks.db"}},
         registry = {
             kind = "gameRegistry",
@@ -272,7 +256,7 @@
         cards = {
             kind = "cardDatabase",
             collection = "cards",
-            lores = { "PlayerCards.db", "CharacterCards.db" },
+            lores = { "PlayerCards.db" },
         },
         traits = {
             kind = "traitDatabase",
@@ -294,7 +278,8 @@
         ["Perks.db"] = true,
         ["GameRegistry.db"] = true,
         ["PlayerCards.db"] = true,
-        ["CharacterCards.db"] = true,
+        ["CharacterCardSupport.db"] = true,
+        ["CommonCharacterCards.db"] = true,
         ["CharTraits.db"] = true,
         ["TokyoSubwayLines.db"] = true,
         ["CharacterList.db"] = true,
@@ -389,6 +374,7 @@
             tonumber = tonumber,
             tostring = tostring,
             type = type,
+            characterCardSupport = characterCardSupport,
         }
     end
 
@@ -565,21 +551,36 @@
             return
         end
 
+        local firstCharacterByName = {}
         local firstCharacterByDatabase = {}
         for key, entry in pairs(characterList) do
             local path = "characterList." .. tostring(key)
             if not isAsciiId(key) or type(entry) ~= "table" or entry.id ~= key then
                 addError(errors, "invalid_character_list_id", path, "캐릭터 목록 키와 내부 ID가 올바르지 않습니다.")
             else
+                if type(entry.name) ~= "string" or entry.name == "" then
+                    addError(errors, "missing_name", path .. ".name", "캐릭터 목록 이름이 필요합니다.")
+                elseif firstCharacterByName[entry.name] then
+                    addError(errors, "duplicate_character_name", path .. ".name", "캐릭터 이름이 중복됩니다.")
+                else
+                    firstCharacterByName[entry.name] = key
+                end
+                if not isPositiveInteger(entry.turnLimit) or entry.turnLimit < 7 or entry.turnLimit > 12 then
+                    addError(errors, "invalid_turn_limit", path .. ".turnLimit", "제한 턴은 7 이상 12 이하이어야 합니다.")
+                end
                 for field in pairs(entry) do
-                    if field ~= "id" and field ~= "database" then
+                    if field ~= "id" and field ~= "database" and field ~= "name" and field ~= "turnLimit"
+                        and field ~= "cardPool" then
                         addError(
                             errors,
                             "unexpected_character_list_field",
                             path .. "." .. tostring(field),
-                            "캐릭터 목록에는 id와 database만 사용할 수 있습니다."
+                            "캐릭터 목록에는 id, database, name, turnLimit, cardPool만 사용할 수 있습니다."
                         )
                     end
+                end
+                if entry.cardPool ~= nil and entry.cardPool ~= "common" then
+                    addError(errors, "invalid_character_card_pool", path .. ".cardPool", "지원하지 않는 공용 카드 풀입니다.")
                 end
 
                 if not isCharacterDatabaseName(entry.database) then
@@ -614,7 +615,40 @@
         end
     end
 
-    local function loadCharacterDefinitions(characterList, errors, captured)
+    local function loadCommonCharacterCards(errors, captured, cards)
+        local module = loadSingleModule(SOURCES.commonCharacterCards, errors, captured)
+        if type(module) ~= "table" then return {} end
+        local path = "CommonCharacterCards.db"
+        local ownCards = module.cards
+        if type(ownCards) ~= "table" then
+            addError(errors, "missing_collection", path .. ".cards", "공용 캐릭터 카드 컬렉션이 없습니다.")
+            ownCards = {}
+        end
+        for cardId, card in pairs(ownCards) do
+            if cards[cardId] ~= nil then
+                addError(errors, "duplicate_card_id", path .. ".cards." .. tostring(cardId), "카드 ID가 중복됩니다.")
+            elseif type(card) ~= "table" or card.owner ~= "character" then
+                addError(errors, "invalid_character_card", path .. ".cards." .. tostring(cardId), "캐릭터 소유 카드만 정의할 수 있습니다.")
+            else
+                cards[cardId] = card
+            end
+        end
+        local deck = module.deck
+        if not isArray(deck) or #deck == 0 then
+            addError(errors, "invalid_common_character_deck", path .. ".deck", "공용 덱은 비어 있지 않은 연속 배열이어야 합니다.")
+            return {}
+        end
+        local seen = {}
+        for index, cardId in ipairs(deck) do
+            if type(cardId) ~= "string" or ownCards[cardId] == nil or seen[cardId] then
+                addError(errors, "invalid_common_character_card", path .. ".deck[" .. index .. "]", "공용 덱 카드가 없거나 중복되었습니다.")
+            end
+            seen[cardId] = true
+        end
+        return deck
+    end
+
+    local function loadCharacterDefinitions(characterList, errors, captured, cards, commonDeck)
         local characters = {}
         for _, characterId in ipairs(sortedAsciiKeys(characterList)) do
             local entry = characterList[characterId]
@@ -634,6 +668,19 @@
                 for index, module in ipairs(modules) do
                     local modulePath = database .. "[" .. index .. "]"
                     validateModuleHeader(module, "characterDatabase", modulePath, errors)
+                    if type(module.cards) ~= "table" then
+                        addError(errors, "missing_collection", modulePath .. ".cards", "캐릭터 카드 컬렉션이 없습니다.")
+                    else
+                        for cardId, card in pairs(module.cards) do
+                            if cards[cardId] ~= nil then
+                                addError(errors, "duplicate_card_id", modulePath .. ".cards." .. tostring(cardId), "카드 ID가 중복됩니다.")
+                            elseif type(card) ~= "table" or card.owner ~= "character" then
+                                addError(errors, "invalid_character_card", modulePath .. ".cards." .. tostring(cardId), "캐릭터 소유 카드만 정의할 수 있습니다.")
+                            else
+                                cards[cardId] = card
+                            end
+                        end
+                    end
                     local collection = module.characters
                     if type(collection) ~= "table" then
                         addError(errors, "missing_collection", modulePath .. ".characters", "캐릭터 DB 컬렉션이 없습니다.")
@@ -648,6 +695,42 @@
                             )
                         elseif characters[characterId] == nil then
                             characters[characterId] = definition
+                            if type(definition) == "table" then
+                                if definition.name ~= entry.name or type(definition.battle) ~= "table"
+                                    or definition.battle.turnLimit ~= entry.turnLimit then
+                                    addError(errors, "character_catalog_mismatch", modulePath, "캐릭터 목록 요약과 개별 DB가 일치하지 않습니다.")
+                                end
+                                if entry.cardPool == "common" and type(definition.battle) == "table" then
+                                    local battle = definition.battle
+                                    if battle.deck ~= nil then
+                                        addError(errors, "unexpected_custom_deck", modulePath .. ".battle.deck", "공용 덱 캐릭터는 extraDeck만 지정합니다.")
+                                    end
+                                    if not isArray(battle.extraDeck) then
+                                        addError(errors, "invalid_extra_deck", modulePath .. ".battle.extraDeck", "추가 덱은 연속 배열이어야 합니다.")
+                                    end
+                                    local deck = {}
+                                    local seen = {}
+                                    for _, cardId in ipairs(commonDeck or {}) do
+                                        deck[#deck + 1] = cardId
+                                        seen[cardId] = true
+                                    end
+                                    for index, cardId in ipairs(isArray(battle.extraDeck) and battle.extraDeck or {}) do
+                                        if type(module.cards) ~= "table" or module.cards[cardId] == nil or seen[cardId] then
+                                            addError(errors, "invalid_extra_card", modulePath .. ".battle.extraDeck[" .. index .. "]", "추가 카드가 해당 캐릭터 DB에 없거나 중복되었습니다.")
+                                        else
+                                            deck[#deck + 1] = cardId
+                                            seen[cardId] = true
+                                        end
+                                    end
+                                    battle.deck = deck
+                                else
+                                    for _, cardId in ipairs(type(definition.battle) == "table" and type(definition.battle.deck) == "table" and definition.battle.deck or {}) do
+                                        if type(module.cards) ~= "table" or module.cards[cardId] == nil then
+                                            addError(errors, "foreign_character_card", modulePath .. ".battle.deck", "덱 카드는 해당 캐릭터 DB에 정의되어야 합니다.")
+                                        end
+                                    end
+                                end
+                            end
                         end
 
                         for definedId in pairs(collection) do
@@ -1578,11 +1661,12 @@
         end
     end
 
-    local function validateCapturedStaticData(captured, discoveredCharacterList, discoveryErrors)
+    local function validateCapturedStaticData(captured, discoveredCharacterList, discoveryErrors, selectedCharacters)
         local errors = {}
         for _, item in ipairs(discoveryErrors or {}) do
             table.insert(errors, item)
         end
+        characterCardSupport = loadSingleModule(SOURCES.characterCardSupport, errors, captured)
         local registry = loadSingleModule(SOURCES.registry, errors, captured)
         local cards = loadMergedCollection(SOURCES.cards, errors, captured)
         local traits = loadMergedCollection(SOURCES.traits, errors, captured)
@@ -1611,12 +1695,16 @@
             end
         end
         local subwayLines = loadMergedCollection(SOURCES.subwayLines, errors, captured)
+        local commonDeck = {}
+        if captured["CommonCharacterCards.db"] ~= nil then
+            commonDeck = loadCommonCharacterCards(errors, captured, cards)
+        end
         local characterList = discoveredCharacterList
         if characterList == nil then
             characterList = loadMergedCollection(SOURCES.characterList, errors, captured)
         end
         validateCharacterList(characterList, errors)
-        local characters = loadCharacterDefinitions(characterList, errors, captured)
+        local characters = loadCharacterDefinitions(selectedCharacters or characterList, errors, captured, cards, commonDeck)
 
         validateRegistry(registry, errors)
         validateCards(cards, registry, errors)
@@ -1624,6 +1712,12 @@
         validateSubwayLines(subwayLines, errors)
         validateCharacters(characters, cards, traits, registry, errors)
 
+        local loadedCount = countEntries(characters)
+        for id, entry in pairs(characterList) do
+            if characters[id] == nil and type(entry) == "table" then
+                characters[id] = {id = id, name = entry.name, battle = {turnLimit = entry.turnLimit}}
+            end
+        end
         return {
             ok = #errors == 0,
             schemaVersion = SUPPORTED_SCHEMA_VERSION,
@@ -1633,7 +1727,7 @@
                 traits = countEntries(traits),
                 perks = countEntries(perks),
                 subwayLines = countEntries(subwayLines),
-                characters = countEntries(characters),
+                characters = loadedCount,
             },
             data = #errors == 0 and {
                 registry = registry,
@@ -1642,11 +1736,33 @@
                 perks = perks,
                 subwayLines = subwayLines,
                 characters = characters,
+                characterList = characterList,
+                partial = selectedCharacters ~= nil,
             } or nil,
         }
     end
 
-    local function loadAndValidateAll(forceRefresh)
+    local function loadAndValidateAll(forceRefresh, requestedIds)
+        local scope = "all"
+        if requestedIds ~= nil then
+            local errors, unique, ordered = {}, {}, {}
+            if not isArray(requestedIds) then
+                addError(errors, "invalid_character_ids", "characterIds", "캐릭터 ID 배열이 필요합니다.")
+            else
+                for _, id in ipairs(requestedIds) do
+                    if not isAsciiId(id) then
+                        addError(errors, "invalid_character_id", "characterIds", "캐릭터 ID 형식이 올바르지 않습니다.")
+                    elseif not unique[id] then
+                        unique[id] = true
+                        ordered[#ordered + 1] = id
+                    end
+                end
+            end
+            if #errors > 0 then return {ok = false, errors = errors} end
+            table.sort(ordered)
+            requestedIds = ordered
+            scope = "characters:" .. table.concat(ordered, ",")
+        end
         staticCacheStats.requests = staticCacheStats.requests + 1
         emitDiagnostic(2, "validation_requested", {
             forceRefresh = forceRefresh == true,
@@ -1660,49 +1776,59 @@
         if forceRefresh ~= true
             and RUNTIME_CACHE_DEVELOPMENT_BYPASS == false
             and #staticCacheEntries > 0 then
-            local newest = staticCacheEntries[1]
-            for index = 2, #staticCacheEntries do
-                if staticCacheEntries[index].lastUsed > newest.lastUsed then
-                    newest = staticCacheEntries[index]
+            local newest
+            for _, entry in ipairs(staticCacheEntries) do
+                if entry.sources.scope == scope and (newest == nil or entry.lastUsed > newest.lastUsed) then
+                    newest = entry
                 end
             end
-            staticCacheClock = staticCacheClock + 1
-            newest.lastUsed = staticCacheClock
-            newest.hits = newest.hits + 1
-            staticCacheStats.fastHits = staticCacheStats.fastHits + 1
-            staticCacheStats.hits = staticCacheStats.hits + 1
-            emitDiagnostic(2, "validation_cache_hit", {
-                cache = "production_fast",
-                ok = newest.report.ok == true,
-            })
-            return cloneStaticValue(newest.report)
+            if newest then
+                staticCacheClock = staticCacheClock + 1
+                newest.lastUsed = staticCacheClock
+                newest.hits = newest.hits + 1
+                staticCacheStats.fastHits = staticCacheStats.fastHits + 1
+                staticCacheStats.hits = staticCacheStats.hits + 1
+                return cloneStaticValue(newest.report)
+            end
         end
 
         local captured = captureBaseStaticLores(triggerId)
-        local discoveredCharacterList = nil
-        local discoveryErrors = nil
-        local dynamicLoreOrder = findCachedDynamicLoreOrder(captured)
-        if dynamicLoreOrder == nil then
-            discoveryErrors = {}
-            discoveredCharacterList = loadMergedCollection(SOURCES.characterList, discoveryErrors, captured)
-            dynamicLoreOrder = collectCharacterDatabaseNames(discoveredCharacterList)
+        captured.scope = scope
+        local discoveryErrors = {}
+        local discoveredCharacterList = loadMergedCollection(SOURCES.characterList, discoveryErrors, captured)
+        local selectedCharacters
+        if requestedIds ~= nil then
+            selectedCharacters = {}
+            for _, id in ipairs(requestedIds) do
+                if discoveredCharacterList[id] == nil then
+                    addError(discoveryErrors, "unknown_character", "characterIds." .. id, "등록되지 않은 캐릭터입니다.")
+                else
+                    selectedCharacters[id] = discoveredCharacterList[id]
+                end
+            end
         end
-        for _, database in ipairs(dynamicLoreOrder) do
+        local needsCommonCards = requestedIds == nil
+        if not needsCommonCards then
+            for _, entry in pairs(selectedCharacters) do
+                if type(entry) == "table" and entry.cardPool == "common" then
+                    needsCommonCards = true
+                    break
+                end
+            end
+        end
+        if needsCommonCards then captureStaticLore(triggerId, captured, "CommonCharacterCards.db") end
+        for _, database in ipairs(collectCharacterDatabaseNames(selectedCharacters or discoveredCharacterList)) do
             captureStaticLore(triggerId, captured, database)
         end
         local cached = findStaticCacheEntry(captured)
         if cached ~= nil then
             staticCacheStats.hits = staticCacheStats.hits + 1
-            emitDiagnostic(2, "validation_cache_hit", {
-                cache = "source_identity",
-                ok = cached.report.ok == true,
-            })
             return cloneStaticValue(cached.report)
         end
 
         staticCacheStats.misses = staticCacheStats.misses + 1
         staticCacheStats.validations = staticCacheStats.validations + 1
-        local report = validateCapturedStaticData(captured, discoveredCharacterList, discoveryErrors)
+        local report = validateCapturedStaticData(captured, discoveredCharacterList, discoveryErrors, selectedCharacters)
         emitDiagnostic(report.ok == true and 2 or 1, "validation_completed", {
             ok = report.ok == true,
             errorCount = #report.errors,
@@ -1724,6 +1850,11 @@
 
     local actions = {
         loadAll = loadAndValidateAll,
+        loadCatalog = function() return loadAndValidateAll(false, {}) end,
+        loadCharacters = function(ids)
+            if ids == nil then return {ok = false, errors = { {code = "invalid_character_ids", path = "characterIds", message = "캐릭터 ID 배열이 필요합니다."} } } end
+            return loadAndValidateAll(false, ids)
+        end,
         validateAll = function()
             local result = loadAndValidateAll()
             result.data = nil
@@ -1769,6 +1900,6 @@
         }
     end
 
-    return handler()
+    return handler(...)
     end
 end)()

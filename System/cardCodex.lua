@@ -83,7 +83,13 @@
                 addCardId(found, cardId, staticData)
             end
             for _, cardId in ipairs(type(stored.characterCardIds) == "table" and stored.characterCardIds or {}) do
-                addCardId(found, cardId, staticData)
+                -- A scoped battle snapshot does not contain past opponents' cards.
+                -- Absence here is not deletion; full codex loading still validates IDs.
+                if staticData.partial == true and type(cardId) == "string" and staticData.cards[cardId] == nil then
+                    found.character[cardId] = true
+                else
+                    addCardId(found, cardId, staticData)
+                end
             end
         end
         local state = emptyState()

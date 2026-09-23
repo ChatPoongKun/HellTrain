@@ -1,0 +1,84 @@
+local card = characterCardSupport.card
+local recoverResistance = characterCardSupport.recoverResistance
+local loseStealth = characterCardSupport.loseStealth
+local backlash = characterCardSupport.backlash
+local cool = characterCardSupport.cool
+
+return {
+    schemaVersion = 1,
+    kind = "commonCharacterCards",
+    deck = {
+        "common_stand_firm",
+        "common_step_aside",
+        "common_seek_witness",
+        "common_raise_voice",
+        "common_cold_glance",
+        "common_control_breath",
+        "common_speak_up",
+        "common_guard_space",
+        "common_watch_surroundings",
+        "common_set_boundary",
+    },
+    cards = {
+        common_stand_firm = card(
+            "common_stand_firm", "자세 지키기", { "recovery" }, {}, { "저항 2 회복." },
+            "흔들리는 열차 안에서 자세를 바로잡고 자신을 지킵니다.",
+            { actorAction = "손잡이를 단단히 잡고 몸의 중심을 바로 세운다.", actorThought = "침착하게 버티자." },
+            function() return { recoverResistance(2) } end
+        ),
+        common_step_aside = card(
+            "common_step_aside", "한 걸음 피하기", { "recovery", "response" }, {}, { "저항 1 회복. 반발 1." },
+            "몸을 옆으로 옮겨 거리를 확보합니다.",
+            { actorAction = "발을 옮겨 몸 사이에 틈을 만든다.", actorThought = "거리를 둬야 해." },
+            function(context) return { recoverResistance(1), backlash(context, 1) } end
+        ),
+        common_seek_witness = card(
+            "common_seek_witness", "목격자 찾기", { "exposure" }, {}, { "은폐 피해 2." },
+            "주변 승객에게 상황을 알릴 기회를 찾습니다.",
+            { actorAction = "주변을 둘러보며 눈을 맞출 사람을 찾는다.", actorThought = "누군가는 보고 있을 거야." },
+            function() return { loseStealth(2) } end
+        ),
+        common_raise_voice = card(
+            "common_raise_voice", "분명한 경고", { "exposure" }, {}, { "은폐 피해 3." },
+            "주변에도 들리도록 분명하게 경고합니다.",
+            { actorAction = "목소리를 높여 상대에게 물러서라고 말한다.", actorThought = "더는 조용히 넘기지 않겠어." },
+            function() return { loseStealth(3) } end
+        ),
+        common_cold_glance = card(
+            "common_cold_glance", "차가운 시선", { "response" }, {}, { "냉각 2." },
+            "시선을 돌리지 않고 경계심을 다잡습니다.",
+            { actorAction = "상대를 똑바로 바라보며 표정을 굳힌다.", actorThought = "흔들리지 말자." },
+            function(context) return { cool(context, 2) } end
+        ),
+        common_control_breath = card(
+            "common_control_breath", "호흡 가다듬기", { "recovery", "response" }, {}, { "저항 2 회복. 냉각 1." },
+            "호흡을 고르며 흐트러진 마음을 추스릅니다.",
+            { actorAction = "깊게 숨을 들이쉬고 천천히 내쉰다.", actorThought = "정신을 차리자." },
+            function(context) return { recoverResistance(2), cool(context, 1) } end
+        ),
+        common_speak_up = card(
+            "common_speak_up", "도움 요청", { "exposure", "response" }, {}, { "은폐 피해 1. 반발 1." },
+            "주변에 도움을 청하고 자신의 의사를 분명히 합니다.",
+            { actorAction = "가까운 승객을 향해 도움을 요청한다.", actorThought = "혼자 감당할 필요는 없어." },
+            function(context) return { loseStealth(1), backlash(context, 1) } end
+        ),
+        common_guard_space = card(
+            "common_guard_space", "공간 지키기", { "recovery" }, {}, { "저항 3 회복." },
+            "몸 주위의 공간을 지키며 다시 중심을 잡습니다.",
+            { actorAction = "몸을 돌려 통로 쪽으로 한 발 물러선다.", actorThought = "내 자리를 지켜야 해." },
+            function() return { recoverResistance(3) } end
+        ),
+        common_watch_surroundings = card(
+            "common_watch_surroundings", "주변 살피기", { "exposure" }, {}, { "은폐 피해 2." },
+            "출입문과 승객의 위치를 확인합니다.",
+            { actorAction = "다음 역의 출입문과 주변 승객을 빠르게 살핀다.", actorThought = "빠져나갈 길을 찾자." },
+            function() return { loseStealth(2) } end
+        ),
+        common_set_boundary = card(
+            "common_set_boundary", "선 긋기", { "response" }, {}, { "반발 2." },
+            "상대에게 분명한 거부 의사를 전합니다.",
+            { actorAction = "몸을 돌려 단호하게 멈추라고 말한다.", actorThought = "여기까지야." },
+            function(context) return { backlash(context, 2) } end
+        ),
+    },
+}

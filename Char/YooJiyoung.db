@@ -1,3 +1,13 @@
+local recoverResistance = characterCardSupport.recoverResistance
+local loseStealth = characterCardSupport.loseStealth
+local addMood = characterCardSupport.addMood
+local removeMood = characterCardSupport.removeMood
+local backlash = characterCardSupport.backlash
+local cool = characterCardSupport.cool
+local hasRole = characterCardSupport.hasRole
+local card = characterCardSupport.card
+local planCard = characterCardSupport.planCard
+
 return {
     schemaVersion = 1,
     kind = "characterDatabase",
@@ -60,5 +70,134 @@ return {
                 },
             },
         },
+    },
+    cards = {
+        jiyoung_close_collar = card(
+            "jiyoung_close_collar", "옷깃 여미기", { "response", "recovery" }, {}, { "저항 2 회복. 냉각 1, 혼란·순응이면 대신 2." },
+            "드러난 목덜미와 옷깃을 바싹 끌어당겨 여미고 숨결을 가다듬어, 치한의 손길로 달아오른 감각을 차갑게 식히는 행동입니다.",
+            {
+                actorAction = "떨리는 손가락으로 카디건 옷깃을 목 끝까지 바싹 끌어당겨 여미고는, 가빠진 호흡을 가다듬으며 어깨를 한껏 움츠린다.",
+                actorThought = "등 뒤에서… 옷 너머로 닿는 게 너무 뜨거워… 제발, 아무도 모르게 여기서 멈춰줘…",
+            },
+            function(context, event)
+                return { recoverResistance(2), cool(context, (context.mood == "confusion" or context.mood == "compliance") and 2 or 1) }
+            end
+        ),
+        jiyoung_quiet_warning = card(
+            "jiyoung_quiet_warning", "조용한 경고", { "response" }, {}, { "반발 2. 무시면 의심 토큰 1 추가." },
+            "떨리는 손끝으로 치한의 손을 살짝 밀어내며 나직하게 그만두라고 읊조려, 무심하게 넘기려던 상황에 날 선 경계를 세우는 행동입니다.",
+            {
+                actorAction = "손끝을 가슴 앞으로 끌어모아 웅크린 채 고개를 살짝 돌려, 귓가에 닿을 듯 말 듯 작은 목소리로 그만해 달라고 애원하듯 속삭인다.",
+                actorThought = "이런 짓, 제발 그만둬 주세요… 심장이 터질 것 같단 말이에요…",
+            },
+            function(context, event)
+                local commands = { backlash(context, 2) }
+                if context.mood == "ignore" then commands[#commands + 1] = addMood("suspicion", 1) end
+                return commands
+            end
+        ),
+        jiyoung_turn_to_corner = card(
+            "jiyoung_turn_to_corner", "구석으로 몸 돌리기", { "recovery" }, {}, { "저항 3 회복. 의심·거절이면 대신 4." },
+            "인파에 밀리는 척 차벽 구석으로 등을 돌려 하체를 숨기고 호흡을 정돈하여, 위축된 저항 의지를 단단히 추스르는 행동입니다.",
+            {
+                actorAction = "열차가 흔들리는 틈을 타 승객들 틈새를 비집고 차벽 모퉁이로 파고들어, 하체를 구석 벽면으로 바싹 붙이며 깊은 숨을 내쉰다.",
+                actorThought = "여기로 숨으면… 손이 닿지 않겠지? 진정하자, 침착해야 해…",
+            },
+            function(context, event)
+                return { recoverResistance((context.mood == "suspicion" or context.mood == "rejection") and 4 or 3) }
+            end
+        ),
+        jiyoung_silent_glare = planCard(
+            "jiyoung_silent_glare", "침묵의 노려봄", { "exposure" }, { "다음 유린 카드 선언 시 은폐 피해 4." }, 1, "violation",
+            "짓궂은 손길을 참아내며 젖은 눈빛으로 상대의 얼굴을 똑바로 응시해, 뒤이어 선을 넘는 유린이 가해질 때 주변의 시선을 단숨에 끌어모으는 ::tag[plan]::을 배치합니다.",
+            {
+                planPlaced = {
+                    actorAction = "가방 끈을 억세게 쥐어뜯듯 붙잡은 채 고개를 천천히 돌려, 뒤에 선 상대의 얼굴을 눈물 맺힌 눈으로 빤히 응시한다.",
+                    actorThought = "다 보고 있어… 한 번만 더 선을 넘으면, 정말 가만있지 않을 거야…!",
+                },
+                planTriggered = {
+                    actorAction = "참았던 숨을 거칠게 들이키며 고개를 번쩍 치켜들고, 주변 승객들이 돌아볼 만큼 강하고 서슬 퍼런 눈빛으로 상대를 노려본다.",
+                    actorThought = "봤지? 당신 얼굴, 똑똑히 기억했어… 사람들 앞에서 전부 폭로해 버릴 거야!",
+                },
+            },
+            function(context, event)
+                return { loseStealth(4) }
+            end
+        ),
+        jiyoung_timid_call_for_help = card(
+            "jiyoung_timid_call_for_help", "소심한 도움 요청", { "exposure" }, {}, { "은폐 피해 2. 의심·거절이면 대신 4." },
+            "떨리는 목소리로 옆 승객에게 자리를 비켜달라며 도움의 눈빛을 보내, 치한이 숨어 있는 사각지대를 강제로 무너뜨리는 행동입니다.",
+            {
+                actorAction = "옆에 서 있는 승객의 옷자락을 조심스레 쥐며 떨리는 목소리로 저기, 조금만 비켜주실 수 있나요 하고 속삭인다.",
+                actorThought = "누구라도 좋으니 제발 알아채 줘… 뒤에 붙은 이 남자가 이상한 짓을 하고 있다고…",
+            },
+            function(context, event)
+                return { loseStealth((context.mood == "suspicion" or context.mood == "rejection") and 4 or 2) }
+            end
+        ),
+        jiyoung_hug_bag_close = card(
+            "jiyoung_hug_bag_close", "가방 끌어안기", { "response", "recovery" }, {}, { "저항 2 회복. 무시 토큰 1 추가." },
+            "가방을 품 안 가득 끌어안아 가슴과 배를 가로막고, 이 수치스러운 순간이 아무 일 없이 지나가기만을 바라며 버티는 행동입니다.",
+            {
+                actorAction = "메고 있던 숄더백을 가슴 앞으로 바싹 당겨 끌어안고 턱을 가방 위에 묻은 채, 몸을 둥글게 말아 방어 태세를 취한다.",
+                actorThought = "이렇게 가방으로 막고 있으면… 곧 다음 역에 도착할 거야. 조금만 참자…",
+            },
+            function(context, event)
+                return { recoverResistance(2), addMood("ignore", 1) }
+            end
+        ),
+        jiyoung_half_step_back = card(
+            "jiyoung_half_step_back", "반 걸음 물러서기", { "response", "exposure" }, {}, { "반발 2. 은폐 피해 1, 의심·거절이면 대신 2." },
+            "뒤에서 짓눌려오는 하체의 압박에 흠칫 놀라 반 걸음 물러서며, 부자연스러운 동선으로 주변 승객의 이목을 환기하는 행동입니다.",
+            {
+                actorAction = "흠칫 놀라 숨을 삼키며 발끝을 떼어 반 걸음 옆으로 비켜서고, 불안한 기색으로 옷자락을 정돈하며 거리를 벌린다.",
+                actorThought = "앗… 방금 그거, 분명히 그거였어… 닿았어… 싫어, 소름 돋아…",
+            },
+            function(context, event)
+                return { backlash(context, 2), loseStealth((context.mood == "suspicion" or context.mood == "rejection") and 2 or 1) }
+            end
+        ),
+        jiyoung_avoid_eye_contact = card(
+            "jiyoung_avoid_eye_contact", "시선 피하기", { "response" }, {}, { "냉각 3. 순응이면 추가로 순응 토큰 1 제거." },
+            "붉어진 얼굴을 푹 숙이고 고개를 돌려 수치심을 삼키며, 쾌락에 녹아내리려던 나약한 순응의 기색을 필사적으로 떨쳐내는 행동입니다.",
+            {
+                actorAction = "귓불까지 새빨갛게 물든 얼굴을 푹 숙인 채 바닥만 내려다보며, 입술을 깨물고 불규칙해지려는 숨결을 억지로 누른다.",
+                actorThought = "몸이 이상하게 뜨거워져… 딱풀로 자위했을 때보다 훨씬 더… 안 돼, 느끼면 안 돼 지영아…",
+            },
+            function(context, event)
+                local commands = { cool(context, 3) }
+                if context.mood == "compliance" then commands[#commands + 1] = removeMood("compliance", 1) end
+                return commands
+            end
+        ),
+        jiyoung_find_courage = card(
+            "jiyoung_find_courage", "떨리는 용기", { "exposure" }, {}, { "은폐 피해 3. 혼란·순응이면 2, 거절이면 4." },
+            "수치심과 공포 속에서도 주먹을 쥐고 몸을 크게 틀어 저항의 기색을 노골적으로 드러냄으로써, 치한의 은폐를 크게 깎아먹는 행동입니다.",
+            {
+                actorAction = "겁에 질려 파들거리던 두 주먹을 꼭 쥐고는, 몸을 홱 틀어 세차게 반동을 주며 주변 승객들의 시선을 끌어모은다.",
+                actorThought = "더 이상은 못 참아! 계속 가만히 있으면… 정말로 끝장나 버릴 거야…!",
+            },
+            function(context, event)
+                return { loseStealth((context.mood == "confusion" or context.mood == "compliance") and 2 or (context.mood == "rejection" and 4 or 3)) }
+            end
+        ),
+        jiyoung_phone_in_hand = planCard(
+            "jiyoung_phone_in_hand", "손에 쥔 스마트폰", { "response" }, { "다음 카드 선언 시 냉각 2. 유린 카드면 대신 4." }, 2, nil,
+            "언제든 신고 버튼을 누를 수 있도록 화면을 켠 스마트폰을 꽉 쥐고 버티며, 상대가 섣불리 몸을 덮쳐올 때 냉정하게 거리를 벌리는 ::tag[plan]::을 배치합니다.",
+            {
+                planPlaced = {
+                    actorAction = "가방 속에서 스마트폰을 꺼내 화면을 켠 뒤, 화면을 가슴 앞에 꼭 쥐고 언제든 112를 누를 수 있는 자세를 취한다.",
+                    actorThought = "화면만 켜 두면… 섣불리 다가오지 못하겠지? 신고 버튼, 엄지손가락 위에 올려놨어…",
+                },
+                planTriggered = {
+                    actorAction = "눈부시게 켜진 스마트폰 화면을 치켜들어 불빛을 정면으로 비추며, 단숨에 몸을 뒤로 물려 차가운 거리를 벌린다.",
+                    actorThought = "봤죠? 나 지금 경찰 부를 거예요! 더 다가오면 정말 누를 거라고요!",
+                },
+            },
+            function(context, event)
+                return { cool(context, hasRole(event.roles, "violation") and 4 or 2) }
+            end
+        ),
+
     },
 }

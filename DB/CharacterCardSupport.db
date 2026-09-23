@@ -1,0 +1,123 @@
+local MOOD_ORDER = { "rejection", "suspicion", "ignore", "confusion", "compliance" }
+local MOOD_INDEX = {}
+for index, moodId in ipairs(MOOD_ORDER) do MOOD_INDEX[moodId] = index end
+
+local function command(op, target, amount, mood, cause)
+    local value = { op = op, target = target, cause = cause or "cardEffect" }
+    if amount ~= nil then value.amount = amount end
+    if mood ~= nil then value.mood = mood end
+    return value
+end
+
+local function recoverResistance(amount, cause)
+    return command("recover_resistance", "character", amount, nil, cause)
+end
+
+local function loseStealth(amount, cause)
+    return command("lose_stealth", "player", amount, nil, cause)
+end
+
+local function addMood(mood, amount, cause)
+    return command("add_mood_token", "character", amount, mood, cause)
+end
+
+local function removeMood(mood, amount, cause)
+    return command("remove_mood_token", "character", amount, mood, cause)
+end
+
+local function forceMood(mood, cause)
+    return command("force_mood", "character", nil, mood, cause)
+end
+
+local function adjacentMood(currentMood, delta)
+    local index = MOOD_INDEX[currentMood]
+    if index == nil then return currentMood end
+    local target = index + delta
+    if target < 1 then
+        target = 1
+    elseif target > 5 then
+        target = 5
+    end
+    return MOOD_ORDER[target]
+end
+
+-- 공통 무드 키워드의 런타임 표현. 극단에서는 현재 무드로 clamp되어 앵커링한다.
+local function manipulate(context, amount, cause) -- 농락
+    local v = addMood(adjacentMood(context.mood, 1), amount, cause)
+    v.ruleTerm = "manipulate"
+    return v
+end
+
+local function backlash(context, amount, cause) -- 반발
+    local v = addMood(adjacentMood(context.mood, -1), amount, cause)
+    v.ruleTerm = "backlash"
+    return v
+end
+
+local function calm(context, amount, cause) -- 진정
+    return removeMood(adjacentMood(context.mood, -1), amount, cause)
+end
+
+local function cool(context, amount, cause) -- 냉각
+    return removeMood(adjacentMood(context.mood, 1), amount, cause)
+end
+
+local function hasRole(roles, roleId)
+    for _, id in ipairs(roles or {}) do
+        if id == roleId then return true end
+    end
+    return false
+end
+
+-- Stable IDs preserve deck and collection references; narrative reflects personality and erotic tension.
+local function card(id, name, roles, mechanisms, rules, description, narration, resolve)
+    return {
+        id = id, owner = "character", name = name, description = description,
+        cardType = "action", roles = roles, mechanisms = mechanisms,
+        base = { stealthCost = 0, resistanceDamage = 0 }, rules = rules, resolve = resolve,
+        narration = { play = narration },
+    }
+end
+
+local function planCard(id, name, roles, rules, duration, requiredRole, description, narration, resolve)
+    local value = card(id, name, roles, {}, rules, description, nil, nil)
+    value.cardType = "plan"
+    value.rules = { "지속 " .. duration .. "턴, 충전 1.", rules[1] }
+    value.narration = narration
+    value.mechanismData = { plan = {
+        durationTurns = duration, charges = 1,
+        selectionAssumption = {
+            event = { type = "card_declared", side = "player", roles = requiredRole and { requiredRole } or {} },
+            chargePolicy = "all",
+        },
+        trigger = function(context, event)
+            return event.type == "card_declared" and event.side == "player"
+                and (requiredRole == nil or hasRole(event.roles, requiredRole))
+        end,
+        resolve = function(context, event)
+            local commands = resolve(context, event)
+            for _, command in ipairs(commands) do command.cause = "plan" end
+            return commands
+        end,
+    } }
+    return value
+end
+
+return {
+    schemaVersion = 1,
+    kind = "characterCardSupport",
+    command = command,
+    recoverResistance = recoverResistance,
+    loseStealth = loseStealth,
+    addMood = addMood,
+    removeMood = removeMood,
+    forceMood = forceMood,
+    adjacentMood = adjacentMood,
+    manipulate = manipulate,
+    backlash = backlash,
+    calm = calm,
+    cool = cool,
+    hasRole = hasRole,
+    card = card,
+    planCard = planCard,
+}

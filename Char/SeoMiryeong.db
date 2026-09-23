@@ -1,3 +1,11 @@
+local recoverResistance = characterCardSupport.recoverResistance
+local loseStealth = characterCardSupport.loseStealth
+local addMood = characterCardSupport.addMood
+local backlash = characterCardSupport.backlash
+local cool = characterCardSupport.cool
+local card = characterCardSupport.card
+local planCard = characterCardSupport.planCard
+
 return {
     schemaVersion = 1,
     kind = "characterDatabase",
@@ -63,5 +71,130 @@ return {
                 },
             },
         },
+    },
+    cards = {
+        miryeong_draw_cardigan_closed = card(
+            "miryeong_draw_cardigan_closed", "카디건 여미기", { "response", "recovery" }, {}, { "저항 2 회복. 냉각 1, 혼란·순응이면 대신 2." },
+            "부드러운 카디건 앞자락을 단정하게 포개어 쥐며 숨을 고르고, 옷 너머로 번지던 음란한 열기를 차분하게 가라앉히는 행동입니다.",
+            {
+                actorAction = "원피스 위에 걸친 얇은 카디건 앞자락을 가슴 앞으로 다소곳이 끌어모아 쥐며, 조용히 숨을 고르고 몸을 사린다.",
+                actorThought = "등 뒤에서… 젊은 사람의 거친 체온이 너무 생생하게 닿아와… 어서 마음을 가라앉혀야 해…",
+            },
+            function(context, event)
+                return { recoverResistance(2), cool(context, (context.mood == "confusion" or context.mood == "compliance") and 2 or 1) }
+            end
+        ),
+        miryeong_gentle_boundary = card(
+            "miryeong_gentle_boundary", "부드러운 경계선", { "response", "recovery" }, {}, { "반발 3. 거절이면 대신 저항 2 회복." },
+            "\"이러시면 안 돼요\"라며 부드러우면서도 완곡한 어조로 치한의 손목 부근을 살짝 밀어내어, 품위 있는 반발로 선을 긋는 행동입니다.",
+            {
+                actorAction = "고운 손등을 뒤편으로 슬며시 뻗어 완곡하게 거리를 밀어내며, 부드럽지만 단호한 목소리로 이러시면 안 돼요, 하고 속삭인다.",
+                actorThought = "의도를 모르는 게 아니에요. 하지만 저는 남편이 있는 사람이고… 이런 장난은 받아줄 수 없답니다.",
+            },
+            function(context, event)
+                if context.mood == "rejection" then return { recoverResistance(2) } end; return { backlash(context, 3) }
+            end
+        ),
+        miryeong_move_beside_door = card(
+            "miryeong_move_beside_door", "출입문 쪽으로 이동", { "recovery" }, {}, { "저항 3 회복. 의심·무시면 대신 4." },
+            "인파를 헤치고 출입문 손잡이 쪽으로 몸을 옮겨 바람을 쐬며, 흐트러질 뻔했던 마음의 여유와 저항을 가다듬는 행동입니다.",
+            {
+                actorAction = "차분한 걸음으로 인파 사이를 지나쳐 열차 출입문 유리창 옆으로 자리를 옮기고, 손잡이를 단단히 쥐며 여유를 되찾는다.",
+                actorThought = "문가 쪽으로 피하면 조금은 낫겠지요. 더는 그 뜨거운 앞섶이 엉덩이에 닿지 않도록 조심해야겠어요.",
+            },
+            function(context, event)
+                return { recoverResistance((context.mood == "suspicion" or context.mood == "ignore") and 4 or 3) }
+            end
+        ),
+        miryeong_draw_line_at_door = planCard(
+            "miryeong_draw_line_at_door", "문가의 경계벽", { "response" }, { "다음 유린 카드 선언 시 반발 4." }, 2, "violation",
+            "차문 유리에 등을 기대어 사각을 차단한 채 대기하다가, 상대가 노골적인 유린을 밀어붙여 올 때 완강한 반발로 쳐낼 ::tag[plan]::을 배치합니다.",
+            {
+                planPlaced = {
+                    actorAction = "출입문 기둥을 등 뒤에 바싹 세워 하체의 사각을 가리고, 단정한 눈빛으로 주변의 기척을 차분하게 주시한다.",
+                    actorThought = "여기까지 쫓아오실 생각인가요? 어른으로서 지켜야 할 마지막 선을 넘지 않으시길 바라요.",
+                },
+                planTriggered = {
+                    actorAction = "단호하게 손을 뻗어 진입로를 쳐내며, 엄격한 눈빛으로 고개를 가로젓는다.",
+                    actorThought = "도를 넘으셨어요! 제가 조용히 넘어간다고 해서, 이런 파렴치한 짓까지 허락한 줄 아셨나요?",
+                },
+            },
+            function(context, event)
+                return { backlash(context, 4) }
+            end
+        ),
+        miryeong_close_heart = card(
+            "miryeong_close_heart", "굳게 닫은 마음", { "response" }, {}, { "냉각 2. 반발 1." },
+            "옅은 미소를 지우고 시선을 허공으로 두어 마음의 빗장을 굳게 걸어 잠그며, 들뜨려던 배덕적 감각을 차갑게 식히는 행동입니다.",
+            {
+                actorAction = "온화하던 얼굴에서 표정을 완전히 거두고 굳은 눈매로 앞만 응시하며, 감각의 문을 차갑게 닫아건다.",
+                actorThought = "몸이 저릿하다고 해서 홀려선 안 돼. 이 감각은 거짓이고, 나는 정숙한 가정의 어머니야.",
+            },
+            function(context, event)
+                return { cool(context, 2), backlash(context, 1) }
+            end
+        ),
+        miryeong_touch_wedding_ring = card(
+            "miryeong_touch_wedding_ring", "결혼반지 어루만지기", { "response", "recovery" }, {}, { "저항 2 회복. 무시 토큰 1 추가." },
+            "왼손 약지에 끼워진 결혼반지를 엄지로 천천히 매만지며 아내이자 어머니로서의 정숙함을 되새겨, 유혹을 흘려내는 행동입니다.",
+            {
+                actorAction = "가슴 앞으로 모은 왼손 약지의 백금 결혼반지를 엄지손가락으로 느릿하게 매만지며, 깊은 숨을 들이쉰다.",
+                actorThought = "남편과 쌓아온 세월이 내 손에 걸려 있는데… 이런 음란한 마찰 따위에 흔들려선 안 돼요.",
+            },
+            function(context, event)
+                return { recoverResistance(2), addMood("ignore", 1) }
+            end
+        ),
+        miryeong_step_back_smile_fades = card(
+            "miryeong_step_back_smile_fades", "차가워진 미소", { "response", "exposure" }, {}, { "반발 2. 은폐 피해 1, 의심이면 대신 2." },
+            "항상 띠고 있던 온화한 미소를 완전히 거두고 단호한 눈빛으로 상대를 제지하여, 은폐를 허물고 반발하는 행동입니다.",
+            {
+                actorAction = "항상 짓고 있던 미소를 거두고 한 걸음 뒤로 물러나며, 불쾌한 기색을 숨기지 않고 상대를 빤히 쳐다본다.",
+                actorThought = "젊은 분이 왜 이렇게 염치가 없으신지… 더 참아드리는 것도 한계가 있답니다.",
+            },
+            function(context, event)
+                return { backlash(context, 2), loseStealth(context.mood == "suspicion" and 2 or 1) }
+            end
+        ),
+        miryeong_read_the_intent = card(
+            "miryeong_read_the_intent", "기척 간파", { "exposure" }, {}, { "은폐 피해 3. 무시·의심이면 대신 4." },
+            "원숙한 눈썰미로 치한의 비정상적인 접근 궤적을 꿰뚫어 보고 몸을 살짝 비켜서며, 뻔뻔한 시도를 승객들 앞에 드러내는 행동입니다.",
+            {
+                actorAction = "상대의 접근 궤적을 미리 읽고 자연스럽게 반 보 비켜서서 사각지대에서 부드럽게 빠져나온다.",
+                actorThought = "열차가 흔들려서 닿았다는 핑계는 통하지 않아요. 그 뻔한 손동작, 이미 다 읽고 있었으니까요.",
+            },
+            function(context, event)
+                return { loseStealth((context.mood == "ignore" or context.mood == "suspicion") and 4 or 3) }
+            end
+        ),
+        miryeong_calm_public_rebuke = card(
+            "miryeong_calm_public_rebuke", "차분한 공개 훈계", { "exposure" }, {}, { "은폐 피해 2. 의심·거절이면 대신 3." },
+            "차분하지만 주변 승객들의 귓가에 울릴 만큼 또렷한 목소리로 점잖게 주의를 주어, 치한의 낯을 뜨겁게 만드는 행동입니다.",
+            {
+                actorAction = "조용하지만 울림이 있는 또렷한 어조로 뒤쪽 손님, 손 위치가 조금 이상하네요 라고 말해 주변 승객들의 고개를 돌리게 한다.",
+                actorThought = "부끄러운 줄 아셔야죠. 어른답게 행동하지 못한다면, 사람들 앞에서 부끄러움을 배우셔야 해요.",
+            },
+            function(context, event)
+                return { loseStealth((context.mood == "suspicion" or context.mood == "rejection") and 3 or 2) }
+            end
+        ),
+        miryeong_raised_palm = planCard(
+            "miryeong_raised_palm", "내민 손바닥", { "response" }, { "다음 압박 카드 선언 시 냉각 3. 순응이면 대신 4." }, 2, "pressure",
+            "가슴 앞쪽에 조용히 손바닥을 펼쳐 안전거리를 확보한 채 버티며, 상대가 억지로 몸을 밀어붙일 때 차갑게 물러서게 만드는 ::tag[plan]::을 배치합니다.",
+            {
+                planPlaced = {
+                    actorAction = "옆구리와 골반 사이에 조용히 손바닥을 세워 일정한 간격을 유지한 채, 더는 좁혀오지 못하도록 침묵의 벽을 세운다.",
+                    actorThought = "이 선 안으로는 발을 들이지 마세요. 더 들이미신다면, 그땐 정말 용서치 않을 테니까요.",
+                },
+                planTriggered = {
+                    actorAction = "세워둔 손바닥으로 정면 공간을 지그시 밀어내며 차가운 표정으로 단숨에 거리를 벌린다.",
+                    actorThought = "선이 무너질 줄 아셨나요? 제 몸도, 제 마음도… 당신 뜻대로 다뤄질 만큼 가볍지 않답니다.",
+                },
+            },
+            function(context, event)
+                return { cool(context, context.mood == "compliance" and 4 or 3) }
+            end
+        ),
+
     },
 }

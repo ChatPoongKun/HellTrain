@@ -21,6 +21,8 @@ checks = [
     ('runtime-bundle-contract-check.ps1', [powershell, '-NoProfile', '-File', ROOT / 'build/tests/runtime-bundle-contract-check.ps1']),
     ('html-indent-check.ps1', [powershell, '-NoProfile', '-File', ROOT / 'build/tests/html-indent-check.ps1']),
     *[(Path(args[0]).name, [sys.executable, *args]) for args in [
+        [HERE / 'check_scoped_static_data.py'],
+        [HERE / 'check_common_character_deck.py'],
         [HERE / 'check_character_switch.py'],
         [HERE / 'check_send_guidance.py'],
         [HERE / 'check_narrative_state_guidance.py'],
@@ -39,6 +41,8 @@ checks = [
 ]
 if not fast:
     checks += [(Path(args[0]).name, [sys.executable, *args]) for args in [
+        [HERE / 'check_scoped_static_data.py', 'jit'],
+        [HERE / 'check_common_character_deck.py', 'jit'],
         [HERE / 'check_character_switch.py', 'jit'],
         [HERE / 'check_surrender.py', 'jit'],
         [HERE / 'check_validation_reuse.py', 'jit'],

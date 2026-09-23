@@ -326,7 +326,7 @@
     end
 
     local function loadStaticData()
-        local report, errors = callModule("staticData", "loadAll")
+        local report, errors = callModule("staticData", "loadCatalog")
         if errors then return nil, errors end
         if type(report.data) ~= "table" or getmetatable(report.data) ~= nil then
             return nil, {

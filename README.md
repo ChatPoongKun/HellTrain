@@ -109,13 +109,30 @@ end)
 |---|---|
 | `GameRegistry.db` | 정적 데이터 레지스트리와 버전 정보 |
 | `PlayerCards.db` | 플레이어 카드 정의 |
-| `CharacterCards.db` | 캐릭터 카드 정의 |
+| `CharacterCardSupport.db` | 캐릭터 카드 공통 생성 함수·효과 보조 함수 |
+| `CommonCharacterCards.db` | 커스텀 캐릭터용 공용 기본 덱과 카드 정의 |
 | `CharTraits.db` | 캐릭터 특성 정의 |
 | `Perks.db` | 플레이어 퍽 정의 |
 | `TokyoSubwayLines.db` | 노선과 역 정보 |
-| `CharacterList.db` | 캐릭터 프로필 목록 |
+| `CharacterList.db` | 캐릭터 ID·DB 경로·표시 이름·제한 턴의 경량 목록 |
 
 DB 이름은 런타임 계약의 일부입니다. 이름을 변경하려면 `staticData.lua`의 로딩 순서와 모든 참조를 함께 수정해야 합니다.
+
+기존 캐릭터 카드 정의는 각 `Char/<캐릭터>.db`의 `cards`에 저장하며, 해당 캐릭터의
+`battle.deck`은 같은 DB의 카드 ID를 참조합니다. 커스텀 캐릭터는 목록에
+`cardPool = "common"`을 지정하고 개별 DB에 `battle.extraDeck`과 추가 카드만
+기록합니다. 로딩할 때 공용 기본 덱 뒤에 전용 카드가 붙습니다. 상세 작성법은
+[신규 캐릭터 생성 가이드](<신규 캐릭터 생성 가이드.md>)를 참고하십시오.
+캐릭터를 추가할 때는 개별 DB와 `CharacterList.db`를 등록합니다. 목록의
+`name`, `turnLimit`은 개별 정의와 일치해야 하며 전체 검증에서 불일치를 거부합니다.
+
+일반 설정은 `staticData.loadCatalog`, 전투는 `loadCharacters({캐릭터 ID, ...})`를
+사용합니다. 선택 화면은 표시할 후보만, 캐릭터 기록 화면은 조우한 캐릭터만
+추가로 읽습니다. 캐릭터 요약은 전체 목록에 남지만 미선택 캐릭터의 카드·프로필은
+복사하지 않습니다. 캐릭터 전환 검증에는 이전·다음 상대가 함께 필요할 수 있습니다.
+전체 카드 도감을 명시적으로 열 때와 개발·빌드 검증의 `loadAll`/`validateAll`은
+전체 데이터를 읽습니다. 패키지에는 모든 로어가 포함되므로 CHARX 크기나 호스트의
+원본 로어 보관량을 줄이는 변경은 아닙니다.
 
 ### HTML 임베딩
 

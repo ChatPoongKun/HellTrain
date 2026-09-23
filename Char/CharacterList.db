@@ -5,22 +5,32 @@ return {
         yoo_jiyoung = {
             id = "yoo_jiyoung",
             database = "YooJiyoung.db",
+            name = "유지영",
+            turnLimit = 9,
         },
         yoon_seoa = {
             id = "yoon_seoa",
             database = "YoonSeoa.db",
+            name = "윤서아",
+            turnLimit = 12,
         },
         han_jenny = {
             id = "han_jenny",
             database = "HanJenny.db",
+            name = "한제니",
+            turnLimit = 8,
         },
         seo_miryeong = {
             id = "seo_miryeong",
             database = "SeoMiryeong.db",
+            name = "서미령",
+            turnLimit = 11,
         },
         sister_agnes = {
             id = "sister_agnes",
             database = "SisterAgnes.db",
+            name = "아그네스 수녀",
+            turnLimit = 12,
         },
     },
 }

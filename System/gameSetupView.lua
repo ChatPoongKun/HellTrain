@@ -315,6 +315,14 @@
     local function buildCharacterOfferItem(slot, characterId, data, errors)
         local path = "$.characterOffer.characters[" .. slot .. "]"
         local character = data.characters[characterId]
+        if data.partial == true and type(character) == "table" and character.publicProfile == nil then
+            local ok, report = pcall(runScript, triggerId, "staticData", "loadCharacters", {characterId})
+            if not ok or type(report) ~= "table" or report.ok ~= true then
+                addError(errors, "character_load_failed", path, "캐릭터 정보를 불러오지 못했습니다.")
+                return nil
+            end
+            character = report.data.characters[characterId]
+        end
         if type(character) ~= "table" or character.id ~= characterId then
             addError(errors, "missing_character", path .. ".characterId", "제안된 캐릭터를 찾을 수 없습니다: " .. tostring(characterId))
             return nil

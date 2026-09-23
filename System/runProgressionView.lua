@@ -643,6 +643,14 @@
     local function buildCharacterView(slot, characterId, staticData, errors)
         local path = "$.characterOffer.characters[" .. slot .. "]"
         local character = staticData.characters[characterId]
+        if staticData.partial == true and type(character) == "table" and character.publicProfile == nil then
+            local ok, report = pcall(runScript, triggerId, "staticData", "loadCharacters", {characterId})
+            if not ok or type(report) ~= "table" or report.ok ~= true then
+                addError(errors, "character_load_failed", path, "캐릭터 정보를 불러오지 못했습니다.")
+                return nil
+            end
+            character = report.data.characters[characterId]
+        end
         if type(character) ~= "table"
             or character.id ~= characterId
             or type(character.name) ~= "string"
@@ -1518,6 +1526,21 @@
         if battle then add(battle.battleId, battle.character.characterId, battle.status) end
         local ids = {}
         for id in pairs(counts) do ids[#ids + 1] = id end
+        local needsProfiles = false
+        for _, id in ipairs(ids) do
+            if data.partial == true and data.characters[id].publicProfile == nil then
+                needsProfiles = true
+                break
+            end
+        end
+        if needsProfiles then
+            -- One scope per journal, so more encountered characters than cache
+            -- slots do not evict each other on every popup opening.
+            local report, callError = callRuntime("staticData", "loadCharacters", ids)
+            if callError then return failure({callError}) end
+            if not report.ok then return report end
+            data = report.data
+        end
         table.sort(ids, function(a, b) return data.characters[a].name < data.characters[b].name end)
         local view = { kind = "characterJournalView", schemaVersion = SCHEMA_VERSION, count = #ids, items = {} }
         for index, id in ipairs(ids) do

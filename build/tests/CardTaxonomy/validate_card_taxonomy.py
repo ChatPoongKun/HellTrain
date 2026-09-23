@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the card type/role contract directly from the two Lua card databases."""
+"""Validate the card type/role contract directly from shipped Lua card databases."""
 
 from __future__ import annotations
 
@@ -131,8 +131,10 @@ def main() -> int:
     errors: list[str] = []
     validate_runtime_type_contract(errors)
     player = player_prototype_blocks(ROOT / "DB" / "PlayerCards.db")
-    character = card_blocks(ROOT / "DB" / "CharacterCards.db", r"[a-z][a-z0-9_]+")
-    if len(player) != 56 or len(character) != 50:
+    character_paths = [ROOT / "DB" / "CommonCharacterCards.db", *sorted((ROOT / "Char").glob("*.db"))]
+    character = [block for path in character_paths
+                 for block in card_blocks(path, r"[a-z][a-z0-9_]+")]
+    if len(player) != 56 or len(character) != 60:
         errors.append(f"card count mismatch: player={len(player)}, character={len(character)}")
 
     for card_id, constructor, block in player:
