@@ -72,11 +72,6 @@ local lorePaths = {
     ["Environments.db"] = "DB/Environments.db",
     ["TokyoSubwayLines.db"] = "DB/TokyoSubwayLines.db",
     ["CharacterList.db"] = "Char/CharacterList.db",
-    ["YooJiyoung.db"] = "Char/YooJiyoung.db",
-    ["YoonSeoa.db"] = "Char/YoonSeoa.db",
-    ["HanJenny.db"] = "Char/HanJenny.db",
-    ["SeoMiryeong.db"] = "Char/SeoMiryeong.db",
-    ["SisterAgnes.db"] = "Char/SisterAgnes.db",
     ["sideBar.html"] = "html/sideBar.html",
     ["cardDraft.html"] = "html/cardDraft.html",
     ["characterSelect.html"] = "html/characterSelect.html",
@@ -87,6 +82,11 @@ local lorePaths = {
 local loreLoads = {}
 function getLoreBooks(triggerId, name)
     local path = lorePaths[name]
+    if path == nil and type(name) == "string" and name:match("^[A-Za-z][A-Za-z0-9_]*%.db$") then
+        local candidate = "Char/" .. name
+        local file = io.open(candidate, "rb")
+        if file then file:close(); path = candidate end
+    end
     if path == nil then return {} end
     return { { content = readFile(path) } }
 end

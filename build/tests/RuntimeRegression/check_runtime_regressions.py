@@ -17,6 +17,8 @@ if sys.argv[1:] not in ([], ['--fast']):
 fast = sys.argv[1:] == ['--fast']
 
 checks = [
+    ('check_character_registry.py', [sys.executable, HERE / 'check_character_registry.py']),
+    ('check_character_registry_contract.py', [sys.executable, HERE / 'check_character_registry_contract.py']),
     ('validate_card_taxonomy.py', [sys.executable, ROOT / 'build/tests/CardTaxonomy/validate_card_taxonomy.py']),
     ('runtime-bundle-contract-check.ps1', [powershell, '-NoProfile', '-File', ROOT / 'build/tests/runtime-bundle-contract-check.ps1']),
     ('html-indent-check.ps1', [powershell, '-NoProfile', '-File', ROOT / 'build/tests/html-indent-check.ps1']),

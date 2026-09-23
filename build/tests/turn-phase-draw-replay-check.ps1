@@ -54,15 +54,15 @@ local lorePaths = {
     ["Perks.db"] = "DB/Perks.db",
     ["TokyoSubwayLines.db"] = "DB/TokyoSubwayLines.db",
     ["CharacterList.db"] = "Char/CharacterList.db",
-    ["YooJiyoung.db"] = "Char/YooJiyoung.db",
-    ["YoonSeoa.db"] = "Char/YoonSeoa.db",
-    ["HanJenny.db"] = "Char/HanJenny.db",
-    ["SeoMiryeong.db"] = "Char/SeoMiryeong.db",
-    ["SisterAgnes.db"] = "Char/SisterAgnes.db",
 }
 
 function getLoreBooks(triggerId, name)
     local path = lorePaths[name]
+    if path == nil and type(name) == "string" and name:match("^[A-Za-z][A-Za-z0-9_]*%.db$") then
+        local candidate = "Char/" .. name
+        local file = io.open(candidate, "rb")
+        if file then file:close(); path = candidate end
+    end
     return path and { { content = readFile(path) } } or {}
 end
 
