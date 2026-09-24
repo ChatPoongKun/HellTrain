@@ -18,6 +18,8 @@ local scenarios,plans=0,0
 assert(data.registry.roles.unknown==nil,'unknown must not be a real card role')
 for characterId,definition in pairs(data.characters) do
  local originalDeck=definition.battle.deck
+ local originalCommonDeck=definition.battle.commonDeck
+ definition.battle.commonDeck=nil
  local hybrids,planCount=0,0
  assert(#originalDeck>0,characterId..' has no character cards to exercise')
  for _,id in ipairs(originalDeck) do
@@ -102,6 +104,7 @@ for characterId,definition in pairs(data.characters) do
   end
  end
  definition.battle.deck=originalDeck
+ definition.battle.commonDeck=originalCommonDeck
  print('character pipeline:',characterId,#originalDeck,'cards,',hybrids,'hybrids,',planCount,'plans')
 end
 print('character pipeline complete:',scenarios,'scenarios,',plans,'plan resolutions')

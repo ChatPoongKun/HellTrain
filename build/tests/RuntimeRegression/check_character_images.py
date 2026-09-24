@@ -11,12 +11,12 @@ local sample = checked('staticData', 'loadCharacters', {'hakurei_reimu'}).data.c
 assert(sample.portraitImage == 'dummy.png' and sample.fallenImage == 'dummy.png',
     'Reimu sample must exercise the paired dummy fallback')
 local commonDeck = assert(load('return ' .. assert(sources['CommonCharacterCards.db']:match('deck%s*=%s*(%b{})'))))()
-assert(#sample.battle.deck == #commonDeck + 1, 'Reimu deck must contain the shared deck and one own card')
+assert(#sample.battle.deck == 1 and sample.battle.deck[1] == 'reimu_boundary_guard',
+    'Reimu static deck must retain its own card')
+assert(#sample.battle.commonDeck == #commonDeck, 'Reimu common supplement pool changed length')
 for index, cardId in ipairs(commonDeck) do
-    assert(sample.battle.deck[index] == cardId, 'Reimu deck changed a shared card')
+    assert(sample.battle.commonDeck[index] == cardId, 'Reimu common supplement pool changed a card')
 end
-assert(sample.battle.deck[#commonDeck + 1] == 'reimu_boundary_guard',
-    'Reimu card must follow the shared deck')
 
 local listing = sources['CharacterList.db']
 sources['CharacterList.db'] = listing:gsub('characters = {', [[characters = {

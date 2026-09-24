@@ -14,8 +14,8 @@ python build/tests/RuntimeRegression/check_runtime_regressions.py
 조회 범위, 캐시 간 격리, 반환값 수정 격리, 미로딩 캐릭터의 도감 발견 기록 보존,
 목록 요약 불일치 거부를 검사한다. 가상 캐릭터 200명을 목록에 추가해도 선택하지
 않은 개별 DB를 읽지 않는지 Lua 5.4와 LuaJIT에서 확인한다.
-`check_common_character_deck.py`는 공용 덱과 캐릭터별 추가 카드 결합, 빈 추가 덱,
-전투 시작, 선택적 로딩 및 잘못된 카드 참조의 거부를 두 Lua 런타임에서 확인한다.
+`check_common_character_deck.py`는 전용 카드 수에 따른 공용 카드 보충, 시드별 재현,
+10장 경계, 전투 시작, 선택적 로딩 및 잘못된 카드 참조의 거부를 두 Lua 런타임에서 확인한다.
 
 이 폴더의 테스트 소스와 fixture는 모두 Git에 포함한다. 로컬 `.agents/` 자료나 별도 `.deps` 디렉터리 없이 설치된 Lupa의 Lua 5.4와 LuaJIT 런타임을 사용한다.
 

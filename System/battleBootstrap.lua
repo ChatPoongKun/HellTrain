@@ -3,6 +3,7 @@
     local MAX_SAFE_INTEGER = 9007199254740991
     local MAX_PLAN_CAPACITY = 16
     local DEFAULT_PLAYER_PLAN_CAPACITY = 1
+    local CUSTOM_CHARACTER_DECK_TARGET = 10
 
     local PLAYER_CARD_IDS = {
         "pc_predator_001",
@@ -488,6 +489,7 @@
         end
 
         local characterDeckLength = getArrayLength(battle.deck)
+        local ownCardIds = {}
         if characterDeckLength == nil then
             errors[#errors + 1] = makeError(
                 "invalid_character_deck",
@@ -504,6 +506,7 @@
                         "캐릭터 카드 ID는 lower_snake_case ASCII ID여야 합니다."
                     )
                 else
+                    ownCardIds[cardId] = true
                     local card = cards[cardId]
                     if type(card) ~= "table" then
                         errors[#errors + 1] = makeError(
@@ -522,6 +525,61 @@
             end
         end
 
+        if battle.commonDeck ~= nil then
+            local commonDeckLength = getArrayLength(battle.commonDeck)
+            if commonDeckLength == nil or commonDeckLength == 0 then
+                errors[#errors + 1] = makeError(
+                    "invalid_common_character_deck",
+                    "$.staticData.characters." .. spec.characterId .. ".battle.commonDeck",
+                    "공용 카드 풀은 비어 있지 않은 연속 배열이어야 합니다."
+                )
+            else
+                local seenCommon = {}
+                for index, cardId in ipairs(battle.commonDeck) do
+                    local path = "$.staticData.characters." .. spec.characterId
+                        .. ".battle.commonDeck[" .. index .. "]"
+                    if not isAsciiId(cardId) then
+                        errors[#errors + 1] = makeError(
+                            "invalid_character_card_id",
+                            path,
+                            "공용 캐릭터 카드 ID는 lower_snake_case ASCII ID여야 합니다."
+                        )
+                    elseif seenCommon[cardId] or ownCardIds[cardId] then
+                        errors[#errors + 1] = makeError(
+                            "duplicate_common_character_card",
+                            path,
+                            "공용 카드 풀은 전용 덱과 겹치지 않는 고유 카드만 포함해야 합니다."
+                        )
+                    else
+                        seenCommon[cardId] = true
+                        local card = cards[cardId]
+                        if type(card) ~= "table" then
+                            errors[#errors + 1] = makeError(
+                                "unknown_character_card",
+                                path,
+                                "정적 DB에서 공용 캐릭터 카드를 찾을 수 없습니다."
+                            )
+                        elseif card.owner ~= "character" then
+                            errors[#errors + 1] = makeError(
+                                "character_card_owner_mismatch",
+                                path,
+                                "공용 카드의 정적 소유자가 character가 아닙니다."
+                            )
+                        end
+                    end
+                end
+                if characterDeckLength ~= nil
+                    and characterDeckLength < CUSTOM_CHARACTER_DECK_TARGET
+                    and commonDeckLength < CUSTOM_CHARACTER_DECK_TARGET - characterDeckLength then
+                    errors[#errors + 1] = makeError(
+                        "insufficient_common_character_cards",
+                        "$.staticData.characters." .. spec.characterId .. ".battle.commonDeck",
+                        "전용 카드를 10장으로 보충할 공용 카드가 부족합니다."
+                    )
+                end
+            end
+        end
+
         if getArrayLength(battle.traitIds) == nil then
             errors[#errors + 1] = makeError(
                 "invalid_character_traits",
@@ -531,6 +589,78 @@
         end
 
         return character, battle, errors, nil
+    end
+
+    local function buildCharacterDeck(triggerId, battle, seed)
+        local deck = copyArray(battle.deck)
+        local rng = { seed = seed, cursor = 0 }
+        if battle.commonDeck == nil or #deck >= CUSTOM_CHARACTER_DECK_TARGET then
+            return deck, rng, nil
+        end
+
+        if type(runScript) ~= "function" then
+            return nil, nil, {
+                makeError(
+                    "runtime_unavailable",
+                    "$.runtime.deterministicRng",
+                    "공용 카드 보충에 필요한 결정적 RNG 실행기를 찾을 수 없습니다."
+                ),
+            }
+        end
+
+        local shuffleOk, shuffleReport = pcall(
+            runScript,
+            triggerId,
+            "deterministicRng",
+            "shuffle",
+            rng,
+            battle.commonDeck
+        )
+        if not shuffleOk then
+            return nil, nil, {
+                makeError(
+                    "common_character_shuffle_call_error",
+                    "$.runtime.deterministicRng",
+                    "공용 카드 풀을 섞는 중 실행 오류가 발생했습니다."
+                ),
+            }
+        end
+        if type(shuffleReport) ~= "table" then
+            return nil, nil, {
+                makeError(
+                    "invalid_common_character_shuffle_result",
+                    "$.runtime.deterministicRng",
+                    "공용 카드 풀 섞기가 올바른 결과를 반환하지 않았습니다."
+                ),
+            }
+        end
+        if shuffleReport.ok ~= true then
+            local nestedErrors = copyErrors(shuffleReport)
+            if #nestedErrors == 0 then
+                nestedErrors[1] = makeError(
+                    "common_character_shuffle_failed",
+                    "$.runtime.deterministicRng",
+                    "공용 카드 풀 섞기가 실패했습니다."
+                )
+            end
+            return nil, nil, nestedErrors
+        end
+        if getArrayLength(shuffleReport.value) ~= #battle.commonDeck
+            or type(shuffleReport.rng) ~= "table" then
+            return nil, nil, {
+                makeError(
+                    "invalid_common_character_shuffle_result",
+                    "$.runtime.deterministicRng",
+                    "공용 카드 풀 섞기 결과에 카드 배열과 RNG 상태가 필요합니다."
+                ),
+            }
+        end
+
+        local supplementCount = CUSTOM_CHARACTER_DECK_TARGET - #deck
+        for index = 1, supplementCount do
+            deck[#deck + 1] = shuffleReport.value[index]
+        end
+        return deck, shuffleReport.rng, nil
     end
 
     local function buildJourney(seed, staticData, turnLimit)
@@ -750,13 +880,21 @@
         if planCapacityError then
             return failure({ planCapacityError })
         end
+        local characterDeck, initialRng, characterDeckErrors = buildCharacterDeck(
+            triggerId,
+            characterBattle,
+            normalized.seed
+        )
+        if characterDeckErrors then
+            return failure(characterDeckErrors)
+        end
         local journey, journeyErrors = buildJourney(normalized.seed, staticData, characterBattle.turnLimit)
         if journeyErrors then
             return failure(journeyErrors)
         end
 
         local cardInstances = makeInstances(normalized.playerCardIds, "player")
-        local characterInstances = makeInstances(characterBattle.deck, "character")
+        local characterInstances = makeInstances(characterDeck, "character")
         for _, instance in ipairs(characterInstances) do
             cardInstances[#cardInstances + 1] = instance
         end
@@ -768,10 +906,7 @@
             turnLimit = journey.turnLimit,
             transit = journey.transit,
             sceneContext = journey.sceneContext,
-            rng = {
-                seed = normalized.seed,
-                cursor = 0,
-            },
+            rng = initialRng,
             player = {
                 stealth = playerStealth,
                 baseDrawCount = 3,

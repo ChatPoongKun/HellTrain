@@ -1,6 +1,7 @@
 (function()
     local STATIC_CACHE_MAX_ENTRIES = 4
     local MAX_PLAN_CAPACITY = 16
+    local CUSTOM_CHARACTER_DECK_TARGET = 10
     local DIAGNOSTIC_SCOPE = "helltrain.staticData"
     local STATIC_BASE_LORE_ORDER = {
         "GameRegistry.db",
@@ -725,7 +726,6 @@
                                     local deck = {}
                                     local seen = {}
                                     for _, cardId in ipairs(commonDeck or {}) do
-                                        deck[#deck + 1] = cardId
                                         seen[cardId] = true
                                     end
                                     for index, cardId in ipairs(isArray(battle.extraDeck) and battle.extraDeck or {}) do
@@ -741,7 +741,12 @@
                                             addError(errors, "unlisted_extra_card", modulePath .. ".cards." .. cardId, "전용 카드를 사용하려면 battle.extraDeck에 카드 ID를 추가해야 합니다.")
                                         end
                                     end
+                                    local commonPool = {}
+                                    for _, cardId in ipairs(commonDeck or {}) do
+                                        commonPool[#commonPool + 1] = cardId
+                                    end
                                     battle.deck = deck
+                                    battle.commonDeck = commonPool
                                 else
                                     for _, cardId in ipairs(type(definition.battle) == "table" and type(definition.battle.deck) == "table" and definition.battle.deck or {}) do
                                         if type(module.cards) ~= "table" or module.cards[cardId] == nil then
@@ -1642,13 +1647,36 @@
                         end
                     end
 
-                    if not isArray(battle.deck) or #battle.deck == 0 then
+                    local hasCommonPool = battle.commonDeck ~= nil
+                    if not isArray(battle.deck) or (#battle.deck == 0 and not hasCommonPool) then
                         addError(errors, "invalid_character_deck", path .. ".battle.deck", "캐릭터 덱이 비어 있거나 배열이 아닙니다.")
                     else
                         for index, cardId in ipairs(battle.deck) do
                             local card = cards[cardId]
                             if not card or card.owner ~= "character" then
                                 addError(errors, "invalid_character_card", path .. ".battle.deck[" .. index .. "]", "캐릭터 카드를 찾을 수 없습니다.")
+                            end
+                        end
+                    end
+                    if hasCommonPool then
+                        if not isArray(battle.commonDeck) or #battle.commonDeck == 0 then
+                            addError(errors, "invalid_common_character_deck", path .. ".battle.commonDeck", "공용 카드 풀은 비어 있지 않은 연속 배열이어야 합니다.")
+                        else
+                            for index, cardId in ipairs(battle.commonDeck) do
+                                local card = cards[cardId]
+                                if not card or card.owner ~= "character" then
+                                    addError(errors, "invalid_character_card", path .. ".battle.commonDeck[" .. index .. "]", "공용 캐릭터 카드를 찾을 수 없습니다.")
+                                end
+                            end
+                            if isArray(battle.deck)
+                                and #battle.deck < CUSTOM_CHARACTER_DECK_TARGET
+                                and #battle.commonDeck < CUSTOM_CHARACTER_DECK_TARGET - #battle.deck then
+                                addError(
+                                    errors,
+                                    "insufficient_common_character_cards",
+                                    path .. ".battle.commonDeck",
+                                    "전용 카드를 10장으로 보충할 공용 카드가 부족합니다."
+                                )
                             end
                         end
                     end
