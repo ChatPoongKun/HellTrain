@@ -1045,6 +1045,7 @@
             result = true,
             rewardOffer = true,
             characterOffer = true,
+            freeTraining = true,
             selectedCharacter = true,
             perks = true,
             perkCount = true,
@@ -1336,6 +1337,22 @@
             if view.rewardOffer ~= nil or view.selectedCharacter ~= nil then
                 addError(errors, "unexpected_phase_view", "$", "상대 선택 단계에 보상 또는 선택 완료 View를 둘 수 없습니다.")
             end
+            if type(view.freeTraining) ~= "table" then
+                addError(errors, "missing_free_training_view", "$.freeTraining", "자유조교 진입 View가 필요합니다.")
+            else
+                checkAllowedKeys(view.freeTraining, {
+                    enabled = true,
+                    eligibleCount = true,
+                    interactionToken = true,
+                }, "$.freeTraining", errors)
+                if type(view.freeTraining.enabled) ~= "boolean"
+                    or not isInteger(view.freeTraining.eligibleCount, 0)
+                    or view.freeTraining.enabled ~= (view.freeTraining.eligibleCount > 0)
+                    or type(view.characterOffer) ~= "table"
+                    or view.freeTraining.interactionToken ~= view.characterOffer.interactionToken then
+                    addError(errors, "invalid_free_training_view", "$.freeTraining", "자유조교 활성 조건 또는 token이 올바르지 않습니다.")
+                end
+            end
         elseif view.phase == "battleReady" then
             if type(view.selectedCharacter) ~= "table" then
                 addError(errors, "missing_selected_character", "$.selectedCharacter", "선택 완료 상대 View가 필요합니다.")
@@ -1349,6 +1366,10 @@
             if view.rewardOffer ~= nil or view.characterOffer ~= nil then
                 addError(errors, "unexpected_phase_view", "$", "전투 준비 단계에 제안 View를 둘 수 없습니다.")
             end
+        end
+
+        if view.phase ~= "characterSelect" and view.freeTraining ~= nil then
+            addError(errors, "unexpected_free_training_view", "$.freeTraining", "캐릭터 선택 단계 밖에는 자유조교 진입 View를 둘 수 없습니다.")
         end
 
         if #errors > 0 then return failure(errors) end
@@ -1381,6 +1402,18 @@
             view.rewardOffer = buildRewardOfferView(runState, staticData, errors)
         elseif runState.phase == "characterSelect" then
             view.characterOffer = buildCharacterOfferView(runState, staticData, errors)
+            local eligibility, eligibilityError = callRuntime("freeTraining", "eligibility", runState)
+            if eligibilityError then
+                errors[#errors + 1] = eligibilityError
+            elseif eligibility.ok ~= true then
+                appendNestedErrors(errors, "$.freeTraining", eligibility)
+            else
+                view.freeTraining = {
+                    enabled = #eligibility.eligibleIds > 0,
+                    eligibleCount = #eligibility.eligibleIds,
+                    interactionToken = runState.characterOffer.interactionToken,
+                }
+            end
         elseif runState.phase == "battleReady" then
             local characterId = type(runState.battleSpec) == "table"
                 and runState.battleSpec.characterId
@@ -1469,12 +1502,31 @@
             if type(item) ~= "table" then
                 addError(errors, "invalid_character_record", path, "캐릭터 기록이 필요합니다.")
             else
-                checkAllowedKeys(item, { profile = true, encounters = true, victories = true, defeats = true, active = true, family = true, hobbies = true }, path, errors)
+                checkAllowedKeys(item, { profile = true, encounters = true, victories = true, defeats = true, active = true, family = true, hobbies = true, freeTrainingCount = true, freeTrainingHistory = true }, path, errors)
                 validateCharacterView(item.profile, path .. ".profile", index, errors)
                 validateString(item.family, path .. ".family", errors)
                 validateString(item.hobbies, path .. ".hobbies", errors)
                 for _, field in ipairs({ "encounters", "victories", "defeats", "active" }) do
                     if not isInteger(item[field], 0) then addError(errors, "invalid_encounter_count", path .. "." .. field, "조우 집계가 올바르지 않습니다.") end
+                end
+                local historyCount = getArrayLength(item.freeTrainingHistory, path .. ".freeTrainingHistory", errors)
+                if not isInteger(item.freeTrainingCount, 0) or item.freeTrainingCount ~= historyCount then
+                    addError(errors, "free_training_count_mismatch", path .. ".freeTrainingCount", "자유조교 횟수와 기록 수가 다릅니다.")
+                end
+                for historyIndex, history in ipairs(type(item.freeTrainingHistory) == "table" and item.freeTrainingHistory or {}) do
+                    local historyPath = path .. ".freeTrainingHistory[" .. historyIndex .. "]"
+                    if type(history) ~= "table" then
+                        addError(errors, "invalid_free_training_record", historyPath, "자유조교 기록이 필요합니다.")
+                    else
+                        checkAllowedKeys(history, { sessionId = true, number = true, summary = true, summaryStatus = true, truncated = true }, historyPath, errors)
+                        if type(history.sessionId) ~= "string" or history.sessionId == ""
+                            or not isInteger(history.number, 1)
+                            or type(history.summary) ~= "string" or history.summary == ""
+                            or (history.summaryStatus ~= "complete" and history.summaryStatus ~= "failed" and history.summaryStatus ~= "empty")
+                            or type(history.truncated) ~= "boolean" then
+                            addError(errors, "invalid_free_training_record", historyPath, "자유조교 기록 형식이 올바르지 않습니다.")
+                        end
+                    end
                 end
                 if isInteger(item.encounters, 1) and isInteger(item.victories, 0) and isInteger(item.defeats, 0) and isInteger(item.active, 0, 1) then
                     if item.encounters ~= item.victories + item.defeats + item.active then
@@ -1517,6 +1569,17 @@
             if callError then return failure({ callError }) end
             if not report.ok then return report end
             sessions = report.state.sessions
+        end
+        local freeTrainingRecords = {}
+        if input.freeTrainingState ~= nil then
+            local report, callError = callRuntime("freeTraining", "validate", input.freeTrainingState)
+            if callError then return failure({ callError }) end
+            if not report.ok then return report end
+            if type(input.setupState) == "table" and report.state.setupId ~= input.setupState.setupId then
+                addError(errors, "free_training_setup_mismatch", "$.freeTrainingState.setupId", "다른 게임의 자유조교 기록입니다.")
+            else
+                freeTrainingRecords = report.state.records
+            end
         end
         local battle = input.battleState
         if battle ~= nil then
@@ -1562,6 +1625,20 @@
             local background = data.characters[id].publicProfile.background or {}
             item.family = type(background.family) == "string" and background.family ~= "" and background.family or "알려진 정보 없음"
             item.hobbies = type(background.hobbies) == "string" and background.hobbies ~= "" and background.hobbies or "알려진 정보 없음"
+            item.freeTrainingCount = 0
+            item.freeTrainingHistory = {}
+            for _, record in ipairs(freeTrainingRecords) do
+                if record.characterId == id then
+                    item.freeTrainingCount = item.freeTrainingCount + 1
+                    table.insert(item.freeTrainingHistory, 1, {
+                        sessionId = record.sessionId,
+                        number = record.number,
+                        summary = record.summary,
+                        summaryStatus = record.summaryStatus,
+                        truncated = record.truncated,
+                    })
+                end
+            end
             view.items[index] = item
             if input.characterId == id then view.selected = item end
         end

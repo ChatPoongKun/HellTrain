@@ -65,7 +65,7 @@ ORDER = {
     ],
     "HTML": [
         "battleui.html", "battleui-interaction.html", "cardDraft.html",
-        "characterSelect.html", "postBattle.html", "sideBar.html",
+        "characterSelect.html", "postBattle.html", "freeTraining.html", "sideBar.html",
         "도감.html", "덱 확인.html", "설정.html", "캐릭터 리스트.html",
         "캐릭터 프로필.html", "플레이 가이드.html",
     ],

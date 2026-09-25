@@ -5552,3 +5552,156 @@ animation-iteration-count: 1 !important;
 .draft-ui .draft-choice-state:checked + .draft-card .draft-selected-open { display: inline; }
 
 </style>
+/* freeTraining.html */
+.run-free-training-entry {
+display: flex;
+align-items: center;
+justify-content: space-between;
+gap: 12px;
+margin: 14px 0 18px;
+padding: 12px 14px;
+border: 1px solid rgba(226, 116, 136, .25);
+border-radius: 12px;
+background: rgba(82, 34, 49, .18);
+color: #c8bbc0;
+font-size: 12px;
+}
+.run-free-training-button,
+.free-training button,
+.journal-training-retry {
+border: 1px solid rgba(235, 134, 153, .48);
+border-radius: 9px;
+background: linear-gradient(135deg, #ad465d, #7b3045);
+color: #fff;
+font: inherit;
+font-weight: 800;
+cursor: pointer;
+}
+.run-free-training-button {
+min-width: 108px;
+padding: 9px 16px;
+}
+.run-free-training-button:disabled {
+border-color: rgba(255, 255, 255, .1);
+background: rgba(255, 255, 255, .05);
+color: #776d72;
+cursor: not-allowed;
+}
+.free-training {
+width: min(100%, 760px);
+margin: 8px auto;
+padding: 22px;
+border: 1px solid rgba(226, 116, 136, .25);
+border-radius: 16px;
+background: radial-gradient(circle at 50% 0%, rgba(184, 64, 91, .16), transparent 45%), #100d12;
+color: #eee6e9;
+box-shadow: 0 18px 46px rgba(0, 0, 0, .36);
+}
+.free-training-head,
+.free-training-active {
+text-align: center;
+}
+.free-training-kicker {
+display: block;
+margin-bottom: 7px;
+color: #e48da0;
+font-size: 10px;
+font-weight: 900;
+letter-spacing: .18em;
+}
+.free-training h2 {
+margin: 0;
+font-size: 22px;
+}
+.free-training p {
+margin: 9px 0 18px;
+color: #b9adb1;
+font-size: 13px;
+line-height: 1.65;
+}
+.free-training-grid {
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+gap: 10px;
+margin: 18px 0;
+}
+.free-training-card {
+display: grid;
+grid-template-columns: 48px 1fr;
+gap: 10px;
+align-items: center;
+padding: 11px;
+border: 1px solid rgba(255, 255, 255, .08);
+border-radius: 12px;
+background: rgba(255, 255, 255, .035);
+}
+.free-training-card img {
+width: 48px;
+height: 48px;
+border-radius: 50%;
+object-fit: cover;
+}
+.free-training-card strong,
+.free-training-card span {
+display: block;
+}
+.free-training-card span {
+margin-top: 3px;
+color: #a99da2;
+font-size: 11px;
+}
+.free-training-card button {
+grid-column: 1 / -1;
+padding: 9px;
+}
+.free-training-secondary {
+width: 100%;
+padding: 10px;
+border-color: rgba(255, 255, 255, .12) !important;
+background: rgba(255, 255, 255, .05) !important;
+}
+.free-training-active button {
+min-width: 180px;
+padding: 11px 18px;
+}
+.journal-training-section {
+margin: 16px 0;
+}
+.journal-training-list {
+display: grid;
+gap: 8px;
+}
+.journal-training-record {
+padding: 10px 12px;
+border: 1px solid rgba(226, 116, 136, .18);
+border-radius: 10px;
+background: rgba(82, 34, 49, .12);
+}
+.journal-training-record summary {
+cursor: pointer;
+font-weight: 800;
+}
+.journal-training-record p {
+margin: 10px 0 0;
+color: #c8bdc1;
+line-height: 1.65;
+}
+.journal-training-note {
+display: block;
+margin-top: 7px;
+color: #a89ca1;
+font-size: 11px;
+}
+.journal-training-retry {
+margin-top: 10px;
+padding: 7px 10px;
+}
+@media (max-width: 600px) {
+.run-free-training-entry {
+align-items: stretch;
+flex-direction: column;
+}
+.free-training {
+padding: 16px;
+}
+}

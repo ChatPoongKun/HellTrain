@@ -24,6 +24,7 @@ local input={setupState=receipt,battleState=active,characterId=id}
 local view=journal(input)
 assert(view.count==1 and view.selected.encounters==1 and view.selected.active==1)
 assert(view.selected.victories==0 and view.selected.defeats==0)
+assert(view.selected.freeTrainingCount==0 and #view.selected.freeTrainingHistory==0)
 assert(view.selected.profile.name==data.characters[id].name)
 assert(view.selected.profile.portraitImage==data.characters[id].portraitImage)
 assert(view.selected.profile.appearanceSummary and #view.selected.profile.traits>0)
@@ -58,6 +59,14 @@ local partialResult=call('runProgressionView','build',wonRun,receipt,catalog).vi
 assert(partialResult.result.character.fallenImage==data.characters[id].fallenImage)
 local won=journal({setupState=receipt,runState=wonRun,characterId=id})
 assert(won.selected.encounters==1 and won.selected.victories==1 and won.selected.defeats==0)
+local freeState={kind='freeTrainingV1',schemaVersion=1,setupId=receipt.setupId,nextSessionNumber=3,records={
+ {sessionId=receipt.setupId..':free:1',number=1,characterId=id,startChatIndex=1,endChatIndex=3,summary='첫 번째 자유조교 기록.',summaryStatus='complete',truncated=false},
+ {sessionId=receipt.setupId..':free:2',number=2,characterId=id,startChatIndex=4,endChatIndex=8,summary='두 번째 자유조교 기록.',summaryStatus='complete',truncated=true},
+}}
+local trained=journal({setupState=receipt,runState=wonRun,freeTrainingState=freeState,characterId=id})
+assert(trained.selected.freeTrainingCount==2 and #trained.selected.freeTrainingHistory==2)
+assert(trained.selected.freeTrainingHistory[1].number==2 and trained.selected.freeTrainingHistory[1].truncated)
+assert(trained.selected.encounters==won.selected.encounters and trained.selected.victories==won.selected.victories)
 -- A later battle against the same character adds a single active encounter.
 local later=clone(active);later.battleId='journal-next-battle'
 later.turnStartReceipt=nil

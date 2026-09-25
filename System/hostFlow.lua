@@ -60,7 +60,7 @@ local UI_INTERACTION_VAR = "helltrainBattleInteractionV1"
 local UI_TARGET_INDEX_VAR = "helltrainUiTargetIndexV1"
 local UI_READY_VAR = "gameSetupReady"
 local APPROACH_RETRY_VAR = "helltrainApproachRetryV1"
-local RUN_PROGRESSION_AUTHORITY_KEY = "runProgressionV1.authority"
+local FREE_TRAINING_ROUTE_VAR = "helltrainFreeTrainingRouteV1"
 local APPROACH_REQUEST_ATTEMPTS = 1
 local UI_CONTAINER_OPEN = [[<div class="helltrain-dynamic-ui" aria-label="게임 화면">]]
 local UI_CONTAINER_EMPTY = UI_CONTAINER_OPEN .. "</div>"
@@ -312,6 +312,27 @@ local function escapeApproachName(name)
     return (name:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;"))
 end
 
+local function readFreeTrainingRoute(triggerId)
+    local raw = readUiFragment(triggerId, FREE_TRAINING_ROUTE_VAR)
+    if raw == "" then return nil end
+    if type(json) ~= "table" or type(json.decode) ~= "function" then
+        error("json.decode is unavailable for free training route")
+    end
+    local ok, route = pcall(json.decode, raw)
+    if not ok or type(route) ~= "table"
+        or (route.phase ~= "selecting" and route.phase ~= "active"
+            and route.phase ~= "closing" and route.phase ~= "returning") then
+        error("invalid free training route")
+    end
+    if route.phase ~= "selecting" and (type(route.sessionId) ~= "string" or route.sessionId == "") then
+        error("invalid free training session route")
+    end
+    if route.phase == "active" and (type(route.context) ~= "string" or route.context == "") then
+        error("invalid free training context route")
+    end
+    return route
+end
+
 -- Only live calls own locks. A saved/branched chat or a reloaded Lua runtime
 -- cannot remain locked by an abandoned request marker.
 local SCENE_REQUEST_VAR = "helltrainSceneRequestV1"
@@ -390,85 +411,19 @@ local function showSceneProcessing(triggerId, message)
     refreshGameUi(triggerId)
 end
 
-local function selectedApproachCharacter(triggerId, report, characterId)
+local function selectedApproachName(report, characterId)
     local selected = type(report) == "table"
         and type(report.view) == "table"
         and report.view.selectedCharacter
         or nil
     local name = type(selected) == "table" and selected.name or nil
-    local profile = selected
-
-    local staticOk, staticReport = pcall(
-        runScript,
-        triggerId,
-        "staticData",
-        "loadCharacters",
-        {characterId}
-    )
-    if staticOk
-        and type(staticReport) == "table"
-        and staticReport.ok == true
-        and type(staticReport.data) == "table"
-        and type(staticReport.data.characters) == "table"
-        and type(staticReport.data.characters[characterId]) == "table" then
-        profile = staticReport.data.characters[characterId]
-        if type(profile.name) == "string" and profile.name ~= "" then
-            name = profile.name
-        end
-    end
-
     if type(name) ~= "string" or name == "" then
         name = characterId
     end
-    return name, profile
+    return name
 end
 
-local function pastApproachEncounters(triggerId, report, characterId)
-    local runState = type(report) == "table"
-        and type(report.state) == "table"
-        and report.state.kind == "runProgressionV1"
-        and report.state
-        or nil
-    if runState == nil
-        and type(HostCompat) == "table"
-        and type(HostCompat.readState) == "function" then
-        local readOk, stored = pcall(HostCompat.readState, triggerId, RUN_PROGRESSION_AUTHORITY_KEY)
-        if readOk and type(stored) == "table" and stored.kind == "runProgressionV1" then
-            runState = stored
-        end
-    end
-
-    local encounters = {}
-    for sessionNumber, session in ipairs(
-        type(runState) == "table" and type(runState.sessions) == "table" and runState.sessions or {}
-    ) do
-        if type(session) == "table" and session.characterId == characterId then
-            encounters[#encounters + 1] = {
-                sessionNumber = sessionNumber,
-                result = session.status,
-                reasonCode = session.reasonCode,
-                turnNumber = session.turnNumber,
-                turnLimit = session.turnLimit,
-                finalStealth = session.finalStealth,
-                finalResistance = session.finalResistance,
-                transit = session.transit,
-            }
-        end
-    end
-    return encounters
-end
-
-local function encodeApproachData(value, fallback)
-    if type(value) == "table" and type(json) == "table" and type(json.encode) == "function" then
-        local encodeOk, result = pcall(json.encode, value)
-        if encodeOk and type(result) == "string" then return result end
-    end
-    return fallback
-end
-
-local function buildApproachPrompt(characterName, profile, encounters)
-    local encodedProfile = encodeApproachData(profile, "{}")
-    local encodedEncounters = encodeApproachData(encounters, "[]")
+local function buildApproachPrompt(characterName, relationshipContext)
     return {
         {
             role = "system",
@@ -486,8 +441,8 @@ local function buildApproachPrompt(characterName, profile, encounters)
                 "과거 결과의 victory는 플레이어가 캐릭터의 저항을 무너뜨린 경우이고, defeat는 캐릭터가 플레이어를 물리친 경우다.",
                 "과거 조우 정보의 내부 ID와 수치는 직접 나열하지 말고 관계의 기억으로만 반영하라.",
                 "대상 캐릭터: " .. characterName,
-                "캐릭터 자료(JSON): " .. encodedProfile,
-                "과거 조우 정보(JSON): " .. encodedEncounters,
+                "현재 활성 캐릭터 로어북과 동일한 관계 자료:",
+                relationshipContext,
             }, "\n"),
         },
         {
@@ -542,13 +497,12 @@ local function showApproachProcessing(triggerId, characterName)
     showSceneProcessing(triggerId, characterName .. "에게 접근하고 있습니다.")
 end
 
-local function generateApproachScene(triggerId, report, characterId)
+local function generateApproachScene(triggerId, lore)
     if type(LLM) ~= "function" then
         return nil, "LLM 함수를 사용할 수 없습니다. Lua 스크립트의 low-level access를 활성화해야 합니다."
     end
-    local characterName, profile = selectedApproachCharacter(triggerId, report, characterId)
-    local encounters = pastApproachEncounters(triggerId, report, characterId)
-    local prompt = addRequestContext(triggerId, buildApproachPrompt(characterName, profile, encounters))
+    local characterName = lore.characterName
+    local prompt = addRequestContext(triggerId, buildApproachPrompt(characterName, lore.content))
     local lastError = "알 수 없는 LLM 오류"
     for _ = 1, APPROACH_REQUEST_ATTEMPTS do
         local requestOk, response = pcall(sceneLLM, triggerId, prompt)
@@ -606,12 +560,12 @@ end
 local function resumeApproachTransition(triggerId, report, characterId, phase)
     removeApproachRetryFiller(triggerId)
     if phase == "pending" then
-        showApproachProcessing(triggerId, selectedApproachCharacter(triggerId, report, characterId))
-        local output, generationError = generateApproachScene(
-            triggerId,
-            report,
-            characterId
-        )
+        local lore = runScript(triggerId, "characterContextLore", "sync", characterId)
+        if type(lore) ~= "table" or lore.ok ~= true then
+            return false, "활성 캐릭터 로어북을 준비하지 못했습니다."
+        end
+        showApproachProcessing(triggerId, lore.characterName)
+        local output, generationError = generateApproachScene(triggerId, lore)
         if output == nil then
             return false, generationError
         end
@@ -638,7 +592,7 @@ local function resumeApproachWithAlert(triggerId, report, characterId, phase)
     detail = runOk and detail or completed
     debug(1, "character approach: 생성 또는 전환 실패: " .. tostring(detail))
     local uiOk, uiError = pcall(function()
-        local characterName = escapeApproachName(selectedApproachCharacter(triggerId, report, characterId))
+        local characterName = escapeApproachName(selectedApproachName(report, characterId))
         writeUiFragment(triggerId, UI_BODY_VAR, [[<section style="padding: 28px; text-align: center;" aria-live="polite">
 <h2>요청을 완료하지 못했습니다</h2>
 <p>]] .. characterName .. [[에게 접근하지 못했습니다. 아래 버튼을 눌러 다시 시도하세요.</p>
@@ -710,6 +664,7 @@ local BUTTON_ACTIONS = {
     hostFlow = { retryApproach = true },
     init = { start = true, choose = true, chooseCharacter = true },
     battleController = { clickCard = true, registerCard = true, cancelCard = true, selectCardEffect = true, armSubmission = true, surrender = true, skipAftermath = true },
+    freeTrainingController = { open = true, begin = true, cancel = true, finish = true, skipSummary = true, retrySummary = true },
     popupManage = { root = true, push = true, replace = true, back = true, close = true },
 }
 
@@ -732,6 +687,12 @@ local function isAllowedButtonRoute(script, arguments)
                 or action == "registerCard"
                 or action == "cancelCard"
                 or action == "skipAftermath") and #arguments == 3)
+    elseif script == "freeTrainingController" then
+        return (action == "open" and #arguments == 2)
+            or (action == "begin" and #arguments == 3)
+            or (action == "cancel" and #arguments == 2)
+            or ((action == "finish" or action == "skipSummary") and #arguments == 3)
+            or (action == "retrySummary" and #arguments == 2)
     elseif action == "back" or action == "close" then
         return #arguments == 1
     end
@@ -764,6 +725,10 @@ local function handleButtonClick(triggerId, data)
     end
 
     local report = runScript(triggerId, script, table.unpack(parts))
+    if script == "freeTrainingController" then
+        controllerSucceeded(triggerId, "freeTrainingController." .. tostring(parts[1]), report)
+        return report
+    end
     if type(report) == "table" and report.ok == true and report.draftRecovered == true then
         syncGameUiTarget(triggerId)
         if type(alertError) == "function" then
@@ -849,6 +814,16 @@ end
 
 --정상 요청에 저장된 비공개 턴 사건과 사용자 장면 지시를 request에만 추가
 local function handleEditRequest(triggerId, data)
+    local route = readFreeTrainingRoute(triggerId)
+    if route ~= nil then
+        if route.phase ~= "active" or type(data) ~= "table" then return data end
+        local prompt = {}
+        if type(route.context) == "string" and route.context ~= "" then
+            prompt[#prompt + 1] = { role = "system", content = route.context }
+        end
+        for _, message in ipairs(data) do prompt[#prompt + 1] = message end
+        return prompt
+    end
     local report = runScript(
         triggerId,
         "battleController",
@@ -873,6 +848,16 @@ local function showSendGuidance(triggerId, code, guidance)
     return false
 end
 
+local function releasesFreeTrainingReturnGuard(data)
+    if type(data) ~= "string" then return false end
+    local parts = splitByDelimiter(data, "|")
+    local script = table.remove(parts, 1)
+    if not isAllowedButtonRoute(script, parts) then return false end
+    return (script == "init" and parts[1] == "chooseCharacter")
+        or (script == "freeTrainingController"
+            and (parts[1] == "open" or parts[1] == "retrySummary"))
+end
+
 local function selectionSendGuidance(triggerId)
     local run = HostCompat.readState(triggerId, "runProgressionV1.authority")
     local setup = HostCompat.readState(triggerId, "gameSetupV1.authority")
@@ -891,6 +876,18 @@ local function selectionSendGuidance(triggerId)
 end
 
 local function handleStart(triggerId)
+    local routeOk, route = pcall(readFreeTrainingRoute, triggerId)
+    if not routeOk then
+        alertTurnFailure(triggerId, "자유조교 상태를 읽지 못했습니다: " .. tostring(route))
+        return false
+    end
+    if route ~= nil then
+        if route.phase == "active" then return true end
+        local restored = runScript(triggerId, "freeTrainingController", "restore")
+        if type(restored) == "table" and restored.ok == true then return false end
+        controllerSucceeded(triggerId, "freeTrainingController.restore", restored)
+        return showSendGuidance(triggerId, "free_training_transition", "자유조교 화면의 버튼으로 대상을 선택하거나 전환이 끝날 때까지 기다려 주세요.")
+    end
     local retryReadOk, retryPhase, retryCharacterId = pcall(
         readApproachRetry,
         triggerId
@@ -951,6 +948,16 @@ end
 
 --완성 응답을 관측한 뒤 턴을 한 번만 확정
 local function handleOutput(triggerId)
+    local routeOk, route = pcall(readFreeTrainingRoute, triggerId)
+    if routeOk and route ~= nil then
+        return { ok = true, schemaVersion = 1, errors = {} }
+    elseif not routeOk then
+        return {
+            ok = false,
+            schemaVersion = 1,
+            errors = { { code = "free_training_route_invalid", path = "$.chatVar", message = tostring(route) } },
+        }
+    end
     return runScript(
         triggerId,
         "battleController",
@@ -967,6 +974,39 @@ end
             return handleEditDisplay(triggerId, ...)
         elseif action == "buttonClick" then
             local route = ...
+            local freeOk, freeState = pcall(readFreeTrainingRoute, triggerId)
+            if not freeOk then
+                alertTurnFailure(triggerId, "자유조교 상태를 읽지 못했습니다: " .. tostring(freeState))
+                return
+            end
+            local releasesReturnGuard = freeState ~= nil and freeState.phase == "returning"
+                and releasesFreeTrainingReturnGuard(route)
+            if releasesReturnGuard then
+                local released = runScript(triggerId, "freeTrainingController", "release", freeState.sessionId)
+                if not controllerSucceeded(triggerId, "freeTrainingController.release", released) then return end
+                freeState = nil
+            end
+            if freeState ~= nil and type(route) == "string"
+                and not route:match("^freeTrainingController|")
+                and not route:match("^popupManage|") then
+                if type(alertError) == "function" then
+                    pcall(alertError, triggerId, "자유조교를 종료한 뒤 다른 게임 동작을 이용해 주세요.")
+                end
+                return
+            end
+            if freeState ~= nil and type(route) == "string" and route:match("^popupManage|") then
+                local allowedPopup = route == "popupManage|root|캐릭터 프로필|list"
+                    or route:match("^popupManage|push|캐릭터 프로필|[a-z][a-z0-9_]*$") ~= nil
+                    or route == "popupManage|back"
+                    or route == "popupManage|close"
+                if not allowedPopup then
+                    if type(alertError) == "function" then
+                        pcall(alertError, triggerId, "자유조교 중에는 캐릭터 기록만 열 수 있습니다.")
+                    end
+                    return
+                end
+            end
+            if freeState ~= nil and type(route) ~= "string" then return end
             if type(route) == "string" and (route:match("^init|chooseCharacter|")
                 or route:match("^battleController|surrender|") or route == "hostFlow|retryApproach") then
                 return withSceneRequest(triggerId, function() return handleButtonClick(triggerId, route) end)

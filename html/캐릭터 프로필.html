@@ -21,10 +21,26 @@
 <div class="profile-stat"><div class="stat-value">{{dictelement::{{tempvar::journal_record}}::encounters}}</div><div class="stat-label">조우 횟수</div></div>
 <div class="profile-stat"><div class="stat-value">{{dictelement::{{tempvar::journal_record}}::victories}}</div><div class="stat-label">함락 횟수</div></div>
 <div class="profile-stat"><div class="stat-value">{{dictelement::{{tempvar::journal_record}}::defeats}}</div><div class="stat-label">패배 횟수</div></div>
+<div class="profile-stat"><div class="stat-value">{{dictelement::{{tempvar::journal_record}}::freeTrainingCount}}</div><div class="stat-label">자유조교</div></div>
 </div>
 {{#when::keep::{{dictelement::{{tempvar::journal_record}}::active}}::is::1}}<div class="profile-subtitle">현재 조우 중 · 결과는 전투가 끝나면 반영됩니다.</div>{{/when}}
 </div>
 </section>
+{{#when::keep::{{dictelement::{{tempvar::journal_record}}::freeTrainingCount}}::isnot::0}}
+<section class="profile-section journal-training-section">
+<h3 class="section-title">자유조교 기록</h3>
+<div class="journal-training-list">
+{{#each::keep {{dictelement::{{tempvar::journal_record}}::freeTrainingHistory}} as training_record}}
+<details class="journal-training-record">
+<summary>제 {{dictelement::{{slot::training_record}}::number}}회 자유조교</summary>
+<p>{{dictelement::{{slot::training_record}}::summary}}</p>
+{{#when::keep::{{dictelement::{{slot::training_record}}::truncated}}::is::true}}<span class="journal-training-note">일부 대화를 발췌해 요약했습니다.</span>{{/when}}
+{{#when::keep::{{dictelement::{{slot::training_record}}::summaryStatus}}::is::failed}}<button type="button" class="journal-training-retry" risu-btn="freeTrainingController|retrySummary|{{dictelement::{{slot::training_record}}::sessionId}}">요약 재시도</button>{{/when}}
+</details>
+{{/each}}
+</div>
+</section>
+{{/when}}
 <div class="profile-grid">
 <section class="profile-panel wide-panel">
 <div class="panel-title">외형 정보</div>

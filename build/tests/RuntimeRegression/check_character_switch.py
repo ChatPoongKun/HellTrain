@@ -13,6 +13,15 @@ setmetatable(modules,{__index=function(t,n)
  local h=loadLore('System/'..n..'.lua');rawset(t,n,h);return h
 end})
 json=dofile('build/tests/fixtures/json.lua')
+local fixtureGetLoreBooks=getLoreBooks
+local localLorebooks={}
+function upsertLocalLoreBook(_,name,content,options)
+ localLorebooks[name]={comment=name,content=content,alwaysActive=options.alwaysActive,insertorder=options.insertOrder}
+end
+function getLoreBooks(id,name)
+ if localLorebooks[name] then return {localLorebooks[name]} end
+ return fixtureGetLoreBooks(id,name)
+end
 lorePaths['postBattle.html']='html/postBattle.html'
 local function call(m,a,...) return assertOk(m..'.'..a,runScript('test',m,a,...)) end
 local data=call('staticData','loadAll').data
@@ -58,6 +67,11 @@ function LLM(_,prompt)
  probing=false
  assert(prompt[1].content:find('대상 캐릭터: '..data.characters[nextId].name,1,true))
  assert(not prompt[1].content:find('대상 캐릭터: '..data.characters[oldId].name,1,true))
+ assert(prompt[1].content:find('"privateProfile"',1,true),'private profile missing from compact relationship context')
+ assert(prompt[1].content:find('recentFreeTrainingSummaries',1,true),'free-training summaries field missing from approach context')
+ assert(not prompt[1].content:find('startingResistance',1,true),'battle definition leaked into approach context')
+ local activeLore=assert(localLorebooks['helltrain.activeCharacter.v1'])
+ assert(activeLore.alwaysActive==true and activeLore.content:find(data.characters[nextId].name,1,true))
  if failGeneration then return {success=false,result='temporary failure'} end
  return {success=true,result='Approach of '..nextId}
 end

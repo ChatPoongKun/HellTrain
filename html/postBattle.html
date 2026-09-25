@@ -281,9 +281,19 @@ aria-label="승리 보상을 받지 않고 계속"
 
 {{#when::keep::{{dictelement::{{tempvar::run_progression_view}}::phase}}::is::characterSelect}}
 {{settempvar::run_progression_offer::{{dictelement::{{tempvar::run_progression_view}}::characterOffer}}}}
+{{settempvar::run_free_training::{{dictelement::{{tempvar::run_progression_view}}::freeTraining}}}}
 <div class="run-section-head">
 <h3 class="run-section-title">다음 전투 대상을 선택하세요</h3>
 <span class="run-instruction">첫 클릭: 공개 정보 확인 · 열린 카드 아래 버튼: 상대 확정</span>
+</div>
+<div class="run-free-training-entry">
+{{#when::keep::{{dictelement::{{tempvar::run_free_training}}::enabled}}::is::true}}
+<button class="run-free-training-button" type="button" risu-btn="freeTrainingController|open|{{dictelement::{{tempvar::run_free_training}}::interactionToken}}">자유조교</button>
+<span>함락 3회 이상인 캐릭터 {{dictelement::{{tempvar::run_free_training}}::eligibleCount}}명</span>
+{{:else}}
+<button class="run-free-training-button" type="button" disabled aria-disabled="true">자유조교</button>
+<span>같은 캐릭터를 3회 이상 함락하면 해금됩니다.</span>
+{{/when}}
 </div>
 <input class="run-choice-none" type="radio" name="run-target-choice" id="run-target-none" checked aria-hidden="true">
 <div class="run-target-grid" role="list" aria-label="다음 전투 대상 세 명">

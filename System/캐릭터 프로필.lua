@@ -1,18 +1,50 @@
 (function(triggerId, characterId)
     local function execute()
         local battle = HostCompat.readState(triggerId, "battleRuntimeV1.authority")
+        local setup = HostCompat.readState(triggerId, "gameSetupV1.authority")
+        local freeTraining = HostCompat.readState(triggerId, "freeTrainingV1.authority")
+        if type(freeTraining) == "table" and type(setup) == "table"
+            and freeTraining.setupId ~= setup.setupId then
+            freeTraining = nil
+        end
         local ids = {}
         if type(battle) == "table" and type(battle.character) == "table" then
             ids[1] = battle.character.characterId
         end
-        local data = runScript(triggerId, "staticData", "loadCharacters", ids)
-        if not data.ok then return data end
-        local built = runScript(triggerId, "runProgressionView", "buildCharacterJournal", {
-            setupState = HostCompat.readState(triggerId, "gameSetupV1.authority"),
-            runState = HostCompat.readState(triggerId, "runProgressionV1.authority"),
-            battleState = battle,
-            characterId = characterId ~= "list" and characterId or nil,
-        }, data.data)
+        local built
+        if type(freeTraining) == "table" and type(freeTraining.active) == "table"
+            and (freeTraining.active.phase == "active" or freeTraining.active.phase == "closing")
+            and type(freeTraining.active.journalSnapshot) == "table" then
+            local copied, snapshot = pcall(function()
+                return json.decode(json.encode(freeTraining.active.journalSnapshot))
+            end)
+            if not copied or type(snapshot) ~= "table" then
+                return { ok = false, errors = { { message = "저장된 캐릭터 기록을 읽지 못했습니다." } } }
+            end
+            if characterId ~= "list" then
+                for _, item in ipairs(snapshot.items or {}) do
+                    if type(item.profile) == "table" and item.profile.characterId == characterId then
+                        snapshot.selected = item
+                        break
+                    end
+                end
+                if snapshot.selected == nil then return { ok = false, errors = { { message = "아직 조우하지 않은 캐릭터입니다." } } } end
+            else
+                snapshot.selected = nil
+            end
+            built = runScript(triggerId, "runProgressionView", "validateCharacterJournal", snapshot)
+            if built.ok then built = { ok = true, view = snapshot } end
+        else
+            local data = runScript(triggerId, "staticData", "loadCharacters", ids)
+            if not data.ok then return data end
+            built = runScript(triggerId, "runProgressionView", "buildCharacterJournal", {
+                setupState = setup,
+                runState = HostCompat.readState(triggerId, "runProgressionV1.authority"),
+                battleState = battle,
+                freeTrainingState = freeTraining,
+                characterId = characterId ~= "list" and characterId or nil,
+            }, data.data)
+        end
         if not built.ok then return built end
         local published = runScript(triggerId, "dataBridge", "_publishCanonical", "characterJournalView", built.view,
             function(purpose, name) return purpose == "dataBridgeCanonicalV1" and name == "characterJournalView" end)
