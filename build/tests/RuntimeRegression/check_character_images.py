@@ -20,7 +20,7 @@ end
 
 local listing = sources['CharacterList.db']
 sources['CharacterList.db'] = listing:gsub('characters = {', [[characters = {
-    image_probe = {id='image_probe', database='ImageProbe.db', name='파일명과 다른 표시 이름', turnLimit=8, cardPool='common'},
+    image_probe = {id='image_probe', database='ImageProbe.db', name='파일명과 다른 표시 이름', turnLimit=8},
 ]], 1)
 local definition = [[
 return {
@@ -32,7 +32,7 @@ return {
         sexualPreference='서로의 경계를 존중하는 관계를 선호함',
         backgroundNarrative='이미지 회귀 테스트용 캐릭터 배경.',
         battle={startingResistance=30,turnLimit=8,startingMood='suspicion',
-            baseDrawCount=3,maxHandSize=5,planCapacity=1,traitIds={},extraDeck={}},
+            baseDrawCount=3,maxHandSize=5,planCapacity=1,traitIds={},deck={}},
     }}, cards={},
 }
 ]]
