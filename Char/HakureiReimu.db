@@ -43,7 +43,7 @@ return {
                 maxHandSize = 5,
                 planCapacity = 1,
                 traitIds = {},
-                extraDeck = { "reimu_boundary_guard" },
+                deck = { "reimu_boundary_guard" },
             },
         },
     },

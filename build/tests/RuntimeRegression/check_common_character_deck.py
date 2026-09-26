@@ -1,4 +1,4 @@
-"""Custom character decks use own cards first and seed-based common supplements."""
+"""Character decks use own cards first and automatically receive seed-based common supplements."""
 from pathlib import Path
 import sys
 
@@ -10,7 +10,7 @@ lua.execute(r'''
 local listing = sources['CharacterList.db']
 local common = sources['CommonCharacterCards.db']
 sources['CharacterList.db'] = listing:gsub('characters = {', [[characters = {
-    custom_probe = {id='custom_probe', database='CustomProbe.db', name='공용 덱 검사', turnLimit=8, cardPool='common'},
+    custom_probe = {id='custom_probe', database='CustomProbe.db', name='공용 덱 검사', turnLimit=8},
 ]], 1)
 
 local function commonSource(cardCount)
@@ -33,10 +33,10 @@ sources['CommonCharacterCards.db'] = commonSource(12)
 local fixtureCommon = sources['CommonCharacterCards.db']
 
 local function customSource(cardCount)
-    local extraDeck, cards = {}, {}
+    local deck, cards = {}, {}
     for index = 1, cardCount do
         local id = string.format('probe_own_%02d', index)
-        extraDeck[#extraDeck + 1] = string.format("'%s'", id)
+        deck[#deck + 1] = string.format("'%s'", id)
         cards[#cards + 1] = string.format([[
 %s=characterCardSupport.card(
     '%s', '전용 카드 %d', {'recovery'}, {}, {'저항 1 회복.'}, '전용 카드',
@@ -50,11 +50,11 @@ return {
         id='custom_probe', name='공용 덱 검사', publicProfile={},
         sexualPreference='상호 존중을 중시함', backgroundNarrative='공용 덱 검사 캐릭터.',
         battle={startingResistance=30, turnLimit=8, startingMood='suspicion',
-            baseDrawCount=3, maxHandSize=5, planCapacity=1, traitIds={}, extraDeck={%s}},
+            baseDrawCount=3, maxHandSize=5, planCapacity=1, traitIds={}, deck={%s}},
     }},
     cards={%s},
 }
-]], table.concat(extraDeck, ','), table.concat(cards, ','))
+]], table.concat(deck, ','), table.concat(cards, ','))
 end
 
 local playerDeck = {
@@ -105,12 +105,12 @@ end
 local emptyIds = startCustom(0, 12345)
 local emptyOwn, emptyShared = analyze(emptyIds)
 assert(#emptyIds == 10 and emptyOwn == 0 and emptyShared == 10,
-    'zero-card custom character must receive ten common cards')
+    'zero-card character must receive ten common cards')
 
 local partialIds = startCustom(3, 12345)
 local partialOwn, partialShared = analyze(partialIds)
 assert(#partialIds == 10 and partialOwn == 3 and partialShared == 7,
-    'partial custom deck must be supplemented to ten cards')
+    'partial character deck must be supplemented to ten cards')
 
 local sameSeedIds = startCustom(3, 12345)
 assert(table.concat(partialIds, ',') == table.concat(sameSeedIds, ','),
@@ -138,40 +138,18 @@ end
 checked('staticData', 'clearCache')
 local catalog = checked('staticData', 'loadCatalog').data
 assert(catalog.characters.custom_probe and not catalog.characters.custom_probe.publicProfile)
-assert(not reads['CommonCharacterCards.db'] and not reads['CustomProbe.db'], 'catalog loaded custom content')
-local existing = checked('staticData', 'loadCharacters', {'han_jenny'}).data
-assert(not reads['CommonCharacterCards.db'], 'ordinary character loaded common deck')
-assert(not existing.cards.common_probe_01)
+assert(not reads['CommonCharacterCards.db'] and not reads['CustomProbe.db'],
+    'catalog loaded character content')
 
-sources['CustomProbe.db'] = [[
-return {
-    schemaVersion=1, kind='characterDatabase',
-    characters={custom_probe={
-        id='custom_probe', name='공용 덱 검사', publicProfile={},
-        sexualPreference='상호 존중을 중시함', backgroundNarrative='공용 덱 검사 캐릭터.',
-        battle={startingResistance=30, turnLimit=8, startingMood='suspicion',
-            baseDrawCount=3, maxHandSize=5, planCapacity=1, traitIds={}, extraDeck={}},
-    }},
-    cards={orphan=characterCardSupport.card(
-        'orphan', '누락 카드', {'recovery'}, {}, {'저항 1 회복.'}, '전용 카드',
-        {actorAction='몸을 피한다.', actorThought='지켜야 해.'},
-        function() return {characterCardSupport.recoverResistance(1)} end)},
-}
-]]
-checked('staticData', 'clearCache')
-local orphan = runScript('test', 'staticData', 'loadCharacters', {'custom_probe'})
-assert(not orphan.ok, 'defined but unlisted custom card was silently omitted')
-local orphanReported = false
-for _, issue in ipairs(orphan.errors or {}) do
-    if issue.code == 'unlisted_extra_card' then orphanReported = true end
-end
-assert(orphanReported, 'unlisted custom card had no actionable validation error')
+local existing = checked('staticData', 'loadCharacters', {'han_jenny'}).data
+assert(reads['CommonCharacterCards.db'], 'character load did not include common card pool')
+assert(existing.cards.common_probe_01, 'character scope did not include common cards')
 
 sources['CustomProbe.db'] = customSource(1):gsub(
-    "extraDeck={'probe_own_01'}", "extraDeck={'missing_card'}", 1)
+    "deck={'probe_own_01'}", "deck={'missing_card'}", 1)
 checked('staticData', 'clearCache')
 assert(not runScript('test', 'staticData', 'loadCharacters', {'custom_probe'}).ok,
-    'unknown extra card accepted')
+    'unknown character deck card accepted')
 
 sources['CustomProbe.db'] = customSource(1)
 sources['CommonCharacterCards.db'] = fixtureCommon:gsub(
@@ -179,8 +157,8 @@ sources['CommonCharacterCards.db'] = fixtureCommon:gsub(
 checked('staticData', 'clearCache')
 assert(not runScript('test', 'staticData', 'loadCharacters', {'custom_probe'}).ok,
     'unknown shared card accepted')
-assert(checked('staticData', 'loadCharacters', {'han_jenny'}).ok,
-    'malformed shared deck affected an ordinary character')
+assert(not runScript('test', 'staticData', 'loadCharacters', {'han_jenny'}).ok,
+    'malformed shared deck did not affect a character-scoped load')
 
 sources['CommonCharacterCards.db'] = [[
 local id = 'only_common'
@@ -204,5 +182,5 @@ assert(insufficientReported, 'insufficient common pool lacked an actionable vali
 
 sources['CommonCharacterCards.db'] = common
 sources['CharacterList.db'] = listing
-print('PASS: seeded common supplements, own-deck threshold, scoping and invalid references')
+print('PASS: automatic seeded common supplements, unified deck schema and validation')
 ''')

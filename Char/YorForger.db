@@ -37,7 +37,7 @@ return {
                 maxHandSize = 5,
                 planCapacity = 1,
                 traitIds = {},
-                extraDeck = {},
+                deck = {},
             },
         },
     },

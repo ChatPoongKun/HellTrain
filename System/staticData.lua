@@ -570,18 +570,14 @@
                     addError(errors, "invalid_turn_limit", path .. ".turnLimit", "제한 턴은 7 이상 12 이하이어야 합니다.")
                 end
                 for field in pairs(entry) do
-                    if field ~= "id" and field ~= "database" and field ~= "name" and field ~= "turnLimit"
-                        and field ~= "cardPool" then
+                    if field ~= "id" and field ~= "database" and field ~= "name" and field ~= "turnLimit" then
                         addError(
                             errors,
                             "unexpected_character_list_field",
                             path .. "." .. tostring(field),
-                            "캐릭터 목록에는 id, database, name, turnLimit, cardPool만 사용할 수 있습니다."
+                            "캐릭터 목록에는 id, database, name, turnLimit만 사용할 수 있습니다."
                         )
                     end
-                end
-                if entry.cardPool ~= nil and entry.cardPool ~= "common" then
-                    addError(errors, "invalid_character_card_pool", path .. ".cardPool", "지원하지 않는 공용 카드 풀입니다.")
                 end
 
                 if not isCharacterDatabaseName(entry.database) then
@@ -725,42 +721,25 @@
                                     or definition.battle.turnLimit ~= entry.turnLimit then
                                     addError(errors, "character_catalog_mismatch", modulePath, "캐릭터 목록 요약과 개별 DB가 일치하지 않습니다.")
                                 end
-                                if entry.cardPool == "common" and type(definition.battle) == "table" then
+                                if type(definition.battle) == "table" then
                                     local battle = definition.battle
-                                    if battle.deck ~= nil then
-                                        addError(errors, "unexpected_custom_deck", modulePath .. ".battle.deck", "공용 덱 캐릭터는 extraDeck만 지정합니다.")
-                                    end
-                                    if not isArray(battle.extraDeck) then
-                                        addError(errors, "invalid_extra_deck", modulePath .. ".battle.extraDeck", "추가 덱은 연속 배열이어야 합니다.")
-                                    end
-                                    local deck = {}
-                                    local seen = {}
-                                    for _, cardId in ipairs(commonDeck or {}) do
-                                        seen[cardId] = true
-                                    end
-                                    for index, cardId in ipairs(isArray(battle.extraDeck) and battle.extraDeck or {}) do
-                                        if type(module.cards) ~= "table" or module.cards[cardId] == nil or seen[cardId] then
-                                            addError(errors, "invalid_extra_card", modulePath .. ".battle.extraDeck[" .. index .. "]", "추가 카드가 해당 캐릭터 DB에 없거나 중복되었습니다.")
-                                        else
-                                            deck[#deck + 1] = cardId
-                                            seen[cardId] = true
+                                    if isArray(battle.deck) then
+                                        for _, cardId in ipairs(battle.deck) do
+                                            if type(module.cards) ~= "table" or module.cards[cardId] == nil then
+                                                addError(
+                                                    errors,
+                                                    "foreign_character_card",
+                                                    modulePath .. ".battle.deck",
+                                                    "덱 카드는 해당 캐릭터 DB에 정의되어야 합니다."
+                                                )
+                                            end
                                         end
-                                    end
-                                    for _, cardId in ipairs(sortedAsciiKeys(module.cards)) do
-                                        if not seen[cardId] then
-                                            addError(errors, "unlisted_extra_card", modulePath .. ".cards." .. cardId, "전용 카드를 사용하려면 battle.extraDeck에 카드 ID를 추가해야 합니다.")
-                                        end
-                                    end
-                                    local commonPool = {}
-                                    for _, cardId in ipairs(commonDeck or {}) do
-                                        commonPool[#commonPool + 1] = cardId
-                                    end
-                                    battle.deck = deck
-                                    battle.commonDeck = commonPool
-                                else
-                                    for _, cardId in ipairs(type(definition.battle) == "table" and type(definition.battle.deck) == "table" and definition.battle.deck or {}) do
-                                        if type(module.cards) ~= "table" or module.cards[cardId] == nil then
-                                            addError(errors, "foreign_character_card", modulePath .. ".battle.deck", "덱 카드는 해당 캐릭터 DB에 정의되어야 합니다.")
+                                        if #battle.deck < CUSTOM_CHARACTER_DECK_TARGET then
+                                            local commonPool = {}
+                                            for _, cardId in ipairs(commonDeck or {}) do
+                                                commonPool[#commonPool + 1] = cardId
+                                            end
+                                            battle.commonDeck = commonPool
                                         end
                                     end
                                 end
@@ -1897,15 +1876,7 @@
                 end
             end
         end
-        local needsCommonCards = requestedIds == nil
-        if not needsCommonCards then
-            for _, entry in pairs(selectedCharacters) do
-                if type(entry) == "table" and entry.cardPool == "common" then
-                    needsCommonCards = true
-                    break
-                end
-            end
-        end
+        local needsCommonCards = requestedIds == nil or #requestedIds > 0
         if needsCommonCards then captureStaticLore(triggerId, captured, "CommonCharacterCards.db") end
         for _, database in ipairs(collectCharacterDatabaseNames(selectedCharacters or discoveredCharacterList)) do
             captureStaticLore(triggerId, captured, database)
