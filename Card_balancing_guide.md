@@ -657,7 +657,8 @@ Payoff의 조건부 피해는 `D(성공 총피해)-D(기본피해)`의 기대값
 
 - publicProfile.personality.traits
 - occupation / background / hobbies
-- privateProfile의 성적 지식·경험·숨은 욕구 등 서사적 반응 근거
+- sexualPreference의 관계 취향과 경계
+- backgroundNarrative의 과거와 현재 상황 등 서사적 반응 근거
 - startingResistance / startingMood
 - baseDrawCount / planCapacity
 - traitIds

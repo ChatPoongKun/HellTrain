@@ -63,6 +63,8 @@ json.encode / json.decode
 
 필수 회귀 테스트와 fixture는 Git에 포함되는 [`build/tests/`](build/tests/README.md)에 둡니다. `setup.bat`은 빌드용 Pillow와 테스트용 Lupa를 설치하며, 테스트는 로컬 `.agents/` 자료에 의존하지 않습니다. 전체 검사만 실행하려면 프로젝트 루트에서 `python build/tests/RuntimeRegression/check_runtime_regressions.py`를 사용합니다.
 
+에이전트가 명시적인 지시없이는 절대 회귀검사나 빌드를 자의적으로 수행하도록 하지 마십시오. 이는 반드시 개발자가 직접 테스트하고 배포판을 빌드해야 합니다.
+
 ## RisuAI 등록 원칙
 
 ### 메인 스크립트
@@ -326,7 +328,7 @@ battleLogView
 
 캐릭터 리스트는 `runProgressionV1.authority.sessions`와 현재 `battleRuntimeV1.authority`를 읽어 조우한 캐릭터만 표시합니다. `battleId`로 중복을 제거하며, 진행 중 전투는 조우 1회, 확정된 `victory`는 함락 1회, `defeat`는 패배 1회로 계산합니다. 별도 누적 카운터를 저장하지 않으므로 같은 화면을 반복해서 열어도 횟수가 늘지 않습니다.
 
-`System/캐릭터 프로필.lua`가 정적 데이터 캐시를 읽고, `runProgressionView.buildCharacterJournal`이 기존 캐릭터 표시·검증 함수를 재사용해 `characterJournalView`를 만듭니다. 상세 화면은 공개 프로필과 전투 특징만 표시하며, 미조우 캐릭터 ID로 직접 접근하는 요청은 거부합니다. 기록의 범위는 현재 채팅에 보존된 진행 이력입니다.
+`System/캐릭터 프로필.lua`가 정적 데이터 캐시를 읽고, `runProgressionView.buildCharacterJournal`이 기존 캐릭터 표시·검증 함수를 재사용해 `characterJournalView`를 만듭니다. 상세 화면은 공개 프로필, 배경 서사, 성적 취향과 전투 특징을 표시하며, 미조우 캐릭터 ID로 직접 접근하는 요청은 거부합니다. 기록의 범위는 현재 채팅에 보존된 진행 이력입니다.
 
 ## 전투 컨트롤러 공개 action
 

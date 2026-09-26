@@ -649,7 +649,15 @@
         return deck
     end
 
-    local function loadCharacterDefinitions(characterList, errors, captured, cards, commonDeck)
+    local function loadCharacterDefinitions(
+        characterList,
+        errors,
+        captured,
+        cards,
+        commonDeck,
+        characterOrigins,
+        cardOrigins
+    )
         local characters = {}
         for _, characterId in ipairs(sortedAsciiKeys(characterList)) do
             local entry = characterList[characterId]
@@ -679,6 +687,7 @@
                                 addError(errors, "invalid_character_card", modulePath .. ".cards." .. tostring(cardId), "캐릭터 소유 카드만 정의할 수 있습니다.")
                             else
                                 cards[cardId] = card
+                                cardOrigins[cardId] = modulePath
                             end
                         end
                     end
@@ -696,6 +705,7 @@
                             )
                         elseif characters[characterId] == nil then
                             characters[characterId] = definition
+                            characterOrigins[characterId] = modulePath
                             if type(definition) == "table" then
                                 local portrait = definition.portraitImage
                                 local fallen = definition.fallenImage
@@ -772,6 +782,22 @@
             end
         end
         return characters
+    end
+
+    local function qualifyCharacterDefinitionPaths(errors, characterOrigins, cardOrigins)
+        for _, item in ipairs(errors) do
+            if type(item) == "table" and type(item.path) == "string" then
+                local collection, id, suffix = item.path:match("^(characters)%.([a-z][a-z0-9_]*)(.*)$")
+                local origin = collection == "characters" and characterOrigins[id] or nil
+                if origin == nil then
+                    collection, id, suffix = item.path:match("^(cards)%.([a-z][a-z0-9_]*)(.*)$")
+                    origin = collection == "cards" and cardOrigins[id] or nil
+                end
+                if origin ~= nil then
+                    item.path = origin .. "." .. collection .. "." .. id .. suffix
+                end
+            end
+        end
     end
 
     local function validateRegistryCollection(collection, path, errors, ownerRequired)
@@ -1583,8 +1609,14 @@
                 if type(character.publicProfile) ~= "table" then
                     addError(errors, "missing_public_profile", path .. ".publicProfile", "공개 프로필이 없습니다.")
                 end
-                if character.privateProfile ~= nil and type(character.privateProfile) ~= "table" then
-                    addError(errors, "invalid_private_profile", path .. ".privateProfile", "비공개 프로필이 테이블이 아닙니다.")
+                if character.privateProfile ~= nil then
+                    addError(errors, "legacy_private_profile", path .. ".privateProfile", "privateProfile 대신 sexualPreference를 사용해야 합니다.")
+                end
+                if type(character.sexualPreference) ~= "string" or character.sexualPreference == "" then
+                    addError(errors, "invalid_sexual_preference", path .. ".sexualPreference", "성적 취향은 비어 있지 않은 문자열이어야 합니다.")
+                end
+                if type(character.backgroundNarrative) ~= "string" or character.backgroundNarrative == "" then
+                    addError(errors, "invalid_background_narrative", path .. ".backgroundNarrative", "배경 서사는 비어 있지 않은 문자열이어야 합니다.")
                 end
 
                 local battle = character.battle
@@ -1751,13 +1783,24 @@
             characterList = loadMergedCollection(SOURCES.characterList, errors, captured)
         end
         validateCharacterList(characterList, errors)
-        local characters = loadCharacterDefinitions(selectedCharacters or characterList, errors, captured, cards, commonDeck)
+        local characterOrigins = {}
+        local cardOrigins = {}
+        local characters = loadCharacterDefinitions(
+            selectedCharacters or characterList,
+            errors,
+            captured,
+            cards,
+            commonDeck,
+            characterOrigins,
+            cardOrigins
+        )
 
         validateRegistry(registry, errors)
         validateCards(cards, registry, errors)
         validateTraits(traits, errors)
         validateSubwayLines(subwayLines, errors)
         validateCharacters(characters, cards, traits, registry, errors)
+        qualifyCharacterDefinitionPaths(errors, characterOrigins, cardOrigins)
 
         local loadedCount = countEntries(characters)
         for id, entry in pairs(characterList) do

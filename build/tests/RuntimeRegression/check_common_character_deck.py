@@ -48,6 +48,7 @@ return {
     schemaVersion=1, kind='characterDatabase',
     characters={custom_probe={
         id='custom_probe', name='공용 덱 검사', publicProfile={},
+        sexualPreference='상호 존중을 중시함', backgroundNarrative='공용 덱 검사 캐릭터.',
         battle={startingResistance=30, turnLimit=8, startingMood='suspicion',
             baseDrawCount=3, maxHandSize=5, planCapacity=1, traitIds={}, extraDeck={%s}},
     }},
@@ -147,6 +148,7 @@ return {
     schemaVersion=1, kind='characterDatabase',
     characters={custom_probe={
         id='custom_probe', name='공용 덱 검사', publicProfile={},
+        sexualPreference='상호 존중을 중시함', backgroundNarrative='공용 덱 검사 캐릭터.',
         battle={startingResistance=30, turnLimit=8, startingMood='suspicion',
             baseDrawCount=3, maxHandSize=5, planCapacity=1, traitIds={}, extraDeck={}},
     }},

@@ -29,6 +29,8 @@ return {
         id='image_probe', name='파일명과 다른 표시 이름',
         portraitImage='probe_portrait.png', fallenImage='probe_fallen.png',
         publicProfile={age=25,occupation='직장인',appearance={style='외투'},background={}},
+        sexualPreference='서로의 경계를 존중하는 관계를 선호함',
+        backgroundNarrative='이미지 회귀 테스트용 캐릭터 배경.',
         battle={startingResistance=30,turnLimit=8,startingMood='suspicion',
             baseDrawCount=3,maxHandSize=5,planCapacity=1,traitIds={},extraDeck={}},
     }}, cards={},

@@ -33,9 +33,8 @@ return {
                     boardingReason = "낯선 지하철에 나타난 이변의 원인을 찾는 중",
                 },
             },
-            privateProfile = {
-                hiddenDesire = "낯선 공간에서도 침착하게 이변을 해결하고 돌아가고 싶어 함",
-            },
+            sexualPreference = "연애나 성적 관계보다 서로의 경계를 존중하는 차분한 관계를 선호함",
+            backgroundNarrative = "환상향의 하쿠레이 신사를 지키는 무녀로, 낯선 지하철에 나타난 이변의 원인을 쫓다가 이곳에 들어섰다.",
             battle = {
                 startingResistance = 30,
                 turnLimit = 9,

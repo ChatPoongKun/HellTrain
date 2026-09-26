@@ -1,4 +1,27 @@
 (function(triggerId, characterId)
+    local function escapeHtml(value)
+        return tostring(value)
+            :gsub("&", "&amp;")
+            :gsub("<", "&lt;")
+            :gsub(">", "&gt;")
+            :gsub('"', "&quot;")
+            :gsub("'", "&#39;")
+    end
+
+    local function formatErrors(result)
+        if type(result) ~= "table" or type(result.errors) ~= "table" then return nil end
+        local parts = {}
+        for _, item in ipairs(result.errors) do
+            if type(item) == "table" and type(item.path) == "string" then
+                parts[#parts + 1] = "[" .. tostring(item.code or "error") .. "] "
+                    .. tostring(item.message or "캐릭터 정보를 불러오지 못했습니다.")
+                    .. " (" .. item.path .. ")"
+            end
+        end
+        if #parts == 0 then return nil end
+        return table.concat(parts, "\n")
+    end
+
     local function execute()
         local battle = HostCompat.readState(triggerId, "battleRuntimeV1.authority")
         local setup = HostCompat.readState(triggerId, "gameSetupV1.authority")
@@ -58,7 +81,10 @@
     local ok, result = pcall(execute)
     if ok and type(result) == "table" and result.ok then return result end
     debug(1, "캐릭터 기록 조회 실패: " .. tostring(ok and result.errors and result.errors[1] and result.errors[1].message or result))
+    local detail = ok and formatErrors(result) or nil
+    local detailHtml = detail and ('<pre class="character-journal-error">' .. escapeHtml(detail) .. '</pre>') or ""
     HostCompat.writeChatVar(triggerId, "helltrainUiPopupV1",
-        '<div class="popup-overlay"><div class="popup-container"><div class="popup-header"><div class="popup-title">캐릭터 기록</div><button class="close-btn" risu-btn="popupManage|close" aria-label="닫기">×</button></div><p>캐릭터 기록을 불러오지 못했습니다. 잠시 후 다시 열어 주세요.</p></div></div>')
+        '<div class="popup-overlay"><div class="popup-container"><div class="popup-header"><div class="popup-title">캐릭터 기록</div><button class="close-btn" risu-btn="popupManage|close" aria-label="닫기">×</button></div><p>캐릭터 기록을 불러오지 못했습니다. 아래 DB 오류를 확인해 주세요.</p>'
+            .. detailHtml .. '</div></div>')
     return { ok = false }
 end)

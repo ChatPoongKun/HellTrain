@@ -39,16 +39,8 @@ return {
                 },
             },
 
-            privateProfile = {
-                sexualKnowledge = "섹스를 야동으로만 접함",
-                sexualExperience = "실제 관계는 한 적 없으나 몇 번 자위를 해본 적 있음",
-                virginity = {
-                    kiss = false,
-                    oral = false,
-                    vaginal = "자위 때 사용한 딱풀",
-                    anal = false,
-                },
-            },
+            sexualPreference = "천천히 신뢰를 쌓는 다정한 관계를 선호하며 낯선 친밀감 앞에서는 수줍음이 먼저 드러남",
+            backgroundNarrative = "부모님과 함께 지내며 책과 음악을 좋아하는 대학생으로, 평범한 외출을 마치고 집으로 돌아가는 길에 지하철에 탔다.",
 
             battle = {
                 startingResistance = 30,

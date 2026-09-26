@@ -27,7 +27,7 @@ python build/tests/RuntimeRegression/check_character_context_lore.py
 python build/tests/RuntimeRegression/check_character_journal.py
 ```
 
-`check_free_training.py`는 같은 캐릭터의 서로 다른 승리 전투 3회 조건과 세션 상태 전이의 중복 방지를 확인한다. `check_free_training_host_flow.py`는 자유 입력 중 전투 controller·검증·commit 경로가 호출되지 않는지 확인한다. `check_free_training_summary.py`는 현재 세션의 채팅 경계, 빈 대화, 요약 실패 및 길이 제한을 확인한다. `check_character_context_lore.py`는 활성 캐릭터의 공개·비공개 프로필, 과거 전투 결과와 최신 자유조교 요약 3회만 항상 활성 로컬 로어북에 투영하는지 확인한다. 실제 RisuAI에서는 생성 중 종료, 최신 응답으로 UI target 이동, 리롤과 Continue, 종료 뒤 동일 캐릭터 후보 유지도 수동으로 확인한다.
+`check_free_training.py`는 같은 캐릭터의 서로 다른 승리 전투 3회 조건과 세션 상태 전이의 중복 방지를 확인한다. `check_free_training_host_flow.py`는 자유 입력 중 전투 controller·검증·commit 경로가 호출되지 않는지 확인한다. `check_free_training_summary.py`는 현재 세션의 채팅 경계, 빈 대화, 요약 실패 및 길이 제한을 확인한다. `check_character_context_lore.py`는 활성 캐릭터의 공개 프로필·성적 취향·배경 서사, 과거 전투 결과와 최신 자유조교 요약 3회만 항상 활성 로컬 로어북에 투영하는지 확인한다. 실제 RisuAI에서는 생성 중 종료, 최신 응답으로 UI target 이동, 리롤과 Continue, 종료 뒤 동일 캐릭터 후보 유지도 수동으로 확인한다.
 
 이 폴더의 테스트 소스와 fixture는 모두 Git에 포함한다. 로컬 `.agents/` 자료나 별도 `.deps` 디렉터리 없이 설치된 Lupa의 Lua 5.4와 LuaJIT 런타임을 사용한다.
 

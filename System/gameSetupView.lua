@@ -201,6 +201,21 @@
         end
     end
 
+    local function appendCharacterLoadErrors(target, fallbackPath, report)
+        if type(report) ~= "table" or type(report.errors) ~= "table" or #report.errors == 0 then
+            addError(target, "character_load_failed", fallbackPath, "캐릭터 정보를 불러오지 못했습니다.")
+            return
+        end
+        for _, item in ipairs(report.errors) do
+            addError(
+                target,
+                tostring(type(item) == "table" and item.code or "character_load_failed"),
+                tostring(type(item) == "table" and item.path or fallbackPath),
+                tostring(type(item) == "table" and item.message or "캐릭터 정보를 불러오지 못했습니다.")
+            )
+        end
+    end
+
     local function callRuntime(moduleName, moduleAction, ...)
         if type(runScript) ~= "function" then
             return nil, {
@@ -317,8 +332,11 @@
         local character = data.characters[characterId]
         if data.partial == true and type(character) == "table" and character.publicProfile == nil then
             local ok, report = pcall(runScript, triggerId, "staticData", "loadCharacters", {characterId})
-            if not ok or type(report) ~= "table" or report.ok ~= true then
+            if not ok or type(report) ~= "table" then
                 addError(errors, "character_load_failed", path, "캐릭터 정보를 불러오지 못했습니다.")
+                return nil
+            elseif report.ok ~= true then
+                appendCharacterLoadErrors(errors, path, report)
                 return nil
             end
             character = report.data.characters[characterId]

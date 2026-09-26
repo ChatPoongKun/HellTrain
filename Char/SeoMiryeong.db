@@ -39,17 +39,8 @@ return {
                 },
             },
 
-            privateProfile = {
-                sexualKnowledge = "결혼 생활을 통해 성에 대해 현실적이고 성숙한 지식을 갖고 있음",
-                sexualExperience = "배우자와의 오랜 관계 경험이 있으며 자신의 경계를 분명히 알고 있음",
-                hiddenDesire = "상대의 의도를 알아차리고도 모르는 척하며 상황의 속도를 통제하려는 성향이 있음",
-                virginity = {
-                    kiss = "경험 있음",
-                    oral = "경험 있음",
-                    vaginal = "경험 있음",
-                    anal = "경험 없음",
-                },
-            },
+            sexualPreference = "신뢰와 친밀감이 쌓인 안정적인 관계를 선호하며 관계의 분위기와 속도를 차분히 조율하려 함",
+            backgroundNarrative = "오랫동안 꽃집을 운영하며 가족을 돌봐 온 사람으로, 외부 행사 장식을 마치고 가게로 돌아가던 길이었다.",
 
             battle = {
                 startingResistance = 33,

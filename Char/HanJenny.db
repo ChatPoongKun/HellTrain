@@ -39,17 +39,8 @@ return {
                 },
             },
 
-            privateProfile = {
-                sexualKnowledge = "인터넷과 연애 경험으로 성 지식이 풍부하며 노골적인 농담에도 익숙함",
-                sexualExperience = "가벼운 만남과 연애를 모두 경험했지만 주도권을 넘기는 것은 꺼림",
-                hiddenDesire = "상대를 놀리는 역할에는 익숙하지만 예상 밖의 반격에는 쉽게 페이스를 잃음",
-                virginity = {
-                    kiss = "경험 있음",
-                    oral = "경험 있음",
-                    vaginal = "경험 있음",
-                    anal = "경험 없음",
-                },
-            },
+            sexualPreference = "장난스럽고 주도적인 관계를 선호하지만 서로의 경계를 분명히 존중하는 것을 중요하게 여김",
+            backgroundNarrative = "패션과 뷰티 콘텐츠로 이름을 알린 인플루언서로, 브랜드 행사 촬영을 마치고 귀가하던 중 지하철에 올랐다.",
 
             battle = {
                 startingResistance = 27,

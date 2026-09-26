@@ -38,17 +38,8 @@ return {
                 },
             },
 
-            privateProfile = {
-                sexualKnowledge = "성 지식과 연애 경험은 충분하지만 사생활을 철저히 통제함",
-                sexualExperience = "몇 차례의 진지한 교제와 성관계 경험이 있음",
-                hiddenDesire = "자신의 동요를 간파당하거나 주도권을 잃는 상황을 두려워하면서도 의식함",
-                virginity = {
-                    kiss = "경험 있음",
-                    oral = "경험 있음",
-                    vaginal = "경험 있음",
-                    anal = "경험 없음",
-                },
-            },
+            sexualPreference = "상호 존중과 절제된 친밀감을 선호하며 관계에서도 주도권과 명확한 경계를 중시함",
+            backgroundNarrative = "대기업 전략기획팀을 이끄는 완벽주의자로, 늦은 회의를 마치고 홀로 귀가하기 위해 지하철에 올랐다.",
 
             battle = {
                 startingResistance = 36,

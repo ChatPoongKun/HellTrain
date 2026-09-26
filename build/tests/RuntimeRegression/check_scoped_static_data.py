@@ -8,6 +8,16 @@ from simulate_balance import runtime
 lua, _ = runtime('jit' if 'jit' in sys.argv else 'lua54')
 lua.execute(r'''
 local full = data
+local characterCount = 0
+for id, character in pairs(full.characters) do
+    characterCount = characterCount + 1
+    assert(type(character.sexualPreference) == 'string' and character.sexualPreference ~= '',
+        'character sexual preference missing: '..id)
+    assert(type(character.backgroundNarrative) == 'string' and character.backgroundNarrative ~= '',
+        'character background narrative missing: '..id)
+    assert(character.privateProfile == nil, 'legacy private profile retained: '..id)
+end
+assert(characterCount == 6, 'expected six registered characters, got '..characterCount)
 local reads = {}
 local original = getLoreBooks
 function getLoreBooks(t, name)
@@ -53,10 +63,103 @@ assert(#stored.characterCardIds == 2, 'catalog recording discarded discoveries')
 RUNTIME_CACHE_DEVELOPMENT_BYPASS = nil
 local saved = sources['YooJiyoung.db']
 sources['YooJiyoung.db'] = 'invalid Lua!'
+checked('staticData', 'clearCache')
 assert(checked('staticData','loadCharacters',{'han_jenny'}).ok)
+local invalidSyntax = runScript('test', 'staticData', 'loadCharacters', {'yoo_jiyoung'})
+assert(not invalidSyntax.ok, 'invalid character DB syntax was accepted')
+local sawSyntaxDatabase = false
+for _, item in ipairs(invalidSyntax.errors or {}) do
+    if item.code == 'compile_error' and item.path == 'YooJiyoung.db[1]' then
+        sawSyntaxDatabase = true
+    end
+end
+assert(sawSyntaxDatabase, 'character syntax error omitted its DB filename')
 assert(not runScript('test','staticData','loadAll').ok)
 sources['YooJiyoung.db'] = saved
 checked('staticData','loadAll')
+local jennySource = sources['HanJenny.db']
+sources['HanJenny.db'] = jennySource:gsub('startingResistance = 27', 'startingResistance = 0', 1)
+checked('staticData', 'clearCache')
+local invalidJenny = runScript('test', 'staticData', 'loadCharacters', {'han_jenny'})
+assert(not invalidJenny.ok, 'invalid character field was accepted')
+local sawPreciseCharacterPath = false
+for _, item in ipairs(invalidJenny.errors or {}) do
+    if item.code == 'invalid_starting_resistance'
+        and item.path == 'HanJenny.db[1].characters.han_jenny.battle.startingResistance' then
+        sawPreciseCharacterPath = true
+    end
+end
+assert(sawPreciseCharacterPath, 'character field error omitted its DB filename or exact field')
+sources['HanJenny.db'] = jennySource
+checked('staticData', 'clearCache')
+sources['HanJenny.db'] = jennySource:gsub(
+    'sexualPreference = "[^"]+"',
+    'sexualPreference = {}',
+    1
+)
+local invalidPreference = runScript('test', 'staticData', 'loadCharacters', {'han_jenny'})
+assert(not invalidPreference.ok, 'non-string sexual preference was accepted')
+local sawPreferencePath = false
+for _, item in ipairs(invalidPreference.errors or {}) do
+    if item.code == 'invalid_sexual_preference'
+        and item.path == 'HanJenny.db[1].characters.han_jenny.sexualPreference' then
+        sawPreferencePath = true
+    end
+end
+assert(sawPreferencePath, 'sexual preference error omitted its DB filename or exact field')
+sources['HanJenny.db'] = jennySource
+checked('staticData', 'clearCache')
+sources['HanJenny.db'] = jennySource:gsub(
+    'backgroundNarrative = "[^"]+"',
+    'backgroundNarrative = ""',
+    1
+)
+local invalidNarrative = runScript('test', 'staticData', 'loadCharacters', {'han_jenny'})
+assert(not invalidNarrative.ok, 'empty background narrative was accepted')
+local sawNarrativePath = false
+for _, item in ipairs(invalidNarrative.errors or {}) do
+    if item.code == 'invalid_background_narrative'
+        and item.path == 'HanJenny.db[1].characters.han_jenny.backgroundNarrative' then
+        sawNarrativePath = true
+    end
+end
+assert(sawNarrativePath, 'background narrative error omitted its DB filename or exact field')
+sources['HanJenny.db'] = jennySource
+checked('staticData', 'clearCache')
+sources['HanJenny.db'] = jennySource:gsub(
+    'sexualPreference = "[^"]+"',
+    'privateProfile = {}, sexualPreference = "legacy"',
+    1
+)
+local legacyProfile = runScript('test', 'staticData', 'loadCharacters', {'han_jenny'})
+assert(not legacyProfile.ok, 'legacy private profile was accepted')
+local sawLegacyPath = false
+for _, item in ipairs(legacyProfile.errors or {}) do
+    if item.code == 'legacy_private_profile'
+        and item.path == 'HanJenny.db[1].characters.han_jenny.privateProfile' then
+        sawLegacyPath = true
+    end
+end
+assert(sawLegacyPath, 'legacy private profile error omitted its DB filename or exact field')
+sources['HanJenny.db'] = jennySource
+checked('staticData', 'clearCache')
+sources['HanJenny.db'] = jennySource:gsub(
+    '"jenny_fix_makeup", "쿠션 팩트 수정"',
+    '"jenny_fix_makeup", ""',
+    1
+)
+local invalidJennyCard = runScript('test', 'staticData', 'loadCharacters', {'han_jenny'})
+assert(not invalidJennyCard.ok, 'invalid character card field was accepted')
+local sawPreciseCardPath = false
+for _, item in ipairs(invalidJennyCard.errors or {}) do
+    if item.code == 'missing_name'
+        and item.path == 'HanJenny.db[1].cards.jenny_fix_makeup.name' then
+        sawPreciseCardPath = true
+    end
+end
+assert(sawPreciseCardPath, 'character card field error omitted its DB filename or exact field')
+sources['HanJenny.db'] = jennySource
+checked('staticData', 'clearCache')
 local listing = sources['CharacterList.db']
 sources['CharacterList.db'] = listing:gsub('turnLimit = 8', 'turnLimit = 9', 1)
 assert(not runScript('test','staticData','loadAll').ok, 'catalog drift accepted')

@@ -809,6 +809,8 @@ local function handleButtonClick(triggerId, data)
             parts[2],
             "pending"
         )
+    elseif script == "init" then
+        controllerSucceeded(triggerId, "onButtonClick.init." .. tostring(parts[1]), report)
     end
 end
 

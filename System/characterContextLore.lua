@@ -112,7 +112,8 @@
         local document, documentError = safeJson({
             name = character.name,
             publicProfile = character.publicProfile or {},
-            privateProfile = character.privateProfile or {},
+            sexualPreference = character.sexualPreference,
+            backgroundNarrative = character.backgroundNarrative,
             pastBattleResults = battleResults(runState, characterId),
             recentFreeTrainingSummaries = summaries,
         }, "$.context")

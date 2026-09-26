@@ -28,6 +28,8 @@ assert(view.selected.freeTrainingCount==0 and #view.selected.freeTrainingHistory
 assert(view.selected.profile.name==data.characters[id].name)
 assert(view.selected.profile.portraitImage==data.characters[id].portraitImage)
 assert(view.selected.profile.appearanceSummary and #view.selected.profile.traits>0)
+assert(view.selected.profile.sexualPreference==data.characters[id].sexualPreference)
+assert(view.selected.profile.backgroundNarrative==data.characters[id].backgroundNarrative)
 assert(not view.selected.profile.privateProfile and not view.selected.profile.deck)
 local before=canonical(input)
 assert(canonical(journal(input))==canonical(view) and canonical(input)==before)
@@ -76,7 +78,7 @@ assert(repeatView.selected.encounters==2 and repeatView.selected.victories==1 an
 assert(not runScript('test','runProgressionView','buildCharacterJournal',{characterId=id},data).ok)
 local malformed=clone(wonRun);malformed.stats.victories=999
 assert(not runScript('test','runProgressionView','buildCharacterJournal',{setupState=receipt,runState=malformed},data).ok)
-local invalid=clone(won);invalid.selected.privateProfile={secret='hidden'}
+local invalid=clone(won);invalid.selected.profile.privateProfile={secret='hidden'}
 assert(not runScript('test','dataBridge','encode','characterJournalView',invalid).ok)
 local encoded=runScript('test','dataBridge','encode','characterJournalView',repeatView)
 assert(encoded.ok and encoded.bytes>0)
@@ -86,6 +88,8 @@ for characterId in pairs(data.characters) do
  local profile=journal({battleState=state,characterId=characterId})
  assert(profile.count==1 and profile.selected.profile.characterId==characterId)
  assert(profile.selected.profile.portraitImage==data.characters[characterId].portraitImage)
+ assert(profile.selected.profile.sexualPreference==data.characters[characterId].sexualPreference)
+ assert(profile.selected.profile.backgroundNarrative==data.characters[characterId].backgroundNarrative)
 end
 -- Real popup root -> detail -> back -> close, without changing authority.
 function debug(_,message) if message:find('조회 실패',1,true) then error(message) end end
@@ -121,3 +125,7 @@ for filename in ('캐릭터 리스트.html', '캐릭터 프로필.html'):
     assert html.count('{{') == html.count('}}')
     for directive in ('each', 'when'):
         assert html.count('{{#' + directive) == html.count('{{/' + directive + '}}')
+
+profile_html = (Path('html') / '캐릭터 프로필.html').read_text(encoding='utf-8')
+assert '배경 서사' in profile_html and 'backgroundNarrative' in profile_html
+assert '성적 취향' in profile_html and 'sexualPreference' in profile_html

@@ -294,6 +294,21 @@
         end
     end
 
+    local function appendCharacterLoadErrors(target, fallbackPath, report)
+        if type(report) ~= "table" or type(report.errors) ~= "table" or #report.errors == 0 then
+            addError(target, "character_load_failed", fallbackPath, "캐릭터 정보를 불러오지 못했습니다.")
+            return
+        end
+        for _, item in ipairs(report.errors) do
+            addError(
+                target,
+                tostring(type(item) == "table" and item.code or "character_load_failed"),
+                tostring(type(item) == "table" and item.path or fallbackPath),
+                tostring(type(item) == "table" and item.message or "캐릭터 정보를 불러오지 못했습니다.")
+            )
+        end
+    end
+
     local function callRuntime(moduleName, moduleAction, ...)
         if type(runScript) ~= "function" then
             return nil, {
@@ -421,8 +436,11 @@
         local character = staticData.characters[settlement.characterId]
         if staticData.partial == true and type(character) == "table" and character.fallenImage == nil then
             local ok, report = pcall(runScript, triggerId, "staticData", "loadCharacters", {settlement.characterId})
-            if not ok or type(report) ~= "table" or report.ok ~= true then
+            if not ok or type(report) ~= "table" then
                 addError(errors, "character_load_failed", "$.result.character", "결과 캐릭터 정보를 불러오지 못했습니다.")
+                return nil
+            elseif report.ok ~= true then
+                appendCharacterLoadErrors(errors, "$.result.character", report)
                 return nil
             end
             character = report.data.characters[settlement.characterId]
@@ -654,8 +672,11 @@
         local character = staticData.characters[characterId]
         if staticData.partial == true and type(character) == "table" and character.publicProfile == nil then
             local ok, report = pcall(runScript, triggerId, "staticData", "loadCharacters", {characterId})
-            if not ok or type(report) ~= "table" or report.ok ~= true then
+            if not ok or type(report) ~= "table" then
                 addError(errors, "character_load_failed", path, "캐릭터 정보를 불러오지 못했습니다.")
+                return nil
+            elseif report.ok ~= true then
+                appendCharacterLoadErrors(errors, path, report)
                 return nil
             end
             character = report.data.characters[characterId]
@@ -704,6 +725,8 @@
             age = profile.age,
             occupation = profile.occupation,
             appearanceSummary = appearanceSummary,
+            sexualPreference = character.sexualPreference,
+            backgroundNarrative = character.backgroundNarrative,
             startingResistance = battle.startingResistance,
             turnLimit = battle.turnLimit,
             startingMood = {
@@ -915,6 +938,8 @@
             age = true,
             occupation = true,
             appearanceSummary = true,
+            sexualPreference = true,
+            backgroundNarrative = true,
             startingResistance = true,
             turnLimit = true,
             startingMood = true,
@@ -935,6 +960,8 @@
         end
         validateString(character.occupation, path .. ".occupation", errors)
         validateString(character.appearanceSummary, path .. ".appearanceSummary", errors)
+        validateString(character.sexualPreference, path .. ".sexualPreference", errors)
+        validateString(character.backgroundNarrative, path .. ".backgroundNarrative", errors)
         if not isFinite(character.startingResistance) or character.startingResistance <= 0 then
             addError(errors, "invalid_starting_resistance", path .. ".startingResistance", "시작 저항은 양수여야 합니다.")
         end

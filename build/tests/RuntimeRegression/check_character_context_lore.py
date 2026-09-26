@@ -22,8 +22,8 @@ local states={
 }
 HostCompat={readState=function(_,key)return states[key]end}
 local characters={
- a={id='a',name='A',portraitImage='a.png',fallenImage='af.png',publicProfile={age=24,occupation='A job'},privateProfile={hiddenDesire='A desire'},battle={startingResistance=30,deck={'secret_card'}}},
- b={id='b',name='B',portraitImage='b.png',fallenImage='bf.png',publicProfile={age=25,occupation='B job'},privateProfile={hiddenDesire='B desire'},battle={startingResistance=20,deck={'other_card'}}},
+ a={id='a',name='A',portraitImage='a.png',fallenImage='af.png',publicProfile={age=24,occupation='A job'},sexualPreference='A preference',backgroundNarrative='A background',battle={startingResistance=30,deck={'secret_card'}}},
+ b={id='b',name='B',portraitImage='b.png',fallenImage='bf.png',publicProfile={age=25,occupation='B job'},sexualPreference='B preference',backgroundNarrative='B background',battle={startingResistance=20,deck={'other_card'}}},
 }
 function runScript(_,module,action,arg)
  if module=='staticData' and action=='loadCharacters' then
@@ -48,7 +48,9 @@ local lore=assert((loadstring or load)('return '..source))()
 local first=lore('test','sync','a')
 assert(first.ok and first.synced and first.loreName=='helltrain.activeCharacter.v1')
 assert(first.document.name=='A' and first.document.publicProfile.age==24)
-assert(first.document.privateProfile.hiddenDesire=='A desire')
+assert(first.document.sexualPreference=='A preference')
+assert(first.document.backgroundNarrative=='A background')
+assert(first.document.privateProfile==nil)
 assert(#first.document.pastBattleResults==2)
 assert(#first.document.recentFreeTrainingSummaries==3)
 assert(first.document.recentFreeTrainingSummaries[1].number==5)

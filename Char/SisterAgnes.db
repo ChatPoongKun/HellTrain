@@ -41,17 +41,8 @@ return {
                 },
             },
 
-            privateProfile = {
-                sexualKnowledge = "상담과 교육에 필요한 지식은 갖추었지만 자신의 욕망과는 분리해 생각함",
-                sexualExperience = "연애 및 성관계 경험이 없으며 정결 서원을 지키고 있음",
-                hiddenDesire = "욕망이 존재한다는 사실보다 그것을 인정하는 순간 자신의 신념이 흔들릴까 두려워함",
-                virginity = {
-                    kiss = "경험 없음",
-                    oral = "경험 없음",
-                    vaginal = "경험 없음",
-                    anal = "경험 없음",
-                },
-            },
+            sexualPreference = "정결 서원을 지키며 성적 관계를 바라지 않고 정서적 신뢰와 상호 존중을 가장 중요하게 여김",
+            backgroundNarrative = "수도 공동체에서 기도와 봉사를 이어 온 수녀로, 복지시설 봉사를 마치고 수도원으로 돌아가던 중이었다.",
 
             battle = {
                 startingResistance = 34,
