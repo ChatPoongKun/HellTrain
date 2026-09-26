@@ -5551,7 +5551,6 @@ animation-iteration-count: 1 !important;
 .draft-ui .draft-choice-state:checked + .draft-card .draft-selected-idle { display: none; }
 .draft-ui .draft-choice-state:checked + .draft-card .draft-selected-open { display: inline; }
 
-</style>
 /* freeTraining.html */
 .run-free-training-entry {
 display: flex;
@@ -5705,3 +5704,4 @@ flex-direction: column;
 padding: 16px;
 }
 }
+</style>
