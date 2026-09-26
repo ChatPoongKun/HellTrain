@@ -21,7 +21,8 @@ for characterId,definition in pairs(data.characters) do
  local originalCommonDeck=definition.battle.commonDeck
  definition.battle.commonDeck=nil
  local hybrids,planCount=0,0
- assert(#originalDeck>0,characterId..' has no character cards to exercise')
+ assert(#originalDeck>0 or (type(originalCommonDeck)=='table' and #originalCommonDeck>0),
+  characterId..' has no playable character cards')
  for _,id in ipairs(originalDeck) do
   local card=data.cards[id]
   if #card.roles==2 then hybrids=hybrids+1 end

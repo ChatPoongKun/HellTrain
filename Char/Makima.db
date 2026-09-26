@@ -1,0 +1,45 @@
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        makima = {
+            id = "makima",
+            name = "마키마",
+            portraitImage = "",
+            fallenImage = "",
+            publicProfile = {
+                age = 27,
+                occupation = "공안 대마 특이4과 책임자",
+                appearance = {
+                    hairColor = "붉은빛이 도는 갈색",
+                    eyeColor = "금빛과 붉은색의 동심원",
+                    skin = "밝은 피부",
+                    height = 168,
+                    style = "흰 셔츠와 검은 넥타이, 단정한 정장 바지",
+                },
+                personality = {
+                    traits = { "차분함", "위압적인 카리스마", "치밀함" },
+                    likes = { "영화", "개", "질서" },
+                },
+                background = {
+                    family = "여러 마리의 개와 함께 생활함",
+                    hobbies = "영화 감상과 산책",
+                    boardingReason = "공안이 감지한 미등록 악마의 흔적을 확인하는 중",
+                },
+            },
+            sexualPreference = "상대의 감정과 행동을 자신이 정한 질서 안에 두는 주도적인 관계를 선호함",
+            backgroundNarrative = "공안 대마 특이4과를 지휘하며 사람을 부드러운 말로 움직이는 인물로, 미등록 악마 사건을 조사하기 위해 열차에 탔다.",
+            battle = {
+                startingResistance = 34,
+                turnLimit = 11,
+                startingMood = "ignore",
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                planCapacity = 1,
+                traitIds = {},
+                extraDeck = {},
+            },
+        },
+    },
+    cards = {},
+}

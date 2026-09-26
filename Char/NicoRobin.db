@@ -1,0 +1,45 @@
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        nico_robin = {
+            id = "nico_robin",
+            name = "니코 로빈",
+            portraitImage = "",
+            fallenImage = "",
+            publicProfile = {
+                age = 30,
+                occupation = "고고학자이자 해적단 선원",
+                appearance = {
+                    hairColor = "검은색",
+                    eyeColor = "푸른색",
+                    skin = "밝은 피부",
+                    height = 188,
+                    style = "선글라스와 짙은 색 재킷을 곁들인 차분한 여행복",
+                },
+                personality = {
+                    traits = { "침착함", "지적임", "건조한 유머" },
+                    likes = { "고고학", "독서", "역사적 수수께끼" },
+                },
+                background = {
+                    family = "밀짚모자 일당을 소중한 동료이자 가족으로 여김",
+                    hobbies = "고문서 해독과 독서",
+                    boardingReason = "정체불명의 지하 유적과 연결된 단서를 조사하는 중",
+                },
+            },
+            sexualPreference = "지성과 신뢰를 나눌 수 있고 서로의 자유와 경계를 존중하는 차분한 관계를 선호함",
+            backgroundNarrative = "오하라의 생존자이자 진실의 역사를 좇는 고고학자로, 지하 유적의 문자를 조사하던 중 낯선 열차에 들어섰다.",
+            battle = {
+                startingResistance = 32,
+                turnLimit = 10,
+                startingMood = "suspicion",
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                planCapacity = 1,
+                traitIds = {},
+                extraDeck = {},
+            },
+        },
+    },
+    cards = {},
+}

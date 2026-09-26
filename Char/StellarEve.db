@@ -1,0 +1,45 @@
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        stellar_eve = {
+            id = "stellar_eve",
+            name = "이브",
+            portraitImage = "",
+            fallenImage = "",
+            publicProfile = {
+                age = 25,
+                occupation = "제7 공수부대 대원",
+                appearance = {
+                    hairColor = "검은색",
+                    eyeColor = "갈색",
+                    skin = "밝은 피부",
+                    height = 169,
+                    style = "강화형 전투 슈트와 긴 포니테일",
+                },
+                personality = {
+                    traits = { "침착함", "사명감", "인간에 대한 호기심" },
+                    likes = { "동료", "인류의 기억", "임무 완수" },
+                },
+                background = {
+                    family = "마더 스피어와 공수부대 동료들을 자신의 근원으로 여김",
+                    hobbies = "기록 수집과 지상 탐색",
+                    boardingReason = "네이티브 신호가 감지된 지하 시설을 수색하는 중",
+                },
+            },
+            sexualPreference = "임무 너머의 감정을 솔직히 나누고 서로의 선택과 존재를 존중하는 관계를 선호함",
+            backgroundNarrative = "황폐한 지구를 되찾기 위해 강하한 제7 공수부대의 전사로, 미확인 에너지 신호를 추적하다 움직이는 지하 시설에 진입했다.",
+            battle = {
+                startingResistance = 35,
+                turnLimit = 10,
+                startingMood = "rejection",
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                planCapacity = 1,
+                traitIds = {},
+                extraDeck = {},
+            },
+        },
+    },
+    cards = {},
+}

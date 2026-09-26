@@ -8,6 +8,12 @@ from simulate_balance import runtime
 lua, _ = runtime('jit' if 'jit' in sys.argv else 'lua54')
 lua.execute(r'''
 local full = data
+local characterList = assert(load(sources['CharacterList.db'], 'CharacterList.db'))().characters
+local listedCharacterCount = 0
+for id in pairs(characterList) do
+    listedCharacterCount = listedCharacterCount + 1
+    assert(full.characters[id], 'registered character missing from full load: '..id)
+end
 local characterCount = 0
 for id, character in pairs(full.characters) do
     characterCount = characterCount + 1
@@ -17,7 +23,8 @@ for id, character in pairs(full.characters) do
         'character background narrative missing: '..id)
     assert(character.privateProfile == nil, 'legacy private profile retained: '..id)
 end
-assert(characterCount == 6, 'expected six registered characters, got '..characterCount)
+assert(characterCount == listedCharacterCount,
+    'loaded character count mismatch: expected '..listedCharacterCount..', got '..characterCount)
 local reads = {}
 local original = getLoreBooks
 function getLoreBooks(t, name)

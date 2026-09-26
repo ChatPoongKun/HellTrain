@@ -1,0 +1,45 @@
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        fubuki = {
+            id = "fubuki",
+            name = "후부키",
+            portraitImage = "",
+            fallenImage = "",
+            publicProfile = {
+                age = 23,
+                occupation = "B급 1위 프로 히어로",
+                appearance = {
+                    hairColor = "짙은 녹색",
+                    eyeColor = "녹색",
+                    skin = "밝은 피부",
+                    height = 167,
+                    style = "진주 목걸이와 짙은 녹색 드레스, 모피 코트",
+                },
+                personality = {
+                    traits = { "야심", "통솔력", "강한 자존심" },
+                    likes = { "후부키 그룹", "인재 영입", "세련된 생활" },
+                },
+                background = {
+                    family = "언니 타츠마키와 복잡하지만 깊은 유대를 지님",
+                    hobbies = "그룹 관리와 새로운 인재 탐색",
+                    boardingReason = "지하에서 발생한 괴인 재해 신고를 받고 출동하는 중",
+                },
+            },
+            sexualPreference = "자신의 야심과 약한 면을 모두 인정하면서 대등하게 곁을 지켜 주는 관계를 선호함",
+            backgroundNarrative = "후부키 그룹을 이끄는 강력한 초능력자이자 B급 1위 히어로로, 지하 재해 신고를 확인하러 홀로 열차에 들어섰다.",
+            battle = {
+                startingResistance = 31,
+                turnLimit = 9,
+                startingMood = "rejection",
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                planCapacity = 1,
+                traitIds = {},
+                extraDeck = {},
+            },
+        },
+    },
+    cards = {},
+}

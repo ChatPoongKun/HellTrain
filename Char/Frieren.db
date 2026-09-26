@@ -1,0 +1,45 @@
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        frieren = {
+            id = "frieren",
+            name = "프리렌",
+            portraitImage = "",
+            fallenImage = "",
+            publicProfile = {
+                age = 1000,
+                occupation = "엘프 마법사",
+                appearance = {
+                    hairColor = "은백색",
+                    eyeColor = "녹색",
+                    skin = "밝은 피부",
+                    height = 160,
+                    style = "흰색과 금색의 마법사 복장, 붉은 귀걸이",
+                },
+                personality = {
+                    traits = { "침착함", "무심한 듯 다정함", "수집욕" },
+                    likes = { "마법서", "보잘것없는 마법", "오래된 기억" },
+                },
+                background = {
+                    family = "페른과 슈타르크를 여행 동료로 여기며 옛 용사 일행을 기억함",
+                    hobbies = "마도서 수집과 마법 연구",
+                    boardingReason = "희귀한 이동 마법이 숨겨졌다는 소문을 확인하는 중",
+                },
+            },
+            sexualPreference = "서두르지 않고 긴 시간을 함께 보내며 작은 감정과 기억을 소중히 쌓는 관계를 선호함",
+            backgroundNarrative = "천 년 넘게 살아온 엘프 마법사로, 인간의 마음과 시간의 가치를 알아 가는 여행 중 수상한 이동 마법에 이끌렸다.",
+            battle = {
+                startingResistance = 36,
+                turnLimit = 12,
+                startingMood = "ignore",
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                planCapacity = 1,
+                traitIds = {},
+                extraDeck = {},
+            },
+        },
+    },
+    cards = {},
+}

@@ -1,0 +1,45 @@
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        yor_forger = {
+            id = "yor_forger",
+            name = "요르 포저",
+            portraitImage = "",
+            fallenImage = "",
+            publicProfile = {
+                age = 27,
+                occupation = "베를린트 시청 직원",
+                appearance = {
+                    hairColor = "검은색",
+                    eyeColor = "붉은색",
+                    skin = "밝은 피부",
+                    height = 170,
+                    style = "붉은 스웨터와 검은 치마, 금색 머리띠",
+                },
+                personality = {
+                    traits = { "상냥함", "성실함", "엉뚱함" },
+                    likes = { "가족", "동생", "조용한 일상" },
+                },
+                background = {
+                    family = "남편 로이드와 딸 아냐로 이루어진 포저 가족",
+                    hobbies = "가족과 외출하기, 요리 연습",
+                    boardingReason = "시청 업무를 마치고 가족이 기다리는 집으로 돌아가는 길",
+                },
+            },
+            sexualPreference = "서툴더라도 서로를 배려하고 가족으로서 안전과 신뢰를 지켜 주는 관계를 선호함",
+            backgroundNarrative = "시청 직원으로 일하면서 비밀리에 암살 임무를 수행하는 여성으로, 업무를 마치고 가족에게 돌아가던 중 수상한 열차에 올랐다.",
+            battle = {
+                startingResistance = 34,
+                turnLimit = 10,
+                startingMood = "suspicion",
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                planCapacity = 1,
+                traitIds = {},
+                extraDeck = {},
+            },
+        },
+    },
+    cards = {},
+}

@@ -1,0 +1,45 @@
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        dva = {
+            id = "dva",
+            name = "D.Va",
+            portraitImage = "",
+            fallenImage = "",
+            publicProfile = {
+                age = 21,
+                occupation = "프로게이머 출신 메카 조종사",
+                appearance = {
+                    hairColor = "짙은 갈색",
+                    eyeColor = "갈색",
+                    skin = "밝은 피부",
+                    height = 166,
+                    style = "분홍색 포인트가 들어간 조종복과 헤드셋",
+                },
+                personality = {
+                    traits = { "승부욕", "자신감", "동료애" },
+                    likes = { "게임", "방송", "새로운 도전" },
+                },
+                background = {
+                    family = "부산의 가족과 메카 부대 동료들을 아낌",
+                    hobbies = "게임 방송과 신작 공략",
+                    boardingReason = "도시 지하에서 포착된 옴닉 신호를 확인하러 이동하는 중",
+                },
+            },
+            sexualPreference = "유쾌하게 경쟁하면서도 무대 밖에서는 진심과 사생활을 존중해 주는 관계를 선호함",
+            backgroundNarrative = "세계적인 프로게이머에서 대한민국의 메카 조종사가 된 영웅으로, 이상 신호를 조사하던 중 통신이 끊긴 열차에 갇혔다.",
+            battle = {
+                startingResistance = 28,
+                turnLimit = 8,
+                startingMood = "suspicion",
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                planCapacity = 1,
+                traitIds = {},
+                extraDeck = {},
+            },
+        },
+    },
+    cards = {},
+}

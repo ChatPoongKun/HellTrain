@@ -1,0 +1,45 @@
+return {
+    schemaVersion = 1,
+    kind = "characterDatabase",
+    characters = {
+        tsunade = {
+            id = "tsunade",
+            name = "츠나데",
+            portraitImage = "",
+            fallenImage = "",
+            publicProfile = {
+                age = 54,
+                occupation = "호카게이자 의료 닌자",
+                appearance = {
+                    hairColor = "금발",
+                    eyeColor = "갈색",
+                    skin = "밝은 피부",
+                    height = 163,
+                    style = "녹색 겉옷과 회색 상의, 이마의 백호 문양",
+                },
+                personality = {
+                    traits = { "호방함", "책임감", "불같은 성격" },
+                    likes = { "술", "도박", "마을 사람들을 지키는 일" },
+                },
+                background = {
+                    family = "초대 호카게의 손녀이며 마을을 가족처럼 여김",
+                    hobbies = "술자리와 내기",
+                    boardingReason = "공간 이동 현상으로 실종된 닌자들을 추적하는 중",
+                },
+            },
+            sexualPreference = "강단과 책임감을 이해하고 대등하게 의지할 수 있는 성숙한 관계를 선호함",
+            backgroundNarrative = "전설의 세 닌자 중 한 명이자 뛰어난 의료 닌자로, 마을의 이상 공간을 조사하다 이 열차에 도착했다.",
+            battle = {
+                startingResistance = 38,
+                turnLimit = 12,
+                startingMood = "rejection",
+                baseDrawCount = 3,
+                maxHandSize = 5,
+                planCapacity = 1,
+                traitIds = {},
+                extraDeck = {},
+            },
+        },
+    },
+    cards = {},
+}
